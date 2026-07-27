@@ -22,15 +22,16 @@ import {
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import { ChatInput } from "./chat-input";
-import { createChatMinimapEntries } from "./minimap/chat-minimap-adapter";
-import { ChatMinimap } from "./minimap/chat-minimap";
+import { createConversationNavigatorEntries } from "./conversation-navigator/conversation-navigator-adapter";
+import { ConversationNavigator } from "./conversation-navigator/conversation-navigator";
 import { MessageList } from "./message-view";
 import styles from "./welcome.module.css";
-import type { ContextUsage, SessionStats, SessionTreeNode } from "./agent-types";
-import {
-  type ChatSession,
-  useChatController,
-} from "./use-chat-controller";
+import type {
+  ContextUsage,
+  SessionStats,
+  SessionTreeNode,
+} from "./agent-types";
+import { type ChatSession, useChatController } from "./use-chat-controller";
 
 export type BranchState = {
   tree: SessionTreeNode[];
@@ -54,6 +55,7 @@ export function ChatCenter({
   onOpenModelProvider,
   onOpenSkills,
   projectName,
+  conversationNavigatorCompact,
 }: {
   session: ChatSession | null;
   newSessionCwd: string | null;
@@ -68,6 +70,7 @@ export function ChatCenter({
   onOpenModelProvider: () => void;
   onOpenSkills: () => void;
   projectName: string | null;
+  conversationNavigatorCompact: boolean;
 }) {
   const controller = useChatController({
     session,
@@ -83,32 +86,20 @@ export function ChatCenter({
   const { t } = useI18n();
   const [dragActive, setDragActive] = useState(false);
   const [scrollerNode, setScrollerNode] = useState<HTMLDivElement | null>(null);
-  const [contentNode, setContentNode] = useState<HTMLDivElement | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
-  const [composerNode, setComposerNode] = useState<HTMLDivElement | null>(null);
-  const [composerHeight, setComposerHeight] = useState(0);
   const dragCounter = useRef(0);
   const messageElementsRef = useRef<Map<string, HTMLElement>>(new Map());
   const { activeLeafId, changeLeaf, isCompacting, running, tree } = controller;
 
-  const minimapEntries = useMemo(
+  const conversationNavigatorEntries = useMemo(
     () =>
-      createChatMinimapEntries({
+      createConversationNavigatorEntries({
         entryIds: controller.entryIds,
         messages: controller.messages,
-        streamingMessage: controller.stream.streamingMessage,
       }),
-    [
-      controller.entryIds,
-      controller.messages,
-      controller.stream.streamingMessage,
-    ],
-  );
-  const minimapViewportInsets = useMemo(
-    () => ({ bottom: composerHeight }),
-    [composerHeight],
+    [controller.entryIds, controller.messages],
   );
 
   const handleMessageElement = useCallback(
@@ -130,22 +121,6 @@ export function ChatCenter({
     });
     return () => onBranchState?.(null);
   }, [activeLeafId, changeLeaf, isCompacting, onBranchState, running, tree]);
-
-  useEffect(() => {
-    if (!composerNode) return;
-
-    const updateComposerHeight = () => {
-      setComposerHeight(composerNode.getBoundingClientRect().height);
-    };
-    const observer = new ResizeObserver(updateComposerHeight);
-    observer.observe(composerNode);
-    const frame = window.requestAnimationFrame(updateComposerHeight);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [composerNode]);
 
   function hasImages(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.items).some(
@@ -199,68 +174,65 @@ export function ChatCenter({
       ) : controller.error ? (
         <CenteredState error>{controller.error}</CenteredState>
       ) : (
-        <>
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="chat-scrollbar min-w-0 flex-1 overflow-y-auto overscroll-contain"
+              ref={(node) => {
+                controller.setScrollerNode(node);
+                setScrollerNode(node);
+              }}
+            >
               <div
-                className="min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none]"
+                className={`min-h-full w-full px-4 pt-4 pb-[220px] ${
+                  hasConversation ? "mx-auto max-w-[820px]" : ""
+                }`}
                 ref={(node) => {
-                  controller.setScrollerNode(node);
-                  setScrollerNode(node);
+                  controller.setContentNode(node);
                 }}
               >
-                <div
-                  className={`min-h-full w-full px-4 pt-4 pb-[220px] ${
-                    hasConversation ? "mx-auto max-w-[820px]" : ""
-                  }`}
-                  ref={(node) => {
-                    controller.setContentNode(node);
-                    setContentNode(node);
-                  }}
-                >
-                  {!hasConversation ? (
-                    <Welcome
-                      modelCount={controller.models.length}
-                      modelReady={Boolean(controller.currentModel)}
-                      onOpenModelProvider={onOpenModelProvider}
-                      onOpenSkills={onOpenSkills}
-                      onStart={() => controller.textareaRef.current?.focus()}
-                      projectName={projectName}
-                    />
-                  ) : null}
-
-                  <MessageList
-                    entryIds={controller.entryIds}
-                    forkingEntryId={controller.forkingEntryId}
-                    lastUserRef={controller.lastUserRef}
-                    messages={controller.messages}
-                    onEdit={(targetId, text) =>
-                      void controller.editFromHere(targetId, text)
-                    }
-                    onFork={(entryId) => void controller.fork(entryId)}
-                    highlightedMessageId={highlightedMessageId}
-                    onMessageElement={handleMessageElement}
-                    running={controller.running}
-                    streamingMessage={controller.stream.streamingMessage}
+                {!hasConversation ? (
+                  <Welcome
+                    modelCount={controller.models.length}
+                    modelReady={Boolean(controller.currentModel)}
+                    onOpenModelProvider={onOpenModelProvider}
+                    onOpenSkills={onOpenSkills}
+                    onStart={() => controller.textareaRef.current?.focus()}
+                    projectName={projectName}
                   />
+                ) : null}
 
-                  {controller.running ? <div className="h-[80vh]" /> : null}
-                </div>
+                <MessageList
+                  entryIds={controller.entryIds}
+                  forkingEntryId={controller.forkingEntryId}
+                  lastUserRef={controller.lastUserRef}
+                  messages={controller.messages}
+                  onEdit={(targetId, text) =>
+                    void controller.editFromHere(targetId, text)
+                  }
+                  onFork={(entryId) => void controller.fork(entryId)}
+                  highlightedMessageId={highlightedMessageId}
+                  onMessageElement={handleMessageElement}
+                  running={controller.running}
+                  streamingMessage={controller.stream.streamingMessage}
+                />
+
+                {controller.running ? <div className="h-[80vh]" /> : null}
               </div>
-
-              <ChatMinimap
-                content={contentNode}
-                messageElementsRef={messageElementsRef}
-                messages={minimapEntries}
-                onHoverMessageChange={setHighlightedMessageId}
-                scroller={scrollerNode}
-                viewportInsets={minimapViewportInsets}
-              />
             </div>
+
+            <ChatInput {...controller} />
           </div>
 
-          <ChatInput {...controller} rootRef={setComposerNode} />
-        </>
+          <ConversationNavigator
+            compact={conversationNavigatorCompact}
+            entries={conversationNavigatorEntries}
+            messageElementsRef={messageElementsRef}
+            onHighlightMessageChange={setHighlightedMessageId}
+            running={controller.running}
+            scroller={scrollerNode}
+          />
+        </div>
       )}
     </main>
   );
@@ -393,8 +365,9 @@ function CenteredState({
 }) {
   return (
     <div
-      className={`grid flex-1 place-items-center text-sm ${error ? "text-destructive-text" : "text-muted"
-        }`}
+      className={`grid flex-1 place-items-center text-sm ${
+        error ? "text-destructive-text" : "text-muted"
+      }`}
     >
       {children}
     </div>

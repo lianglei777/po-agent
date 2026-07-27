@@ -1,52 +1,69 @@
 import { describe, expect, it } from "vitest";
 import {
+  COLLAPSED_PRIMARY_NAV_WIDTH,
   fitPanelWidths,
-  getFilePanelWidthBounds,
-  getSidebarWidthBounds,
+  getConversationWidthBounds,
+  getEffectivePrimaryNavWidth,
+  getInspectorWidthBounds,
+  isNarrowWorkspace,
 } from "./panel-sizing";
 
 describe("agent workspace panel sizing", () => {
-  it("keeps the chat width available while both panels are open", () => {
-    expect(getSidebarWidthBounds(1200, 480, true)).toEqual({
-      min: 200,
-      max: 358,
+  it("keeps the chat width available while all desktop panels are open", () => {
+    expect(getConversationWidthBounds(1440, 216, 420, true, true)).toEqual({
+      min: 131,
+      max: 131,
     });
-    expect(getFilePanelWidthBounds(1200, 260, true)).toEqual({
-      min: 300,
-      max: 578,
-    });
-  });
-
-  it("limits the file panel to sixty percent of the workspace", () => {
-    expect(getFilePanelWidthBounds(1600, 260, true)).toEqual({
-      min: 300,
-      max: 960,
+    expect(getInspectorWidthBounds(1440, 216, 248, true, true)).toEqual({
+      min: 303,
+      max: 303,
     });
   });
 
-  it("fits both panels at the 1024px desktop floor", () => {
+  it("collapses the primary navigation before the inspector becomes overlayed", () => {
+    expect(getEffectivePrimaryNavWidth(1439, true, 216)).toBe(
+      COLLAPSED_PRIMARY_NAV_WIDTH,
+    );
+    expect(getEffectivePrimaryNavWidth(1440, true, 216)).toBe(216);
+    expect(isNarrowWorkspace(1279)).toBe(true);
+    expect(isNarrowWorkspace(1280)).toBe(false);
+  });
+
+  it("keeps stored desktop widths when they fit", () => {
+    expect(
+      fitPanelWidths(
+        1440,
+        { conversation: 248, inspector: 420, primaryNav: 216 },
+        {
+          conversationOpen: true,
+          inspectorOpen: true,
+          primaryNavExpanded: true,
+          showInspectorDock: true,
+        },
+      ),
+    ).toEqual({
+      conversation: 231,
+      inspector: 320,
+      primaryNav: 216,
+    });
+  });
+
+  it("uses overlay sizing at the 1024px desktop floor", () => {
     expect(
       fitPanelWidths(
         1024,
-        { filePanel: 480, sidebar: 260 },
-        { filePanelOpen: true, sidebarOpen: true },
+        { conversation: 248, inspector: 420, primaryNav: 216 },
+        {
+          conversationOpen: true,
+          inspectorOpen: true,
+          primaryNavExpanded: true,
+          showInspectorDock: true,
+        },
       ),
     ).toEqual({
-      filePanel: 402,
-      sidebar: 260,
-    });
-  });
-
-  it("preserves the stored width of a closed panel", () => {
-    expect(
-      fitPanelWidths(
-        900,
-        { filePanel: 520, sidebar: 390 },
-        { filePanelOpen: false, sidebarOpen: true },
-      ),
-    ).toEqual({
-      filePanel: 520,
-      sidebar: 390,
+      conversation: 248,
+      inspector: 420,
+      primaryNav: 216,
     });
   });
 });

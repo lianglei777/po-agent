@@ -46,8 +46,9 @@
   --radius-control: 8px;
   --radius-floating: 12px;
   --radius-composer: 22px;
-  --font-ui-mono: var(--font-noto-mono), "JetBrains Mono", "Fira Code",
-    Consolas, ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
+  --font-ui-mono:
+    var(--font-noto-mono), "JetBrains Mono", "Fira Code", Consolas,
+    ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
   /* 字号 token — 生成 text-caption / text-meta / text-body-sm / text-prose 工具类 */
   --text-caption: var(--fs-caption);
   --text-caption--line-height: 1.2;
@@ -57,37 +58,40 @@
   --text-body-sm--line-height: 1.4;
   --text-prose: var(--fs-prose);
   --text-prose--line-height: 1.5;
-  /* 覆盖 Tailwind 默认字号刻度，整体上调 1px */
-  --text-xs: 13px;
+  /* Coze 风格的紧凑桌面字号刻度 */
+  --text-xs: 12px;
   --text-xs--line-height: 1rem;
-  --text-sm: 15px;
+  --text-sm: 14px;
   --text-sm--line-height: 1.25rem;
-  --text-base: 17px;
+  --text-base: 16px;
   --text-base--line-height: 1.5rem;
-  --text-lg: 19px;
+  --text-lg: 18px;
   --text-lg--line-height: 1.75rem;
 }
 
 :root {
   --bg: #ffffff;
-  --bg-panel: #f5f5f5;
-  --sidebar-bg: #f7f7f7;
+  --workspace-bg: #f5f5f3;
+  --bg-panel: #ffffff;
+  --sidebar-bg: #f5f5f3;
+  --conversation-bg: #ffffff;
+  --dock-bg: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-subtle: #f7f7f7;
-  --bg-hover: #ededed;
-  --bg-selected: #e8e8e8;
-  --border-subtle: #e8e8e8;
-  --border-strong: #d7d7d7;
+  --bg-subtle: #f7f7f5;
+  --bg-hover: #ecece9;
+  --bg-selected: #e7e7e3;
+  --border-subtle: #ecece8;
+  --border-strong: #d9d9d4;
   --border-emphasis: #339cff;
   --border: var(--border-subtle);
-  --text: #1a1c1f;
-  --text-muted: #62666d;
-  --text-dim: #8b9098;
+  --text: #1f201e;
+  --text-muted: #686b68;
+  --text-dim: #969995;
   /* 字号 token — 扩展 Tailwind 默认刻度，补充项目所需的中间值 */
   --fs-caption: 11px;
   --fs-meta: 12px;
-  --fs-body-sm: 14px;
-  --fs-prose: 16px;
+  --fs-body-sm: 13px;
+  --fs-prose: 15px;
   --accent: #339cff;
   --accent-hover: #1689f5;
   --accent-deep: #0670d3;
@@ -122,7 +126,7 @@
   --motion-slow: 220ms;
   --shadow-floating: 0 12px 32px rgba(18, 22, 28, 0.12);
   --shadow-soft: 0 1px 6px rgba(18, 22, 28, 0.06);
-  --shadow-composer: 0 6px 24px rgba(18, 22, 28, 0.09);
+  --shadow-composer: 0 6px 24px rgba(32, 32, 28, 0.08);
   --shadow-card: none;
   color-scheme: light;
 }
@@ -149,7 +153,7 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, ui-sans-serif,
     "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   font-synthesis: none;
   overflow-x: auto;
   overflow-y: hidden;
@@ -171,15 +175,27 @@ body {
 
 /* ModelsConfig save button animations */
 @keyframes saved-pop {
-  0%   { transform: scale(1); }
-  30%  { transform: scale(1.08); }
-  60%  { transform: scale(0.96); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.08);
+  }
+  60% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes saved-check-draw {
-  from { stroke-dashoffset: 18; }
-  to   { stroke-dashoffset: 0; }
+  from {
+    stroke-dashoffset: 18;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* 标题沿用系统无衬线字体，保持 Codex 工作台的紧凑语气 */
@@ -193,6 +209,32 @@ body {
   font-weight: 600;
   letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+/* 对话正文使用安静的原生滚动条，保留明确的滚动位置反馈。 */
+.chat-scrollbar {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.chat-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  background-clip: padding-box;
 }
 
 /* 降低动效偏好：尊重用户的 prefers-reduced-motion 设置 */

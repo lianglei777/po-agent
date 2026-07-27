@@ -1,19 +1,20 @@
 ---
 name: Po Agent
-description: A precise Codex-inspired desktop workspace with a white canvas, quiet neutral rails, compact controls, and restrained blue state accents.
+description: A precise Coze-inspired desktop workspace with a soft gray application rail, continuous white work surfaces, compact controls, and restrained blue state accents.
 colors:
   light:
+    workspace: "#f5f5f3"
     canvas: "#ffffff"
-    panel: "#f5f5f5"
+    panel: "#ffffff"
     elevated: "#ffffff"
-    subtle: "#f7f7f7"
-    hover: "#ededed"
-    selected: "#e8e8e8"
-    text: "#1a1c1f"
-    muted: "#62666d"
-    dim: "#8b9098"
-    borderSubtle: "#e8e8e8"
-    borderStrong: "#d7d7d7"
+    subtle: "#f7f7f5"
+    hover: "#ecece9"
+    selected: "#e7e7e3"
+    text: "#1f201e"
+    muted: "#686b68"
+    dim: "#969995"
+    borderSubtle: "#ecece8"
+    borderStrong: "#d9d9d4"
     borderEmphasis: "#339cff"
     accent: "#339cff"
     accentHover: "#1689f5"
@@ -41,24 +42,28 @@ motion:
 
 ## Direction
 
-Po Agent is a focused desktop developer tool, not a marketing or entertainment surface. Its visual north star is the Codex desktop workspace: white content canvas, quiet gray navigation rails, compact information density, system typography, restrained blue state accents, and dark primary actions. The implementation borrows interaction and presentation principles without adding features that the product does not actually support.
+Po Agent is a focused desktop developer tool, not a marketing or entertainment surface. Its visual north star is the Coze desktop workspace: a soft gray application rail, continuous white work surfaces, compact information density, system typography, restrained blue state accents, and dark primary actions. The implementation borrows interaction and presentation principles without adding features that the product does not actually support.
 
 ## Workspace architecture
 
-- The left rail owns New chat, Model Provider, projects, sessions, and locale.
-- The central workspace switches views while Chat remains mounted.
-- The right Project panel is user-opened, resizable, and switches between Files and Skills for the project selected in the left rail. It is hidden on configuration views without losing state.
+- The primary navigation rail owns global Files and Skills shortcuts, projects, Settings, and locale. Its bottom actions are icon-only and horizontal; System Prompt lives inside Settings. The rail expands for project names and collapses to an icon rail, with compact mode automatic on narrower workspaces.
+- The project Conversation panel owns New chat, session search, and the current project's session tree. It is independently resizable and closable so project selection and conversation selection remain separate concepts.
+- Chat uses one continuous white workspace surface containing the project Conversation panel and the conversation canvas. Resting resize handles are visually transparent, so hierarchy comes from spacing and surface tone instead of vertical rules.
+- Settings is an exclusive full-screen application state with an explicit Exit Settings action. The project navigation, Conversation panel, Chat, and Project dock are hidden while Settings is visible, while Chat remains mounted to preserve its state.
+- A permanent right-side Project dock exposes Files, Skills, and Project Settings as vertical tabs. The dock and expanded inspector are one continuous white surface, with the resize handle placed only between Chat and the complete right-side surface. Selecting a tab opens a resizable inspector; selecting the active tab or its close button collapses it.
+- On narrow workspaces, the Project inspector becomes an overlay so Chat retains a usable minimum width. Its active tab, open state, rail state, and user-adjusted widths survive reloads.
 - The minimum supported viewport width is 1024px; there is no mobile-specific layout.
 - Projects and sessions use compact single-line rows. Secondary metadata must not overpower titles or displace row actions.
-- Model Provider keeps its 224px settings rail. The File tree adapts between 160px and 224px so the preview remains usable in a narrow Project panel. Skills uses single-column list, detail, and add states rather than nesting a settings rail inside the panel.
+- The File tree is the inspector's primary surface when no file is open. When previewing a file, it adapts between 160px and 224px so the preview remains usable. Skills uses single-column list, detail, and add states rather than nesting another settings rail inside the inspector.
 
-## Project panel
+## Project dock and inspector
 
-- Files and Skills are sibling tabs in the right Project panel because both are interpreted relative to the project selected in the left rail.
+- Files, Skills, and Project Settings are sibling tabs because all three are interpreted relative to the selected project.
 - The Skills tab shows the effective Skill set for that project: project-scoped, global, built-in, and Skill Pack-provided Skills.
 - Project installation means only the selected project. Global installation means every project, including projects added later. Installation controls must name both the selected project and the global effect explicitly.
 - Switching projects reloads the effective Skill set and leaves no stale detail from the previous project.
-- Opening a file selects Files; opening Skills from Chat selects Skills. The panel keeps its last selected tab when it is closed and reopened.
+- Opening a file selects Files; opening Skills from Chat selects Skills. The inspector keeps its last selected tab when it is closed and reopened.
+- Project Settings reuses the existing project-instructions workflow and preserves its unsaved-change confirmation behavior.
 
 ## Token architecture
 
@@ -82,7 +87,7 @@ Feature components consume semantic tokens or shared primitives. Do not introduc
   - `text-prose` (16px, lh 1.5) — chat composer body
   - `text-base` (17px) — body prose
   - `text-lg` (19px) — section headings
-- Default UI text is 15px (`text-sm`); compact code and technical metadata use 12–13px (`text-meta`, `text-xs`).
+- Default UI text is 14px (`text-sm`); compact code and technical metadata use 11–12px (`text-caption`, `text-meta`, `text-xs`).
 - Body prose should generally remain within 65–75 characters per line.
 
 ## Boundaries, shape, and elevation
@@ -97,6 +102,8 @@ Use three boundary roles:
 - The chat composer is the intentional exception at 22px.
 - Pills and circles are reserved for badges, status dots, switches, and the send icon button.
 - Resting cards are flat. Shadows appear only where a surface genuinely floats.
+- The primary application rail has no enclosing white card, border, or outer radius. Conversation, Chat, Project dock, and the expanded inspector use white surfaces over the gray application background.
+- Vertical resize handles remain invisible until hover, keyboard focus, or active dragging.
 - Do not use decorative grids, textures, gradients, neon, or layered glass effects.
 
 ## Component states
@@ -122,10 +129,13 @@ Codex blue (`#339cff`) is reserved for active state fills, switches, live state,
 - Final answer content stays outside the execution disclosure and remains directly readable.
 - Tool rows reserve stable columns for command summary, status, and disclosure controls.
 - The floating Composer keeps model, thinking, compaction, attachments, queue/steer/stop, and send controls in one compact toolbar.
+- Long conversations use a semantic conversation outline built from user requests. The current turn follows the reading position, each full row jumps directly to that turn, and a compact rail opens the outline as an overlay when the project inspector is visible or workspace width is constrained.
 
 ## Settings and detail pages
 
-- Configuration views use a quiet 224px navigation rail and one centered reading column.
+- Settings replaces the workspace chrome with a quiet gray navigation rail and a rounded white settings surface. A visible Exit Settings action returns to the preserved workspace.
+- The model-provider editor stays mounted across Settings-section changes so pending configuration is not discarded.
+- System Prompt is a directly embedded Settings workbench rather than a primary modal. It keeps effective-prompt preview, global append editing, project-instruction preview, reload state, conflict handling, and unsaved-change protection.
 - Settings are grouped into bordered sections with label and description on the left and the control on the right.
 - Rows use dividers instead of separate cards. Destructive actions remain visually separated and explicitly confirmed.
 - Auto-save status stays in the workspace chrome; do not reintroduce a fake manual-save workflow.

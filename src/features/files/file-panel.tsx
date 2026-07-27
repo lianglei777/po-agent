@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { ChevronRight, FileText } from "lucide-react";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadFile } from "./api";
 import { FileTree } from "./file-tree";
-import { joinPath, relativePath } from "./path";
+import { relativePath } from "./path";
 import type { OpenFile } from "./types";
 
 export type { OpenFile } from "./types";
@@ -17,33 +16,28 @@ export function FilePanel({
   onAtMention,
   onOpenFile,
   refreshKey = 0,
-  specialContent,
-  specialTitle,
 }: {
   cwd?: string | null;
   file: OpenFile | null;
   onAtMention?: (path: string) => void;
   onOpenFile?: (path: string, name: string) => void;
   refreshKey?: number;
-  specialContent?: ReactNode;
-  specialTitle?: string;
 }) {
   const { t } = useI18n();
-  const currentPath =
-    file?.path ?? (cwd && specialTitle ? joinPath(cwd, specialTitle) : null);
+  const currentPath = file?.path ?? null;
   const pathSegments = currentPath && cwd
     ? relativePath(cwd, currentPath).split("/").filter(Boolean)
     : [];
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col bg-canvas">
-      <div className="flex h-9 flex-none items-stretch border-b border-line-subtle bg-canvas text-meta text-muted">
-        <nav
-          aria-label={t.files.currentFilePath}
-          className="flex min-w-0 flex-1 items-center overflow-hidden px-3"
-          title={currentPath ?? undefined}
-        >
-          {pathSegments.length ? (
+      {currentPath ? (
+        <div className="flex h-9 flex-none items-stretch border-b border-line-subtle bg-canvas text-meta text-muted">
+          <nav
+            aria-label={t.files.currentFilePath}
+            className="flex min-w-0 flex-1 items-center overflow-hidden px-3"
+            title={currentPath}
+          >
             <ol className="flex min-w-0 items-center font-ui-mono">
               {pathSegments.map((segment, index) => (
                 <li className="flex min-w-0 items-center" key={`${segment}-${index}`}>
@@ -54,17 +48,18 @@ export function FilePanel({
                 </li>
               ))}
             </ol>
-          ) : (
-            <span className="truncate">{t.files.files}</span>
-          )}
-        </nav>
-      </div>
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          {specialContent ?? (file ? <LoadedFile file={file} key={file.path} /> : <EmptyFile />)}
+          </nav>
         </div>
+      ) : null}
+      <div className="flex min-h-0 flex-1">
         {cwd && onOpenFile ? (
-          <aside className="flex w-[clamp(160px,42%,224px)] shrink-0 border-l border-line-subtle bg-canvas">
+          <aside
+            className={`flex shrink-0 bg-canvas ${
+              file
+                ? "w-[clamp(160px,42%,224px)] border-r border-line-subtle"
+                : "w-full"
+            }`}
+          >
             <FileTree
               cwd={cwd}
               onAtMention={onAtMention}
@@ -73,6 +68,13 @@ export function FilePanel({
             />
           </aside>
         ) : null}
+        {file ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <LoadedFile file={file} key={file.path} />
+          </div>
+        ) : cwd && onOpenFile ? null : (
+          <EmptyFile />
+        )}
       </div>
     </div>
   );

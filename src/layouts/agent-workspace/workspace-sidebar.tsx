@@ -1,7 +1,10 @@
 import {
-  Cpu,
-  MessageSquarePlus,
-  ScrollText,
+  FileText,
+  Languages,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings2,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,87 +12,130 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  SessionSidebar,
-  type SessionSidebarProps,
-} from "@/features/sessions/session-sidebar";
+import { ProjectNavigation } from "@/features/sessions/project-navigation";
+import type { SessionNavigationController } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
+import type { ProjectPanelTab } from "./project-panel";
 import type { WorkspaceView } from "./workspace-navigation";
 
 export type WorkspaceSidebarProps = {
+  activeProjectTool: ProjectPanelTab;
   activeView: WorkspaceView;
-  onNewChat: () => void;
-  onOpenModelProvider: () => void;
-  onOpenSystemPrompt: () => void;
-  sessionProps: SessionSidebarProps;
+  compact: boolean;
+  navigation: SessionNavigationController;
+  onOpenFiles: () => void;
+  onOpenSettings: () => void;
+  onOpenSkills: () => void;
+  onToggleCompact: () => void;
+  projectPanelOpen: boolean;
 };
 
 export function WorkspaceSidebar({
+  activeProjectTool,
   activeView,
-  onNewChat,
-  onOpenModelProvider,
-  onOpenSystemPrompt,
-  sessionProps,
+  compact,
+  navigation,
+  onOpenFiles,
+  onOpenSettings,
+  onOpenSkills,
+  onToggleCompact,
+  projectPanelOpen,
 }: WorkspaceSidebarProps) {
   const { locale, setLocale, t } = useI18n();
   const nextLocale = locale === "zh" ? "en" : "zh";
-  const selectedCwd = sessionProps.selectedCwd;
+  const projectSelected = Boolean(navigation.selectedCwd);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--sidebar-bg)] p-2.5">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex">
-            <Button
-              aria-current={activeView === "chat" ? "page" : undefined}
-              className="w-full justify-start text-xs text-primary"
-              disabled={!selectedCwd}
-              onClick={onNewChat}
-              type="button"
-              variant="ghost"
-            >
-              <MessageSquarePlus className="size-3.5" />
-              {t.workspace.newChat}
-            </Button>
-          </span>
-        </TooltipTrigger>
-        {!selectedCwd ? (
-          <TooltipContent>{t.chat.input.selectProjectBeforeStart}</TooltipContent>
-        ) : null}
-      </Tooltip>
-
-      <Button
-        aria-current={activeView === "model-provider" ? "page" : undefined}
-        className="mt-0.5 w-full justify-start text-xs text-primary"
-        onClick={onOpenModelProvider}
-        type="button"
-        variant={activeView === "model-provider" ? "secondary" : "ghost"}
+    <div
+      className={`flex h-full min-h-0 flex-col bg-[var(--sidebar-bg)] ${
+        compact ? "px-1.5 py-2.5" : "px-3 py-3"
+      }`}
+    >
+      <div
+        className={`mb-2 flex h-9 items-center ${
+          compact ? "justify-center" : "gap-2 px-1"
+        }`}
       >
-        <Cpu className="size-3.5" />
-        {t.workspace.modelProvider}
-      </Button>
-
-      <SessionSidebar {...sessionProps} />
-
-      <div className="mt-auto flex gap-1 border-t border-line-subtle pt-2">
+        <div
+          aria-label="Po Agent"
+          className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-primary text-xs font-semibold tracking-[-0.04em] text-primary-foreground"
+        >
+          Po
+        </div>
+        {compact ? null : (
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.02em] text-primary">
+            Po Agent
+          </span>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              aria-label={t.workspace.systemPrompt}
-              onClick={onOpenSystemPrompt}
+              aria-label={
+                compact
+                  ? t.workspace.expandPrimaryNavigation
+                  : t.workspace.collapsePrimaryNavigation
+              }
+              onClick={onToggleCompact}
               size="icon-sm"
               type="button"
               variant="ghost"
             >
-              <ScrollText className="size-3.5" />
+              {compact ? <PanelLeftOpen /> : <PanelLeftClose />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{t.workspace.systemPromptDescription}</TooltipContent>
+          <TooltipContent side={compact ? "right" : "bottom"}>
+            {compact
+              ? t.workspace.expandPrimaryNavigation
+              : t.workspace.collapsePrimaryNavigation}
+          </TooltipContent>
         </Tooltip>
-        <div
-          aria-orientation="vertical"
-          className="mx-0.5 h-4 w-px self-center bg-line-subtle"
-          role="separator"
+      </div>
+
+      <nav aria-label={t.workspace.projectTools} className="space-y-0.5">
+        <ProjectToolButton
+          active={
+            activeView === "chat" &&
+            projectPanelOpen &&
+            activeProjectTool === "skills"
+          }
+          compact={compact}
+          disabledReason={
+            projectSelected ? null : t.workspace.selectProjectForSkills
+          }
+          icon={<Sparkles />}
+          label={t.workspace.skills}
+          onClick={onOpenSkills}
+        />
+        <ProjectToolButton
+          active={
+            activeView === "chat" &&
+            projectPanelOpen &&
+            activeProjectTool === "files"
+          }
+          compact={compact}
+          disabledReason={
+            projectSelected ? null : t.workspace.selectProjectForFiles
+          }
+          icon={<FileText />}
+          label={t.files.files}
+          onClick={onOpenFiles}
+        />
+      </nav>
+
+      <div className="my-2.5 h-px bg-line-subtle" />
+      <ProjectNavigation compact={compact} navigation={navigation} />
+
+      <div
+        className={`mt-auto flex items-center border-t border-line-strong pt-2.5 ${
+          compact ? "justify-center gap-1" : "gap-1"
+        }`}
+      >
+        <SidebarIconAction
+          active={activeView === "model-provider"}
+          compact={compact}
+          icon={<Settings2 />}
+          label={t.workspace.settings}
+          onClick={onOpenSettings}
         />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -99,17 +145,15 @@ export function WorkspaceSidebar({
                   ? t.common.switchToChinese
                   : t.common.switchToEnglish
               }
+              className={compact ? "size-5 px-0" : "size-8 px-0"}
               onClick={() => setLocale(nextLocale)}
-              size="icon-sm"
               type="button"
               variant="ghost"
             >
-              <span className="font-ui-mono text-caption font-semibold">
-                {locale === "zh" ? "中" : "EN"}
-              </span>
+              <Languages />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
+          <TooltipContent side={compact ? "right" : "top"}>
             {nextLocale === "zh"
               ? t.common.switchToChinese
               : t.common.switchToEnglish}
@@ -117,5 +161,77 @@ export function WorkspaceSidebar({
         </Tooltip>
       </div>
     </div>
+  );
+}
+
+function ProjectToolButton({
+  active,
+  compact,
+  disabledReason,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  compact: boolean;
+  disabledReason: string | null;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  const button = (
+    <Button
+      aria-current={active ? "page" : undefined}
+      aria-disabled={disabledReason ? true : undefined}
+      className={`w-full ${compact ? "justify-center px-0" : "justify-start"}`}
+      onClick={disabledReason ? undefined : onClick}
+      size="sm"
+      type="button"
+      variant={active ? "secondary" : "ghost"}
+    >
+      {icon}
+      {compact ? null : <span className="truncate">{label}</span>}
+    </Button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side={compact ? "right" : "top"}>
+        {disabledReason ?? label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SidebarIconAction({
+  active = false,
+  compact,
+  icon,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  compact: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-current={active ? "page" : undefined}
+          aria-label={label}
+          className={compact ? "size-5 px-0" : "size-8 px-0"}
+          onClick={onClick}
+          type="button"
+          variant={active ? "secondary" : "ghost"}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side={compact ? "right" : "top"}>{label}</TooltipContent>
+    </Tooltip>
   );
 }

@@ -1,21 +1,32 @@
-export const DEFAULT_SIDEBAR_WIDTH = 260;
-export const DEFAULT_FILE_PANEL_WIDTH = 480;
-export const MIN_SIDEBAR_WIDTH = 200;
-export const MAX_SIDEBAR_WIDTH = 420;
-export const MIN_FILE_PANEL_WIDTH = 300;
-export const MIN_CHAT_WIDTH = 360;
+export const COLLAPSED_PRIMARY_NAV_WIDTH = 56;
+export const INSPECTOR_DOCK_WIDTH = 44;
+export const DEFAULT_PRIMARY_NAV_WIDTH = 216;
+export const DEFAULT_CONVERSATION_WIDTH = 248;
+export const DEFAULT_INSPECTOR_WIDTH = 420;
+export const MIN_PRIMARY_NAV_WIDTH = 184;
+export const MAX_PRIMARY_NAV_WIDTH = 300;
+export const MIN_CONVERSATION_WIDTH = 216;
+export const MAX_CONVERSATION_WIDTH = 360;
+export const MIN_INSPECTOR_WIDTH = 320;
+export const MAX_INSPECTOR_WIDTH = 720;
+export const MIN_CHAT_WIDTH = 570;
+export const NARROW_WORKSPACE_WIDTH = 1280;
+export const COMPACT_PRIMARY_NAV_WORKSPACE_WIDTH = 1440;
 
 const RESIZE_HANDLE_WIDTH = 1;
-const MIN_NARROW_CHAT_WIDTH = 140;
+const WORKSPACE_CHROME_WIDTH = 56;
 
 export type PanelWidths = {
-  filePanel: number;
-  sidebar: number;
+  conversation: number;
+  inspector: number;
+  primaryNav: number;
 };
 
-type PanelVisibility = {
-  filePanelOpen: boolean;
-  sidebarOpen: boolean;
+export type PanelVisibility = {
+  conversationOpen: boolean;
+  inspectorOpen: boolean;
+  primaryNavExpanded: boolean;
+  showInspectorDock: boolean;
 };
 
 export type WidthBounds = {
@@ -27,61 +38,83 @@ function clamp(value: number, { max, min }: WidthBounds) {
   return Math.min(max, Math.max(min, value));
 }
 
-function availablePanelWidth(
-  containerWidth: number,
-  otherPanelWidth: number,
-  visibleHandleCount: number,
-) {
-  const chatWidth = Math.min(
-    MIN_CHAT_WIDTH,
-    Math.max(
-      MIN_NARROW_CHAT_WIDTH,
-      containerWidth -
-        MIN_SIDEBAR_WIDTH -
-        MIN_FILE_PANEL_WIDTH -
-        visibleHandleCount * RESIZE_HANDLE_WIDTH,
-    ),
-  );
-  return Math.max(
-    0,
-    containerWidth -
-      otherPanelWidth -
-      chatWidth -
-      visibleHandleCount * RESIZE_HANDLE_WIDTH,
-  );
+export function isNarrowWorkspace(containerWidth: number) {
+  return containerWidth < NARROW_WORKSPACE_WIDTH;
 }
 
-export function getSidebarWidthBounds(
+export function getEffectivePrimaryNavWidth(
   containerWidth: number,
-  filePanelWidth: number,
-  filePanelOpen: boolean,
-): WidthBounds {
-  const available = availablePanelWidth(
-    containerWidth,
-    filePanelOpen ? filePanelWidth : 0,
-    filePanelOpen ? 2 : 1,
-  );
-  const max = Math.min(MAX_SIDEBAR_WIDTH, available);
+  expanded: boolean,
+  width: number,
+) {
+  return expanded && !isNarrowWorkspace(containerWidth)
+    && containerWidth >= COMPACT_PRIMARY_NAV_WORKSPACE_WIDTH
+      ? width
+      : COLLAPSED_PRIMARY_NAV_WIDTH;
+}
+
+export function getPrimaryNavWidthBounds(): WidthBounds {
   return {
-    max,
-    min: Math.min(MIN_SIDEBAR_WIDTH, max),
+    max: MAX_PRIMARY_NAV_WIDTH,
+    min: MIN_PRIMARY_NAV_WIDTH,
   };
 }
 
-export function getFilePanelWidthBounds(
+export function getConversationWidthBounds(
   containerWidth: number,
-  sidebarWidth: number,
-  sidebarOpen: boolean,
+  primaryNavWidth: number,
+  inspectorWidth: number,
+  inspectorOpen: boolean,
+  showInspectorDock: boolean,
 ): WidthBounds {
-  const available = availablePanelWidth(
-    containerWidth,
-    sidebarOpen ? sidebarWidth : 0,
-    sidebarOpen ? 2 : 1,
+  const inspectorConsumesSpace =
+    inspectorOpen && !isNarrowWorkspace(containerWidth);
+  const reserved =
+    primaryNavWidth +
+    (inspectorConsumesSpace ? inspectorWidth : 0) +
+    (showInspectorDock ? INSPECTOR_DOCK_WIDTH : 0) +
+    MIN_CHAT_WIDTH +
+    WORKSPACE_CHROME_WIDTH +
+    3 * RESIZE_HANDLE_WIDTH;
+  const max = Math.min(
+    MAX_CONVERSATION_WIDTH,
+    Math.max(0, containerWidth - reserved),
   );
-  const max = Math.min(containerWidth * 0.6, available);
   return {
     max,
-    min: Math.min(MIN_FILE_PANEL_WIDTH, max),
+    min: Math.min(MIN_CONVERSATION_WIDTH, max),
+  };
+}
+
+export function getInspectorWidthBounds(
+  containerWidth: number,
+  primaryNavWidth: number,
+  conversationWidth: number,
+  conversationOpen: boolean,
+  showInspectorDock: boolean,
+): WidthBounds {
+  if (isNarrowWorkspace(containerWidth)) {
+    const max = Math.min(MAX_INSPECTOR_WIDTH, containerWidth * 0.6);
+    return {
+      max,
+      min: Math.min(MIN_INSPECTOR_WIDTH, max),
+    };
+  }
+
+  const reserved =
+    primaryNavWidth +
+    (conversationOpen ? conversationWidth : 0) +
+    (showInspectorDock ? INSPECTOR_DOCK_WIDTH : 0) +
+    MIN_CHAT_WIDTH +
+    WORKSPACE_CHROME_WIDTH +
+    3 * RESIZE_HANDLE_WIDTH;
+  const max = Math.min(
+    MAX_INSPECTOR_WIDTH,
+    Math.max(0, containerWidth - reserved),
+  );
+  return {
+    max,
+    min: Math.min(MIN_INSPECTOR_WIDTH, max),
   };
 }
 
@@ -90,55 +123,53 @@ export function fitPanelWidths(
   widths: PanelWidths,
   visibility: PanelVisibility,
 ): PanelWidths {
-  let sidebar = visibility.sidebarOpen
-    ? clamp(widths.sidebar, {
-        max: MAX_SIDEBAR_WIDTH,
-        min: MIN_SIDEBAR_WIDTH,
-      })
-    : widths.sidebar;
-  const filePanelMax = containerWidth * 0.6;
-  let filePanel = visibility.filePanelOpen
-    ? clamp(widths.filePanel, {
-        max: filePanelMax,
-        min: Math.min(MIN_FILE_PANEL_WIDTH, filePanelMax),
-      })
-    : widths.filePanel;
-  const visibleHandleCount =
-    Number(visibility.sidebarOpen) + Number(visibility.filePanelOpen);
-  const available = availablePanelWidth(
+  const primaryNav = clamp(widths.primaryNav, getPrimaryNavWidthBounds());
+  const effectivePrimaryNav = getEffectivePrimaryNavWidth(
     containerWidth,
-    0,
-    visibleHandleCount,
+    visibility.primaryNavExpanded,
+    primaryNav,
   );
-  let overflow =
-    (visibility.sidebarOpen ? sidebar : 0) +
-    (visibility.filePanelOpen ? filePanel : 0) -
-    available;
+  let conversation = clamp(widths.conversation, {
+    max: MAX_CONVERSATION_WIDTH,
+    min: MIN_CONVERSATION_WIDTH,
+  });
+  let inspector = clamp(widths.inspector, {
+    max: Math.min(MAX_INSPECTOR_WIDTH, containerWidth * 0.6),
+    min: Math.min(MIN_INSPECTOR_WIDTH, containerWidth * 0.6),
+  });
 
-  if (overflow > 0 && visibility.filePanelOpen) {
-    const reduction = Math.min(
-      overflow,
-      Math.max(0, filePanel - MIN_FILE_PANEL_WIDTH),
-    );
-    filePanel -= reduction;
-    overflow -= reduction;
-  }
-  if (overflow > 0 && visibility.sidebarOpen) {
-    const reduction = Math.min(
-      overflow,
-      Math.max(0, sidebar - MIN_SIDEBAR_WIDTH),
-    );
-    sidebar -= reduction;
-    overflow -= reduction;
-  }
-  if (overflow > 0 && visibility.filePanelOpen) {
-    const reduction = Math.min(overflow, filePanel);
-    filePanel -= reduction;
-    overflow -= reduction;
-  }
-  if (overflow > 0 && visibility.sidebarOpen) {
-    sidebar = Math.max(0, sidebar - overflow);
+  if (isNarrowWorkspace(containerWidth)) {
+    return { conversation, inspector, primaryNav };
   }
 
-  return { filePanel, sidebar };
+  const visibleHandleCount =
+    Number(visibility.primaryNavExpanded) +
+    Number(visibility.conversationOpen) +
+    Number(visibility.inspectorOpen);
+  const occupied =
+    effectivePrimaryNav +
+    (visibility.conversationOpen ? conversation : 0) +
+    (visibility.inspectorOpen ? inspector : 0) +
+    (visibility.showInspectorDock ? INSPECTOR_DOCK_WIDTH : 0) +
+    WORKSPACE_CHROME_WIDTH +
+    visibleHandleCount * RESIZE_HANDLE_WIDTH;
+  let overflow = occupied + MIN_CHAT_WIDTH - containerWidth;
+
+  if (overflow > 0 && visibility.inspectorOpen) {
+    const reduction = Math.min(
+      overflow,
+      Math.max(0, inspector - MIN_INSPECTOR_WIDTH),
+    );
+    inspector -= reduction;
+    overflow -= reduction;
+  }
+  if (overflow > 0 && visibility.conversationOpen) {
+    const reduction = Math.min(
+      overflow,
+      Math.max(0, conversation - MIN_CONVERSATION_WIDTH),
+    );
+    conversation -= reduction;
+  }
+
+  return { conversation, inspector, primaryNav };
 }

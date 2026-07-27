@@ -21,7 +21,10 @@ export const en = {
     modelProvider: "Model Provider",
     projects: "Projects",
     openProject: "Open project",
-    conversationMinimap: "Conversation minimap",
+    conversationNavigator: "Conversation",
+    collapseConversationNavigator: "Collapse conversation outline",
+    expandConversationNavigator: "Open conversation outline",
+    jumpToLatest: "Jump to latest",
     hideSidebar: "Hide sidebar",
     showSidebar: "Show sidebar",
     hideFilePanel: "Hide file panel",
@@ -32,17 +35,33 @@ export const en = {
     branches: "Branches",
     system: "System",
     systemPrompt: "System Prompt",
-    systemPromptDescription: "View and edit global append prompt and project instructions",
+    systemPromptDescription:
+      "View and edit global append prompt and project instructions",
     noBranches: "No branches in this session",
     noSystemPrompt: "No system prompt available",
     context: "context",
     models: "Models",
     skills: "Skills",
+    settings: "Settings",
+    projectSettings: "Project settings",
+    projectTools: "Project tools",
     selectProjectForSkills: "Select a project before opening Skills",
+    selectProjectForFiles: "Select a project before opening Files",
+    collapsePrimaryNavigation: "Collapse primary navigation",
+    expandPrimaryNavigation: "Expand primary navigation",
+    hideConversations: "Hide project conversations",
+    showConversations: "Show project conversations",
     closeSidebar: "Close sidebar",
+    resizePrimaryNavigation: "Resize primary navigation",
+    resizeConversationSidebar: "Resize project conversations",
     resizeSessionSidebar: "Resize session sidebar",
     resizeFilePanel: "Resize file panel",
     resizeProjectPanel: "Resize project panel",
+  },
+  settings: {
+    exitSettings: "Exit settings",
+    languageDescription:
+      "Choose the interface language used across navigation, dialogs, and status messages.",
   },
   chat: {
     dragDropImages: "Drop images to attach",
@@ -135,7 +154,8 @@ export const en = {
       editFromHere: "Edit from here",
       newSession: "New session",
       creating: "Creating...",
-      editUndoNotice: "Edited from here; later messages collapsed into a branch",
+      editUndoNotice:
+        "Edited from here; later messages collapsed into a branch",
       editUndoAction: "Undo",
       branchHistory: "Branch history",
       branchNavigationUnavailableWhileRunning:
@@ -164,6 +184,8 @@ export const en = {
     selectProjectEllipsis: "Select project...",
     selectProjectToViewSessions: "Select a project to view sessions",
     noSessions: "No sessions found",
+    noMatchingSessions: "No matching sessions",
+    searchSessions: "Search conversations",
     draft: "New session",
     draftHint: "Draft - send a message to create",
     sessionActions: "Session actions",
@@ -188,7 +210,8 @@ export const en = {
     renameFailed: "Rename failed",
     deleteFailed: "Delete failed",
     deleteSessionTitle: "Delete session?",
-    deleteSessionDescription: "Permanently delete “{session}” and its message history? This action cannot be undone.",
+    deleteSessionDescription:
+      "Permanently delete “{session}” and its message history? This action cannot be undone.",
     deleteSessionAction: "Delete session",
     deletingSession: "Deleting...",
     expandForks: "Expand session forks",
@@ -250,11 +273,13 @@ export const en = {
     copied: "Copied",
     apiOverride: "API override",
     apiProtocol: "API Protocol",
-    apiProtocolDescription: "Usually inherits the provider setting. Change it only when this model must use a different request protocol.",
+    apiProtocolDescription:
+      "Usually inherits the provider setting. Change it only when this model must use a different request protocol.",
     inheritNone: "inherit / none",
     reasoningThinking: "Reasoning / thinking",
     thinkingOnDefault: "Thinking On default strength",
-    thinkingOnDefaultDescription: "Used when chat Thinking is On. Higher strength may be slower and use more tokens, but is better for complex tasks.",
+    thinkingOnDefaultDescription:
+      "Used when chat Thinking is On. Higher strength may be slower and use more tokens, but is better for complex tasks.",
     imageInput: "Image input",
     capabilities: "Capabilities",
     deepSeekCompat: "DeepSeek thinking compat",
@@ -267,7 +292,8 @@ export const en = {
     cacheWrite: "Cache write",
     configured: "configured",
     notConfigured: "not configured",
-    apiKeyStored: "API key is stored. Enter a new key below to replace it, or disconnect to remove it.",
+    apiKeyStored:
+      "API key is stored. Enter a new key below to replace it, or disconnect to remove it.",
     enterApiKeyPrefix: "Enter your",
     enterApiKeyMiddle: "API key to enable",
     modelSingular: "model.",
@@ -303,7 +329,8 @@ export const en = {
     modelList: "Model list",
     fetchModelList: "Fetch model list",
     discoveringModels: "Fetching...",
-    discoverModelsDescription: "Fetch supported models and fill known parameters from the Pi catalog when possible.",
+    discoverModelsDescription:
+      "Fetch supported models and fill known parameters from the Pi catalog when possible.",
     addModels: "Add models",
     remoteDiscoveryFailed: "Remote discovery failed",
     noDiscoveredModels: "No models were discovered for this provider.",
@@ -314,34 +341,60 @@ export const en = {
     addSelected: "Add selected",
     existingHidden: "existing, hidden",
     compatibility: "Compatibility",
-    compatibilityDescription: "Only settings supported by the effective API protocol are shown. Auto lets Pi detect or use its default behavior.",
-    compatibilityUnavailable: "This API protocol does not expose compatibility overrides.",
+    compatibilityDescription:
+      "Only settings supported by the effective API protocol are shown. Auto lets Pi detect or use its default behavior.",
+    compatibilityUnavailable:
+      "This API protocol does not expose compatibility overrides.",
     compatibilitySettings: "Compatibility settings",
     compatFieldDescriptions: {
-      "openai-completions.supportsStore": "Whether the endpoint supports the `store` field. When enabled, sends `store: false` to opt out of server-side storage. Default: auto-detected from baseUrl.",
-      "openai-completions.supportsDeveloperRole": "Whether the endpoint accepts `developer` role messages instead of `system`. Only applied when reasoning is enabled. Default: disabled; enable manually when the endpoint supports the developer role.",
-      "openai-completions.supportsReasoningEffort": "Whether the endpoint supports the `reasoning_effort` parameter. When disabled, it is omitted. Default: auto-detected from baseUrl.",
-      "openai-completions.supportsUsageInStreaming": "Whether streaming responses return token usage via `stream_options: { include_usage: true }`. Default: true.",
-      "openai-completions.maxTokensField": "Field name for the output length limit: `max_completion_tokens` or `max_tokens`. Default: auto-detected from baseUrl.",
-      "openai-completions.requiresToolResultName": "Whether tool result messages must include the `name` field. Default: auto-detected from baseUrl.",
-      "openai-completions.requiresAssistantAfterToolResult": "Whether an assistant message must be inserted between a tool result and the following user message. Default: auto-detected from baseUrl.",
-      "openai-completions.requiresThinkingAsText": "Whether replayed thinking blocks are converted to text wrapped in `<thinking>` delimiters. Default: auto-detected from baseUrl.",
-      "openai-completions.requiresReasoningContentOnAssistantMessages": "Whether every replayed assistant message must carry an empty `reasoning_content` field when reasoning is enabled. Default: auto-detected from baseUrl.",
-      "openai-completions.thinkingFormat": "Serialization format for reasoning params. openai uses `reasoning_effort`; openrouter uses `reasoning: { effort }`; deepseek uses `thinking: { type }` plus `reasoning_effort`; together uses `reasoning: { enabled }` plus `reasoning_effort`; zai and qwen use a top-level `enable_thinking`; qwen-chat-template uses `chat_template_kwargs.enable_thinking`. Default: openai.",
-      "openai-completions.openRouterRouting": "OpenRouter upstream routing preferences, sent as the request body `provider` field. Only applied when baseUrl points to openrouter.ai.",
-      "openai-completions.vercelGatewayRouting": "Vercel AI Gateway routing preferences; `only`/`order` map to `providerOptions.gateway`. Only applied when baseUrl points to ai-gateway.vercel.sh.",
-      "openai-completions.zaiToolStream": "Whether z.ai supports a top-level `tool_stream: true` for streaming tool call deltas. Default: false.",
-      "openai-completions.supportsStrictMode": "Whether the endpoint accepts the `strict` field on tool definitions. When enabled, sends `strict: false` on tool definitions. Default: true.",
-      "openai-completions.cacheControlFormat": "Prompt cache marker format. When set to `anthropic`, applies Anthropic-style `cache_control` markers to the system prompt, the last tool definition, and the last conversation message.",
-      "openai-completions.sendSessionAffinityHeaders": "Whether to send session-affinity headers (`session_id`, `x-client-request-id`, `x-session-affinity`, from sessionId) when caching is enabled. Default: false.",
-      "openai-completions.supportsLongCacheRetention": "Whether the endpoint supports long prompt cache retention: OpenAI-style sends `prompt_cache_retention: \"24h\"`, Anthropic-style sends `cache_control.ttl: \"1h\"`. Default: true.",
-      "openai-responses.sendSessionIdHeader": "Whether to send the OpenAI `session_id` cache-affinity header (from sessionId) when caching is enabled. Default: true.",
-      "openai-responses.supportsLongCacheRetention": "Whether the endpoint supports `prompt_cache_retention: \"24h\"` long prompt cache retention. Default: true.",
-      "anthropic-messages.supportsEagerToolInputStreaming": "Whether the endpoint accepts per-tool `eager_input_streaming`. When disabled, the field is omitted and the legacy `fine-grained-tool-streaming-2025-05-14` beta header is sent instead. Default: true.",
-      "anthropic-messages.supportsLongCacheRetention": "Whether the endpoint supports Anthropic long cache retention (`cache_control.ttl: \"1h\"`). Default: true.",
-      "anthropic-messages.sendSessionAffinityHeaders": "Whether to send the `x-session-affinity` header (from sessionId) when caching is enabled. Required for providers like Fireworks that route by session affinity to maximize cache hits. Default: false.",
-      "anthropic-messages.supportsCacheControlOnTools": "Whether the endpoint accepts Anthropic-style `cache_control` markers on tool definitions. When disabled, the marker is omitted from tool params. Some Anthropic-compatible providers (e.g., Fireworks) do not support it. Default: true.",
-      "anthropic-messages.forceAdaptiveThinking": "Whether to force adaptive thinking (`thinking.type: \"adaptive\"` plus `output_config.effort`) regardless of model id. Custom Anthropic-compatible endpoints can enable this for models requiring the adaptive format; set to false to opt out on overridden built-in models. Default: false.",
+      "openai-completions.supportsStore":
+        "Whether the endpoint supports the `store` field. When enabled, sends `store: false` to opt out of server-side storage. Default: auto-detected from baseUrl.",
+      "openai-completions.supportsDeveloperRole":
+        "Whether the endpoint accepts `developer` role messages instead of `system`. Only applied when reasoning is enabled. Default: disabled; enable manually when the endpoint supports the developer role.",
+      "openai-completions.supportsReasoningEffort":
+        "Whether the endpoint supports the `reasoning_effort` parameter. When disabled, it is omitted. Default: auto-detected from baseUrl.",
+      "openai-completions.supportsUsageInStreaming":
+        "Whether streaming responses return token usage via `stream_options: { include_usage: true }`. Default: true.",
+      "openai-completions.maxTokensField":
+        "Field name for the output length limit: `max_completion_tokens` or `max_tokens`. Default: auto-detected from baseUrl.",
+      "openai-completions.requiresToolResultName":
+        "Whether tool result messages must include the `name` field. Default: auto-detected from baseUrl.",
+      "openai-completions.requiresAssistantAfterToolResult":
+        "Whether an assistant message must be inserted between a tool result and the following user message. Default: auto-detected from baseUrl.",
+      "openai-completions.requiresThinkingAsText":
+        "Whether replayed thinking blocks are converted to text wrapped in `<thinking>` delimiters. Default: auto-detected from baseUrl.",
+      "openai-completions.requiresReasoningContentOnAssistantMessages":
+        "Whether every replayed assistant message must carry an empty `reasoning_content` field when reasoning is enabled. Default: auto-detected from baseUrl.",
+      "openai-completions.thinkingFormat":
+        "Serialization format for reasoning params. openai uses `reasoning_effort`; openrouter uses `reasoning: { effort }`; deepseek uses `thinking: { type }` plus `reasoning_effort`; together uses `reasoning: { enabled }` plus `reasoning_effort`; zai and qwen use a top-level `enable_thinking`; qwen-chat-template uses `chat_template_kwargs.enable_thinking`. Default: openai.",
+      "openai-completions.openRouterRouting":
+        "OpenRouter upstream routing preferences, sent as the request body `provider` field. Only applied when baseUrl points to openrouter.ai.",
+      "openai-completions.vercelGatewayRouting":
+        "Vercel AI Gateway routing preferences; `only`/`order` map to `providerOptions.gateway`. Only applied when baseUrl points to ai-gateway.vercel.sh.",
+      "openai-completions.zaiToolStream":
+        "Whether z.ai supports a top-level `tool_stream: true` for streaming tool call deltas. Default: false.",
+      "openai-completions.supportsStrictMode":
+        "Whether the endpoint accepts the `strict` field on tool definitions. When enabled, sends `strict: false` on tool definitions. Default: true.",
+      "openai-completions.cacheControlFormat":
+        "Prompt cache marker format. When set to `anthropic`, applies Anthropic-style `cache_control` markers to the system prompt, the last tool definition, and the last conversation message.",
+      "openai-completions.sendSessionAffinityHeaders":
+        "Whether to send session-affinity headers (`session_id`, `x-client-request-id`, `x-session-affinity`, from sessionId) when caching is enabled. Default: false.",
+      "openai-completions.supportsLongCacheRetention":
+        'Whether the endpoint supports long prompt cache retention: OpenAI-style sends `prompt_cache_retention: "24h"`, Anthropic-style sends `cache_control.ttl: "1h"`. Default: true.',
+      "openai-responses.sendSessionIdHeader":
+        "Whether to send the OpenAI `session_id` cache-affinity header (from sessionId) when caching is enabled. Default: true.",
+      "openai-responses.supportsLongCacheRetention":
+        'Whether the endpoint supports `prompt_cache_retention: "24h"` long prompt cache retention. Default: true.',
+      "anthropic-messages.supportsEagerToolInputStreaming":
+        "Whether the endpoint accepts per-tool `eager_input_streaming`. When disabled, the field is omitted and the legacy `fine-grained-tool-streaming-2025-05-14` beta header is sent instead. Default: true.",
+      "anthropic-messages.supportsLongCacheRetention":
+        'Whether the endpoint supports Anthropic long cache retention (`cache_control.ttl: "1h"`). Default: true.',
+      "anthropic-messages.sendSessionAffinityHeaders":
+        "Whether to send the `x-session-affinity` header (from sessionId) when caching is enabled. Required for providers like Fireworks that route by session affinity to maximize cache hits. Default: false.",
+      "anthropic-messages.supportsCacheControlOnTools":
+        "Whether the endpoint accepts Anthropic-style `cache_control` markers on tool definitions. When disabled, the marker is omitted from tool params. Some Anthropic-compatible providers (e.g., Fireworks) do not support it. Default: true.",
+      "anthropic-messages.forceAdaptiveThinking":
+        'Whether to force adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) regardless of model id. Custom Anthropic-compatible endpoints can enable this for models requiring the adaptive format; set to false to opt out on overridden built-in models. Default: false.',
     },
     auto: "Auto",
     inherited: "Inherited",
@@ -354,23 +407,29 @@ export const en = {
     diagnosticDetails: "Diagnostic details",
     applySuggestionAndRetest: "Apply suggestion and retest",
     suggestedChange: "Suggested change",
-    realRequestCostNotice: "Runs a real, low-token model request and may incur a small charge.",
+    realRequestCostNotice:
+      "Runs a real, low-token model request and may incur a small charge.",
     removeModelTitle: "Delete model",
     removeModelDescription: "Delete “{model}”. This action cannot be undone.",
     deleteProviderTitle: "Delete provider",
-    deleteProviderDescription: "Delete “{provider}”. This action cannot be undone.",
+    deleteProviderDescription:
+      "Delete “{provider}”. This action cannot be undone.",
     deleteProviderAction: "Delete",
     removeModelAction: "Delete",
     deleteModelDescription: "Remove this model from the model list",
-    deleteProviderRowDescription: "Remove this provider and its models from the configuration",
+    deleteProviderRowDescription:
+      "Remove this provider and its models from the configuration",
     removeApiKeyTitle: "Remove API key?",
-    removeApiKeyDescription: "Remove the stored API key for “{provider}” immediately? You will need to enter a key again to reconnect.",
+    removeApiKeyDescription:
+      "Remove the stored API key for “{provider}” immediately? You will need to enter a key again to reconnect.",
     removeApiKeyAction: "Remove API key",
     disconnectOAuthTitle: "Disconnect authentication?",
-    disconnectOAuthDescription: "Disconnect “{provider}” immediately? You can reconnect later by signing in again.",
+    disconnectOAuthDescription:
+      "Disconnect “{provider}” immediately? You can reconnect later by signing in again.",
     disconnectOAuthAction: "Disconnect authentication",
     discardChangesTitle: "Discard unsaved changes?",
-    discardChangesDescription: "Your model configuration changes have not been saved. Discarding them cannot be undone.",
+    discardChangesDescription:
+      "Your model configuration changes have not been saved. Discarding them cannot be undone.",
     continueEditing: "Continue editing",
     discardChanges: "Discard changes",
   },
@@ -397,7 +456,8 @@ export const en = {
       collision: "Collision",
     },
     selectSkill: "Select a skill to view its details.",
-    searchMarketDescription: "Search the skills market, then install through the project's verified ResourceLoader workflow.",
+    searchMarketDescription:
+      "Search the skills market, then install through the project's verified ResourceLoader workflow.",
     searchSkillsMarket: "Search skills market",
     searchSkills: "Search skills...",
     installationScope: "Installation scope",
@@ -411,10 +471,12 @@ export const en = {
     viewDetails: "View details",
     market: "Market",
     createLocal: "Import local",
-    createLocalDescription: "Import an existing local skill file into the selected installation scope.",
+    createLocalDescription:
+      "Import an existing local skill file into the selected installation scope.",
     skillFilePath: "Skill file or directory path",
     skillFilePathPlaceholder: "D:\\my-skills\\review\\SKILL.md",
-    skillFilePathHint: "Absolute path to a local .md skill file, or a directory containing SKILL.md. Importing a directory copies the entire folder (including sibling resources like scripts and templates). The skill name is read from frontmatter, falling back to the directory or file name.",
+    skillFilePathHint:
+      "Absolute path to a local .md skill file, or a directory containing SKILL.md. Importing a directory copies the entire folder (including sibling resources like scripts and templates). The skill name is read from frontmatter, falling back to the directory or file name.",
     importSkill: "Import",
     creating: "Importing...",
     skillExists: "A skill with this name already exists.",
@@ -423,7 +485,8 @@ export const en = {
     modelInvocationAllowed: "Available to the model",
     manualInvocationOnly: "Manual invocation only",
     modelInvocation: "Model invocation",
-    modelInvocationDescription: "When off, this skill is omitted from the model prompt. It remains available for explicit",
+    modelInvocationDescription:
+      "When off, this skill is omitted from the model prompt. It remains available for explicit",
     calls: "calls.",
     source: "Source",
     sourceLocal: "Local config",
@@ -433,17 +496,21 @@ export const en = {
     fromSkillPack: "Skill Pack",
     scope: "Scope",
     path: "Path",
-    readOnlySymlink: "This skill was discovered through a symlink and is read-only.",
+    readOnlySymlink:
+      "This skill was discovered through a symlink and is read-only.",
     managedByPack: "Managed by its Skill Pack and read-only here.",
-    changesNotice: "Changes affect newly created sessions, restored sessions, or a session after its resources are reloaded. The current running session is not silently restarted.",
+    changesNotice:
+      "Changes affect newly created sessions, restored sessions, or a session after its resources are reloaded. The current running session is not silently restarted.",
     removeSkill: "Delete skill",
-    removeSkillRowDescription: "Deletes the skill files and updates the lock file. This action cannot be undone.",
+    removeSkillRowDescription:
+      "Deletes the skill files and updates the lock file. This action cannot be undone.",
     general: "General",
     dangerZone: "Danger Zone",
     metadata: "Metadata",
     remove: "Delete",
     removeConfirmTitle: "Delete skill",
-    removeConfirmDescription: "Delete \u201C{name}\u201D. This action cannot be undone.",
+    removeConfirmDescription:
+      "Delete \u201C{name}\u201D. This action cannot be undone.",
     removeConfirmAction: "Delete",
     removed: "Deleted",
     packs: {
@@ -451,10 +518,12 @@ export const en = {
       tabPacks: "Skill Packs",
       addAction: "Add Skill Pack",
       addTitle: "Add Skill Pack",
-      addDescription: "Review and install a Pi Package from npm, Git, HTTPS, or an absolute local directory.",
+      addDescription:
+        "Review and install a Pi Package from npm, Git, HTTPS, or an absolute local directory.",
       sourceLabel: "Package source",
       sourcePlaceholder: "npm:@scope/package or D:\\skill-packs\\package",
-      sourceHint: "Local directories may be anywhere on this computer. URLs with credentials, query parameters, or fragments are rejected.",
+      sourceHint:
+        "Local directories may be anywhere on this computer. URLs with credentials, query parameters, or fragments are rejected.",
       browse: "Browse",
       refresh: "Refresh Skill Packs",
       loading: "Loading Skill Packs",
@@ -479,10 +548,13 @@ export const en = {
       prompts: "Prompts",
       themes: "Themes",
       noResources: "None",
-      securityWarning: "Installing a Skill Pack adds instructions that the agent can use and may execute commands permitted by the current session. Review its source and resources first.",
-      extensionWarning: "This package contains executable extensions. Install it only if you trust its publisher and source.",
+      securityWarning:
+        "Installing a Skill Pack adds instructions that the agent can use and may execute commands permitted by the current session. Review its source and resources first.",
+      extensionWarning:
+        "This package contains executable extensions. Install it only if you trust its publisher and source.",
       installTitle: "Install Skill Pack?",
-      installDescription: "Install \u201C{name}\u201D and make its resources available to new sessions.",
+      installDescription:
+        "Install \u201C{name}\u201D and make its resources available to new sessions.",
       installScope: "Install for",
       installProject: "This project",
       installGlobal: "All projects",
@@ -490,9 +562,11 @@ export const en = {
       updateAction: "Check & Update",
       repairAction: "Repair",
       viewPack: "View Skill Pack",
-      localRefreshHint: "This local Skill Pack reads from its source directory. Edit the source and refresh to load its current contents.",
+      localRefreshHint:
+        "This local Skill Pack reads from its source directory. Edit the source and refresh to load its current contents.",
       removeTitle: "Remove Skill Pack?",
-      removeDescription: "Remove \u201C{name}\u201D and its Package-managed resources?",
+      removeDescription:
+        "Remove \u201C{name}\u201D and its Package-managed resources?",
       removeAction: "Remove",
       installedSuccess: "Skill Pack installed. Changes apply to new sessions.",
       removedSuccess: "Skill Pack removed. Changes apply to new sessions.",
@@ -502,22 +576,28 @@ export const en = {
   },
   instructions: {
     title: "System Prompt",
-    description: "Review the effective prompt, manage the global append, and preview project instructions.",
+    description:
+      "Review the effective prompt, manage the global append, and preview project instructions.",
     globalAppend: "Global Append Prompt",
-    globalAppendDescription: "Appended to every session's system prompt across all projects.",
+    globalAppendDescription:
+      "Appended to every session's system prompt across all projects.",
     globalAppendPath: "File: ~/.pi/agent/APPEND_SYSTEM.md",
     globalAppendFilePath: "~/.pi/agent/APPEND_SYSTEM.md",
     projectInstructions: "Project Instructions",
-    projectInstructionsDescription: "Project-level AGENTS.md instructions for the current workspace.",
-    projectInstructionsPreviewDescription: "Preview the current workspace AGENTS.md here, then open the file workspace when you need to edit it.",
+    projectInstructionsDescription:
+      "Project-level AGENTS.md instructions for the current workspace.",
+    projectInstructionsPreviewDescription:
+      "Preview the current workspace AGENTS.md here, then open the file workspace when you need to edit it.",
     projectInstructionsPath: "File: {path}",
     projectNotSelected: "Select a project to manage project instructions.",
     noProjectInstructionsTitle: "No project instructions yet",
-    noProjectInstructionsDescription: "Create or edit AGENTS.md in the file workspace.",
+    noProjectInstructionsDescription:
+      "Create or edit AGENTS.md in the file workspace.",
     editInFileWorkspace: "Edit in file workspace",
     createInFileWorkspace: "Create in file workspace",
     contentPlaceholder: "Enter instruction content...",
-    globalContentPlaceholder: "Add personal instructions that should apply across every project...",
+    globalContentPlaceholder:
+      "Add personal instructions that should apply across every project...",
     createTemplate: "Create from template",
     save: "Save",
     saving: "Saving...",
@@ -529,16 +609,20 @@ export const en = {
     applying: "Applying...",
     applied: "Applied to session",
     reloadInstructions: "Reload instructions",
-    reloadDescription: "Reload the current session to pick up instruction changes.",
-    reloadUnavailableWhileRunning: "Wait for the current task to finish before reloading.",
+    reloadDescription:
+      "Reload the current session to pick up instruction changes.",
+    reloadUnavailableWhileRunning:
+      "Wait for the current task to finish before reloading.",
     dirtyWarning: "You have unsaved changes.",
     unsaved: "Unsaved",
     discardChangesTitle: "Discard unsaved changes?",
-    discardChangesDescription: "Your instruction edits have not been saved. Discarding them cannot be undone.",
+    discardChangesDescription:
+      "Your instruction edits have not been saved. Discarding them cannot be undone.",
     continueEditing: "Continue editing",
     discardChanges: "Discard changes",
     conflictTitle: "File modified externally",
-    conflictDescription: "The instruction file has been modified by another process. Reload the latest version or overwrite with your changes.",
+    conflictDescription:
+      "The instruction file has been modified by another process. Reload the latest version or overwrite with your changes.",
     conflictOverwrite: "Overwrite",
     conflictReload: "Reload latest",
     errorSave: "Failed to save instructions",
@@ -552,19 +636,25 @@ export const en = {
     currentResult: "Current result",
     managedContent: "Managed content",
     finalSystemPrompt: "Final System Prompt",
-    finalSystemPromptDescription: "The effective system prompt for the current session after all sources are combined.",
+    finalSystemPromptDescription:
+      "The effective system prompt for the current session after all sources are combined.",
     noActiveSystemPromptTitle: "No effective system prompt yet",
-    noActiveSystemPrompt: "Start or select a session to inspect its effective system prompt.",
+    noActiveSystemPrompt:
+      "Start or select a session to inspect its effective system prompt.",
     noSession: "No session selected",
     active: "Active",
     notConfigured: "Not configured",
     sessionOutdated: "Current session needs an update",
-    sessionOutdatedDescription: "The file is saved. Apply it separately to update this session.",
-    saveBeforeApply: "Save the current edits before applying them to this session.",
+    sessionOutdatedDescription:
+      "The file is saved. Apply it separately to update this session.",
+    saveBeforeApply:
+      "Save the current edits before applying them to this session.",
     sessionCurrent: "Current session is up to date",
     deleteGlobalTitle: "Delete global append prompt?",
-    deleteGlobalDescription: "This permanently deletes {path}. New sessions will no longer include these instructions.",
+    deleteGlobalDescription:
+      "This permanently deletes {path}. New sessions will no longer include these instructions.",
     deleteProjectTitle: "Delete AGENTS.md?",
-    deleteProjectDescription: "This deletes {path}. If the file is tracked by Git, it can be restored from version history.",
+    deleteProjectDescription:
+      "This deletes {path}. If the file is tracked by Git, it can be restored from version history.",
   },
 } as const;

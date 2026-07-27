@@ -6,8 +6,8 @@ const sessionTreeSource = readFileSync(
   fileURLToPath(new URL("./session-tree.tsx", import.meta.url)),
   "utf8",
 );
-const sessionSidebarSource = readFileSync(
-  fileURLToPath(new URL("./session-sidebar.tsx", import.meta.url)),
+const conversationSidebarSource = readFileSync(
+  fileURLToPath(new URL("./conversation-sidebar.tsx", import.meta.url)),
   "utf8",
 );
 
@@ -32,7 +32,7 @@ describe("session tree destructive actions", () => {
     expect(sessionTreeSource).not.toContain(
       "hidden items-center group-hover:flex",
     );
-    expect(sessionSidebarSource).toContain(
+    expect(conversationSidebarSource).toContain(
       'viewportClassName="[&>div]:block!"',
     );
   });
@@ -53,10 +53,8 @@ describe("session tree destructive actions", () => {
   });
 
   it("uses the shared start-aligned menu behavior in the session sidebar", () => {
-    expect(sessionSidebarSource).toContain("<DropdownMenuContent>");
-    expect(sessionSidebarSource).not.toContain(
-      '<DropdownMenuContent align="end">',
-    );
+    expect(sessionTreeSource).toContain("<DropdownMenuContent");
+    expect(sessionTreeSource).toContain('align="start"');
   });
 
   it("uses compact single-line Codex-style session rows", () => {

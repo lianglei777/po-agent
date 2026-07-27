@@ -31,10 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
-import type {
-  AttachedImage,
-  ModelInfo,
-} from "./agent-types";
+import type { AttachedImage, ModelInfo } from "./agent-types";
 import {
   resolveThinkingLevelForMode,
   type ThinkingMode,
@@ -148,11 +145,10 @@ export function ChatInput({
 
   return (
     <div
-      className="pointer-events-none absolute right-9 bottom-0 left-0 z-20 bg-canvas px-4 pt-3 pb-3"
+      className="pointer-events-none absolute right-0 bottom-0 left-0 z-20 bg-canvas px-4 pt-3 pb-3"
       ref={rootRef}
     >
       <div className="pointer-events-auto mx-auto max-w-[820px]">
-
         {retryInfo ? (
           <InlineStatus tone="warning">
             {t.chat.input.retrying} {retryInfo.attempt}/{retryInfo.maxAttempts}
@@ -345,8 +341,8 @@ export function ChatInput({
                     {model.name} · {model.provider}
                   </SelectItem>
                 ))}
-                </SelectContent>
-              </Select>
+              </SelectContent>
+            </Select>
 
             {/* thinking */}
             <CompactSelect

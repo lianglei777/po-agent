@@ -18,12 +18,14 @@ describe("file panel visual contract", () => {
     expect(source).not.toContain("Card");
   });
 
-  it("places the preview before the file tree without editor features", () => {
+  it("uses the file tree as the primary surface and opens previews beside it", () => {
     expect(source).toContain("<FileTree");
     expect(source).toContain("cwd");
-    expect(source.indexOf("<LoadedFile")).toBeLessThan(
-      source.indexOf("<FileTree"),
+    expect(source.indexOf("<FileTree")).toBeLessThan(
+      source.indexOf("<LoadedFile"),
     );
+    expect(source).toContain('file ?');
+    expect(source).toContain(': "w-full"');
     expect(source).not.toContain("Tabs");
     expect(source).not.toContain("Editor");
     expect(source).not.toContain("Search");

@@ -44,12 +44,15 @@ import {
 import styles from "./message-view.module.css";
 
 // 懒加载代码块组件，避免将 react-syntax-highlighter 打入主 bundle
-const CodeBlock = dynamic(() => import("./code-block").then((m) => m.CodeBlock), {
-  ssr: false,
-  loading: () => (
-    <div className="my-3 h-16 rounded-2xl border border-line-subtle bg-[var(--tool-bg)]" />
-  ),
-});
+const CodeBlock = dynamic(
+  () => import("./code-block").then((m) => m.CodeBlock),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="my-3 h-16 rounded-2xl border border-line-subtle bg-[var(--tool-bg)]" />
+    ),
+  },
+);
 
 export function MessageList({
   messages,
@@ -88,14 +91,14 @@ export function MessageList({
             originalIndex > 0 ? messages[originalIndex - 1] : null;
           const previousEntryId =
             originalIndex > 0 ? entryIds[originalIndex - 1] : undefined;
-          const minimapId =
+          const navigatorId =
             entryId ??
             message.clientId ??
             `user-${message.timestamp ?? "untimed"}-${originalIndex}`;
           const isLastUser = !presentation
             .slice(presentationIndex + 1)
             .some((candidate) => candidate.kind === "user");
-          const highlighted = highlightedMessageId === minimapId;
+          const highlighted = highlightedMessageId === navigatorId;
           return (
             <article
               className={cn(
@@ -104,14 +107,16 @@ export function MessageList({
                   "bg-subtle outline outline-1 outline-line-strong",
               )}
               data-message-role="user"
-              key={entryId ?? minimapId}
+              key={entryId ?? navigatorId}
               ref={(element) => {
-                onMessageElement?.(minimapId, element);
+                onMessageElement?.(navigatorId, element);
                 if (isLastUser) lastUserRef.current = element;
               }}
             >
               <UserMessageView
-                canEdit={previous?.role === "assistant" && Boolean(previousEntryId)}
+                canEdit={
+                  previous?.role === "assistant" && Boolean(previousEntryId)
+                }
                 canFork={Boolean(entryId) && presentationIndex > 0}
                 entryId={entryId}
                 forking={forkingEntryId === entryId}
@@ -127,29 +132,28 @@ export function MessageList({
           );
         }
 
-        const minimapIds = [
+        const messageIds = [
           ...item.entryIds,
           ...(item.streaming ? ["streaming-assistant"] : []),
         ];
-        const minimapId =
-          minimapIds[0] ??
+        const messageId =
+          messageIds[0] ??
           `assistant-${item.messages[0]?.timestamp ?? "untimed"}-${presentationIndex}`;
         const highlighted =
           highlightedMessageId !== null &&
           highlightedMessageId !== undefined &&
-          minimapIds.includes(highlightedMessageId);
+          messageIds.includes(highlightedMessageId);
         return (
           <article
             className={cn(
               "group relative mb-8 scroll-mt-4 px-2 py-1 transition-[background-color,outline-color] duration-[var(--motion-fast)] -mx-2",
-              highlighted &&
-                "bg-subtle outline outline-1 outline-line-strong",
+              highlighted && "bg-subtle outline outline-1 outline-line-strong",
             )}
             data-message-role="assistant"
             data-streaming={item.streaming || undefined}
-            key={minimapId}
+            key={messageId}
             ref={(element) => {
-              for (const id of minimapIds) {
+              for (const id of messageIds) {
                 onMessageElement?.(id, element);
               }
             }}
@@ -223,7 +227,6 @@ function UserMessageView({
         ))}
       </div>
 
-
       <div className="mt-1 flex min-h-7 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         {message.status === "failed" ? (
           <Badge variant="destructive">{t.chat.message.failed}</Badge>
@@ -233,10 +236,12 @@ function UserMessageView({
           {/* copy */}
           <SmallAction
             label={copied ? t.chat.message.copied : t.chat.message.copy}
-            onClick={() => void copyText(messageText(message)).then(() => {
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1500);
-            })}
+            onClick={() =>
+              void copyText(messageText(message)).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              })
+            }
           >
             {copied ? <Check /> : <Copy />}
           </SmallAction>
@@ -250,7 +255,9 @@ function UserMessageView({
           {canFork && entryId && !running ? (
             <SmallAction
               disabled={forking}
-              label={forking ? t.chat.message.creating : t.chat.message.newSession}
+              label={
+                forking ? t.chat.message.creating : t.chat.message.newSession
+              }
               onClick={onFork}
             >
               <GitFork />
@@ -295,9 +302,7 @@ function AssistantTurnView({
   const error = errorMessage ? assistantErrorDetails(errorMessage) : null;
   const text = final
     .filter(
-      (
-        item,
-      ): item is AssistantTurnBlock & { block: TextContent } =>
+      (item): item is AssistantTurnBlock & { block: TextContent } =>
         item.block.type === "text",
     )
     .map((item) => item.block.text)
@@ -389,10 +394,12 @@ function AssistantTurnView({
           {text ? (
             <SmallAction
               label={copied ? t.chat.message.copied : t.chat.message.copy}
-              onClick={() => void copyText(text).then(() => {
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1500);
-              })}
+              onClick={() =>
+                void copyText(text).then(() => {
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                })
+              }
             >
               {copied ? <Check /> : <Copy />}
             </SmallAction>
@@ -421,8 +428,7 @@ function ExecutionProcess({
   assistantError: boolean;
 }) {
   const { t } = useI18n();
-  const automaticValue =
-    streaming || assistantError ? "execution-process" : "";
+  const automaticValue = streaming || assistantError ? "execution-process" : "";
   const [value, setValue] = useState(automaticValue);
   const userControlled = useRef(false);
 
@@ -547,11 +553,7 @@ function ExecutionStep({
   );
 }
 
-function FinalAssistantBlock({
-  block,
-}: {
-  block: TextContent | ImageContent;
-}) {
+function FinalAssistantBlock({ block }: { block: TextContent | ImageContent }) {
   if (block.type === "text") return <Markdown text={block.text} />;
   return <AssistantImage block={block} />;
 }
@@ -662,7 +664,8 @@ function MessageTime({ value }: { value: number }) {
   return (
     <time>
       {date.toLocaleString([], {
-        year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+        year:
+          date.getFullYear() === today.getFullYear() ? undefined : "numeric",
         month: sameDay ? undefined : "short",
         day: sameDay ? undefined : "numeric",
         hour: "2-digit",
@@ -696,7 +699,8 @@ function resultText(
 
 function toolSummary(input: Record<string, unknown>) {
   const keys = ["command", "path", "file_path", "pattern", "query"];
-  const key = keys.find((candidate) => candidate in input) ?? Object.keys(input)[0];
+  const key =
+    keys.find((candidate) => candidate in input) ?? Object.keys(input)[0];
   return key ? String(input[key]).slice(0, 120) : "";
 }
 

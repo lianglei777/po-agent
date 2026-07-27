@@ -1,7 +1,5 @@
 import {
-  PanelLeftClose,
   PanelLeftOpen,
-  PanelRightOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,18 +10,14 @@ import {
 import { useI18n } from "@/i18n/use-i18n";
 import type { SessionTreeNode } from "@/features/chat/agent-types";
 import { BranchHistory } from "@/features/chat/branch-history";
-import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
 import type { WorkspaceView } from "./workspace-navigation";
 
 type WorkspaceTopBarProps = {
   activeView: WorkspaceView;
-  projectPanelOpen: boolean;
-  modelProviderSaveStatus?: ModelProviderSaveStatus;
-  onToggleProjectPanel: () => void;
-  onToggleSidebar: () => void;
+  conversationOpen: boolean;
+  onToggleConversation: () => void;
   projectName: string | null;
   sessionTitle: string | null;
-  sidebarOpen: boolean;
   showBranchHistory?: boolean;
   branchTree?: SessionTreeNode[];
   branchActiveLeafId?: string | null;
@@ -33,13 +27,10 @@ type WorkspaceTopBarProps = {
 
 export function WorkspaceTopBar({
   activeView,
-  projectPanelOpen,
-  modelProviderSaveStatus,
-  onToggleProjectPanel,
-  onToggleSidebar,
+  conversationOpen,
+  onToggleConversation,
   projectName,
   sessionTitle,
-  sidebarOpen,
   showBranchHistory,
   branchTree,
   branchActiveLeafId,
@@ -49,25 +40,33 @@ export function WorkspaceTopBar({
   const { t } = useI18n();
   const title =
     activeView === "model-provider"
-      ? t.workspace.modelProvider
+      ? t.workspace.settings
       : sessionTitle ?? t.workspace.newChat;
 
   return (
-    <header className="flex h-11 flex-none items-center border-b border-line-subtle bg-canvas">
-      <TopBarIconButton
-        label={sidebarOpen ? t.workspace.hideSidebar : t.workspace.showSidebar}
-        onClick={onToggleSidebar}
-      >
-        {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-      </TopBarIconButton>
-
-      <div className="min-w-0 flex-1 px-3">
-        <div className="truncate text-sm font-medium text-primary">{title}</div>
-      </div>
-
-      {activeView === "model-provider" ? (
-        <ModelProviderSaveIndicator status={modelProviderSaveStatus} />
+    <header className="flex h-11 flex-none items-center border-b border-line-subtle bg-canvas px-2">
+      {activeView === "chat" && !conversationOpen ? (
+        <TopBarIconButton
+          label={t.workspace.showConversations}
+          onClick={onToggleConversation}
+        >
+          <PanelLeftOpen />
+        </TopBarIconButton>
       ) : null}
+
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-2">
+        {activeView === "chat" && projectName ? (
+          <>
+            <span className="truncate text-meta font-medium text-muted">
+              {projectName}
+            </span>
+            <span aria-hidden className="text-dim">
+              /
+            </span>
+          </>
+        ) : null}
+        <div className="truncate text-sm font-semibold text-primary">{title}</div>
+      </div>
 
       {/* 分支历史按钮 */}
       {showBranchHistory &&
@@ -84,84 +83,15 @@ export function WorkspaceTopBar({
         </div>
       ) : null}
 
-      {activeView === "chat" && projectName && !projectPanelOpen ? (
-        <TopBarIconButton
-          borderSide="left"
-          label={t.workspace.showProjectPanel}
-          onClick={onToggleProjectPanel}
-        >
-          <PanelRightOpen />
-        </TopBarIconButton>
-      ) : null}
     </header>
   );
 }
 
-function ModelProviderSaveIndicator({
-  status,
-}: {
-  status?: ModelProviderSaveStatus;
-}) {
-  const { t } = useI18n();
-  if (!status || status.phase === "idle") return null;
-
-  if (status.phase === "error") {
-    return (
-      <div
-        className="mr-3 flex min-w-0 max-w-[420px] items-center gap-2 text-xs"
-        role="alert"
-      >
-        <span
-          className="min-w-0 truncate text-destructive-text"
-          title={status.message}
-        >
-          {status.message}
-        </span>
-        {status.onRetry ? (
-          <Button
-            className="h-7 shrink-0 px-2"
-            onClick={status.onRetry}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            {t.models.retrySave}
-          </Button>
-        ) : null}
-      </div>
-    );
-  }
-
-  const label =
-    status.phase === "saving"
-      ? t.models.autoSaving
-      : status.phase === "pending"
-        ? t.models.autoSavePending
-        : t.models.autoSaved;
-
-  return (
-    <div
-      className={`mr-3 min-w-24 text-right text-xs ${
-        status.phase === "saved"
-          ? "text-accent-deep"
-          : status.phase === "pending"
-            ? "text-dim"
-            : "text-muted"
-      }`}
-      role="status"
-    >
-      {label}
-    </div>
-  );
-}
-
 function TopBarIconButton({
-  borderSide = "right",
   children,
   label,
   onClick,
 }: {
-  borderSide?: "left" | "right";
   children: React.ReactNode;
   label: string;
   onClick: () => void;
@@ -171,13 +101,9 @@ function TopBarIconButton({
       <TooltipTrigger asChild>
         <Button
           aria-label={label}
-          className={`h-full rounded-none ${
-            borderSide === "left"
-              ? "border-l border-line-subtle"
-              : "border-r border-line-subtle"
-          } text-muted`}
+          className="text-muted"
           onClick={onClick}
-          size="icon"
+          size="icon-sm"
           type="button"
           variant="ghost"
         >

@@ -20,36 +20,45 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatCenter, type BranchState } from "@/features/chat/chat-center";
 import type { OpenFile } from "@/features/files/file-panel";
-import {
-  ModelProviderPage,
-  type ModelProviderSaveStatus,
-} from "@/features/model-providers/model-provider-page";
-import { SystemPromptDialog } from "@/features/instructions/system-prompt-dialog";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
+import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
+import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
 import { loadSessions } from "@/features/sessions/api";
 import {
   getProjectName,
   getSessionTitle,
 } from "@/features/sessions/session-utils";
 import type { SessionInfo } from "@/features/sessions/types";
+import { useSessionNavigation } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
 import {
-  DEFAULT_FILE_PANEL_WIDTH,
-  DEFAULT_SIDEBAR_WIDTH,
+  COLLAPSED_PRIMARY_NAV_WIDTH,
+  DEFAULT_CONVERSATION_WIDTH,
+  DEFAULT_INSPECTOR_WIDTH,
+  DEFAULT_PRIMARY_NAV_WIDTH,
   fitPanelWidths,
-  getFilePanelWidthBounds,
-  getSidebarWidthBounds,
+  getConversationWidthBounds,
+  getEffectivePrimaryNavWidth,
+  getInspectorWidthBounds,
+  getPrimaryNavWidthBounds,
+  isNarrowWorkspace,
   type PanelWidths,
 } from "./panel-sizing";
 import {
   ProjectPanel,
+  ProjectPanelDock,
   type ProjectPanelTab,
 } from "./project-panel";
+import {
+  readLayoutPreferences,
+  writeLayoutPreferences,
+} from "./layout-preferences";
 import {
   shouldConfirmWorkspaceNavigation,
   type WorkspaceView,
 } from "./workspace-navigation";
 import { WorkspaceSidebar } from "./workspace-sidebar";
+import { WorkspaceSettings } from "./workspace-settings";
 import { WorkspaceTopBar } from "./workspace-top-bar";
 
 type DraftSession = {
@@ -59,14 +68,17 @@ type DraftSession = {
 };
 
 export function AgentWorkspace() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [primaryNavExpanded, setPrimaryNavExpanded] = useState(true);
+  const [conversationOpen, setConversationOpen] = useState(true);
   const [projectPanelOpen, setProjectPanelOpen] = useState(false);
   const [projectPanelTab, setProjectPanelTab] =
     useState<ProjectPanelTab>("files");
   const [activeView, setActiveView] = useState<WorkspaceView>("chat");
   const [modelProviderDirty, setModelProviderDirty] = useState(false);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(null);
+  const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
+    null,
+  );
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   const [draftSession, setDraftSession] = useState<DraftSession | null>(null);
@@ -76,38 +88,54 @@ export function AgentWorkspace() {
   const [modelProviderSaveStatus, setModelProviderSaveStatus] =
     useState<ModelProviderSaveStatus>({ phase: "idle" });
   const [openFile, setOpenFile] = useState<OpenFile | null>(null);
-  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
-  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null);
+  const [systemPromptDirty, setSystemPromptDirty] = useState(false);
+  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(
+    null,
+  );
   const [instructionsNeedApply, setInstructionsNeedApply] = useState(false);
   const [projectInstructionsOpen, setProjectInstructionsOpen] = useState(false);
-  const [projectInstructionsDirty, setProjectInstructionsDirty] = useState(false);
+  const [projectInstructionsDirty, setProjectInstructionsDirty] =
+    useState(false);
   const [initialSessionId, setInitialSessionId] = useState<
     string | null | undefined
   >(undefined);
   const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [panelWidths, setPanelWidths] = useState<PanelWidths>({
-    filePanel: DEFAULT_FILE_PANEL_WIDTH,
-    sidebar: DEFAULT_SIDEBAR_WIDTH,
+    conversation: DEFAULT_CONVERSATION_WIDTH,
+    inspector: DEFAULT_INSPECTOR_WIDTH,
+    primaryNav: DEFAULT_PRIMARY_NAV_WIDTH,
   });
   const [resizingPanel, setResizingPanel] = useState<
-    "filePanel" | "sidebar" | null
+    "conversation" | "inspector" | "primaryNav" | null
   >(null);
+  const [layoutPreferencesReady, setLayoutPreferencesReady] = useState(false);
   const [workspaceWidth, setWorkspaceWidth] = useState(1280);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const { t } = useI18n();
-  const showProjectPanel =
-    activeView === "chat" && projectPanelOpen && Boolean(activeCwd);
-  const sidebarBounds = getSidebarWidthBounds(
+  const showProjectDock = activeView === "chat" && Boolean(activeCwd);
+  const showProjectPanel = showProjectDock && projectPanelOpen;
+  const narrowWorkspace = isNarrowWorkspace(workspaceWidth);
+  const effectivePrimaryNavWidth = getEffectivePrimaryNavWidth(
     workspaceWidth,
-    panelWidths.filePanel,
-    showProjectPanel,
+    primaryNavExpanded,
+    panelWidths.primaryNav,
   );
-  const filePanelBounds = getFilePanelWidthBounds(
+  const primaryNavBounds = getPrimaryNavWidthBounds();
+  const conversationBounds = getConversationWidthBounds(
     workspaceWidth,
-    panelWidths.sidebar,
-    sidebarOpen,
+    effectivePrimaryNavWidth,
+    panelWidths.inspector,
+    showProjectPanel,
+    showProjectDock,
+  );
+  const inspectorBounds = getInspectorWidthBounds(
+    workspaceWidth,
+    effectivePrimaryNavWidth,
+    panelWidths.conversation,
+    conversationOpen && activeView === "chat",
+    showProjectDock,
   );
 
   useEffect(() => {
@@ -120,6 +148,34 @@ export function AgentWorkspace() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const preferences = readLayoutPreferences();
+      setPrimaryNavExpanded(preferences.primaryNavExpanded);
+      setConversationOpen(preferences.conversationOpen);
+      setProjectPanelOpen(preferences.inspectorOpen);
+      setPanelWidths(preferences.widths);
+      setLayoutPreferencesReady(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!layoutPreferencesReady) return;
+    writeLayoutPreferences({
+      conversationOpen,
+      inspectorOpen: projectPanelOpen,
+      primaryNavExpanded,
+      widths: panelWidths,
+    });
+  }, [
+    conversationOpen,
+    layoutPreferencesReady,
+    panelWidths,
+    primaryNavExpanded,
+    projectPanelOpen,
+  ]);
+
+  useEffect(() => {
     const workspace = workspaceRef.current;
     if (!workspace) return;
 
@@ -127,16 +183,25 @@ export function AgentWorkspace() {
       setWorkspaceWidth(workspace.clientWidth);
       setPanelWidths((current) =>
         fitPanelWidths(workspace.clientWidth, current, {
-          filePanelOpen: showProjectPanel,
-          sidebarOpen,
+          conversationOpen: conversationOpen && activeView === "chat",
+          inspectorOpen: showProjectPanel,
+          primaryNavExpanded,
+          showInspectorDock: showProjectDock,
         }),
       );
     };
     const observer = new ResizeObserver(fitToWorkspace);
     observer.observe(workspace);
+    fitToWorkspace();
 
     return () => observer.disconnect();
-  }, [showProjectPanel, sidebarOpen]);
+  }, [
+    activeView,
+    conversationOpen,
+    primaryNavExpanded,
+    showProjectDock,
+    showProjectPanel,
+  ]);
 
   const requestNavigation = useCallback(
     (targetView: WorkspaceView, action: () => void) => {
@@ -149,7 +214,7 @@ export function AgentWorkspace() {
         shouldConfirmWorkspaceNavigation(
           activeView,
           targetView,
-          modelProviderDirty,
+          modelProviderDirty || systemPromptDirty,
         )
       ) {
         pendingNavigationRef.current = action;
@@ -158,7 +223,13 @@ export function AgentWorkspace() {
       }
       action();
     },
-    [activeView, modelProviderDirty, projectInstructionsDirty, projectInstructionsOpen],
+    [
+      activeView,
+      modelProviderDirty,
+      projectInstructionsDirty,
+      projectInstructionsOpen,
+      systemPromptDirty,
+    ],
   );
 
   const handleOpenModelProvider = useCallback(
@@ -174,6 +245,17 @@ export function AgentWorkspace() {
         setActiveView("chat");
         setProjectPanelTab("skills");
         setProjectPanelOpen(true);
+        setProjectInstructionsOpen(false);
+      }),
+    [requestNavigation],
+  );
+  const handleOpenFiles = useCallback(
+    () =>
+      requestNavigation("chat", () => {
+        setActiveView("chat");
+        setProjectPanelTab("files");
+        setProjectPanelOpen(true);
+        setProjectInstructionsOpen(false);
       }),
     [requestNavigation],
   );
@@ -188,6 +270,7 @@ export function AgentWorkspace() {
     pendingNavigationRef.current = null;
     setModelProviderDirty(false);
     setProjectInstructionsDirty(false);
+    setSystemPromptDirty(false);
     setProjectInstructionsOpen(false);
     setConfirmingDiscard(false);
     action?.();
@@ -300,27 +383,31 @@ export function AgentWorkspace() {
     [selectSessionById],
   );
 
-  const handleOpenFile = useCallback((path: string, name: string) => {
-    requestNavigation("chat", () => {
-      if (isRootAgentsFile(activeCwd, path, name)) {
-        setOpenFile(null);
-        setProjectInstructionsOpen(true);
-      } else {
-        setProjectInstructionsOpen(false);
-        setOpenFile({ path, name });
-      }
-      setProjectPanelTab("files");
-      setProjectPanelOpen(true);
-    });
-  }, [activeCwd, requestNavigation]);
+  const handleOpenFile = useCallback(
+    (path: string, name: string) => {
+      requestNavigation("chat", () => {
+        if (isRootAgentsFile(activeCwd, path, name)) {
+          setOpenFile(null);
+          setProjectInstructionsOpen(true);
+          setProjectPanelTab("settings");
+        } else {
+          setProjectInstructionsOpen(false);
+          setOpenFile({ path, name });
+          setProjectPanelTab("files");
+        }
+        setProjectPanelOpen(true);
+      });
+    },
+    [activeCwd, requestNavigation],
+  );
 
   const handleOpenProjectInstructions = useCallback(() => {
     requestNavigation("chat", () => {
+      setActiveView("chat");
       setOpenFile(null);
       setProjectInstructionsOpen(true);
-      setProjectPanelTab("files");
+      setProjectPanelTab("settings");
       setProjectPanelOpen(true);
-      setSystemPromptOpen(false);
     });
   }, [requestNavigation]);
 
@@ -342,197 +429,325 @@ export function AgentWorkspace() {
 
   const handleProjectPanelTabChange = useCallback(
     (tab: ProjectPanelTab) => {
-      if (tab === projectPanelTab) return;
       requestNavigation("chat", () => {
+        setActiveView("chat");
+        if (tab === projectPanelTab && projectPanelOpen) {
+          setProjectPanelOpen(false);
+          setProjectInstructionsOpen(false);
+          return;
+        }
         setProjectPanelTab(tab);
+        setProjectPanelOpen(true);
+        setProjectInstructionsOpen(tab === "settings");
       });
     },
-    [projectPanelTab, requestNavigation],
+    [projectPanelOpen, projectPanelTab, requestNavigation],
   );
 
   const handleAtMention = useCallback((path: string) => {
-    window.dispatchEvent(
-      new CustomEvent("pi:mention-file", { detail: path }),
-    );
+    window.dispatchEvent(new CustomEvent("pi:mention-file", { detail: path }));
   }, []);
+
+  const handleNavigationCwdChange = useCallback(
+    (cwd: string) => requestNavigation("chat", () => handleCwdChange(cwd)),
+    [handleCwdChange, requestNavigation],
+  );
+  const handleNavigationNewSession = useCallback(
+    (temporaryId: string, cwd: string) =>
+      requestNavigation("chat", () => handleNewSession(temporaryId, cwd)),
+    [handleNewSession, requestNavigation],
+  );
+  const handleNavigationSelectSession = useCallback(
+    (session: SessionInfo, isRestore = false) =>
+      requestNavigation("chat", () => handleSelectSession(session, isRestore)),
+    [handleSelectSession, requestNavigation],
+  );
+  const handleInitialRestoreDone = useCallback(
+    () => updateSessionUrl(null),
+    [updateSessionUrl],
+  );
+  const sessionNavigation = useSessionNavigation({
+    draftSession,
+    initialSessionId,
+    onCwdChange: handleNavigationCwdChange,
+    onInitialRestoreDone: handleInitialRestoreDone,
+    onNewSession: handleNavigationNewSession,
+    onSelectSession: handleNavigationSelectSession,
+    onSessionDeleted: handleSessionDeleted,
+    refreshKey: sessionRefreshKey,
+    selectedCwd: activeCwd,
+    selectedSessionId: selectedSession?.id ?? draftSession?.id ?? null,
+  });
+  const projectPanelContent = activeCwd ? (
+    <ProjectPanel
+      activeTab={projectPanelTab}
+      cwd={activeCwd}
+      file={openFile}
+      onAtMention={handleAtMention}
+      onClose={handleToggleProjectPanel}
+      onOpenFile={handleOpenFile}
+      projectName={getProjectName(activeCwd)}
+      refreshKey={explorerRefreshKey}
+      settingsContent={
+        <ProjectInstructionsEditor
+          agentId={selectedSession?.id}
+          cwd={activeCwd}
+          isRunning={branchState?.busy}
+          needsApply={instructionsNeedApply}
+          onChanged={handleInstructionsChanged}
+          onApplied={() => setInstructionsNeedApply(false)}
+          onDirtyChange={setProjectInstructionsDirty}
+          onSystemPromptChange={setCurrentSystemPrompt}
+        />
+      }
+    />
+  ) : null;
 
   return (
     <TooltipProvider>
       <div
-        className="flex h-dvh min-w-[1024px] overflow-hidden bg-canvas"
+        className="relative h-dvh min-w-[1024px] overflow-hidden bg-[var(--workspace-bg)]"
+        data-conversation-open={conversationOpen}
         data-project-panel-open={showProjectPanel}
-        data-sidebar-open={sidebarOpen}
+        data-primary-nav-expanded={primaryNavExpanded}
         data-testid="agent-workspace"
         ref={workspaceRef}
       >
-        <aside
-          className={`relative flex-none overflow-hidden bg-panel transition-[width,border-width] ${
-            resizingPanel === "sidebar"
-              ? "duration-0"
-              : "duration-[var(--motion-standard)]"
-          } ${sidebarOpen ? "w-[var(--panel-width)]" : "w-0"}`}
-          style={
-            sidebarOpen
-              ? ({ "--panel-width": `${panelWidths.sidebar}px` } as CSSProperties)
-              : undefined
+        <div
+          className={
+            activeView === "chat" ? "flex h-full min-h-0 min-w-0" : "hidden"
           }
         >
-          <div className="flex h-full w-[var(--panel-width)] flex-col">
-            <WorkspaceSidebar
-              activeView={activeView}
-              onNewChat={() => {
-                if (!activeCwd) return;
-                requestNavigation("chat", () =>
-                  handleNewSession(crypto.randomUUID(), activeCwd),
-                );
-              }}
-              onOpenModelProvider={handleOpenModelProvider}
-              onOpenSystemPrompt={() => setSystemPromptOpen(true)}
-              sessionProps={{
-                draftSession,
-                initialSessionId,
-                onCwdChange: (cwd) =>
-                  requestNavigation("chat", () => handleCwdChange(cwd)),
-                onInitialRestoreDone: () => updateSessionUrl(null),
-                onNewSession: (temporaryId, cwd) =>
-                  requestNavigation("chat", () =>
-                    handleNewSession(temporaryId, cwd),
-                  ),
-                onSelectSession: (session, isRestore) =>
-                  requestNavigation("chat", () =>
-                    handleSelectSession(session, isRestore),
-                  ),
-                onSessionDeleted: handleSessionDeleted,
-                refreshKey: sessionRefreshKey,
-                selectedCwd: activeCwd,
-                selectedSessionId:
-                  selectedSession?.id ?? draftSession?.id ?? null,
-              }}
-            />
-          </div>
-        </aside>
-        {sidebarOpen ? (
-          <ResizeHandle
-            ariaLabel={t.workspace.resizeSessionSidebar}
-            direction={1}
-            max={sidebarBounds.max}
-            min={sidebarBounds.min}
-            onResize={(sidebar) =>
-              setPanelWidths((current) => ({ ...current, sidebar }))
-            }
-            onResizeEnd={() => setResizingPanel(null)}
-            onResizeStart={() => setResizingPanel("sidebar")}
-            value={panelWidths.sidebar}
-          />
-        ) : null}
-
-        <section className="relative flex min-w-0 flex-1 flex-col bg-canvas">
-          <WorkspaceTopBar
-            activeView={activeView}
-            branchActiveLeafId={branchState?.activeLeafId}
-            branchRunning={branchState?.running}
-            branchTree={branchState?.tree}
-            projectPanelOpen={projectPanelOpen}
-            modelProviderSaveStatus={modelProviderSaveStatus}
-            onBranchChangeLeaf={
-              branchState
-                ? (leafId) => void branchState.changeLeaf(leafId)
-                : undefined
-            }
-            onToggleProjectPanel={handleToggleProjectPanel}
-            onToggleSidebar={() => setSidebarOpen((open) => !open)}
-            projectName={activeCwd ? getProjectName(activeCwd) : null}
-            sessionTitle={
-              selectedSession ? getSessionTitle(selectedSession) : null
-            }
-            showBranchHistory={activeView === "chat"}
-            sidebarOpen={sidebarOpen}
-          />
-
-          <div
-            className={
-              activeView === "chat" ? "flex min-h-0 flex-1" : "hidden"
+          <aside
+            className={`relative flex-none overflow-hidden bg-transparent transition-[width] ${
+              resizingPanel === "primaryNav"
+                ? "duration-0"
+                : "duration-[var(--motion-standard)]"
+            } w-[var(--panel-width)]`}
+            style={
+              {
+                "--panel-width": `${effectivePrimaryNavWidth}px`,
+              } as CSSProperties
             }
           >
-            <ChatCenter
-              key={chatInstanceKey}
-              modelsRevision={modelsRevision}
-              newSessionCwd={newSessionCwd}
-              onAgentEnd={handleAgentEnd}
-              onBranchState={setBranchState}
-              onOpenModelProvider={handleOpenModelProvider}
-              onOpenSkills={handleOpenSkills}
-              onSessionCreated={handleSessionCreated}
-              onSessionForked={handleSessionForked}
-              onSystemPromptChange={setCurrentSystemPrompt}
-              projectName={activeCwd ? getProjectName(activeCwd) : null}
-              session={selectedSession}
-            />
-          </div>
-
-          {activeView === "model-provider" ? (
-            <ModelProviderPage
-              onDirtyChange={setModelProviderDirty}
-              onSaved={() => setModelsRevision((current) => current + 1)}
-              onSaveStatusChange={setModelProviderSaveStatus}
-            />
-          ) : null}
-        </section>
-
-        {showProjectPanel && activeCwd ? (
-          <>
+            <div className="flex h-full w-[var(--panel-width)] flex-col">
+              <WorkspaceSidebar
+                activeProjectTool={projectPanelTab}
+                activeView={activeView}
+                compact={
+                  effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
+                }
+                navigation={sessionNavigation}
+                onOpenFiles={handleOpenFiles}
+                onOpenSettings={handleOpenModelProvider}
+                onOpenSkills={handleOpenSkills}
+                onToggleCompact={() =>
+                  setPrimaryNavExpanded((expanded) => !expanded)
+                }
+                projectPanelOpen={projectPanelOpen}
+              />
+            </div>
+          </aside>
+          {primaryNavExpanded && !narrowWorkspace ? (
             <ResizeHandle
-              ariaLabel={t.workspace.resizeProjectPanel}
-              direction={-1}
-              max={filePanelBounds.max}
-              min={filePanelBounds.min}
-              onResize={(filePanel) =>
-                setPanelWidths((current) => ({ ...current, filePanel }))
+              ariaLabel={t.workspace.resizePrimaryNavigation}
+              direction={1}
+              max={primaryNavBounds.max}
+              min={primaryNavBounds.min}
+              onResize={(primaryNav) =>
+                setPanelWidths((current) => ({ ...current, primaryNav }))
               }
               onResizeEnd={() => setResizingPanel(null)}
-              onResizeStart={() => setResizingPanel("filePanel")}
-              value={panelWidths.filePanel}
+              onResizeStart={() => setResizingPanel("primaryNav")}
+              value={panelWidths.primaryNav}
             />
-            <aside
-              className={`flex-none overflow-hidden bg-canvas ${
-                resizingPanel === "filePanel"
-                  ? "duration-0"
-                  : "duration-[var(--motion-standard)]"
-              } w-[var(--panel-width)]`}
-              style={
-                {
-                  "--panel-width": `${panelWidths.filePanel}px`,
-                } as CSSProperties
-              }
-            >
-              <ProjectPanel
-                activeTab={projectPanelTab}
-                cwd={activeCwd}
-                file={openFile}
-                onAtMention={handleAtMention}
-                onClose={handleToggleProjectPanel}
-                onOpenFile={handleOpenFile}
-                onTabChange={handleProjectPanelTabChange}
-                projectName={getProjectName(activeCwd)}
-                refreshKey={explorerRefreshKey}
-                specialContent={
-                  activeCwd && projectInstructionsOpen ? (
-                    <ProjectInstructionsEditor
-                      agentId={selectedSession?.id}
-                      cwd={activeCwd}
-                      isRunning={branchState?.busy}
-                      needsApply={instructionsNeedApply}
-                      onChanged={handleInstructionsChanged}
-                      onApplied={() => setInstructionsNeedApply(false)}
-                      onDirtyChange={setProjectInstructionsDirty}
-                      onSystemPromptChange={setCurrentSystemPrompt}
-                    />
-                  ) : undefined
+          ) : null}
+
+          <div className="my-2 ml-2 flex min-w-0 flex-1 overflow-hidden rounded-xl bg-canvas">
+            {conversationOpen ? (
+              <>
+                <aside
+                  className={`flex-none overflow-hidden bg-canvas transition-[width] ${
+                    resizingPanel === "conversation"
+                      ? "duration-0"
+                      : "duration-[var(--motion-standard)]"
+                  } w-[var(--panel-width)]`}
+                  style={
+                    {
+                      "--panel-width": `${panelWidths.conversation}px`,
+                    } as CSSProperties
+                  }
+                >
+                  <ConversationSidebar
+                    navigation={sessionNavigation}
+                    onClose={() => setConversationOpen(false)}
+                  />
+                </aside>
+                <ResizeHandle
+                  ariaLabel={t.workspace.resizeConversationSidebar}
+                  direction={1}
+                  max={conversationBounds.max}
+                  min={conversationBounds.min}
+                  onResize={(conversation) =>
+                    setPanelWidths((current) => ({
+                      ...current,
+                      conversation,
+                    }))
+                  }
+                  onResizeEnd={() => setResizingPanel(null)}
+                  onResizeStart={() => setResizingPanel("conversation")}
+                  value={panelWidths.conversation}
+                />
+              </>
+            ) : null}
+
+            <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+              <WorkspaceTopBar
+                activeView={activeView}
+                branchActiveLeafId={branchState?.activeLeafId}
+                branchRunning={branchState?.running}
+                branchTree={branchState?.tree}
+                onBranchChangeLeaf={
+                  branchState
+                    ? (leafId) => void branchState.changeLeaf(leafId)
+                    : undefined
                 }
-                specialTitle={projectInstructionsOpen ? "AGENTS.md" : undefined}
+                conversationOpen={conversationOpen}
+                onToggleConversation={() =>
+                  setConversationOpen((open) => !open)
+                }
+                projectName={activeCwd ? getProjectName(activeCwd) : null}
+                sessionTitle={
+                  selectedSession ? getSessionTitle(selectedSession) : null
+                }
+                showBranchHistory
               />
-            </aside>
-          </>
+
+              <div className="flex min-h-0 flex-1">
+                <ChatCenter
+                  key={chatInstanceKey}
+                  conversationNavigatorCompact={
+                    narrowWorkspace || showProjectPanel
+                  }
+                  modelsRevision={modelsRevision}
+                  newSessionCwd={newSessionCwd}
+                  onAgentEnd={handleAgentEnd}
+                  onBranchState={setBranchState}
+                  onOpenModelProvider={handleOpenModelProvider}
+                  onOpenSkills={handleOpenSkills}
+                  onSessionCreated={handleSessionCreated}
+                  onSessionForked={handleSessionForked}
+                  onSystemPromptChange={setCurrentSystemPrompt}
+                  projectName={activeCwd ? getProjectName(activeCwd) : null}
+                  session={selectedSession}
+                />
+              </div>
+            </section>
+          </div>
+
+          {showProjectDock && !narrowWorkspace ? (
+            <>
+              {showProjectPanel && projectPanelContent ? (
+                <ResizeHandle
+                  ariaLabel={t.workspace.resizeProjectPanel}
+                  direction={-1}
+                  max={inspectorBounds.max}
+                  min={inspectorBounds.min}
+                  onResize={(inspector) =>
+                    setPanelWidths((current) => ({ ...current, inspector }))
+                  }
+                  onResizeEnd={() => setResizingPanel(null)}
+                  onResizeStart={() => setResizingPanel("inspector")}
+                  value={panelWidths.inspector}
+                />
+              ) : null}
+              <div className="my-2 ml-2 mr-2 flex flex-none overflow-hidden rounded-xl bg-canvas">
+                <ProjectPanelDock
+                  activeTab={projectPanelTab}
+                  onSelect={handleProjectPanelTabChange}
+                  open={projectPanelOpen}
+                />
+                {showProjectPanel && projectPanelContent ? (
+                  <div
+                    className={`min-w-0 flex-none overflow-hidden ${
+                      resizingPanel === "inspector"
+                        ? "duration-0"
+                        : "duration-[var(--motion-standard)]"
+                    } w-[var(--panel-width)]`}
+                    style={
+                      {
+                        "--panel-width": `${panelWidths.inspector}px`,
+                      } as CSSProperties
+                    }
+                  >
+                    {projectPanelContent}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
+
+          {showProjectDock && narrowWorkspace ? (
+            showProjectPanel && projectPanelContent ? (
+              <div className="absolute top-2 right-2 bottom-2 z-30 flex">
+                <ResizeHandle
+                  ariaLabel={t.workspace.resizeProjectPanel}
+                  direction={-1}
+                  max={inspectorBounds.max}
+                  min={inspectorBounds.min}
+                  onResize={(inspector) =>
+                    setPanelWidths((current) => ({ ...current, inspector }))
+                  }
+                  onResizeEnd={() => setResizingPanel(null)}
+                  onResizeStart={() => setResizingPanel("inspector")}
+                  value={panelWidths.inspector}
+                />
+                <div className="flex overflow-hidden rounded-xl border border-line-subtle bg-canvas shadow-floating">
+                  <ProjectPanelDock
+                    activeTab={projectPanelTab}
+                    onSelect={handleProjectPanelTabChange}
+                    open={projectPanelOpen}
+                  />
+                  <div
+                    className="min-w-0 flex-none"
+                    style={{ width: `${panelWidths.inspector}px` }}
+                  >
+                    {projectPanelContent}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="my-2 ml-2 mr-2 overflow-hidden rounded-xl bg-canvas">
+                <ProjectPanelDock
+                  activeTab={projectPanelTab}
+                  onSelect={handleProjectPanelTabChange}
+                  open={projectPanelOpen}
+                />
+              </div>
+            )
+          ) : null}
+        </div>
+
+        {activeView === "model-provider" ? (
+          <WorkspaceSettings
+            agentId={selectedSession?.id}
+            currentSystemPrompt={currentSystemPrompt}
+            cwd={activeCwd ?? undefined}
+            instructionsNeedApply={instructionsNeedApply}
+            isRunning={branchState?.busy}
+            modelProviderSaveStatus={modelProviderSaveStatus}
+            onBack={() =>
+              requestNavigation("chat", () => setActiveView("chat"))
+            }
+            onInstructionsApplied={() => setInstructionsNeedApply(false)}
+            onInstructionsChanged={handleInstructionsChanged}
+            onModelDirtyChange={setModelProviderDirty}
+            onModelsSaved={() => setModelsRevision((current) => current + 1)}
+            onModelSaveStatusChange={setModelProviderSaveStatus}
+            onOpenProjectInstructions={handleOpenProjectInstructions}
+            onSystemPromptChange={setCurrentSystemPrompt}
+            onSystemPromptDirtyChange={setSystemPromptDirty}
+          />
         ) : null}
 
         <Dialog
@@ -544,44 +759,30 @@ export function AgentWorkspace() {
           <DialogContent showCloseButton={false}>
             <DialogHeader>
               <DialogTitle>
-                {projectInstructionsDirty
+                {projectInstructionsDirty || systemPromptDirty
                   ? t.instructions.discardChangesTitle
                   : t.models.discardChangesTitle}
               </DialogTitle>
               <DialogDescription>
-                {projectInstructionsDirty
+                {projectInstructionsDirty || systemPromptDirty
                   ? t.instructions.discardChangesDescription
                   : t.models.discardChangesDescription}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button autoFocus onClick={cancelDiscard} variant="outline">
-              {projectInstructionsDirty
-                ? t.instructions.continueEditing
-                : t.models.continueEditing}
+                {projectInstructionsDirty || systemPromptDirty
+                  ? t.instructions.continueEditing
+                  : t.models.continueEditing}
               </Button>
               <Button onClick={confirmDiscard} variant="destructive">
-                {projectInstructionsDirty
+                {projectInstructionsDirty || systemPromptDirty
                   ? t.instructions.discardChanges
                   : t.models.discardChanges}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        <SystemPromptDialog
-          agentId={selectedSession?.id}
-          currentSystemPrompt={currentSystemPrompt}
-          cwd={activeCwd ?? undefined}
-          isRunning={branchState?.busy}
-          needsApply={instructionsNeedApply}
-          onApplied={() => setInstructionsNeedApply(false)}
-          onClose={() => setSystemPromptOpen(false)}
-          onInstructionsChanged={handleInstructionsChanged}
-          onOpenProjectInstructions={handleOpenProjectInstructions}
-          onSystemPromptChange={setCurrentSystemPrompt}
-          open={systemPromptOpen}
-        />
       </div>
     </TooltipProvider>
   );
@@ -589,6 +790,7 @@ export function AgentWorkspace() {
 
 function isRootAgentsFile(cwd: string | null, filePath: string, name: string) {
   if (!cwd || name.toLowerCase() !== "agents.md") return false;
-  const normalize = (value: string) => value.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase();
+  const normalize = (value: string) =>
+    value.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase();
   return normalize(filePath) === `${normalize(cwd)}/agents.md`;
 }

@@ -29,17 +29,20 @@ const agentWorkspace = readFileSync(
 describe("visual foundation contract", () => {
   test("defines the approved Codex light tokens", () => {
     expect(css).toContain("--bg: #ffffff");
-    expect(css).toContain("--bg-panel: #f5f5f5");
+    expect(css).toContain("--workspace-bg: #f5f5f3");
+    expect(css).toContain("--bg-panel: #ffffff");
     expect(css).toContain("--bg-elevated: #ffffff");
-    expect(css).toContain("--sidebar-bg: #f7f7f7");
-    expect(css).toContain("--bg-subtle: #f7f7f7");
-    expect(css).toContain("--bg-hover: #ededed");
-    expect(css).toContain("--bg-selected: #e8e8e8");
-    expect(css).toContain("--text: #1a1c1f");
-    expect(css).toContain("--text-muted: #62666d");
-    expect(css).toContain("--text-dim: #8b9098");
-    expect(css).toContain("--border-subtle: #e8e8e8");
-    expect(css).toContain("--border-strong: #d7d7d7");
+    expect(css).toContain("--sidebar-bg: #f5f5f3");
+    expect(css).toContain("--conversation-bg: #ffffff");
+    expect(css).toContain("--dock-bg: #ffffff");
+    expect(css).toContain("--bg-subtle: #f7f7f5");
+    expect(css).toContain("--bg-hover: #ecece9");
+    expect(css).toContain("--bg-selected: #e7e7e3");
+    expect(css).toContain("--text: #1f201e");
+    expect(css).toContain("--text-muted: #686b68");
+    expect(css).toContain("--text-dim: #969995");
+    expect(css).toContain("--border-subtle: #ecece8");
+    expect(css).toContain("--border-strong: #d9d9d4");
     expect(css).toContain("--accent: #339cff");
     expect(css).toContain("--accent-deep: #0670d3");
     expect(css).toContain("--ring: #0670d3");
@@ -70,7 +73,7 @@ describe("visual foundation contract", () => {
   });
 
   test("applies the visual foundation to the chat sample", () => {
-    expect(topBar).toContain("truncate text-sm font-medium text-primary");
+    expect(topBar).toContain("truncate text-sm font-semibold text-primary");
     expect(chatInput).not.toContain("rounded-[20px]");
     expect(chatInput).not.toContain("linear-gradient");
     expect(chatInput).toContain("rounded-composer");
@@ -78,8 +81,11 @@ describe("visual foundation contract", () => {
   });
 
   test("uses a quiet canvas with distinct panel surfaces", () => {
-    expect(agentWorkspace).toContain("bg-panel");
+    expect(agentWorkspace).toContain("bg-transparent");
     expect(agentWorkspace).toContain("bg-canvas");
+    expect(agentWorkspace).toContain(
+      "overflow-hidden rounded-xl bg-canvas",
+    );
     expect(topBar).toContain("border-line-subtle bg-canvas");
     expect(topBar).not.toContain("backdrop-blur");
     expect(chatInput).not.toContain("rounded-[14px]");
@@ -95,7 +101,7 @@ describe("visual foundation contract", () => {
   test("keeps the design sidecar synchronized with the approved theme", () => {
     expect(designSidecar).toContain('"canonical": "#ffffff"');
     expect(designSidecar).toContain('"canonical": "#339cff"');
-    expect(designSidecar).toContain("Codex-like neutral light");
+    expect(designSidecar).toContain("Coze-inspired neutral light");
     expect(designSidecar).not.toContain("Deep Focus");
     expect(designSidecar).not.toContain("Adaptive Workbench");
     expect(designSidecar).not.toContain("rounded-20px");

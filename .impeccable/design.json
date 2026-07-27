@@ -12,38 +12,38 @@
       },
       "panel": {
         "role": "neutral",
-        "displayName": "Sidebar Gray",
-        "canonical": "#f5f5f5",
-        "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#f5f5f5", "#ffffff"]
+        "displayName": "White Work Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#1f201e", "#686b68", "#969995", "#b2b4b0", "#d9d9d4", "#ecece8", "#f5f5f3", "#ffffff"]
       },
       "hover": {
         "role": "neutral",
         "displayName": "Neutral Hover",
-        "canonical": "#ededed",
+        "canonical": "#ecece9",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "selected": {
         "role": "neutral",
         "displayName": "Neutral Selected",
-        "canonical": "#e8e8e8",
+        "canonical": "#e7e7e3",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "border": {
         "role": "neutral",
         "displayName": "Neutral Line",
-        "canonical": "#e8e8e8",
+        "canonical": "#ecece8",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "ink": {
         "role": "neutral",
         "displayName": "High Contrast Ink",
-        "canonical": "#1a1c1f",
+        "canonical": "#1f201e",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#f5f5f5", "#ffffff"]
       },
       "muted": {
         "role": "neutral",
         "displayName": "Codex Muted",
-        "canonical": "#62666d",
+        "canonical": "#686b68",
         "tonalRamp": ["#1a1c1f", "#34373b", "#62666d", "#737880", "#8b9098", "#a6abb2", "#d7d7d7", "#f5f5f5"]
       },
       "accent": {
@@ -150,10 +150,10 @@
     }
   ],
   "narrative": {
-    "northStar": "The Neutral Desk",
-    "overview": "Po Agent is a focused desk for working with an AI coding agent. The Codex-like neutral light theme provides a white canvas, translucent gray sidebars, compact controls, neutral selection, restrained blue state accents, and dark primary actions. Hierarchy comes from tone, spacing, and border rather than decorative effects.",
+    "northStar": "The Coze Workbench",
+    "overview": "Po Agent is a focused desk for working with an AI coding agent. The Coze-inspired neutral light theme provides a soft gray application rail, continuous white work surfaces, compact controls, neutral selection, restrained blue state accents, and dark primary actions. Hierarchy comes from tone, spacing, and selective boundaries rather than framed cards.",
     "keyCharacteristics": [
-      "Single Codex-like neutral light theme with white and soft gray surfaces.",
+      "Single Coze-inspired neutral light theme with a gray application rail and white work surfaces.",
       "Codex blue reserved for focus, links, switches, live agent indicators, and explicit status.",
       "Black primary actions for high-contrast CTA clarity.",
       "Flat resting surfaces; floating composer, dialogs, and menus use restrained shadows.",
@@ -173,7 +173,7 @@
       }
     ],
     "dos": [
-      "Do keep the canvas white and sidebars soft gray.",
+      "Do keep the primary application rail soft gray and work surfaces white.",
       "Do use Codex blue for focus, links, switches, status, and live indicators only.",
       "Do use black for primary action buttons.",
       "Do use neutral gray for selected navigation and passive highlights.",

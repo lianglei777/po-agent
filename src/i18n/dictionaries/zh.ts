@@ -23,7 +23,10 @@ export const zh = {
     modelProvider: "模型",
     projects: "项目",
     openProject: "打开项目",
-    conversationMinimap: "对话导航",
+    conversationNavigator: "对话目录",
+    collapseConversationNavigator: "收起对话目录",
+    expandConversationNavigator: "展开对话目录",
+    jumpToLatest: "定位到最新消息",
     hideSidebar: "隐藏侧边栏",
     showSidebar: "显示侧边栏",
     hideFilePanel: "隐藏文件面板",
@@ -40,11 +43,25 @@ export const zh = {
     context: "上下文",
     models: "模型",
     skills: "技能",
+    settings: "设置",
+    projectSettings: "项目设置",
+    projectTools: "项目工具",
     selectProjectForSkills: "请先选择项目，再打开技能",
+    selectProjectForFiles: "请先选择项目，再打开文件",
+    collapsePrimaryNavigation: "折叠主导航",
+    expandPrimaryNavigation: "展开主导航",
+    hideConversations: "隐藏项目对话",
+    showConversations: "显示项目对话",
     closeSidebar: "关闭侧边栏",
+    resizePrimaryNavigation: "调整主导航宽度",
+    resizeConversationSidebar: "调整项目对话宽度",
     resizeSessionSidebar: "调整会话侧边栏宽度",
     resizeFilePanel: "调整文件面板宽度",
     resizeProjectPanel: "调整项目面板宽度",
+  },
+  settings: {
+    exitSettings: "退出设置",
+    languageDescription: "选择导航、对话框和状态信息使用的界面语言。",
   },
   chat: {
     dragDropImages: "拖放图片以附加",
@@ -139,7 +156,8 @@ export const zh = {
       editUndoNotice: "已从此处编辑，后续内容已收起为分支",
       editUndoAction: "撤销",
       branchHistory: "分支历史",
-      branchNavigationUnavailableWhileRunning: "请等待当前任务完成后再切换分支。",
+      branchNavigationUnavailableWhileRunning:
+        "请等待当前任务完成后再切换分支。",
       thinking: "思考",
       executionProcess: "执行过程",
       executionSteps: "步",
@@ -164,6 +182,8 @@ export const zh = {
     selectProjectEllipsis: "选择项目...",
     selectProjectToViewSessions: "选择一个项目以查看会话",
     noSessions: "没有找到会话",
+    noMatchingSessions: "没有匹配的会话",
+    searchSessions: "搜索项目对话",
     draft: "新会话",
     draftHint: "草稿 - 发送消息后创建",
     sessionActions: "会话操作",
@@ -188,7 +208,8 @@ export const zh = {
     renameFailed: "重命名失败",
     deleteFailed: "删除失败",
     deleteSessionTitle: "删除会话？",
-    deleteSessionDescription: "永久删除“{session}”及其消息记录吗？此操作无法撤销。",
+    deleteSessionDescription:
+      "永久删除“{session}”及其消息记录吗？此操作无法撤销。",
     deleteSessionAction: "删除会话",
     deletingSession: "删除中...",
     expandForks: "展开会话分支",
@@ -250,11 +271,13 @@ export const zh = {
     copied: "已复制",
     apiOverride: "API 覆盖",
     apiProtocol: "API 协议",
-    apiProtocolDescription: "通常继承提供商设置。只有当这个模型必须使用不同请求协议时才需要修改。",
+    apiProtocolDescription:
+      "通常继承提供商设置。只有当这个模型必须使用不同请求协议时才需要修改。",
     inheritNone: "继承 / 无",
     reasoningThinking: "推理 / 思考",
     thinkingOnDefault: "Thinking On 默认强度",
-    thinkingOnDefaultDescription: "当聊天输入选择 Thinking On 时使用。更高强度可能更慢、消耗更多 token，但更适合复杂任务。",
+    thinkingOnDefaultDescription:
+      "当聊天输入选择 Thinking On 时使用。更高强度可能更慢、消耗更多 token，但更适合复杂任务。",
     imageInput: "图片输入",
     capabilities: "能力",
     deepSeekCompat: "DeepSeek 思考兼容",
@@ -303,7 +326,8 @@ export const zh = {
     modelList: "模型列表",
     fetchModelList: "拉取模型列表",
     discoveringModels: "拉取中...",
-    discoverModelsDescription: "拉取支持的模型，并尽可能用 Pi 内置目录补齐已知参数。",
+    discoverModelsDescription:
+      "拉取支持的模型，并尽可能用 Pi 内置目录补齐已知参数。",
     addModels: "添加模型",
     remoteDiscoveryFailed: "远程发现失败",
     noDiscoveredModels: "没有发现此提供商的模型。",
@@ -314,34 +338,59 @@ export const zh = {
     addSelected: "添加选中",
     existingHidden: "个已存在，已隐藏",
     compatibility: "兼容性",
-    compatibilityDescription: "仅显示当前生效 API 协议支持的设置。自动模式会交给 Pi 探测或使用默认行为。",
+    compatibilityDescription:
+      "仅显示当前生效 API 协议支持的设置。自动模式会交给 Pi 探测或使用默认行为。",
     compatibilityUnavailable: "当前 API 协议没有可配置的兼容性选项。",
     compatibilitySettings: "兼容性设置",
     compatFieldDescriptions: {
-      "openai-completions.supportsStore": "端点是否支持 `store` 字段。开启时显式发送 `store: false` 禁止服务端存储请求。默认按 baseUrl 自动探测。",
-      "openai-completions.supportsDeveloperRole": "端点是否接受 `developer` 角色消息（而非 `system`）。仅模型开启推理时生效。默认关闭；端点支持 developer 角色时手动开启。",
-      "openai-completions.supportsReasoningEffort": "端点是否支持 `reasoning_effort` 参数。关闭后不发送该参数。默认按 baseUrl 自动探测。",
-      "openai-completions.supportsUsageInStreaming": "流式响应是否通过 `stream_options: { include_usage: true }` 返回 token 用量。默认开启。",
-      "openai-completions.maxTokensField": "输出长度上限使用的字段名：`max_completion_tokens` 或 `max_tokens`。默认按 baseUrl 自动探测。",
-      "openai-completions.requiresToolResultName": "tool result 消息是否必须携带 `name` 字段。默认按 baseUrl 自动探测。",
-      "openai-completions.requiresAssistantAfterToolResult": "tool result 后若紧跟 user 消息，是否必须在中间插入一条 assistant 消息。默认按 baseUrl 自动探测。",
-      "openai-completions.requiresThinkingAsText": "是否将历史 thinking 块转为带 `<thinking>` 标记的文本块回传。默认按 baseUrl 自动探测。",
-      "openai-completions.requiresReasoningContentOnAssistantMessages": "开启推理时，所有回传的 assistant 消息是否都必须带空的 `reasoning_content` 字段。默认按 baseUrl 自动探测。",
-      "openai-completions.thinkingFormat": "推理参数序列化格式。openai 用 `reasoning_effort`；openrouter 用 `reasoning: { effort }`；deepseek 用 `thinking: { type }` 并附带 `reasoning_effort`；together 用 `reasoning: { enabled }` 并按需附带 `reasoning_effort`；zai、qwen 用顶层 `enable_thinking`；qwen-chat-template 用 `chat_template_kwargs.enable_thinking`。默认 openai。",
-      "openai-completions.openRouterRouting": "OpenRouter 上游路由偏好，作为请求体的 `provider` 字段发送。仅当 baseUrl 指向 openrouter.ai 时生效。",
-      "openai-completions.vercelGatewayRouting": "Vercel AI Gateway 路由偏好，`only`/`order` 映射为 `providerOptions.gateway`。仅当 baseUrl 指向 ai-gateway.vercel.sh 时生效。",
-      "openai-completions.zaiToolStream": "z.ai 是否支持顶层 `tool_stream: true` 以流式输出工具调用增量。默认关闭。",
-      "openai-completions.supportsStrictMode": "端点是否接受工具定义上的 `strict` 字段。开启时在工具定义上发送 `strict: false`。默认开启。",
-      "openai-completions.cacheControlFormat": "提示缓存标记格式。设为 `anthropic` 时按 Anthropic 风格在系统提示、最后一个工具定义和最后一条对话消息上添加 `cache_control` 标记。",
-      "openai-completions.sendSessionAffinityHeaders": "启用缓存时是否发送会话亲和性请求头（`session_id`、`x-client-request-id`、`x-session-affinity`，取自 sessionId）。默认关闭。",
-      "openai-completions.supportsLongCacheRetention": "端点是否支持长时效提示缓存：OpenAI 风格发送 `prompt_cache_retention: \"24h\"`，Anthropic 风格发送 `cache_control.ttl: \"1h\"`。默认开启。",
-      "openai-responses.sendSessionIdHeader": "启用缓存时是否发送 OpenAI 的 `session_id` 缓存亲和性请求头（取自 sessionId）。默认开启。",
-      "openai-responses.supportsLongCacheRetention": "端点是否支持 `prompt_cache_retention: \"24h\"` 长时效提示缓存。默认开启。",
-      "anthropic-messages.supportsEagerToolInputStreaming": "端点是否接受工具上的 `eager_input_streaming`。关闭时改为省略该字段并发送旧版 `fine-grained-tool-streaming-2025-05-14` beta 头。默认开启。",
-      "anthropic-messages.supportsLongCacheRetention": "端点是否支持 Anthropic 长时效缓存（`cache_control.ttl: \"1h\"`）。默认开启。",
-      "anthropic-messages.sendSessionAffinityHeaders": "启用缓存时是否发送 `x-session-affinity` 请求头（取自 sessionId）。Fireworks 等依赖会话亲和路由的提供商需开启以提升缓存命中。默认关闭。",
-      "anthropic-messages.supportsCacheControlOnTools": "端点是否接受工具定义上的 Anthropic 风格 `cache_control` 标记。关闭时从工具参数中省略。Fireworks 等兼容服务可能不支持。默认开启。",
-      "anthropic-messages.forceAdaptiveThinking": "是否强制 adaptive thinking（`thinking.type: \"adaptive\"` 配合 `output_config.effort`），忽略模型 ID 的自动判断。自定义 Anthropic 兼容端点可对需要该格式的模型开启；对被覆盖的内置模型设为 false 可退出。默认关闭。",
+      "openai-completions.supportsStore":
+        "端点是否支持 `store` 字段。开启时显式发送 `store: false` 禁止服务端存储请求。默认按 baseUrl 自动探测。",
+      "openai-completions.supportsDeveloperRole":
+        "端点是否接受 `developer` 角色消息（而非 `system`）。仅模型开启推理时生效。默认关闭；端点支持 developer 角色时手动开启。",
+      "openai-completions.supportsReasoningEffort":
+        "端点是否支持 `reasoning_effort` 参数。关闭后不发送该参数。默认按 baseUrl 自动探测。",
+      "openai-completions.supportsUsageInStreaming":
+        "流式响应是否通过 `stream_options: { include_usage: true }` 返回 token 用量。默认开启。",
+      "openai-completions.maxTokensField":
+        "输出长度上限使用的字段名：`max_completion_tokens` 或 `max_tokens`。默认按 baseUrl 自动探测。",
+      "openai-completions.requiresToolResultName":
+        "tool result 消息是否必须携带 `name` 字段。默认按 baseUrl 自动探测。",
+      "openai-completions.requiresAssistantAfterToolResult":
+        "tool result 后若紧跟 user 消息，是否必须在中间插入一条 assistant 消息。默认按 baseUrl 自动探测。",
+      "openai-completions.requiresThinkingAsText":
+        "是否将历史 thinking 块转为带 `<thinking>` 标记的文本块回传。默认按 baseUrl 自动探测。",
+      "openai-completions.requiresReasoningContentOnAssistantMessages":
+        "开启推理时，所有回传的 assistant 消息是否都必须带空的 `reasoning_content` 字段。默认按 baseUrl 自动探测。",
+      "openai-completions.thinkingFormat":
+        "推理参数序列化格式。openai 用 `reasoning_effort`；openrouter 用 `reasoning: { effort }`；deepseek 用 `thinking: { type }` 并附带 `reasoning_effort`；together 用 `reasoning: { enabled }` 并按需附带 `reasoning_effort`；zai、qwen 用顶层 `enable_thinking`；qwen-chat-template 用 `chat_template_kwargs.enable_thinking`。默认 openai。",
+      "openai-completions.openRouterRouting":
+        "OpenRouter 上游路由偏好，作为请求体的 `provider` 字段发送。仅当 baseUrl 指向 openrouter.ai 时生效。",
+      "openai-completions.vercelGatewayRouting":
+        "Vercel AI Gateway 路由偏好，`only`/`order` 映射为 `providerOptions.gateway`。仅当 baseUrl 指向 ai-gateway.vercel.sh 时生效。",
+      "openai-completions.zaiToolStream":
+        "z.ai 是否支持顶层 `tool_stream: true` 以流式输出工具调用增量。默认关闭。",
+      "openai-completions.supportsStrictMode":
+        "端点是否接受工具定义上的 `strict` 字段。开启时在工具定义上发送 `strict: false`。默认开启。",
+      "openai-completions.cacheControlFormat":
+        "提示缓存标记格式。设为 `anthropic` 时按 Anthropic 风格在系统提示、最后一个工具定义和最后一条对话消息上添加 `cache_control` 标记。",
+      "openai-completions.sendSessionAffinityHeaders":
+        "启用缓存时是否发送会话亲和性请求头（`session_id`、`x-client-request-id`、`x-session-affinity`，取自 sessionId）。默认关闭。",
+      "openai-completions.supportsLongCacheRetention":
+        '端点是否支持长时效提示缓存：OpenAI 风格发送 `prompt_cache_retention: "24h"`，Anthropic 风格发送 `cache_control.ttl: "1h"`。默认开启。',
+      "openai-responses.sendSessionIdHeader":
+        "启用缓存时是否发送 OpenAI 的 `session_id` 缓存亲和性请求头（取自 sessionId）。默认开启。",
+      "openai-responses.supportsLongCacheRetention":
+        '端点是否支持 `prompt_cache_retention: "24h"` 长时效提示缓存。默认开启。',
+      "anthropic-messages.supportsEagerToolInputStreaming":
+        "端点是否接受工具上的 `eager_input_streaming`。关闭时改为省略该字段并发送旧版 `fine-grained-tool-streaming-2025-05-14` beta 头。默认开启。",
+      "anthropic-messages.supportsLongCacheRetention":
+        '端点是否支持 Anthropic 长时效缓存（`cache_control.ttl: "1h"`）。默认开启。',
+      "anthropic-messages.sendSessionAffinityHeaders":
+        "启用缓存时是否发送 `x-session-affinity` 请求头（取自 sessionId）。Fireworks 等依赖会话亲和路由的提供商需开启以提升缓存命中。默认关闭。",
+      "anthropic-messages.supportsCacheControlOnTools":
+        "端点是否接受工具定义上的 Anthropic 风格 `cache_control` 标记。关闭时从工具参数中省略。Fireworks 等兼容服务可能不支持。默认开启。",
+      "anthropic-messages.forceAdaptiveThinking":
+        '是否强制 adaptive thinking（`thinking.type: "adaptive"` 配合 `output_config.effort`），忽略模型 ID 的自动判断。自定义 Anthropic 兼容端点可对需要该格式的模型开启；对被覆盖的内置模型设为 false 可退出。默认关闭。',
     },
     auto: "自动",
     inherited: "继承",
@@ -354,7 +403,8 @@ export const zh = {
     diagnosticDetails: "诊断详情",
     applySuggestionAndRetest: "应用建议并重新测试",
     suggestedChange: "建议修改",
-    realRequestCostNotice: "将发送一次低 token 的真实模型请求，可能产生少量费用。",
+    realRequestCostNotice:
+      "将发送一次低 token 的真实模型请求，可能产生少量费用。",
     removeModelTitle: "删除模型",
     removeModelDescription: "删除“{model}”。此操作无法撤销。",
     deleteProviderTitle: "删除提供商",
@@ -364,10 +414,12 @@ export const zh = {
     deleteModelDescription: "从模型列表移除此模型",
     deleteProviderRowDescription: "从配置中移除此提供商及其模型",
     removeApiKeyTitle: "移除 API Key？",
-    removeApiKeyDescription: "立即移除“{provider}”已保存的 API Key 吗？重新连接时需要再次输入 Key。",
+    removeApiKeyDescription:
+      "立即移除“{provider}”已保存的 API Key 吗？重新连接时需要再次输入 Key。",
     removeApiKeyAction: "移除 API Key",
     disconnectOAuthTitle: "断开认证？",
-    disconnectOAuthDescription: "立即断开“{provider}”的认证吗？之后可以重新登录恢复连接。",
+    disconnectOAuthDescription:
+      "立即断开“{provider}”的认证吗？之后可以重新登录恢复连接。",
     disconnectOAuthAction: "断开认证",
     discardChangesTitle: "放弃未保存的更改？",
     discardChangesDescription: "模型配置的修改尚未保存。放弃后无法恢复。",
@@ -396,7 +448,8 @@ export const zh = {
       collision: "冲突",
     },
     selectSkill: "选择一个技能以查看详情。",
-    searchMarketDescription: "搜索技能市场，并通过项目已验证的 ResourceLoader 工作流安装。",
+    searchMarketDescription:
+      "搜索技能市场，并通过项目已验证的 ResourceLoader 工作流安装。",
     searchSkillsMarket: "搜索技能市场",
     searchSkills: "搜索技能...",
     installationScope: "安装范围",
@@ -413,7 +466,8 @@ export const zh = {
     createLocalDescription: "将本地已有的 Skill 文件导入到所选安装范围。",
     skillFilePath: "Skill 文件或目录路径",
     skillFilePathPlaceholder: "D:\\my-skills\\review\\SKILL.md",
-    skillFilePathHint: "本地 .md skill 文件的绝对路径，或包含 SKILL.md 的目录路径。导入目录时会复制整个目录（含脚本、模板等兄弟资源）；技能名称从 frontmatter 的 name 字段读取，没有则用目录名或文件名。",
+    skillFilePathHint:
+      "本地 .md skill 文件的绝对路径，或包含 SKILL.md 的目录路径。导入目录时会复制整个目录（含脚本、模板等兄弟资源）；技能名称从 frontmatter 的 name 字段读取，没有则用目录名或文件名。",
     importSkill: "导入",
     creating: "导入中...",
     skillExists: "同名技能已存在。",
@@ -422,7 +476,8 @@ export const zh = {
     modelInvocationAllowed: "模型可调用",
     manualInvocationOnly: "仅支持手动调用",
     modelInvocation: "模型调用",
-    modelInvocationDescription: "关闭后，该技能不会加入模型提示词。它仍可用于显式",
+    modelInvocationDescription:
+      "关闭后，该技能不会加入模型提示词。它仍可用于显式",
     calls: "调用。",
     source: "来源",
     sourceLocal: "本地配置",
@@ -434,7 +489,8 @@ export const zh = {
     path: "路径",
     readOnlySymlink: "该技能通过符号链接发现，处于只读状态。",
     managedByPack: "由所属技能包管理，此处为只读。",
-    changesNotice: "改动会影响新建会话、恢复的会话，或资源重新加载后的会话。当前运行中的会话不会被静默重启。",
+    changesNotice:
+      "改动会影响新建会话、恢复的会话，或资源重新加载后的会话。当前运行中的会话不会被静默重启。",
     removeSkill: "删除技能",
     removeSkillRowDescription: "删除技能文件并更新锁文件。此操作无法撤销。",
     general: "常规",
@@ -450,10 +506,12 @@ export const zh = {
       tabPacks: "技能包",
       addAction: "添加技能包",
       addTitle: "添加技能包",
-      addDescription: "检查并安装来自 npm、Git、HTTPS 或本地绝对目录的 Pi Package。",
+      addDescription:
+        "检查并安装来自 npm、Git、HTTPS 或本地绝对目录的 Pi Package。",
       sourceLabel: "Package 来源",
       sourcePlaceholder: "npm:@scope/package 或 D:\\skill-packs\\package",
-      sourceHint: "本地目录可以位于这台电脑的任意位置。包含凭据、查询参数或 fragment 的 URL 会被拒绝。",
+      sourceHint:
+        "本地目录可以位于这台电脑的任意位置。包含凭据、查询参数或 fragment 的 URL 会被拒绝。",
       browse: "浏览",
       refresh: "刷新技能包",
       loading: "正在加载技能包",
@@ -478,8 +536,10 @@ export const zh = {
       prompts: "提示词",
       themes: "主题",
       noResources: "无",
-      securityWarning: "安装技能包会添加 Agent 可使用的指令，并可能执行当前会话所允许的命令。请先检查来源和资源。",
-      extensionWarning: "此 Package 包含可执行扩展。仅在信任其发布者和来源时安装。",
+      securityWarning:
+        "安装技能包会添加 Agent 可使用的指令，并可能执行当前会话所允许的命令。请先检查来源和资源。",
+      extensionWarning:
+        "此 Package 包含可执行扩展。仅在信任其发布者和来源时安装。",
       installTitle: "安装技能包？",
       installDescription: "安装“{name}”，并使其资源可用于新会话。",
       installScope: "安装范围",
@@ -489,7 +549,8 @@ export const zh = {
       updateAction: "检查并更新",
       repairAction: "修复",
       viewPack: "查看技能包",
-      localRefreshHint: "此本地技能包直接读取源目录。修改源目录后刷新，即可加载当前内容。",
+      localRefreshHint:
+        "此本地技能包直接读取源目录。修改源目录后刷新，即可加载当前内容。",
       removeTitle: "移除技能包？",
       removeDescription: "移除“{name}”及其由 Package 管理的资源？",
       removeAction: "移除",
@@ -508,11 +569,13 @@ export const zh = {
     globalAppendFilePath: "~/.pi/agent/APPEND_SYSTEM.md",
     projectInstructions: "项目指令",
     projectInstructionsDescription: "当前工作区的项目级 AGENTS.md 指令。",
-    projectInstructionsPreviewDescription: "预览当前工作区的 AGENTS.md；需要修改时再打开文件工作区。",
+    projectInstructionsPreviewDescription:
+      "预览当前工作区的 AGENTS.md；需要修改时再打开文件工作区。",
     projectInstructionsPath: "文件：{path}",
     projectNotSelected: "选择一个项目以管理项目指令。",
     noProjectInstructionsTitle: "尚无项目指令",
-    noProjectInstructionsDescription: "可以在文件工作区中创建或编辑 AGENTS.md。",
+    noProjectInstructionsDescription:
+      "可以在文件工作区中创建或编辑 AGENTS.md。",
     editInFileWorkspace: "在文件工作区编辑",
     createInFileWorkspace: "在文件工作区创建",
     contentPlaceholder: "输入指令内容...",
@@ -537,7 +600,8 @@ export const zh = {
     continueEditing: "继续编辑",
     discardChanges: "放弃更改",
     conflictTitle: "文件已被外部修改",
-    conflictDescription: "指令文件已被其他进程修改。可以重新加载最新版本，或用当前编辑覆盖。",
+    conflictDescription:
+      "指令文件已被其他进程修改。可以重新加载最新版本，或用当前编辑覆盖。",
     conflictOverwrite: "覆盖",
     conflictReload: "重新加载",
     errorSave: "保存指令失败",
@@ -553,17 +617,21 @@ export const zh = {
     finalSystemPrompt: "最终系统提示词",
     finalSystemPromptDescription: "所有来源组合后，当前会话的生效系统提示词。",
     noActiveSystemPromptTitle: "尚无生效的系统提示词",
-    noActiveSystemPrompt: "新建或选择一个会话后，可以查看其当前生效的系统提示词。",
+    noActiveSystemPrompt:
+      "新建或选择一个会话后，可以查看其当前生效的系统提示词。",
     noSession: "未选择会话",
     active: "已启用",
     notConfigured: "未配置",
     sessionOutdated: "当前会话尚未更新",
-    sessionOutdatedDescription: "文件已经保存；需要单独应用，当前会话才会使用最新内容。",
+    sessionOutdatedDescription:
+      "文件已经保存；需要单独应用，当前会话才会使用最新内容。",
     saveBeforeApply: "请先保存当前修改，再应用到这个会话。",
     sessionCurrent: "当前会话已是最新",
     deleteGlobalTitle: "删除全局追加提示词？",
-    deleteGlobalDescription: "这会永久删除 {path}，后续新会话将不再包含这些指令。",
+    deleteGlobalDescription:
+      "这会永久删除 {path}，后续新会话将不再包含这些指令。",
     deleteProjectTitle: "删除 AGENTS.md？",
-    deleteProjectDescription: "这会删除 {path}。如果文件已纳入 Git，可以从版本历史恢复。",
+    deleteProjectDescription:
+      "这会删除 {path}。如果文件已纳入 Git，可以从版本历史恢复。",
   },
 } satisfies Dictionary;
