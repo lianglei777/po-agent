@@ -1,11 +1,11 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,10 +24,7 @@ import { ProjectInstructionsEditor } from "@/features/instructions/project-instr
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
 import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
 import { loadSessions } from "@/features/sessions/api";
-import {
-  getProjectName,
-  getSessionTitle,
-} from "@/features/sessions/session-utils";
+import { getProjectName } from "@/features/sessions/session-utils";
 import type { SessionInfo } from "@/features/sessions/types";
 import { useSessionNavigation } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
@@ -36,11 +33,11 @@ import {
   DEFAULT_CONVERSATION_WIDTH,
   DEFAULT_INSPECTOR_WIDTH,
   DEFAULT_PRIMARY_NAV_WIDTH,
+  HIDDEN_PRIMARY_NAV_WIDTH,
   fitPanelWidths,
   getConversationWidthBounds,
   getEffectivePrimaryNavWidth,
   getInspectorWidthBounds,
-  getPrimaryNavWidthBounds,
   isNarrowWorkspace,
   type PanelWidths,
 } from "./panel-sizing";
@@ -104,25 +101,32 @@ export function AgentWorkspace() {
   const [panelWidths, setPanelWidths] = useState<PanelWidths>({
     conversation: DEFAULT_CONVERSATION_WIDTH,
     inspector: DEFAULT_INSPECTOR_WIDTH,
-    primaryNav: DEFAULT_PRIMARY_NAV_WIDTH,
   });
   const [resizingPanel, setResizingPanel] = useState<
-    "conversation" | "inspector" | "primaryNav" | null
+    "conversation" | "inspector" | null
   >(null);
   const [layoutPreferencesReady, setLayoutPreferencesReady] = useState(false);
   const [workspaceWidth, setWorkspaceWidth] = useState(1280);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
+  const panelTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        duration: 0.22,
+        ease: [0.4, 0, 0.2, 1] as const,
+      };
   const showProjectDock = activeView === "chat" && Boolean(activeCwd);
   const showProjectPanel = showProjectDock && projectPanelOpen;
   const narrowWorkspace = isNarrowWorkspace(workspaceWidth);
   const effectivePrimaryNavWidth = getEffectivePrimaryNavWidth(
     workspaceWidth,
     primaryNavExpanded,
-    panelWidths.primaryNav,
+    DEFAULT_PRIMARY_NAV_WIDTH,
   );
-  const primaryNavBounds = getPrimaryNavWidthBounds();
+  const primaryNavHidden =
+    effectivePrimaryNavWidth === HIDDEN_PRIMARY_NAV_WIDTH;
   const conversationBounds = getConversationWidthBounds(
     workspaceWidth,
     effectivePrimaryNavWidth,
@@ -518,87 +522,94 @@ export function AgentWorkspace() {
             activeView === "chat" ? "flex h-full min-h-0 min-w-0" : "hidden"
           }
         >
-          <aside
-            className={`relative flex-none overflow-hidden bg-transparent transition-[width] ${
-              resizingPanel === "primaryNav"
-                ? "duration-0"
-                : "duration-[var(--motion-standard)]"
-            } w-[var(--panel-width)]`}
-            style={
-              {
-                "--panel-width": `${effectivePrimaryNavWidth}px`,
-              } as CSSProperties
-            }
-          >
-            <div className="flex h-full w-[var(--panel-width)] flex-col">
-              <WorkspaceSidebar
-                activeProjectTool={projectPanelTab}
-                activeView={activeView}
-                compact={
-                  effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
-                }
-                navigation={sessionNavigation}
-                onOpenFiles={handleOpenFiles}
-                onOpenSettings={handleOpenModelProvider}
-                onOpenSkills={handleOpenSkills}
-                onToggleCompact={() =>
-                  setPrimaryNavExpanded((expanded) => !expanded)
-                }
-                projectPanelOpen={projectPanelOpen}
-              />
-            </div>
-          </aside>
-          {primaryNavExpanded && !narrowWorkspace ? (
-            <ResizeHandle
-              ariaLabel={t.workspace.resizePrimaryNavigation}
-              direction={1}
-              max={primaryNavBounds.max}
-              min={primaryNavBounds.min}
-              onResize={(primaryNav) =>
-                setPanelWidths((current) => ({ ...current, primaryNav }))
-              }
-              onResizeEnd={() => setResizingPanel(null)}
-              onResizeStart={() => setResizingPanel("primaryNav")}
-              value={panelWidths.primaryNav}
-            />
-          ) : null}
+          <AnimatePresence initial={false}>
+            {primaryNavHidden ? null : (
+              <motion.aside
+                animate={{
+                  opacity: 1,
+                  width: effectivePrimaryNavWidth,
+                  x: 0,
+                }}
+                className="relative flex-none overflow-hidden bg-transparent"
+                exit={{ opacity: 0, width: 0, x: -8 }}
+                initial={{ opacity: 0, width: 0, x: -8 }}
+                key="primary-navigation"
+                transition={panelTransition}
+              >
+                <div
+                  className="flex h-full flex-col"
+                  style={{ width: `${effectivePrimaryNavWidth}px` }}
+                >
+                  <WorkspaceSidebar
+                    activeProjectTool={projectPanelTab}
+                    activeView={activeView}
+                    compact={
+                      effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
+                    }
+                    navigation={sessionNavigation}
+                    onOpenFiles={handleOpenFiles}
+                    onOpenSettings={handleOpenModelProvider}
+                    onOpenSkills={handleOpenSkills}
+                    onToggleCompact={() => setPrimaryNavExpanded(false)}
+                    projectPanelOpen={projectPanelOpen}
+                  />
+                </div>
+              </motion.aside>
+            )}
+          </AnimatePresence>
 
-          <div className="my-2 ml-2 flex min-w-0 flex-1 overflow-hidden rounded-xl bg-canvas">
-            {conversationOpen ? (
-              <>
-                <aside
-                  className={`flex-none overflow-hidden bg-canvas transition-[width] ${
+          <div className="my-2 ml-2 flex min-w-0 flex-1 overflow-hidden rounded-l-xl rounded-r-sm bg-canvas">
+            <AnimatePresence initial={false}>
+              {conversationOpen ? (
+                <motion.aside
+                  animate={{
+                    opacity: 1,
+                    width: panelWidths.conversation,
+                    x: 0,
+                  }}
+                  className="flex-none overflow-hidden bg-canvas"
+                  exit={{ opacity: 0, width: 0, x: -8 }}
+                  initial={{ opacity: 0, width: 0, x: -8 }}
+                  key="conversation-panel"
+                  transition={
                     resizingPanel === "conversation"
-                      ? "duration-0"
-                      : "duration-[var(--motion-standard)]"
-                  } w-[var(--panel-width)]`}
-                  style={
-                    {
-                      "--panel-width": `${panelWidths.conversation}px`,
-                    } as CSSProperties
+                      ? { duration: 0 }
+                      : panelTransition
                   }
                 >
-                  <ConversationSidebar
-                    navigation={sessionNavigation}
-                    onClose={() => setConversationOpen(false)}
-                  />
-                </aside>
-                <ResizeHandle
-                  ariaLabel={t.workspace.resizeConversationSidebar}
-                  direction={1}
-                  max={conversationBounds.max}
-                  min={conversationBounds.min}
-                  onResize={(conversation) =>
-                    setPanelWidths((current) => ({
-                      ...current,
-                      conversation,
-                    }))
-                  }
-                  onResizeEnd={() => setResizingPanel(null)}
-                  onResizeStart={() => setResizingPanel("conversation")}
-                  value={panelWidths.conversation}
-                />
-              </>
+                  <div
+                    className="h-full flex-none"
+                    style={{ width: `${panelWidths.conversation}px` }}
+                  >
+                    <ConversationSidebar
+                      navigation={sessionNavigation}
+                      onClose={() => setConversationOpen(false)}
+                      onExpandPrimaryNavigation={() =>
+                        setPrimaryNavExpanded(true)
+                      }
+                      primaryNavigationHidden={primaryNavHidden}
+                    />
+                  </div>
+                </motion.aside>
+              ) : null}
+            </AnimatePresence>
+            {conversationOpen ? (
+              <ResizeHandle
+                ariaLabel={t.workspace.resizeConversationSidebar}
+                className="mt-11"
+                direction={1}
+                max={conversationBounds.max}
+                min={conversationBounds.min}
+                onResize={(conversation) =>
+                  setPanelWidths((current) => ({
+                    ...current,
+                    conversation,
+                  }))
+                }
+                onResizeEnd={() => setResizingPanel(null)}
+                onResizeStart={() => setResizingPanel("conversation")}
+                value={panelWidths.conversation}
+              />
             ) : null}
 
             <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
@@ -613,22 +624,17 @@ export function AgentWorkspace() {
                     : undefined
                 }
                 conversationOpen={conversationOpen}
+                onExpandPrimaryNavigation={() => setPrimaryNavExpanded(true)}
                 onToggleConversation={() =>
                   setConversationOpen((open) => !open)
                 }
-                projectName={activeCwd ? getProjectName(activeCwd) : null}
-                sessionTitle={
-                  selectedSession ? getSessionTitle(selectedSession) : null
-                }
+                primaryNavigationHidden={primaryNavHidden}
                 showBranchHistory
               />
 
               <div className="flex min-h-0 flex-1">
                 <ChatCenter
                   key={chatInstanceKey}
-                  conversationNavigatorCompact={
-                    narrowWorkspace || showProjectPanel
-                  }
                   modelsRevision={modelsRevision}
                   newSessionCwd={newSessionCwd}
                   onAgentEnd={handleAgentEnd}
@@ -650,6 +656,7 @@ export function AgentWorkspace() {
               {showProjectPanel && projectPanelContent ? (
                 <ResizeHandle
                   ariaLabel={t.workspace.resizeProjectPanel}
+                  className="bg-transparent"
                   direction={-1}
                   max={inspectorBounds.max}
                   min={inspectorBounds.min}
@@ -661,70 +668,98 @@ export function AgentWorkspace() {
                   value={panelWidths.inspector}
                 />
               ) : null}
-              <div className="my-2 ml-2 mr-2 flex flex-none overflow-hidden rounded-xl bg-canvas">
+              <div className="my-2 ml-1 mr-2 flex flex-none overflow-hidden rounded-l-sm rounded-r-xl bg-canvas">
                 <ProjectPanelDock
                   activeTab={projectPanelTab}
                   onSelect={handleProjectPanelTabChange}
                   open={projectPanelOpen}
                 />
-                {showProjectPanel && projectPanelContent ? (
-                  <div
-                    className={`min-w-0 flex-none overflow-hidden ${
-                      resizingPanel === "inspector"
-                        ? "duration-0"
-                        : "duration-[var(--motion-standard)]"
-                    } w-[var(--panel-width)]`}
-                    style={
-                      {
-                        "--panel-width": `${panelWidths.inspector}px`,
-                      } as CSSProperties
-                    }
-                  >
-                    {projectPanelContent}
-                  </div>
-                ) : null}
+                <AnimatePresence initial={false}>
+                  {showProjectPanel && projectPanelContent ? (
+                    <motion.div
+                      animate={{
+                        opacity: 1,
+                        width: panelWidths.inspector,
+                        x: 0,
+                      }}
+                      className="min-w-0 flex-none overflow-hidden"
+                      exit={{ opacity: 0, width: 0, x: 8 }}
+                      initial={{ opacity: 0, width: 0, x: 8 }}
+                      key="desktop-project-panel"
+                      transition={
+                        resizingPanel === "inspector"
+                          ? { duration: 0 }
+                          : panelTransition
+                      }
+                    >
+                      <div
+                        className="h-full flex-none"
+                        style={{ width: `${panelWidths.inspector}px` }}
+                      >
+                        {projectPanelContent}
+                      </div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
               </div>
             </>
           ) : null}
 
           {showProjectDock && narrowWorkspace ? (
-            showProjectPanel && projectPanelContent ? (
-              <div className="absolute top-2 right-2 bottom-2 z-30 flex">
-                <ResizeHandle
-                  ariaLabel={t.workspace.resizeProjectPanel}
-                  direction={-1}
-                  max={inspectorBounds.max}
-                  min={inspectorBounds.min}
-                  onResize={(inspector) =>
-                    setPanelWidths((current) => ({ ...current, inspector }))
-                  }
-                  onResizeEnd={() => setResizingPanel(null)}
-                  onResizeStart={() => setResizingPanel("inspector")}
-                  value={panelWidths.inspector}
-                />
-                <div className="flex overflow-hidden rounded-xl border border-line-subtle bg-canvas shadow-floating">
+            <AnimatePresence initial={false}>
+              {showProjectPanel && projectPanelContent ? (
+                <motion.div
+                  animate={{ opacity: 1, x: 0 }}
+                  className="absolute top-2 right-2 bottom-2 z-30 flex"
+                  exit={{ opacity: 0, x: 12 }}
+                  initial={{ opacity: 0, x: 12 }}
+                  key="narrow-project-panel"
+                  transition={panelTransition}
+                >
+                  <ResizeHandle
+                    ariaLabel={t.workspace.resizeProjectPanel}
+                    className="bg-transparent"
+                    direction={-1}
+                    max={inspectorBounds.max}
+                    min={inspectorBounds.min}
+                    onResize={(inspector) =>
+                      setPanelWidths((current) => ({ ...current, inspector }))
+                    }
+                    onResizeEnd={() => setResizingPanel(null)}
+                    onResizeStart={() => setResizingPanel("inspector")}
+                    value={panelWidths.inspector}
+                  />
+                  <div className="flex overflow-hidden rounded-xl border border-line-subtle bg-canvas shadow-floating">
+                    <ProjectPanelDock
+                      activeTab={projectPanelTab}
+                      onSelect={handleProjectPanelTabChange}
+                      open={projectPanelOpen}
+                    />
+                    <div
+                      className="min-w-0 flex-none"
+                      style={{ width: `${panelWidths.inspector}px` }}
+                    >
+                      {projectPanelContent}
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  animate={{ opacity: 1, x: 0 }}
+                  className="my-2 ml-2 mr-2 overflow-hidden rounded-xl bg-canvas"
+                  exit={{ opacity: 0, x: 8 }}
+                  initial={{ opacity: 0, x: 8 }}
+                  key="narrow-project-dock"
+                  transition={panelTransition}
+                >
                   <ProjectPanelDock
                     activeTab={projectPanelTab}
                     onSelect={handleProjectPanelTabChange}
                     open={projectPanelOpen}
                   />
-                  <div
-                    className="min-w-0 flex-none"
-                    style={{ width: `${panelWidths.inspector}px` }}
-                  >
-                    {projectPanelContent}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="my-2 ml-2 mr-2 overflow-hidden rounded-xl bg-canvas">
-                <ProjectPanelDock
-                  activeTab={projectPanelTab}
-                  onSelect={handleProjectPanelTabChange}
-                  open={projectPanelOpen}
-                />
-              </div>
-            )
+                </motion.div>
+              )}
+            </AnimatePresence>
           ) : null}
         </div>
 

@@ -46,9 +46,9 @@ Po Agent is a focused desktop developer tool, not a marketing or entertainment s
 
 ## Workspace architecture
 
-- The primary navigation rail owns global Files and Skills shortcuts, projects, Settings, and locale. Its bottom actions are icon-only and horizontal; System Prompt lives inside Settings. The rail expands for project names and collapses to an icon rail, with compact mode automatic on narrower workspaces.
+- The primary navigation rail owns global Files and Skills shortcuts, projects, Settings, and locale. Its bottom actions are icon-only and horizontal; System Prompt lives inside Settings. The user collapse action fully hides the rail. Its reveal control moves into a dedicated top row of the visible Conversation panel; when Conversation is also hidden, the control falls back to the Chat top bar and is separated from the distinct conversation-list control. Compact icon mode remains automatic on narrower workspaces.
 - The project Conversation panel owns New chat, session search, and the current project's session tree. It is independently resizable and closable so project selection and conversation selection remain separate concepts.
-- Chat uses one continuous white workspace surface containing the project Conversation panel and the conversation canvas. Resting resize handles are visually transparent, so hierarchy comes from spacing and surface tone instead of vertical rules.
+- Chat uses one continuous white workspace surface containing the project Conversation panel and the conversation canvas. Resize handles show a subtle `border-subtle` resting line so the panel boundary and drag affordance stay discoverable; the line emphasizes to `border-emphasis` on hover and drag.
 - Settings is an exclusive full-screen application state with an explicit Exit Settings action. The project navigation, Conversation panel, Chat, and Project dock are hidden while Settings is visible, while Chat remains mounted to preserve its state.
 - A permanent right-side Project dock exposes Files, Skills, and Project Settings as vertical tabs. The dock and expanded inspector are one continuous white surface, with the resize handle placed only between Chat and the complete right-side surface. Selecting a tab opens a resizable inspector; selecting the active tab or its close button collapses it.
 - On narrow workspaces, the Project inspector becomes an overlay so Chat retains a usable minimum width. Its active tab, open state, rail state, and user-adjusted widths survive reloads.
@@ -129,7 +129,7 @@ Codex blue (`#339cff`) is reserved for active state fills, switches, live state,
 - Final answer content stays outside the execution disclosure and remains directly readable.
 - Tool rows reserve stable columns for command summary, status, and disclosure controls.
 - The floating Composer keeps model, thinking, compaction, attachments, queue/steer/stop, and send controls in one compact toolbar.
-- Long conversations use a semantic conversation outline built from user requests. The current turn follows the reading position, each full row jumps directly to that turn, and a compact rail opens the outline as an overlay when the project inspector is visible or workspace width is constrained.
+- Long conversations use a Codex-style turn navigator overlaid on the Chat panel's right edge. User turns form a quiet continuous rail of short marks; hovering one mark expands nearby marks into a wave and reveals the user prompt plus the following assistant summary. Clicking a mark jumps to that turn without changing panel widths.
 
 ## Settings and detail pages
 
@@ -150,7 +150,8 @@ Codex blue (`#339cff`) is reserved for active state fills, switches, live state,
 
 ## Motion and accessibility
 
-- State transitions use 150–220ms and animate only color, opacity, transform, or short shadows when they communicate state.
+- State transitions use 150–220ms and animate color, opacity, transform, or short shadows when they communicate state; bounded panel-width interpolation is reserved for workspace layout changes.
+- Primary navigation, Conversation, and Project panels use a restrained 220ms reveal and dismissal transition. Width interpolation preserves the workspace layout while a subtle opacity and directional offset clarifies which edge owns the panel.
 - `prefers-reduced-motion: reduce` makes non-essential animation near-instant.
 - Preserve semantic HTML, accessible names, keyboard paths, visible focus, and WCAG AA contrast.
 - Verify 1024px, 1440px, and 1920px desktop widths in both languages.

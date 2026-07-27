@@ -1,6 +1,11 @@
 "use client";
 
-import { MessageSquarePlus, PanelLeftClose, Search } from "lucide-react";
+import {
+  MessageSquarePlus,
+  PanelLeftOpen,
+  PanelRight,
+  Search,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,9 +24,13 @@ import type { SessionNavigationController } from "./use-session-navigation";
 export function ConversationSidebar({
   navigation,
   onClose,
+  onExpandPrimaryNavigation,
+  primaryNavigationHidden,
 }: {
   navigation: SessionNavigationController;
   onClose: () => void;
+  onExpandPrimaryNavigation: () => void;
+  primaryNavigationHidden: boolean;
 }) {
   const [query, setQuery] = useState("");
   const { t } = useI18n();
@@ -35,7 +44,29 @@ export function ConversationSidebar({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--conversation-bg)]">
-      <header className="flex h-12 flex-none items-center px-3">
+      {primaryNavigationHidden ? (
+        <header className="flex h-11 flex-none items-center border-b border-line-subtle px-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={t.workspace.expandPrimaryNavigation}
+                className="text-muted"
+                onClick={onExpandPrimaryNavigation}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <PanelLeftOpen />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t.workspace.expandPrimaryNavigation}
+            </TooltipContent>
+          </Tooltip>
+        </header>
+      ) : null}
+
+      <header className="flex h-11 flex-none items-center px-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-primary">
             {projectName}
@@ -50,7 +81,7 @@ export function ConversationSidebar({
               type="button"
               variant="ghost"
             >
-              <PanelLeftClose />
+              <PanelRight />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t.workspace.hideConversations}</TooltipContent>

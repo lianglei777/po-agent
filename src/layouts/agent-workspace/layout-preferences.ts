@@ -1,7 +1,6 @@
 import {
   DEFAULT_CONVERSATION_WIDTH,
   DEFAULT_INSPECTOR_WIDTH,
-  DEFAULT_PRIMARY_NAV_WIDTH,
   type PanelWidths,
 } from "./panel-sizing";
 
@@ -21,7 +20,6 @@ export const DEFAULT_LAYOUT_PREFERENCES: WorkspaceLayoutPreferences = {
   widths: {
     conversation: DEFAULT_CONVERSATION_WIDTH,
     inspector: DEFAULT_INSPECTOR_WIDTH,
-    primaryNav: DEFAULT_PRIMARY_NAV_WIDTH,
   },
 };
 
@@ -51,10 +49,6 @@ export function readLayoutPreferences(): WorkspaceLayoutPreferences {
         inspector: finiteOrDefault(
           value.widths?.inspector,
           DEFAULT_INSPECTOR_WIDTH,
-        ),
-        primaryNav: finiteOrDefault(
-          value.widths?.primaryNav,
-          DEFAULT_PRIMARY_NAV_WIDTH,
         ),
       },
     };

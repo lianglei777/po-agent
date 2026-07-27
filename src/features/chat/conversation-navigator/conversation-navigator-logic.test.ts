@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { selectActiveConversationEntry } from "./conversation-navigator-logic";
+import {
+  selectActiveConversationEntry,
+  waveLineWidth,
+} from "./conversation-navigator-logic";
 
 const anchors = [
   { id: "first", top: 100 },
@@ -36,5 +39,24 @@ describe("selectActiveConversationEntry", () => {
         referenceTop: 100,
       }),
     ).toBe("third");
+  });
+});
+
+describe("waveLineWidth", () => {
+  it("expands the hovered mark and tapers neighboring marks", () => {
+    expect(
+      [0, 1, 2, 3, 4, 5, 6].map((index) =>
+        waveLineWidth({ active: false, hoveredIndex: 3, index }),
+      ),
+    ).toEqual([12, 17, 23, 30, 23, 17, 12]);
+  });
+
+  it("keeps the current turn visible outside hover state", () => {
+    expect(waveLineWidth({ active: true, hoveredIndex: -1, index: 2 })).toBe(
+      18,
+    );
+    expect(waveLineWidth({ active: false, hoveredIndex: -1, index: 3 })).toBe(
+      7,
+    );
   });
 });

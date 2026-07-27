@@ -3,7 +3,7 @@ import {
   Languages,
   PanelLeftClose,
   PanelLeftOpen,
-  Settings2,
+  Settings,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,12 +56,13 @@ export function WorkspaceSidebar({
           compact ? "justify-center" : "gap-2 px-1"
         }`}
       >
-        <div
-          aria-label="Po Agent"
-          className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-primary text-xs font-semibold tracking-[-0.04em] text-primary-foreground"
-        >
-          Po
-        </div>
+        {compact ? null : (
+          <img
+            alt="Po Agent"
+            className="size-8 shrink-0"
+            src="/po-agent-icon.png"
+          />
+        )}
         {compact ? null : (
           <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.02em] text-primary">
             Po Agent
@@ -133,7 +134,7 @@ export function WorkspaceSidebar({
         <SidebarIconAction
           active={activeView === "model-provider"}
           compact={compact}
-          icon={<Settings2 />}
+          icon={<Settings />}
           label={t.workspace.settings}
           onClick={onOpenSettings}
         />

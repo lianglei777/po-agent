@@ -32,7 +32,6 @@ describe("workspace layout preferences", () => {
             widths: {
               conversation: 280,
               inspector: 510,
-              primaryNav: 240,
             },
           }),
         setItem,
@@ -47,7 +46,6 @@ describe("workspace layout preferences", () => {
       widths: {
         conversation: 280,
         inspector: 510,
-        primaryNav: 240,
       },
     });
 

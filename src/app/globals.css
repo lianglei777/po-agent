@@ -211,14 +211,26 @@ body {
   text-wrap: balance;
 }
 
-/* 对话正文使用安静的原生滚动条，保留明确的滚动位置反馈。 */
-.chat-scrollbar {
-  scrollbar-color: var(--border-strong) transparent;
-  scrollbar-width: thin;
+/* 对话正文使用安静的原生滚动条，保留明确的滚动位置反馈。
+   Firefox 用标准 CSS；Chromium 用 webkit 伪元素。二者不可混用，
+   否则 Chrome 121+ 会因检测到标准属性而回退到系统滚动条（带箭头按钮）。 */
+@supports (-moz-appearance: none) {
+  .chat-scrollbar {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
 }
 
 .chat-scrollbar::-webkit-scrollbar {
   width: 8px;
+}
+
+.chat-scrollbar::-webkit-scrollbar-button,
+.chat-scrollbar::-webkit-scrollbar-button:start,
+.chat-scrollbar::-webkit-scrollbar-button:end {
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 .chat-scrollbar::-webkit-scrollbar-track {

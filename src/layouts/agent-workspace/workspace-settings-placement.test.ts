@@ -66,7 +66,7 @@ describe("workspace composition", () => {
     expect(workspaceSource).toContain("onOpenFile={handleOpenFile}");
     expect(workspaceSource).toContain("refreshKey={explorerRefreshKey}");
     expect(workspaceSource).toContain(
-      "flex flex-none overflow-hidden rounded-xl bg-canvas",
+      "flex flex-none overflow-hidden rounded-l-sm rounded-r-xl bg-canvas",
     );
     expect(workspaceSource).not.toContain('className="mx-px"');
   });

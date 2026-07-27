@@ -55,7 +55,6 @@ export function ChatCenter({
   onOpenModelProvider,
   onOpenSkills,
   projectName,
-  conversationNavigatorCompact,
 }: {
   session: ChatSession | null;
   newSessionCwd: string | null;
@@ -70,7 +69,6 @@ export function ChatCenter({
   onOpenModelProvider: () => void;
   onOpenSkills: () => void;
   projectName: string | null;
-  conversationNavigatorCompact: boolean;
 }) {
   const controller = useChatController({
     session,
@@ -91,6 +89,10 @@ export function ChatCenter({
   >(null);
   const dragCounter = useRef(0);
   const messageElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const [chatInputNode, setChatInputNode] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [chatInputHeight, setChatInputHeight] = useState(0);
   const { activeLeafId, changeLeaf, isCompacting, running, tree } = controller;
 
   const conversationNavigatorEntries = useMemo(
@@ -98,8 +100,13 @@ export function ChatCenter({
       createConversationNavigatorEntries({
         entryIds: controller.entryIds,
         messages: controller.messages,
+        streamingMessage: controller.stream.streamingMessage,
       }),
-    [controller.entryIds, controller.messages],
+    [
+      controller.entryIds,
+      controller.messages,
+      controller.stream.streamingMessage,
+    ],
   );
 
   const handleMessageElement = useCallback(
@@ -121,6 +128,17 @@ export function ChatCenter({
     });
     return () => onBranchState?.(null);
   }, [activeLeafId, changeLeaf, isCompacting, onBranchState, running, tree]);
+
+  // 监测 ChatInput 实际高度，让滚动容器底部留出对应空间，
+  // 避免滚动条延伸到浮动输入区下方被遮挡
+  useEffect(() => {
+    if (!chatInputNode) return;
+    const updateHeight = () => setChatInputHeight(chatInputNode.offsetHeight);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(chatInputNode);
+    return () => observer.disconnect();
+  }, [chatInputNode]);
 
   function hasImages(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.items).some(
@@ -178,13 +196,14 @@ export function ChatCenter({
           <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
             <div
               className="chat-scrollbar min-w-0 flex-1 overflow-y-auto overscroll-contain"
+              style={{ marginBottom: chatInputHeight || undefined }}
               ref={(node) => {
                 controller.setScrollerNode(node);
                 setScrollerNode(node);
               }}
             >
               <div
-                className={`min-h-full w-full px-4 pt-4 pb-[220px] ${
+                className={`min-h-full w-full px-4 pt-4 pb-4 ${
                   hasConversation ? "mx-auto max-w-[820px]" : ""
                 }`}
                 ref={(node) => {
@@ -221,15 +240,13 @@ export function ChatCenter({
               </div>
             </div>
 
-            <ChatInput {...controller} />
+            <ChatInput {...controller} rootRef={setChatInputNode} />
           </div>
 
           <ConversationNavigator
-            compact={conversationNavigatorCompact}
             entries={conversationNavigatorEntries}
             messageElementsRef={messageElementsRef}
             onHighlightMessageChange={setHighlightedMessageId}
-            running={controller.running}
             scroller={scrollerNode}
           />
         </div>

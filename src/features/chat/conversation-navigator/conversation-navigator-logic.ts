@@ -22,3 +22,19 @@ export function selectActiveConversationEntry({
   }
   return activeId;
 }
+
+const WAVE_WIDTHS = [30, 23, 17, 12, 8] as const;
+
+export function waveLineWidth({
+  active,
+  hoveredIndex,
+  index,
+}: {
+  active: boolean;
+  hoveredIndex: number;
+  index: number;
+}) {
+  if (hoveredIndex < 0) return active ? 18 : 7;
+  const waveWidth = WAVE_WIDTHS[Math.abs(index - hoveredIndex)] ?? 7;
+  return active ? Math.max(18, waveWidth) : waveWidth;
+}

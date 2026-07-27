@@ -63,21 +63,55 @@ describe("workspace primary navigation", () => {
     expect(source).toContain("disabledReason ?? label");
   });
 
-  it("supports compact and expanded navigation without glass effects", () => {
+  it("supports compact, expanded, and fully hidden navigation without glass effects", () => {
     expect(source).toContain('compact ? "px-1.5 py-2.5" : "px-3 py-3"');
     expect(source).toContain("t.workspace.expandPrimaryNavigation");
     expect(source).toContain("t.workspace.collapsePrimaryNavigation");
+    expect(conversationSource).toContain("primaryNavigationHidden");
+    expect(conversationSource).toContain(
+      "t.workspace.expandPrimaryNavigation",
+    );
+    expect(conversationSource).toContain(
+      "h-11 flex-none items-center border-b border-line-subtle",
+    );
+    expect(workspaceSource).toContain(
+      "primaryNavigationHidden={primaryNavHidden}",
+    );
+    expect(workspaceSource).toContain(
+      "effectivePrimaryNavWidth === HIDDEN_PRIMARY_NAV_WIDTH",
+    );
     expect(source).not.toContain("backdrop-blur");
     expect(workspaceSource).toContain("bg-[var(--workspace-bg)]");
-    expect(topBarSource).toContain("border-line-subtle bg-canvas");
+    expect(topBarSource).toContain("flex h-11 flex-none items-center bg-canvas");
   });
 
-  it("uses surface contrast instead of resting vertical divider lines", () => {
-    expect(conversationSource).not.toContain("border-l");
-    expect(conversationSource).not.toContain("border-r");
+  it("keeps primary navigation and conversation reveal controls visually distinct", () => {
+    expect(topBarSource).toContain("<PanelLeft />");
+    expect(conversationSource).toContain("<PanelRight />");
+    expect(topBarSource).toContain("t.workspace.expandPrimaryNavigation");
+    expect(topBarSource).toContain("t.workspace.showConversations");
+    expect(topBarSource).toContain("mx-1 h-4 w-px flex-none bg-line-subtle");
+  });
+
+  it("animates panel entry and exit while respecting reduced motion", () => {
     expect(workspaceSource).toContain(
-      "flex min-w-0 flex-1 overflow-hidden rounded-xl bg-canvas",
+      'import { AnimatePresence, motion, useReducedMotion } from "motion/react"',
     );
-    expect(resizeHandleSource).toContain("bg-transparent");
+    expect(workspaceSource).toContain("const reduceMotion = useReducedMotion()");
+    expect(workspaceSource).toContain('key="primary-navigation"');
+    expect(workspaceSource).toContain('key="conversation-panel"');
+    expect(workspaceSource).toContain('key="desktop-project-panel"');
+    expect(workspaceSource).toContain('key="narrow-project-panel"');
+    expect(workspaceSource).toContain("exit={{ opacity: 0, width: 0");
+  });
+
+  it("separates continuous surfaces with a subtle resize handle line instead of panel borders", () => {
+    expect(conversationSource).not.toMatch(/\bborder-l(?:-\d|\s|")/);
+    expect(conversationSource).not.toMatch(/\bborder-r(?:-\d|\s|")/);
+    expect(workspaceSource).toContain(
+      "flex min-w-0 flex-1 overflow-hidden rounded-l-xl rounded-r-sm bg-canvas",
+    );
+    expect(resizeHandleSource).toContain("bg-line-subtle");
+    expect(resizeHandleSource).toContain("hover:bg-line-emphasis");
   });
 });

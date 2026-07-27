@@ -73,7 +73,7 @@ describe("visual foundation contract", () => {
   });
 
   test("applies the visual foundation to the chat sample", () => {
-    expect(topBar).toContain("truncate text-sm font-semibold text-primary");
+    expect(topBar).toContain("flex h-11 flex-none items-center bg-canvas");
     expect(chatInput).not.toContain("rounded-[20px]");
     expect(chatInput).not.toContain("linear-gradient");
     expect(chatInput).toContain("rounded-composer");
@@ -86,7 +86,7 @@ describe("visual foundation contract", () => {
     expect(agentWorkspace).toContain(
       "overflow-hidden rounded-xl bg-canvas",
     );
-    expect(topBar).toContain("border-line-subtle bg-canvas");
+    expect(topBar).toContain("flex h-11 flex-none items-center bg-canvas");
     expect(topBar).not.toContain("backdrop-blur");
     expect(chatInput).not.toContain("rounded-[14px]");
     expect(chatInput).toContain("shadow-[var(--shadow-composer)]");

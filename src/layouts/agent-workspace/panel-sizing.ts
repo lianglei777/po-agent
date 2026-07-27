@@ -1,10 +1,9 @@
 export const COLLAPSED_PRIMARY_NAV_WIDTH = 56;
+export const HIDDEN_PRIMARY_NAV_WIDTH = 0;
 export const INSPECTOR_DOCK_WIDTH = 44;
 export const DEFAULT_PRIMARY_NAV_WIDTH = 216;
 export const DEFAULT_CONVERSATION_WIDTH = 248;
 export const DEFAULT_INSPECTOR_WIDTH = 420;
-export const MIN_PRIMARY_NAV_WIDTH = 184;
-export const MAX_PRIMARY_NAV_WIDTH = 300;
 export const MIN_CONVERSATION_WIDTH = 216;
 export const MAX_CONVERSATION_WIDTH = 360;
 export const MIN_INSPECTOR_WIDTH = 320;
@@ -19,7 +18,6 @@ const WORKSPACE_CHROME_WIDTH = 56;
 export type PanelWidths = {
   conversation: number;
   inspector: number;
-  primaryNav: number;
 };
 
 export type PanelVisibility = {
@@ -47,17 +45,11 @@ export function getEffectivePrimaryNavWidth(
   expanded: boolean,
   width: number,
 ) {
-  return expanded && !isNarrowWorkspace(containerWidth)
-    && containerWidth >= COMPACT_PRIMARY_NAV_WORKSPACE_WIDTH
-      ? width
-      : COLLAPSED_PRIMARY_NAV_WIDTH;
-}
-
-export function getPrimaryNavWidthBounds(): WidthBounds {
-  return {
-    max: MAX_PRIMARY_NAV_WIDTH,
-    min: MIN_PRIMARY_NAV_WIDTH,
-  };
+  if (!expanded) return HIDDEN_PRIMARY_NAV_WIDTH;
+  return !isNarrowWorkspace(containerWidth) &&
+    containerWidth >= COMPACT_PRIMARY_NAV_WORKSPACE_WIDTH
+    ? width
+    : COLLAPSED_PRIMARY_NAV_WIDTH;
 }
 
 export function getConversationWidthBounds(
@@ -75,7 +67,7 @@ export function getConversationWidthBounds(
     (showInspectorDock ? INSPECTOR_DOCK_WIDTH : 0) +
     MIN_CHAT_WIDTH +
     WORKSPACE_CHROME_WIDTH +
-    3 * RESIZE_HANDLE_WIDTH;
+    2 * RESIZE_HANDLE_WIDTH;
   const max = Math.min(
     MAX_CONVERSATION_WIDTH,
     Math.max(0, containerWidth - reserved),
@@ -107,7 +99,7 @@ export function getInspectorWidthBounds(
     (showInspectorDock ? INSPECTOR_DOCK_WIDTH : 0) +
     MIN_CHAT_WIDTH +
     WORKSPACE_CHROME_WIDTH +
-    3 * RESIZE_HANDLE_WIDTH;
+    2 * RESIZE_HANDLE_WIDTH;
   const max = Math.min(
     MAX_INSPECTOR_WIDTH,
     Math.max(0, containerWidth - reserved),
@@ -123,11 +115,10 @@ export function fitPanelWidths(
   widths: PanelWidths,
   visibility: PanelVisibility,
 ): PanelWidths {
-  const primaryNav = clamp(widths.primaryNav, getPrimaryNavWidthBounds());
   const effectivePrimaryNav = getEffectivePrimaryNavWidth(
     containerWidth,
     visibility.primaryNavExpanded,
-    primaryNav,
+    DEFAULT_PRIMARY_NAV_WIDTH,
   );
   let conversation = clamp(widths.conversation, {
     max: MAX_CONVERSATION_WIDTH,
@@ -139,11 +130,10 @@ export function fitPanelWidths(
   });
 
   if (isNarrowWorkspace(containerWidth)) {
-    return { conversation, inspector, primaryNav };
+    return { conversation, inspector };
   }
 
   const visibleHandleCount =
-    Number(visibility.primaryNavExpanded) +
     Number(visibility.conversationOpen) +
     Number(visibility.inspectorOpen);
   const occupied =
@@ -171,5 +161,5 @@ export function fitPanelWidths(
     conversation -= reduction;
   }
 
-  return { conversation, inspector, primaryNav };
+  return { conversation, inspector };
 }

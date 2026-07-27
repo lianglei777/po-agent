@@ -8,24 +8,28 @@ const source = readFileSync(
 );
 
 describe("conversation navigator interaction shell", () => {
-  it("uses semantic full-row controls instead of hover-only minimap nodes", () => {
+  it("renders a quiet right-edge mark rail without becoming a panel", () => {
     expect(source).toContain('aria-current={active ? "location" : undefined}');
     expect(source).toContain("onClick={() => navigateTo(entry.id)}");
-    expect(source).toContain("line-clamp-2");
-    expect(source).not.toContain("onPointerMove");
+    expect(source).toContain("pointer-events-none absolute top-0 right-3");
+    expect(source).toContain("waveLineWidth");
+    expect(source).not.toContain("w-56");
+    expect(source).not.toContain("NAVIGATOR_STORAGE_KEY");
   });
 
-  it("supports keyboard traversal and a direct latest-message action", () => {
+  it("supports keyboard traversal and accessible turn labels", () => {
     expect(source).toContain('event.key === "ArrowDown"');
     expect(source).toContain('event.key === "ArrowUp"');
     expect(source).toContain('event.key === "Home"');
     expect(source).toContain('event.key === "End"');
-    expect(source).toContain("t.workspace.jumpToLatest");
+    expect(source).toContain("t.workspace.jumpToConversation.replace");
   });
 
-  it("keeps compact mode as an overlay rather than consuming chat width", () => {
-    expect(source).toContain("compact && overlayOpen");
-    expect(source).toContain("absolute top-0 right-9 bottom-0");
-    expect(source).toContain("NAVIGATOR_STORAGE_KEY");
+  it("shows the user title and assistant summary in a hover preview", () => {
+    expect(source).toContain("data-conversation-preview");
+    expect(source).toContain("{hoveredEntry.title}");
+    expect(source).toContain("{hoveredEntry.summary}");
+    expect(source).toContain("onPointerEnter");
+    expect(source).toContain("onPointerLeave");
   });
 });
