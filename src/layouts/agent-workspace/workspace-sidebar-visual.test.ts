@@ -56,13 +56,6 @@ describe("workspace primary navigation", () => {
     expect(topBarSource).not.toContain("onOpenSystemPrompt");
   });
 
-  it("explains project-dependent Files and Skills actions", () => {
-    expect(source).toContain("t.workspace.selectProjectForSkills");
-    expect(source).toContain("t.workspace.selectProjectForFiles");
-    expect(source).toContain("aria-disabled");
-    expect(source).toContain("disabledReason ?? label");
-  });
-
   it("supports compact, expanded, and fully hidden navigation without glass effects", () => {
     expect(source).toContain('compact ? "px-1.5 py-2.5" : "px-3 py-3"');
     expect(source).toContain("t.workspace.expandPrimaryNavigation");

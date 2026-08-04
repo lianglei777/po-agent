@@ -53,9 +53,8 @@ describe("Skills page", () => {
     expect(source).toContain('setScreen("pack-detail")');
   });
 
-  it("names the selected project as the Skills context", () => {
+  it("propagates project context to child components", () => {
     expect(source).toContain("projectName");
-    expect(source).toContain("t.skills.availableForProject");
     expect(source).toContain('border-line-subtle');
     expect(source).toContain('className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas"');
   });

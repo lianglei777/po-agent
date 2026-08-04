@@ -1,10 +1,8 @@
 import {
-  FileText,
   Languages,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,35 +13,25 @@ import {
 import { ProjectNavigation } from "@/features/sessions/project-navigation";
 import type { SessionNavigationController } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
-import type { ProjectPanelTab } from "./project-panel";
 import type { WorkspaceView } from "./workspace-navigation";
 
 export type WorkspaceSidebarProps = {
-  activeProjectTool: ProjectPanelTab;
   activeView: WorkspaceView;
   compact: boolean;
   navigation: SessionNavigationController;
-  onOpenFiles: () => void;
   onOpenSettings: () => void;
-  onOpenSkills: () => void;
   onToggleCompact: () => void;
-  projectPanelOpen: boolean;
 };
 
 export function WorkspaceSidebar({
-  activeProjectTool,
   activeView,
   compact,
   navigation,
-  onOpenFiles,
   onOpenSettings,
-  onOpenSkills,
   onToggleCompact,
-  projectPanelOpen,
 }: WorkspaceSidebarProps) {
   const { locale, setLocale, t } = useI18n();
   const nextLocale = locale === "zh" ? "en" : "zh";
-  const projectSelected = Boolean(navigation.selectedCwd);
 
   return (
     <div
@@ -53,7 +41,7 @@ export function WorkspaceSidebar({
     >
       <div
         className={`mb-2 flex h-9 items-center ${
-          compact ? "justify-center" : "gap-2 px-1"
+          compact ? "justify-center" : "justify-between pl-3 pr-1"
         }`}
       >
         {compact ? null : (
@@ -62,11 +50,6 @@ export function WorkspaceSidebar({
             className="size-8 shrink-0"
             src="/po-agent-icon.png"
           />
-        )}
-        {compact ? null : (
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.02em] text-primary">
-            Po Agent
-          </span>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -92,38 +75,6 @@ export function WorkspaceSidebar({
         </Tooltip>
       </div>
 
-      <nav aria-label={t.workspace.projectTools} className="space-y-0.5">
-        <ProjectToolButton
-          active={
-            activeView === "chat" &&
-            projectPanelOpen &&
-            activeProjectTool === "skills"
-          }
-          compact={compact}
-          disabledReason={
-            projectSelected ? null : t.workspace.selectProjectForSkills
-          }
-          icon={<Sparkles />}
-          label={t.workspace.skills}
-          onClick={onOpenSkills}
-        />
-        <ProjectToolButton
-          active={
-            activeView === "chat" &&
-            projectPanelOpen &&
-            activeProjectTool === "files"
-          }
-          compact={compact}
-          disabledReason={
-            projectSelected ? null : t.workspace.selectProjectForFiles
-          }
-          icon={<FileText />}
-          label={t.files.files}
-          onClick={onOpenFiles}
-        />
-      </nav>
-
-      <div className="my-2.5 h-px bg-line-subtle" />
       <ProjectNavigation compact={compact} navigation={navigation} />
 
       <div
@@ -162,46 +113,6 @@ export function WorkspaceSidebar({
         </Tooltip>
       </div>
     </div>
-  );
-}
-
-function ProjectToolButton({
-  active,
-  compact,
-  disabledReason,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  compact: boolean;
-  disabledReason: string | null;
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  const button = (
-    <Button
-      aria-current={active ? "page" : undefined}
-      aria-disabled={disabledReason ? true : undefined}
-      className={`w-full ${compact ? "justify-center px-0" : "justify-start"}`}
-      onClick={disabledReason ? undefined : onClick}
-      size="sm"
-      type="button"
-      variant={active ? "secondary" : "ghost"}
-    >
-      {icon}
-      {compact ? null : <span className="truncate">{label}</span>}
-    </Button>
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent side={compact ? "right" : "top"}>
-        {disabledReason ?? label}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 

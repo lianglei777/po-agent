@@ -32,8 +32,6 @@ const saveIndicatorSource = readFileSync(
 describe("workspace composition", () => {
   it("keeps global settings in the primary navigation and project tools in the dock", () => {
     expect(sidebarSource).toContain("t.workspace.settings");
-    expect(sidebarSource).toContain("t.workspace.skills");
-    expect(sidebarSource).toContain("t.files.files");
     expect(projectPanelSource).toContain("t.workspace.skills");
     expect(projectPanelSource).toContain("<SkillsPage");
     expect(projectPanelSource).toContain("ProjectPanelDock");

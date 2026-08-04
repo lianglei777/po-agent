@@ -340,7 +340,7 @@ export function SystemPromptWorkbench({
         <div className="grid min-h-0 flex-1 grid-cols-[14rem_minmax(0,1fr)]">
           <aside
             aria-label={t.instructions.title}
-            className="flex min-h-0 flex-col border-r border-line-subtle bg-subtle p-3"
+            className="flex min-h-0 flex-col border-r border-line-subtle bg-canvas p-3"
           >
             <p className="px-2 pb-1.5 text-caption font-medium text-dim">
               {t.instructions.currentResult}

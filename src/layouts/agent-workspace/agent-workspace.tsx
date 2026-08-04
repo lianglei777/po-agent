@@ -253,17 +253,6 @@ export function AgentWorkspace() {
       }),
     [requestNavigation],
   );
-  const handleOpenFiles = useCallback(
-    () =>
-      requestNavigation("chat", () => {
-        setActiveView("chat");
-        setProjectPanelTab("files");
-        setProjectPanelOpen(true);
-        setProjectInstructionsOpen(false);
-      }),
-    [requestNavigation],
-  );
-
   function cancelDiscard() {
     pendingNavigationRef.current = null;
     setConfirmingDiscard(false);
@@ -541,17 +530,13 @@ export function AgentWorkspace() {
                   style={{ width: `${effectivePrimaryNavWidth}px` }}
                 >
                   <WorkspaceSidebar
-                    activeProjectTool={projectPanelTab}
                     activeView={activeView}
                     compact={
                       effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
                     }
                     navigation={sessionNavigation}
-                    onOpenFiles={handleOpenFiles}
                     onOpenSettings={handleOpenModelProvider}
-                    onOpenSkills={handleOpenSkills}
                     onToggleCompact={() => setPrimaryNavExpanded(false)}
-                    projectPanelOpen={projectPanelOpen}
                   />
                 </div>
               </motion.aside>

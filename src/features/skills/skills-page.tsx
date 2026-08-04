@@ -10,7 +10,6 @@ import {
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SectionTitle } from "@/components/ui/settings-form";
 import { useI18n } from "@/i18n/use-i18n";
 import { AddSkillPanel } from "./add-skill-panel";
 import { AddSkillPackDialog } from "./add-skill-pack-dialog";
@@ -114,20 +113,9 @@ export function SkillsPage({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
-      <header className="border-b border-line-subtle px-4 py-3">
-        <SectionTitle>{t.skills.title}</SectionTitle>
-        <h2 className="truncate text-sm font-semibold text-primary">
-          {projectName}
-        </h2>
-        <p className="mt-0.5 text-meta leading-4 text-muted">
-          {t.skills.availableForProject.replace("{project}", projectName)}
-        </p>
-      </header>
-
       <div className="flex items-center gap-2 border-b border-line-subtle p-2">
         <SegmentedControl
           ariaLabel={t.skills.title}
-          className="min-w-0 flex-1"
           items={[
             { label: t.skills.packs.tabSkills, value: "skills" },
             { label: t.skills.packs.tabPacks, value: "packs" },
@@ -137,7 +125,7 @@ export function SkillsPage({
           value={view}
         />
         {screen === "list" ? (
-          <>
+          <div className="ml-auto flex items-center gap-1">
             <Button
               aria-label={
                 view === "skills" ? t.skills.addSkill : t.skills.packs.addAction
@@ -178,7 +166,7 @@ export function SkillsPage({
                 }
               />
             </Button>
-          </>
+          </div>
         ) : null}
       </div>
 

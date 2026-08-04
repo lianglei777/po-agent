@@ -45,7 +45,6 @@ export const zh = {
     projectSettings: "项目设置",
     projectTools: "项目工具",
     selectProjectForSkills: "请先选择项目，再打开技能",
-    selectProjectForFiles: "请先选择项目，再打开文件",
     collapsePrimaryNavigation: "折叠主导航",
     expandPrimaryNavigation: "展开主导航",
     hideConversations: "隐藏项目对话",
@@ -425,7 +424,6 @@ export const zh = {
   },
   skills: {
     title: "技能",
-    availableForProject: "{project} 可用的技能",
     backToList: "返回列表",
     scopeProject: "当前项目 · {project}",
     scopeProjectDescription: "仅在左侧当前选中的项目中可用。",

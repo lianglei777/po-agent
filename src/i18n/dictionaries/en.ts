@@ -44,7 +44,6 @@ export const en = {
     projectSettings: "Project settings",
     projectTools: "Project tools",
     selectProjectForSkills: "Select a project before opening Skills",
-    selectProjectForFiles: "Select a project before opening Files",
     collapsePrimaryNavigation: "Collapse primary navigation",
     expandPrimaryNavigation: "Expand primary navigation",
     hideConversations: "Hide project conversations",
@@ -432,7 +431,6 @@ export const en = {
   },
   skills: {
     title: "Skills",
-    availableForProject: "Available to {project}",
     backToList: "Back to list",
     scopeProject: "Current project · {project}",
     scopeProjectDescription: "Available only in the selected project.",
