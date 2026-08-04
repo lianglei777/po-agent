@@ -36,7 +36,7 @@ function compatibilityPatch(
   const candidate =
     api === "openai-completions"
       ? openAICompletionsPatch(message)
-      : api === "anthropic-messages"
+      : api === "anthropic-messages" || api === "anthropic-ark"
         ? anthropicMessagesPatch(message)
         : undefined;
   if (!candidate || !api) return undefined;

@@ -2,7 +2,7 @@ export const MODEL_API_PROTOCOLS = [
   "openai-completions",
   "openai-responses",
   "anthropic-messages",
-  "google-generative-ai",
+  "anthropic-ark",
 ] as const;
 
 export type ModelApiProtocol = (typeof MODEL_API_PROTOCOLS)[number];
@@ -78,8 +78,15 @@ export function getCompatFields(
 ): readonly CompatFieldDefinition[] {
   if (api === "openai-completions") return OPENAI_COMPLETIONS_FIELDS;
   if (api === "openai-responses") return OPENAI_RESPONSES_FIELDS;
-  if (api === "anthropic-messages") return ANTHROPIC_MESSAGES_FIELDS;
+  if (api === "anthropic-messages" || api === "anthropic-ark")
+    return ANTHROPIC_MESSAGES_FIELDS;
   return EMPTY_FIELDS;
+}
+
+// 将发现层协议映射为 pi-ai SDK 可识别的聊天协议
+export function getChatApi(api: string | undefined): string | undefined {
+  if (api === "anthropic-ark") return "anthropic-messages";
+  return api;
 }
 
 export function getEffectiveApi(
@@ -144,6 +151,10 @@ export function sanitizeModelsConfig(
         if (!isRecord(modelValue)) return [];
         const modelApi = readApi(modelValue.api, options.strictApi);
         const model = { ...modelValue };
+        // anthropic-ark 仅用于模型发现；聊天层需要 pi-ai 可识别的 anthropic-messages
+        if (modelApi === undefined && providerApi === "anthropic-ark") {
+          model.api = "anthropic-messages";
+        }
         setOptional(
           model,
           "compat",

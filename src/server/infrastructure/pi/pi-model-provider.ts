@@ -24,8 +24,9 @@ import type {
 import type { ModelProvider } from "@/server/ports/model-provider";
 import {
   buildModelDiscoverySuggestions,
-  fetchOpenAICompatibleModels,
+  selectFetchModels,
 } from "./model-discovery";
+import { sanitizeModelsConfig } from "@/contracts/model-compat";
 import { evaluateModelTestMessages } from "./model-test-result";
 import { mapModelDiagnostic } from "./model-diagnostic-mapper";
 
@@ -89,7 +90,7 @@ export class PiModelProvider implements ModelProvider {
     input: DiscoverModelsInput,
   ): Promise<DiscoverModelsResult> {
     return buildModelDiscoverySuggestions(input, {
-      fetchModels: fetchOpenAICompatibleModels,
+      fetchModels: selectFetchModels(input.provider.api),
       catalogModels: getProviders().flatMap((provider) => getModels(provider)),
     });
   }
@@ -106,7 +107,9 @@ export class PiModelProvider implements ModelProvider {
     let modelCompat: Record<string, unknown> | undefined;
     try {
       if (input.config) {
-        await fs.writeFile(configPath, JSON.stringify(input.config));
+        // 清洗配置：将 anthropic-ark 等 discovery 协议映射为 pi-ai 可识别的聊天协议
+        const sanitized = sanitizeModelsConfig(input.config);
+        await fs.writeFile(configPath, JSON.stringify(sanitized));
       }
       const registry = ModelRegistry.create(this.auth, configPath);
       const model = registry.find(input.provider, input.modelId);

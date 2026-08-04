@@ -391,6 +391,16 @@ export const en = {
         "Whether the endpoint accepts Anthropic-style `cache_control` markers on tool definitions. When disabled, the marker is omitted from tool params. Some Anthropic-compatible providers (e.g., Fireworks) do not support it. Default: true.",
       "anthropic-messages.forceAdaptiveThinking":
         'Whether to force adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) regardless of model id. Custom Anthropic-compatible endpoints can enable this for models requiring the adaptive format; set to false to opt out on overridden built-in models. Default: false.',
+      "anthropic-ark.supportsEagerToolInputStreaming":
+        "Whether the endpoint accepts per-tool `eager_input_streaming`. When disabled, the field is omitted and the legacy `fine-grained-tool-streaming-2025-05-14` beta header is sent instead. Default: true.",
+      "anthropic-ark.supportsLongCacheRetention":
+        'Whether the endpoint supports Anthropic long cache retention (`cache_control.ttl: "1h"`). Default: true.',
+      "anthropic-ark.sendSessionAffinityHeaders":
+        "Whether to send the `x-session-affinity` header (from sessionId) when caching is enabled. Required for providers like Fireworks that route by session affinity to maximize cache hits. Default: false.",
+      "anthropic-ark.supportsCacheControlOnTools":
+        "Whether the endpoint accepts Anthropic-style `cache_control` markers on tool definitions. When disabled, the marker is omitted from tool params. Some Anthropic-compatible providers (e.g., Fireworks) do not support it. Default: true.",
+      "anthropic-ark.forceAdaptiveThinking":
+        'Whether to force adaptive thinking (`thinking.type: "adaptive"` plus `output_config.effort`) regardless of model id. Custom Anthropic-compatible endpoints can enable this for models requiring the adaptive format; set to false to opt out on overridden built-in models. Default: false.',
     },
     auto: "Auto",
     inherited: "Inherited",

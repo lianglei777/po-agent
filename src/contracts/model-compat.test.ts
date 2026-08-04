@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { en } from "@/i18n/dictionaries/en";
 import { zh } from "@/i18n/dictionaries/zh";
 import {
+  getChatApi,
   getCompatFields,
   getEffectiveApi,
   MODEL_API_PROTOCOLS,
@@ -60,7 +61,7 @@ describe("model compatibility contract", () => {
       supportsLongCacheRetention: true,
     });
     expect(
-      sanitizeCompat("google-generative-ai", {
+      sanitizeCompat("anthropic-messages", {
         supportsDeveloperRole: false,
       }),
     ).toBeUndefined();
@@ -174,5 +175,48 @@ describe("model compatibility contract", () => {
         expect(zhDescriptions[key], key).toBeTypeOf("string");
       }
     }
+  });
+
+  it("treats anthropic-ark the same as anthropic-messages for compat fields", () => {
+    expect(getCompatFields("anthropic-ark")).toEqual(
+      getCompatFields("anthropic-messages"),
+    );
+  });
+
+  it("maps anthropic-ark to anthropic-messages via getChatApi", () => {
+    expect(getChatApi("anthropic-ark")).toBe("anthropic-messages");
+    expect(getChatApi("anthropic-messages")).toBe("anthropic-messages");
+    expect(getChatApi("openai-completions")).toBe("openai-completions");
+    expect(getChatApi(undefined)).toBeUndefined();
+  });
+
+  it("sanitizes anthropic-ark provider by setting model api to anthropic-messages", () => {
+    expect(
+      sanitizeModelsConfig({
+        providers: {
+          "volcengine-ark": {
+            api: "anthropic-ark",
+            baseUrl: "https://ark.cn-beijing.volces.com/api/coding",
+            apiKey: "ark-test",
+            models: [
+              { id: "doubao-pro-32k" },
+              { id: "deepseek-r1", api: "anthropic-messages" },
+            ],
+          },
+        },
+      }),
+    ).toEqual({
+      providers: {
+        "volcengine-ark": {
+          api: "anthropic-ark",
+          baseUrl: "https://ark.cn-beijing.volces.com/api/coding",
+          apiKey: "ark-test",
+          models: [
+            { id: "doubao-pro-32k", api: "anthropic-messages" },
+            { id: "deepseek-r1", api: "anthropic-messages" },
+          ],
+        },
+      },
+    });
   });
 });

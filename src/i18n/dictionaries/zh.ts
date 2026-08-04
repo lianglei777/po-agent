@@ -387,6 +387,16 @@ export const zh = {
         "端点是否接受工具定义上的 Anthropic 风格 `cache_control` 标记。关闭时从工具参数中省略。Fireworks 等兼容服务可能不支持。默认开启。",
       "anthropic-messages.forceAdaptiveThinking":
         '是否强制 adaptive thinking（`thinking.type: "adaptive"` 配合 `output_config.effort`），忽略模型 ID 的自动判断。自定义 Anthropic 兼容端点可对需要该格式的模型开启；对被覆盖的内置模型设为 false 可退出。默认关闭。',
+      "anthropic-ark.supportsEagerToolInputStreaming":
+        "端点是否接受工具上的 `eager_input_streaming`。关闭时改为省略该字段并发送旧版 `fine-grained-tool-streaming-2025-05-14` beta 头。默认开启。",
+      "anthropic-ark.supportsLongCacheRetention":
+        '端点是否支持 Anthropic 长时效缓存（`cache_control.ttl: "1h"`）。默认开启。',
+      "anthropic-ark.sendSessionAffinityHeaders":
+        "启用缓存时是否发送 `x-session-affinity` 请求头（取自 sessionId）。Fireworks 等依赖会话亲和路由的提供商需开启以提升缓存命中。默认关闭。",
+      "anthropic-ark.supportsCacheControlOnTools":
+        "端点是否接受工具定义上的 Anthropic 风格 `cache_control` 标记。关闭时从工具参数中省略。Fireworks 等兼容服务可能不支持。默认开启。",
+      "anthropic-ark.forceAdaptiveThinking":
+        '是否强制 adaptive thinking（`thinking.type: "adaptive"` 配合 `output_config.effort`），忽略模型 ID 的自动判断。自定义 Anthropic 兼容端点可对需要该格式的模型开启；对被覆盖的内置模型设为 false 可退出。默认关闭。',
     },
     auto: "自动",
     inherited: "继承",
