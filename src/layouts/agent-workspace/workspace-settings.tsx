@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Cpu, Languages, ScrollText } from "lucide-react";
+import { ArrowLeft, Cpu, Images, Languages, ScrollText } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,10 +9,11 @@ import {
 } from "@/features/model-providers/model-provider-page";
 import { SystemPromptWorkbench } from "@/features/instructions/system-prompt-workbench";
 import { useI18n } from "@/i18n/use-i18n";
+import { ContentGenerationSettings } from "@/features/content-generation/content-generation-settings";
 import { mergeClasses } from "@/lib/utils";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
 
-type SettingsSection = "models" | "instructions" | "language";
+type SettingsSection = "models" | "content-generation" | "instructions" | "language";
 
 export function WorkspaceSettings({
   agentId,
@@ -24,6 +25,7 @@ export function WorkspaceSettings({
   onBack,
   onInstructionsApplied,
   onInstructionsChanged,
+  onContentGenerationDirtyChange,
   onModelDirtyChange,
   onModelsSaved,
   onModelSaveStatusChange,
@@ -40,6 +42,7 @@ export function WorkspaceSettings({
   onBack: () => void;
   onInstructionsApplied: () => void;
   onInstructionsChanged: () => void;
+  onContentGenerationDirtyChange: (dirty: boolean) => void;
   onModelDirtyChange: (dirty: boolean) => void;
   onModelsSaved: () => void;
   onModelSaveStatusChange: (status: ModelProviderSaveStatus) => void;
@@ -82,6 +85,12 @@ export function WorkspaceSettings({
           selected={section === "instructions"}
         />
         <SettingsNavButton
+          icon={<Images />}
+          label={t.contentGeneration.title}
+          onClick={() => setSection("content-generation")}
+          selected={section === "content-generation"}
+        />
+        <SettingsNavButton
           icon={<Languages />}
           label={t.common.language}
           onClick={() => setSection("language")}
@@ -110,6 +119,18 @@ export function WorkspaceSettings({
               onDirtyChange={onModelDirtyChange}
               onSaved={onModelsSaved}
               onSaveStatusChange={onModelSaveStatusChange}
+            />
+          </div>
+
+          <div
+            className={
+              section === "content-generation"
+                ? "flex min-h-0 min-w-0 flex-1"
+                : "hidden"
+            }
+          >
+            <ContentGenerationSettings
+              onDirtyChange={onContentGenerationDirtyChange}
             />
           </div>
 

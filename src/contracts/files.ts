@@ -2,6 +2,7 @@ export interface FileEntry {
   name: string;
   path: string;
   isDir: boolean;
+  contentType: string;
   size: number;
   modified: string;
 }

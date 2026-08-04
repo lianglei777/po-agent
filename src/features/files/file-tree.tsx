@@ -20,7 +20,7 @@ import type { FileEntry } from "./types";
 export type FileTreeProps = {
   cwd: string;
   onAtMention?: (path: string) => void;
-  onOpenFile: (path: string, name: string) => void;
+  onOpenFile: (path: string, name: string, contentType?: string) => void;
   refreshKey?: number;
 };
 
@@ -153,7 +153,7 @@ function FileNodes({
   loading: Set<string>;
   text: { empty: string; loading: string; mention: string };
   onToggle: (path: string) => Promise<void>;
-  onOpenFile: (path: string, name: string) => void;
+  onOpenFile: (path: string, name: string, contentType?: string) => void;
   onAtMention?: (path: string) => void;
   depth?: number;
 }) {
@@ -177,7 +177,7 @@ function FileNodes({
           aria-label={entry.name}
           className="group flex h-6 cursor-pointer items-center rounded-sm px-1 text-meta hover:bg-hover focus-within:bg-selected focus-within:text-primary"
           onClick={() =>
-            entry.isDir ? void onToggle(path) : onOpenFile(path, entry.name)
+            entry.isDir ? void onToggle(path) : onOpenFile(path, entry.name, entry.contentType)
           }
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -185,7 +185,7 @@ function FileNodes({
               if (entry.isDir) {
                 void onToggle(path);
               } else {
-                onOpenFile(path, entry.name);
+                onOpenFile(path, entry.name, entry.contentType);
               }
             }
           }}

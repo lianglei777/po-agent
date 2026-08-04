@@ -114,7 +114,7 @@ export function ProjectPanel({
   file: OpenFile | null;
   onAtMention?: (path: string) => void;
   onClose: () => void;
-  onOpenFile?: (path: string, name: string) => void;
+  onOpenFile?: (path: string, name: string, contentType?: string) => void;
   projectName: string;
   refreshKey?: number;
   settingsContent?: ReactNode;

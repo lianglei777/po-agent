@@ -2444,7 +2444,82 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 保存指令文件后，新建会话会自动使用最新文件。已有会话需要通过
 `reload_instructions` 命令显式重载才能生效。
 
-## 12. SSE 通用行为
+## 12. Content Generation API
+
+内容生成会话与 Agent Session 使用不同的执行协议。一个内容生成会话固定绑定一个 API，执行链路为可选上传、提交、可选轮询和产物下载。API Key 只保存在服务端配置中，列表响应仅返回 `hasApiKey`。
+
+### 12.1 管理内容生成 API
+
+```http
+GET /api/content-generation/apis
+PUT /api/content-generation/apis
+DELETE /api/content-generation/apis?id=:id
+```
+
+`PUT` 接受 `SaveContentGenerationApiRequest`。配置支持四种能力：`text-to-image`、`text-to-video`、`image-to-image`、`image-to-video`。HTTP 模板仅支持 `GET` 与 `POST`，模板变量包括：
+
+```text
+{{secret.apiKey}}
+{{input.prompt}}
+{{input.images}}
+{{upload.urls}}
+{{job.remoteTaskId}}
+```
+
+已被会话引用的 API 不能删除。
+
+### 12.2 创建内容生成会话
+
+```http
+POST /api/content-generation/sessions
+Content-Type: application/json
+
+{
+  "cwd": "D:\\workspace",
+  "apiId": "runninghub-seedance-2"
+}
+```
+
+内容生成会话会出现在 `GET /api/sessions` 中，其 `mode` 为 `content-generation`，并包含 `contentGenerationApiId`。
+
+### 12.3 创建和列出生成任务
+
+```http
+GET /api/content-generation/sessions/:id/jobs
+POST /api/content-generation/sessions/:id/jobs
+Content-Type: multipart/form-data
+```
+
+`POST` 表单字段：
+
+- `prompt`：必填字符串。
+- `files`：零个或多个输入文件；只有 API 配置了上传步骤时可用。
+
+同一会话同时只允许一个活跃任务。提交请求不会自动重试，避免重复创建付费任务。
+
+### 12.4 查询一次远端任务
+
+```http
+POST /api/content-generation/jobs/:id/poll
+```
+
+该接口只执行一次 Query API 请求。查询失败会保留 `remoteTaskId`，后续调用继续查询同一个任务，不会重新提交。成功后远端产物会立即下载到：
+
+```text
+<workspace>/.po-agent/generated/<jobId>/
+```
+
+任务阶段为：`created`、`uploading`、`submitting`、`queued`、`running`、`downloading`、`succeeded`、`failed`。
+
+`ContentGenerationJob` 还会返回实际发送的 `submitRequest` Body，以及脱敏后的
+`submitResponse` 与 `latestQueryResponse`。请求和响应快照最大为 64 KiB，疑似凭证字段会替换为
+`[REDACTED]`。下载产物包含 `contentType`，前端通过现有
+`GET /api/files/_?type=raw&path=...` 的 Range 响应播放本地媒体。
+
+内容生成客户端的轮询间隔不得低于 5 秒。服务商配置仍可为不同 API 保存
+独立间隔，但当前 HTTP 校验范围为 5000 至 60000 毫秒。
+
+## 13. SSE 通用行为
 
 Agent、OAuth 和 File Watch 使用相同的 SSE Transport。
 
@@ -2480,9 +2555,9 @@ data: <JSON>
 3. Abort 内部 Signal。
 4. 关闭 Stream。
 
-## 12. 完整 Agent 调用示例
+## 14. 完整 Agent 调用示例
 
-### 12.1 创建 Session
+### 14.1 创建 Session
 
 ```bash
 curl -X POST http://localhost:3000/api/agent/new \
@@ -2503,13 +2578,13 @@ curl -X POST http://localhost:3000/api/agent/new \
 }
 ```
 
-### 12.2 订阅事件
+### 14.2 订阅事件
 
 ```bash
 curl -N http://localhost:3000/api/agent/019e.../events
 ```
 
-### 12.3 发送后续 Prompt
+### 14.3 发送后续 Prompt
 
 ```bash
 curl -X POST http://localhost:3000/api/agent/019e... \
@@ -2520,7 +2595,7 @@ curl -X POST http://localhost:3000/api/agent/019e... \
   }'
 ```
 
-### 12.4 页面恢复
+### 14.4 页面恢复
 
 先获取磁盘 Session：
 
@@ -2536,7 +2611,7 @@ GET /api/agent/019e.../events
 
 订阅会在 Runtime 不存在时从 Session 文件恢复。
 
-## 13. 当前已知限制
+## 15. 当前已知限制
 
 1. API 没有面向公网的身份认证和访问控制。
 2. Runtime Registry、Workspace Roots 和 OAuth Pending Input 都保存在单进程内存中。
@@ -2553,7 +2628,7 @@ GET /api/agent/019e.../events
 12. Range 只支持一个显式区间，不支持多 Range 和标准后缀区间语义。
 13. 当前默认模型是可用模型列表第一项，不是持久化的用户默认选择。
 
-## 14. 实现位置
+## 16. 实现位置
 
 | 内容 | 目录 |
 | --- | --- |

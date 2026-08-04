@@ -27,3 +27,8 @@ export function loadFile(path: string, signal?: AbortSignal) {
     signal,
   });
 }
+
+export function rawFileUrl(path: string) {
+  const params = new URLSearchParams({ path, type: "raw" });
+  return `/api/files/_?${params}`;
+}

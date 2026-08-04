@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, FileText } from "lucide-react";
 import { useI18n } from "@/i18n/use-i18n";
-import { loadFile } from "./api";
+import { MediaPreview } from "@/components/ui/media-preview";
+import { loadFile, rawFileUrl } from "./api";
 import { FileTree } from "./file-tree";
 import { relativePath } from "./path";
 import type { OpenFile } from "./types";
@@ -20,7 +21,7 @@ export function FilePanel({
   cwd?: string | null;
   file: OpenFile | null;
   onAtMention?: (path: string) => void;
-  onOpenFile?: (path: string, name: string) => void;
+  onOpenFile?: (path: string, name: string, contentType?: string) => void;
   refreshKey?: number;
 }) {
   const { t } = useI18n();
@@ -95,6 +96,19 @@ function EmptyFile() {
 }
 
 function LoadedFile({ file }: { file: OpenFile }) {
+  if (file.contentType?.startsWith("image/") || file.contentType?.startsWith("video/") || file.contentType?.startsWith("audio/")) {
+    return (
+      <MediaPreview
+        contentType={file.contentType}
+        name={file.name}
+        src={rawFileUrl(file.path)}
+      />
+    );
+  }
+  return <LoadedTextFile file={file} />;
+}
+
+function LoadedTextFile({ file }: { file: OpenFile }) {
   const { t } = useI18n();
   const [result, setResult] = useState<{
     content: string;

@@ -3,6 +3,7 @@ import type {
   AgentRuntimeResponse,
   ThinkingLevel,
 } from "./agent";
+import type { ContentGenerationJobPhase } from "./content-generation";
 import type { SuccessResponse } from "./common";
 
 export interface SessionInfo {
@@ -15,6 +16,9 @@ export interface SessionInfo {
   messageCount: number;
   firstMessage: string;
   parentSessionId?: string;
+  mode?: "chat" | "content-generation";
+  contentGenerationApiId?: string;
+  contentGenerationPhase?: ContentGenerationJobPhase;
 }
 
 export interface SessionEntry {

@@ -28,6 +28,7 @@ export class NodeWorkspaceFileService implements WorkspaceFileService {
           name: entry.name,
           path: entryPath,
           isDir: entry.isDirectory(),
+          contentType: entry.isDirectory() ? "inode/directory" : mimeForPath(entryPath),
           size: entryStat.size,
           modified: entryStat.mtime.toISOString(),
         };
@@ -133,6 +134,10 @@ function mimeForPath(filePath: string): string {
       ".mp3": "audio/mpeg",
       ".wav": "audio/wav",
       ".ogg": "audio/ogg",
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".mov": "video/quicktime",
+      ".m4v": "video/x-m4v",
       ".pdf": "application/pdf",
     }[extension] ?? "application/octet-stream"
   );

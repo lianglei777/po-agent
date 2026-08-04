@@ -1,6 +1,7 @@
 import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
+import { ContentGenerationService } from "@/server/application/content-generation-service";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
 import { InstructionService } from "@/server/application/instruction-service";
@@ -10,6 +11,8 @@ import { SessionService } from "@/server/application/session-service";
 import { SkillPackService } from "@/server/application/skill-pack-service";
 import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
+import { NodeContentGenerationArtifactStore } from "@/server/infrastructure/filesystem/node-content-generation-artifact-store";
+import { JsonContentGenerationRepository } from "@/server/infrastructure/filesystem/json-content-generation-repository";
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
 import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-directory-browser";
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
@@ -23,6 +26,7 @@ import { PiSkillProvider } from "@/server/infrastructure/pi/pi-skill-provider";
 import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-runner";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { PendingInputRegistry } from "@/server/infrastructure/runtime/pending-input-registry";
+import { HttpContentGenerationProvider } from "@/server/infrastructure/http/http-content-generation-provider";
 
 function createContainer() {
   const sessions = new PiSessionRepository();
@@ -41,10 +45,20 @@ function createContainer() {
   const skills = new PiSkillProvider(processes);
   const skillPacks = new PiSkillPackProvider(undefined, undefined, undefined, roots);
   const instructionStore = new NodeInstructionStore(getAgentDir());
+  const contentGenerationRepository = new JsonContentGenerationRepository(
+    path.join(getAgentDir(), "content-generation.json"),
+  );
+  const contentGenerationService = new ContentGenerationService(
+    contentGenerationRepository,
+    new HttpContentGenerationProvider(),
+    new NodeContentGenerationArtifactStore(),
+    roots,
+  );
 
   return {
     roots,
-    sessionService: new SessionService(sessions, runtimes),
+    contentGenerationService,
+    sessionService: new SessionService(sessions, runtimes, contentGenerationService),
     agentService: new AgentService(
       sessions,
       runtimes,
