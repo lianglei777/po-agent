@@ -168,6 +168,8 @@ export const zh = {
     latestQueryResponse: "查看最新查询接口响应",
     output: "生成结果",
     openRemoteOutput: "打开远程结果",
+    retryQuery: "重新查询",
+    retrying: "查询中...",
     inputs: {
       resolution: "分辨率",
       duration: "时长",

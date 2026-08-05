@@ -20,18 +20,25 @@ describe("content generation conversation", () => {
     expect(source).toContain("Math.max(api.completion.intervalMs, MIN_POLL_INTERVAL_MS)");
   });
 
-  it("provides three Seedance catalog APIs with per-job input schemas", () => {
+  it("provides five RunningHub catalog APIs with per-job input schemas", () => {
     const templates = createRunningHubDrafts();
     expect(templates.map((template) => template.catalogId)).toEqual([
+      "runninghub-seedream-v5-pro-text-to-image",
+      "runninghub-seedream-v5-pro-image-to-image",
       "runninghub-seedance-2-text-to-video",
       "runninghub-seedance-2-image-to-video",
       "runninghub-seedance-2-multimodal-video",
     ]);
-    expect(templates[1].inputSchema?.assets).toMatchObject([
+    expect(templates[0].capability).toBe("text-to-image");
+    expect(templates[0].output.defaultMediaType).toBe("image");
+    expect(templates[1].capability).toBe("image-to-image");
+    expect(templates[1].requiresImages).toBe(true);
+    expect(templates[1].inputSchema?.assets?.map((slot) => slot.key)).toEqual(["imageUrls"]);
+    expect(templates[3].inputSchema?.assets).toMatchObject([
       { key: "firstFrameUrl", required: true, maxFiles: 1 },
       { key: "lastFrameUrl", required: false, maxFiles: 1 },
     ]);
-    expect(templates[2].inputSchema?.assets?.map((slot) => slot.key)).toEqual([
+    expect(templates[4].inputSchema?.assets?.map((slot) => slot.key)).toEqual([
       "imageUrls",
       "videoUrls",
       "audioUrls",
@@ -48,5 +55,14 @@ describe("content generation conversation", () => {
     expect(source).toContain("job.outputs.filter(isDisplayOutput)");
     expect(source).not.toContain("providerTextOutput");
     expect(source).not.toContain("submitting || activeJob ?");
+  });
+
+  it("provides a retry button for query-stage failures", () => {
+    expect(source).toContain("retryPoll");
+    expect(source).toContain("retryingJobId");
+    expect(source).toContain('job.error?.stage === "query"');
+    expect(source).toContain("RotateCcw");
+    expect(source).toContain("retryQuery");
+    expect(source).toContain("retrying");
   });
 });

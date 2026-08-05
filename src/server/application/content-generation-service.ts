@@ -11,12 +11,21 @@ import type {
   SaveContentGenerationProviderRequest,
 } from "@/contracts/content-generation";
 import type { SessionInfo } from "@/contracts/sessions";
-import type { ContentGenerationInputFile } from "@/server/domain/content-generation";
+import type {
+  ContentGenerationInputFile,
+  StoredContentGenerationApi,
+  StoredContentGenerationProvider,
+} from "@/server/domain/content-generation";
 import { AppError } from "@/server/domain/app-error";
 import type { ContentGenerationProvider, ContentGenerationArtifactStore } from "@/server/ports/content-generation-provider";
 import type { ContentGenerationRepository } from "@/server/ports/content-generation-repository";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import { resolveAllowedCwd } from "./resolve-allowed-cwd";
+import {
+  BUILTIN_RUNNINGHUB_PROVIDER_ID,
+  createBuiltinRunningHubApisStored,
+  createBuiltinRunningHubProviderStored,
+} from "./builtin-content-generation";
 
 type Variables = Record<string, unknown>;
 
@@ -29,11 +38,29 @@ export class ContentGenerationService {
   ) {}
 
   async listApis(): Promise<ContentGenerationApi[]> {
-    return (await this.repository.read()).apis.map(publicApi);
+    const state = await this.repository.read();
+    // 合并内置 RunningHub API--按 catalogId 去重，已存储的同 catalog 项优先
+    const storedCatalogIds = new Set(
+      state.apis.map((api) => api.catalogId).filter(Boolean),
+    );
+    const builtinApis = builtinRunningHubApis(state.providers);
+    const merged = [
+      ...state.apis,
+      ...builtinApis.filter((api) => !storedCatalogIds.has(api.catalogId)),
+    ];
+    return merged.map(publicApi);
   }
 
   async listProviders(): Promise<PublicContentGenerationProvider[]> {
-    return (await this.repository.read()).providers.map(publicProvider);
+    const state = await this.repository.read();
+    // 合并内置 RunningHub 供应商--已存储的同类型项优先
+    const hasStoredRunninghub = state.providers.some(
+      (provider) => provider.type === "runninghub",
+    );
+    const merged = hasStoredRunninghub
+      ? state.providers
+      : [builtinRunningHubProvider(), ...state.providers];
+    return merged.map(publicProvider);
   }
 
   async saveProvider(input: SaveContentGenerationProviderRequest) {
@@ -69,7 +96,10 @@ export class ContentGenerationService {
 
   async saveApi(input: SaveContentGenerationApiRequest) {
     const state = await this.repository.read();
-    if (!state.providers.some((provider) => provider.id === input.providerId)) {
+    // 内置 RunningHub 供应商无需事先存储即可挂载 API
+    const providerExists = state.providers.some((provider) => provider.id === input.providerId)
+      || input.providerId === BUILTIN_RUNNINGHUB_PROVIDER_ID;
+    if (!providerExists) {
       throw new AppError("CONTENT_PROVIDER_NOT_FOUND", "Content provider was not found", 404);
     }
     const existing = state.apis.find((api) => api.id === input.id);
@@ -270,16 +300,27 @@ export class ContentGenerationService {
 
   async pollJob(id: string) {
     const job = await this.requiredJob(id);
-    if (!isActive(job.phase)) return job;
+    // 查询阶段失败的 job 允许重新轮询--远端任务仍然存在，用户无需重新付费提交
+    const retryable = job.phase === "failed"
+      && job.error?.stage === "query"
+      && Boolean(job.remoteTaskId);
+    if (!isActive(job.phase) && !retryable) return job;
     const session = await this.requiredSession(job.sessionId);
     const api = await this.requiredApi(job.apiId);
     if (api.completion.mode !== "polling" || !job.remoteTaskId) return job;
-    if (Date.now() - new Date(job.created).getTime() > api.completion.timeoutMs) {
+    // 手动重试时跳过超时检查--用户主动查询已付费任务，不应被原始超时窗口阻止
+    if (!retryable && Date.now() - new Date(job.created).getTime() > api.completion.timeoutMs) {
       return this.failJob(
         job,
         "query",
         new Error("Content generation timed out"),
       );
+    }
+    // 重试前恢复到 pending 状态，清除上次的查询错误
+    if (retryable) {
+      job.phase = pendingPhase(job.remoteStatus, api.completion.pendingValues);
+      delete job.error;
+      await this.persistJob(job);
     }
     try {
       const variables = variablesFor(api, job);
@@ -331,7 +372,7 @@ export class ContentGenerationService {
       }
       const url = stringAt(response, api.upload.urlPath);
       if (!url) throw new Error("Upload API did not return a file URL");
-      const slot = api.inputSchema?.assets?.find((item) => item.key === file.slot);
+      const slot = api.inputSchema?.assets?.find((item: { key: string }) => item.key === file.slot);
       assets.push({
         slot: file.slot,
         name: file.name,
@@ -407,9 +448,12 @@ export class ContentGenerationService {
   }
 
   private async requiredApi(id: string) {
-    const api = await this.repository.getApi(id);
+    const state = await this.repository.read();
+    const storedApi = state.apis.find((a) => a.id === id);
+    const api = storedApi ?? builtinRunningHubApi(id, state.providers);
     if (!api) throw new AppError("CONTENT_API_NOT_FOUND", "Content generation API was not found", 404);
-    const provider = await this.repository.getProvider(api.providerId);
+    const storedProvider = state.providers.find((p) => p.id === api.providerId);
+    const provider = storedProvider ?? builtinRunningHubProviderById(api.providerId);
     if (!provider) throw new AppError("CONTENT_PROVIDER_NOT_FOUND", "Content provider was not found", 404);
     return {
       ...api,
@@ -679,4 +723,35 @@ function extensionFromContentType(value?: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Content generation failed";
+}
+
+// -- 内置 RunningHub 供应商与 API 解析 --
+
+/** 返回内置 RunningHub 供应商（StoredContentGenerationProvider），不含已存储的 apiKey */
+function builtinRunningHubProvider(): StoredContentGenerationProvider {
+  return createBuiltinRunningHubProviderStored();
+}
+
+/** 按 providerId 匹配内置 RunningHub 供应商，非内置 ID 返回 null */
+function builtinRunningHubProviderById(providerId: string): StoredContentGenerationProvider | null {
+  if (providerId === BUILTIN_RUNNINGHUB_PROVIDER_ID) return builtinRunningHubProvider();
+  return null;
+}
+
+/** 根据已存储的供应商列表，返回内置 RunningHub API 列表（providerId 指向已存储或内置供应商） */
+function builtinRunningHubApis(
+  storedProviders: StoredContentGenerationProvider[],
+): StoredContentGenerationApi[] {
+  const storedRunninghub = storedProviders.find((p) => p.type === "runninghub");
+  const providerId = storedRunninghub?.id ?? BUILTIN_RUNNINGHUB_PROVIDER_ID;
+  return createBuiltinRunningHubApisStored(providerId);
+}
+
+/** 按 id 匹配内置 RunningHub API，非内置 ID 返回 null */
+function builtinRunningHubApi(
+  id: string,
+  storedProviders: StoredContentGenerationProvider[],
+): StoredContentGenerationApi | null {
+  const builtinApis = builtinRunningHubApis(storedProviders);
+  return builtinApis.find((api) => api.id === id) ?? null;
 }

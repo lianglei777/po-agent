@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Copy,
   LoaderCircle,
+  RotateCcw,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -55,6 +56,7 @@ export function ContentGenerationCenter({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const endOfConversation = useRef<HTMLDivElement>(null);
   const api = apis.find((item) => item.id === session.contentGenerationApiId);
   const activeJob = useMemo(
@@ -125,6 +127,22 @@ export function ContentGenerationCenter({
     }
   }
 
+  async function retryPoll(jobId: string) {
+    setRetryingJobId(jobId);
+    setError("");
+    try {
+      const next = await pollContentGenerationJob(jobId);
+      setJobs((current) =>
+        current.map((job) => (job.id === next.id ? next : job)),
+      );
+      if (next.phase === "succeeded") onChanged?.();
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setRetryingJobId(null);
+    }
+  }
+
   if (loading) {
     return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
   }
@@ -144,7 +162,14 @@ export function ContentGenerationCenter({
           {orderedJobs.length ? (
             <div className="space-y-8">
               {orderedJobs.map((job) => (
-                <GenerationTurn api={api} cwd={session.cwd} job={job} key={job.id} />
+                <GenerationTurn
+                  api={api}
+                  cwd={session.cwd}
+                  job={job}
+                  key={job.id}
+                  onRetry={retryPoll}
+                  retrying={retryingJobId === job.id}
+                />
               ))}
             </div>
           ) : (
@@ -172,7 +197,19 @@ export function ContentGenerationCenter({
   );
 }
 
-function GenerationTurn({ api, cwd, job }: { api: ContentGenerationApi; cwd: string; job: ContentGenerationJob }) {
+function GenerationTurn({
+  api,
+  cwd,
+  job,
+  onRetry,
+  retrying,
+}: {
+  api: ContentGenerationApi;
+  cwd: string;
+  job: ContentGenerationJob;
+  onRetry: (jobId: string) => void;
+  retrying: boolean;
+}) {
   const { t } = useI18n();
   const inputLabels = t.contentGeneration.inputs as Readonly<Record<string, string>>;
   const parameterEntries = Object.entries(job.parameters ?? {});
@@ -199,12 +236,22 @@ function GenerationTurn({ api, cwd, job }: { api: ContentGenerationApi; cwd: str
           ) : null}
         </div>
       </div>
-      <GenerationResult cwd={cwd} job={job} />
+      <GenerationResult cwd={cwd} job={job} onRetry={onRetry} retrying={retrying} />
     </section>
   );
 }
 
-function GenerationResult({ cwd, job }: { cwd: string; job: ContentGenerationJob }) {
+function GenerationResult({
+  cwd,
+  job,
+  onRetry,
+  retrying,
+}: {
+  cwd: string;
+  job: ContentGenerationJob;
+  onRetry: (jobId: string) => void;
+  retrying: boolean;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const active = ACTIVE_PHASES.has(job.phase);
@@ -233,6 +280,20 @@ function GenerationResult({ cwd, job }: { cwd: string; job: ContentGenerationJob
       ) : null}
 
       {job.error ? <p className="mt-3 text-xs text-destructive-text">{job.error.message}</p> : null}
+
+      {job.phase === "failed" && job.error?.stage === "query" ? (
+        <Button
+          className="mt-2"
+          disabled={retrying}
+          onClick={() => onRetry(job.id)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          {retrying ? <LoaderCircle className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+          {retrying ? t.contentGeneration.retrying : t.contentGeneration.retryQuery}
+        </Button>
+      ) : null}
 
       {displayOutputs.length ? (
         <div className="mt-4 space-y-4">

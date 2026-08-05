@@ -171,6 +171,8 @@ export const en = {
     latestQueryResponse: "View latest query response",
     output: "Generated output",
     openRemoteOutput: "Open remote output",
+    retryQuery: "Retry query",
+    retrying: "Querying...",
     inputs: {
       resolution: "Resolution",
       duration: "Duration",

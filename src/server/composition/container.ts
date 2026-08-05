@@ -58,7 +58,7 @@ function createContainer() {
   );
   const contentGenerationDocumentationService = new ContentGenerationDocumentationService(
     new MarkdownContentGenerationDocumentationRepository(
-      path.join(process.cwd(), "docs", "RunningHubAPIs", "seedance2.0"),
+      path.join(process.cwd(), "docs", "RunningHubAPIs"),
     ),
   );
 

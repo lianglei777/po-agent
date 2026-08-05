@@ -23,8 +23,6 @@ import {
   saveContentGenerationProvider,
 } from "./api";
 import {
-  createBuiltinRunningHubApis,
-  createBuiltinRunningHubProvider,
   createContentGenerationApiDraft,
   createContentGenerationProviderDraft,
 } from "./defaults";
@@ -86,29 +84,12 @@ export function ContentGenerationSettings({
       loadContentGenerationApis(),
     ])
       .then(([nextProviders, nextApis]) => {
+        // 后端已合并内置 RunningHub 供应商与 API，直接使用
         setStoredProviderIds(new Set(nextProviders.map((p) => p.id)));
         setStoredApiIds(new Set(nextApis.map((a) => a.id)));
-
-        // 合并内置 RunningHub 供应商——始终展示，无需手动添加
-        const storedRunninghub = nextProviders.find((p) => p.type === "runninghub");
-        const builtinProvider = createBuiltinRunningHubProvider();
-        const mergedProviders = storedRunninghub
-          ? nextProviders
-          : [builtinProvider, ...nextProviders];
-
-        // 合并内置 RunningHub API——作为子项直接展示
-        const runninghubId = storedRunninghub?.id ?? builtinProvider.id;
-        const builtinApis = createBuiltinRunningHubApis(runninghubId);
-        const mergedApis = [...nextApis];
-        for (const builtin of builtinApis) {
-          if (!mergedApis.some((a) => a.catalogId === builtin.catalogId)) {
-            mergedApis.push(builtin);
-          }
-        }
-
-        setProviders(mergedProviders);
-        setApis(mergedApis);
-        if (mergedProviders[0]) selectProvider(mergedProviders[0]);
+        setProviders(nextProviders);
+        setApis(nextApis);
+        if (nextProviders[0]) selectProvider(nextProviders[0]);
       })
       .catch((cause) => setError(messageOf(cause)))
       .finally(() => setLoading(false));

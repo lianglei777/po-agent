@@ -15,8 +15,9 @@ describe("content generation API settings", () => {
   });
 
   it("renders RunningHub as a built-in provider", () => {
-    expect(source).toContain("createBuiltinRunningHubProvider");
-    expect(source).toContain("createBuiltinRunningHubApis");
+    // 后端 listApis/listProviders 已合并内置项，前端无需再合并
+    expect(source).not.toContain("createBuiltinRunningHubProvider");
+    expect(source).not.toContain("createBuiltinRunningHubApis");
   });
 
   it("collapses API documentation by default with lazy loading", () => {

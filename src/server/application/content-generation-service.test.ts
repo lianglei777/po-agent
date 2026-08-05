@@ -190,6 +190,89 @@ describe("ContentGenerationService", () => {
     expect(test.provider.request).toHaveBeenCalledTimes(2);
   });
 
+  it("re-polls a query-stage failure and succeeds when the remote recovers", async () => {
+    const test = setup({ status: "FAILED", errorMessage: "Internal server error" });
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "runninghub-video",
+    });
+    const created = await test.service.createJob({
+      sessionId: session.id,
+      prompt: "test",
+      files: [],
+    });
+
+    const failed = await test.service.pollJob(created.id);
+    expect(failed.phase).toBe("failed");
+    expect(failed.error).toEqual({ stage: "query", message: "Internal server error" });
+
+    // 设置重试后的远端响应
+    test.provider.request.mockResolvedValueOnce({
+      status: "SUCCESS",
+      results: [{ url: "https://provider.example/result.mp4", outputType: "mp4" }],
+    });
+
+    const retried = await test.service.pollJob(created.id);
+    expect(retried.phase).toBe("succeeded");
+    expect(retried.error).toBeUndefined();
+    expect(retried.outputs).toHaveLength(1);
+    expect(test.provider.request).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips the timeout check when re-polling a query-stage failure", async () => {
+    const test = setup({ status: "FAILED", errorMessage: "Internal server error" });
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "runninghub-video",
+    });
+    const created = await test.service.createJob({
+      sessionId: session.id,
+      prompt: "test",
+      files: [],
+    });
+
+    const failed = await test.service.pollJob(created.id);
+    expect(failed.phase).toBe("failed");
+
+    // 将 created 时间提前到超过 timeoutMs（120000ms）
+    const state = test.getState();
+    const job = state.jobs.find((item) => item.id === created.id);
+    if (job) job.created = new Date(Date.now() - 200_000).toISOString();
+
+    // 重试时应跳过超时检查，正常查询远端
+    test.provider.request.mockResolvedValueOnce({ status: "RUNNING" });
+    const retried = await test.service.pollJob(created.id);
+    expect(retried.phase).toBe("running");
+    expect(retried.error).toBeUndefined();
+  });
+
+  it("does not re-poll a submit-stage failure", async () => {
+    const test = setup({ status: "RUNNING" });
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "runninghub-video",
+    });
+    const created = await test.service.createJob({
+      sessionId: session.id,
+      prompt: "test",
+      files: [],
+    });
+
+    // 模拟 submit 阶段失败
+    const state = test.getState();
+    const job = state.jobs.find((item) => item.id === created.id);
+    if (job) {
+      job.phase = "failed";
+      job.error = { stage: "submit", message: "Submit failed" };
+    }
+
+    const result = await test.service.pollJob(created.id);
+    expect(result.phase).toBe("failed");
+    expect(result.error).toEqual({ stage: "submit", message: "Submit failed" });
+    // 没有发起额外的查询请求
+    expect(test.provider.request).toHaveBeenCalledTimes(1);
+  });
+
   it("prevents a second paid submission while a job is active", async () => {
     const test = setup({ status: "RUNNING" });
     const session = await test.service.createSession({
@@ -316,5 +399,41 @@ describe("ContentGenerationService", () => {
       expect.objectContaining({ Authorization: "Bearer provider-key" }),
       expect.any(Object),
     );
+  });
+
+  it("listApis and listProviders include built-in RunningHub entries when repository is empty", async () => {
+    const test = setup({ status: "RUNNING" });
+    // 清空存储，模拟首次使用
+    test.getState().providers = [];
+    test.getState().apis = [];
+
+    const providers = await test.service.listProviders();
+    expect(providers.some((p) => p.id === "builtin-runninghub")).toBe(true);
+
+    const apis = await test.service.listApis();
+    const catalogIds = apis.map((a) => a.catalogId);
+    expect(catalogIds).toContain("runninghub-seedream-v5-pro-text-to-image");
+    expect(catalogIds).toContain("runninghub-seedance-2-text-to-video");
+    expect(apis.some((a) => a.id === "builtin-runninghub-seedream-v5-pro-text-to-image")).toBe(true);
+  });
+
+  it("createSession resolves a built-in RunningHub API without prior storage", async () => {
+    const test = setup({ status: "RUNNING" });
+    // 清空 API，但保留已存储的供应商使 cwd 校验通过
+    test.getState().apis = [];
+
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "builtin-runninghub-seedance-2-text-to-video",
+    });
+    expect(session.apiId).toBe("builtin-runninghub-seedance-2-text-to-video");
+
+    // 内置 API 可以提交作业
+    const job = await test.service.createJob({
+      sessionId: session.id,
+      prompt: "test",
+      files: [],
+    });
+    expect(job.phase).toBe("running");
   });
 });

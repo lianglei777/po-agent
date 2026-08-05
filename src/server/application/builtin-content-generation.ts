@@ -2,10 +2,74 @@ import type {
   ContentGenerationApi,
   ContentGenerationProvider,
   SaveContentGenerationApiRequest,
-  SaveContentGenerationProviderRequest,
 } from "@/contracts/content-generation";
+import type {
+  StoredContentGenerationApi,
+  StoredContentGenerationProvider,
+} from "@/server/domain/content-generation";
 
-export function createContentGenerationApiDraft(
+// 内置 RunningHub 供应商使用稳定 ID，确保虚拟项与已存储项之间正确匹配
+export const BUILTIN_RUNNINGHUB_PROVIDER_ID = "builtin-runninghub";
+
+export function createBuiltinRunningHubProvider(): ContentGenerationProvider {
+  return {
+    id: BUILTIN_RUNNINGHUB_PROVIDER_ID,
+    name: "RunningHub",
+    type: "runninghub",
+    hasApiKey: false,
+    commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+  };
+}
+
+export function createBuiltinRunningHubProviderStored(): StoredContentGenerationProvider {
+  return {
+    id: BUILTIN_RUNNINGHUB_PROVIDER_ID,
+    name: "RunningHub",
+    type: "runninghub",
+    commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+  };
+}
+
+export function createBuiltinRunningHubApis(
+  providerId: string,
+): ContentGenerationApi[] {
+  return createRunningHubApiCatalog(providerId).map((draft) => ({
+    ...stripApiKey(draft),
+    id: `builtin-${draft.catalogId}`,
+    hasApiKeyOverride: false,
+  }));
+}
+
+export function createBuiltinRunningHubApisStored(
+  providerId: string,
+): StoredContentGenerationApi[] {
+  return createRunningHubApiCatalog(providerId).map((draft) => ({
+    ...stripApiKey(draft),
+    id: `builtin-${draft.catalogId}`,
+  }));
+}
+
+function stripApiKey(
+  draft: SaveContentGenerationApiRequest,
+): Omit<SaveContentGenerationApiRequest, "apiKey"> {
+  const rest = { ...draft } as Omit<SaveContentGenerationApiRequest, "apiKey">;
+  delete (rest as { apiKey?: string }).apiKey;
+  return rest;
+}
+
+export function createRunningHubApiCatalog(
+  providerId: string,
+): SaveContentGenerationApiRequest[] {
+  return [
+    createRunningHubTextToImageDraft(providerId),
+    createRunningHubImageToImageDraft(providerId),
+    createRunningHubTextToVideoDraft(providerId),
+    createRunningHubImageToVideoDraft(providerId),
+    createRunningHubMultimodalVideoDraft(providerId),
+  ];
+}
+
+function createContentGenerationApiDraft(
   providerId = "",
 ): SaveContentGenerationApiRequest {
   return {
@@ -50,66 +114,6 @@ export function createContentGenerationApiDraft(
       downloadRemoteFiles: true,
     },
   };
-}
-
-export function createRunningHubDraft(): SaveContentGenerationApiRequest {
-  return createRunningHubTextToVideoDraft("");
-}
-
-export function createRunningHubApiCatalog(
-  providerId: string,
-): SaveContentGenerationApiRequest[] {
-  return [
-    createRunningHubTextToImageDraft(providerId),
-    createRunningHubImageToImageDraft(providerId),
-    createRunningHubTextToVideoDraft(providerId),
-    createRunningHubImageToVideoDraft(providerId),
-    createRunningHubMultimodalVideoDraft(providerId),
-  ];
-}
-
-export function createRunningHubDrafts(): SaveContentGenerationApiRequest[] {
-  return createRunningHubApiCatalog("");
-}
-
-export function createContentGenerationProviderDraft(
-  type: "runninghub" | "custom",
-): SaveContentGenerationProviderRequest {
-  return {
-    id: crypto.randomUUID(),
-    name: type === "runninghub" ? "RunningHub" : "",
-    type,
-    commonHeaders: type === "runninghub"
-      ? { Authorization: "Bearer {{secret.apiKey}}" }
-      : {},
-  };
-}
-
-// 内置 RunningHub 供应商使用稳定 ID，确保虚拟项与已存储项之间正确匹配
-const BUILTIN_RUNNINGHUB_PROVIDER_ID = "builtin-runninghub";
-
-export function createBuiltinRunningHubProvider(): ContentGenerationProvider {
-  return {
-    id: BUILTIN_RUNNINGHUB_PROVIDER_ID,
-    name: "RunningHub",
-    type: "runninghub",
-    hasApiKey: false,
-    commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
-  };
-}
-
-export function createBuiltinRunningHubApis(
-  providerId: string,
-): ContentGenerationApi[] {
-  return createRunningHubApiCatalog(providerId).map((draft) => {
-    const rest = { ...draft } as Omit<SaveContentGenerationApiRequest, "apiKey">;
-    delete (rest as { apiKey?: string }).apiKey;
-    return {
-      ...rest,
-      id: `builtin-${rest.catalogId}`,
-      hasApiKeyOverride: false,
-    };
-  });
 }
 
 function createRunningHubTextToImageDraft(providerId: string): SaveContentGenerationApiRequest {
