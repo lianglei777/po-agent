@@ -4,8 +4,11 @@ import type {
   ContentGenerationJob,
   ContentGenerationOutput,
   ContentGenerationSession,
+  ContentGenerationInputSchema,
+  ContentGenerationProvider as PublicContentGenerationProvider,
   JsonValue,
   SaveContentGenerationApiRequest,
+  SaveContentGenerationProviderRequest,
 } from "@/contracts/content-generation";
 import type { SessionInfo } from "@/contracts/sessions";
 import type { ContentGenerationInputFile } from "@/server/domain/content-generation";
@@ -29,12 +32,52 @@ export class ContentGenerationService {
     return (await this.repository.read()).apis.map(publicApi);
   }
 
+  async listProviders(): Promise<PublicContentGenerationProvider[]> {
+    return (await this.repository.read()).providers.map(publicProvider);
+  }
+
+  async saveProvider(input: SaveContentGenerationProviderRequest) {
+    const state = await this.repository.read();
+    const existing = state.providers.find((provider) => provider.id === input.id);
+    const provider = {
+      ...input,
+      apiKey: input.apiKey?.trim() || existing?.apiKey,
+    };
+    const index = state.providers.findIndex((item) => item.id === input.id);
+    if (index === -1) state.providers.push(provider);
+    else state.providers[index] = provider;
+    await this.repository.write(state);
+    return publicProvider(provider);
+  }
+
+  async deleteProvider(id: string) {
+    const state = await this.repository.read();
+    if (state.apis.some((api) => api.providerId === id)) {
+      throw new AppError(
+        "CONTENT_PROVIDER_IN_USE",
+        "Content provider still contains APIs",
+        409,
+      );
+    }
+    const next = state.providers.filter((provider) => provider.id !== id);
+    if (next.length === state.providers.length) {
+      throw new AppError("CONTENT_PROVIDER_NOT_FOUND", "Content provider was not found", 404);
+    }
+    state.providers = next;
+    await this.repository.write(state);
+  }
+
   async saveApi(input: SaveContentGenerationApiRequest) {
     const state = await this.repository.read();
+    if (!state.providers.some((provider) => provider.id === input.providerId)) {
+      throw new AppError("CONTENT_PROVIDER_NOT_FOUND", "Content provider was not found", 404);
+    }
     const existing = state.apis.find((api) => api.id === input.id);
     const api = {
       ...input,
-      apiKey: input.apiKey?.trim() || existing?.apiKey,
+      apiKey: input.credentialMode === "override"
+        ? input.apiKey?.trim() || existing?.apiKey
+        : undefined,
     };
     const index = state.apis.findIndex((item) => item.id === input.id);
     if (index === -1) state.apis.push(api);
@@ -132,11 +175,17 @@ export class ContentGenerationService {
   async createJob(input: {
     sessionId: string;
     prompt: string;
+    parameters?: Record<string, JsonValue>;
     files: ContentGenerationInputFile[];
   }) {
     const session = await this.requiredSession(input.sessionId);
     const api = await this.requiredApi(session.apiId);
-    validateJobInput(api, input.prompt, input.files);
+    const parameters = validateJobInput(
+      api,
+      input.prompt,
+      input.parameters ?? {},
+      input.files,
+    );
     const state = await this.repository.read();
     if (
       state.jobs.some(
@@ -156,7 +205,9 @@ export class ContentGenerationService {
       apiId: api.id,
       phase: "created",
       prompt: input.prompt.trim(),
+      parameters,
       uploadedUrls: [],
+      uploadedAssets: [],
       outputs: [],
       created: now,
       modified: now,
@@ -168,7 +219,8 @@ export class ContentGenerationService {
       if (input.files.length) {
         job.phase = "uploading";
         await this.persistJob(job);
-        job.uploadedUrls = await this.uploadFiles(api, input.files);
+        job.uploadedAssets = await this.uploadFiles(api, input.files);
+        job.uploadedUrls = job.uploadedAssets.map((asset) => asset.url);
       }
       job.phase = "submitting";
       const variables = variablesFor(api, job);
@@ -263,7 +315,7 @@ export class ContentGenerationService {
     if (!api.upload) {
       throw new AppError("CONTENT_UPLOAD_UNSUPPORTED", "This API does not configure file upload", 400);
     }
-    const urls: string[] = [];
+    const assets: NonNullable<ContentGenerationJob["uploadedAssets"]> = [];
     for (const file of files) {
       const variables = { secret: { apiKey: api.apiKey ?? "" } };
       const response = await this.provider.upload(
@@ -279,9 +331,15 @@ export class ContentGenerationService {
       }
       const url = stringAt(response, api.upload.urlPath);
       if (!url) throw new Error("Upload API did not return a file URL");
-      urls.push(url);
+      const slot = api.inputSchema?.assets?.find((item) => item.key === file.slot);
+      assets.push({
+        slot: file.slot,
+        name: file.name,
+        mediaType: slot?.mediaType ?? mediaTypeFromMime(file.mimeType),
+        url,
+      });
     }
-    return urls;
+    return assets;
   }
 
   private async completeJob(
@@ -351,7 +409,16 @@ export class ContentGenerationService {
   private async requiredApi(id: string) {
     const api = await this.repository.getApi(id);
     if (!api) throw new AppError("CONTENT_API_NOT_FOUND", "Content generation API was not found", 404);
-    return api;
+    const provider = await this.repository.getProvider(api.providerId);
+    if (!provider) throw new AppError("CONTENT_PROVIDER_NOT_FOUND", "Content provider was not found", 404);
+    return {
+      ...api,
+      apiKey: api.credentialMode === "override" ? api.apiKey : provider.apiKey,
+      commonHeaders: {
+        ...(provider.commonHeaders ?? {}),
+        ...(api.commonHeaders ?? {}),
+      },
+    };
   }
 
   private async requiredSession(id: string) {
@@ -369,11 +436,30 @@ export class ContentGenerationService {
 
 function publicApi(api: SaveContentGenerationApiRequest & { apiKey?: string }): ContentGenerationApi {
   const { apiKey, ...rest } = api;
+  return { ...rest, hasApiKeyOverride: Boolean(apiKey) };
+}
+
+function publicProvider(
+  provider: SaveContentGenerationProviderRequest & { apiKey?: string },
+): PublicContentGenerationProvider {
+  const { apiKey, ...rest } = provider;
   return { ...rest, hasApiKey: Boolean(apiKey) };
 }
 
-function validateJobInput(api: SaveContentGenerationApiRequest, prompt: string, files: ContentGenerationInputFile[]) {
-  if (!prompt.trim()) throw new AppError("VALIDATION_ERROR", "Prompt is required", 400);
+function validateJobInput(
+  api: SaveContentGenerationApiRequest,
+  prompt: string,
+  parameters: Record<string, JsonValue>,
+  files: ContentGenerationInputFile[],
+) {
+  const schema = api.inputSchema;
+  if ((schema?.prompt.required ?? true) && !prompt.trim()) {
+    throw new AppError("VALIDATION_ERROR", "Prompt is required", 400);
+  }
+  if (schema?.prompt.maxLength && prompt.length > schema.prompt.maxLength) {
+    throw new AppError("VALIDATION_ERROR", `Prompt must not exceed ${schema.prompt.maxLength} characters`, 400);
+  }
+  if (schema) return validateSchemaInput(schema, parameters, files);
   if (api.requiresImages && !files.length) throw new AppError("VALIDATION_ERROR", "This content generation API requires an image", 400);
   if (!api.requiresImages && files.length) throw new AppError("VALIDATION_ERROR", "This content generation API does not accept images", 400);
   if (files.length && !api.upload) throw new AppError("VALIDATION_ERROR", "File upload is not configured", 400);
@@ -382,13 +468,104 @@ function validateJobInput(api: SaveContentGenerationApiRequest, prompt: string, 
     if (api.upload?.acceptedTypes?.length && !api.upload.acceptedTypes.includes(file.mimeType)) throw new AppError("VALIDATION_ERROR", `Unsupported file type: ${file.mimeType}`, 400);
     if (api.upload?.maxFileSizeBytes && file.data.byteLength > api.upload.maxFileSizeBytes) throw new AppError("VALIDATION_ERROR", `File ${file.name} is too large`, 400);
   }
+  return parameters;
+}
+
+function validateSchemaInput(
+  schema: ContentGenerationInputSchema,
+  parameters: Record<string, JsonValue>,
+  files: ContentGenerationInputFile[],
+) {
+  const normalized: Record<string, JsonValue> = {};
+  const fields = new Map((schema.parameters ?? []).map((field) => [field.key, field]));
+  for (const key of Object.keys(parameters)) {
+    if (!fields.has(key)) {
+      throw new AppError("VALIDATION_ERROR", `Unknown generation parameter: ${key}`, 400);
+    }
+  }
+  for (const field of fields.values()) {
+    const value = parameters[field.key] ?? field.defaultValue;
+    if (value === undefined || value === null || value === "") {
+      if (field.required) {
+        throw new AppError("VALIDATION_ERROR", `${field.label} is required`, 400);
+      }
+      continue;
+    }
+    if (field.type === "boolean" && typeof value !== "boolean") {
+      throw new AppError("VALIDATION_ERROR", `${field.label} must be a boolean`, 400);
+    }
+    if (field.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new AppError("VALIDATION_ERROR", `${field.label} must be a number`, 400);
+      }
+      if (field.min !== undefined && value < field.min) {
+        throw new AppError("VALIDATION_ERROR", `${field.label} must be at least ${field.min}`, 400);
+      }
+      if (field.max !== undefined && value > field.max) {
+        throw new AppError("VALIDATION_ERROR", `${field.label} must not exceed ${field.max}`, 400);
+      }
+    }
+    if ((field.type === "text" || field.type === "select") && typeof value !== "string") {
+      throw new AppError("VALIDATION_ERROR", `${field.label} must be text`, 400);
+    }
+    if (field.type === "multi-select" && !Array.isArray(value)) {
+      throw new AppError("VALIDATION_ERROR", `${field.label} must be a list`, 400);
+    }
+    if (field.options?.length) {
+      const allowed = field.options.map((option) => option.value);
+      const selected = Array.isArray(value) ? value : [value];
+      if (selected.some((item) => !allowed.includes(item as never))) {
+        throw new AppError("VALIDATION_ERROR", `${field.label} contains an unsupported value`, 400);
+      }
+    }
+    normalized[field.key] = structuredClone(value);
+  }
+
+  const slots = new Map((schema.assets ?? []).map((slot) => [slot.key, slot]));
+  for (const file of files) {
+    const slot = slots.get(file.slot);
+    if (!slot) throw new AppError("VALIDATION_ERROR", `Unknown asset slot: ${file.slot}`, 400);
+    if (slot.acceptedTypes?.length && !slot.acceptedTypes.includes(file.mimeType)) {
+      throw new AppError("VALIDATION_ERROR", `Unsupported file type for ${slot.label}: ${file.mimeType}`, 400);
+    }
+    if (slot.maxFileSizeBytes && file.data.byteLength > slot.maxFileSizeBytes) {
+      throw new AppError("VALIDATION_ERROR", `File ${file.name} is too large for ${slot.label}`, 400);
+    }
+  }
+  for (const slot of slots.values()) {
+    const count = files.filter((file) => file.slot === slot.key).length;
+    const minimum = slot.minFiles ?? (slot.required ? 1 : 0);
+    const maximum = slot.maxFiles ?? (slot.multiple ? undefined : 1);
+    if (count < minimum) {
+      throw new AppError("VALIDATION_ERROR", `${slot.label} requires at least ${minimum} file(s)`, 400);
+    }
+    if (maximum !== undefined && count > maximum) {
+      throw new AppError("VALIDATION_ERROR", `${slot.label} accepts at most ${maximum} file(s)`, 400);
+    }
+  }
+  return normalized;
+}
+
+function mediaTypeFromMime(mimeType: string): "image" | "video" | "audio" {
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "image";
 }
 
 function variablesFor(api: SaveContentGenerationApiRequest & { apiKey?: string }, job: ContentGenerationJob): Variables {
+  const assetValues: Record<string, string | string[]> = {};
+  for (const slot of api.inputSchema?.assets ?? []) {
+    const urls = (job.uploadedAssets ?? [])
+      .filter((asset) => asset.slot === slot.key)
+      .map((asset) => asset.url);
+    assetValues[slot.key] = slot.multiple ? urls : (urls[0] ?? "");
+  }
   return {
     secret: { apiKey: api.apiKey ?? "" },
     input: {
       prompt: job.prompt,
+      ...(job.parameters ?? {}),
+      ...assetValues,
       images: job.uploadedUrls.map((url) => ({ url })),
     },
     upload: { urls: job.uploadedUrls },
@@ -405,17 +582,21 @@ function renderJson(value: JsonValue | undefined, variables: Variables): JsonVal
   if (value === undefined) return undefined;
   if (typeof value === "string") {
     const exact = /^\{\{([^}]+)\}\}$/.exec(value);
-    if (exact) return cloneJson(valueAt(variables, exact[1].trim())) as JsonValue;
+    if (exact) {
+      const replacement = valueAt(variables, exact[1].trim());
+      return replacement === undefined || replacement === ""
+        ? undefined
+        : cloneJson(replacement) as JsonValue;
+    }
     return renderString(value, variables);
   }
   if (Array.isArray(value)) return value.map((item) => renderJson(item, variables) as JsonValue);
   if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        renderJson(item, variables) as JsonValue,
-      ]),
-    ) as Record<string, JsonValue>;
+    const entries = Object.entries(value).flatMap(([key, item]) => {
+      const rendered = renderJson(item, variables);
+      return rendered === undefined ? [] : [[key, rendered] as const];
+    });
+    return Object.fromEntries(entries) as Record<string, JsonValue>;
   }
   return value;
 }

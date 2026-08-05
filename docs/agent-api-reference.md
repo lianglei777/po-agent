@@ -2446,9 +2446,21 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 
 ## 12. Content Generation API
 
-内容生成会话与 Agent Session 使用不同的执行协议。一个内容生成会话固定绑定一个 API，执行链路为可选上传、提交、可选轮询和产物下载。API Key 只保存在服务端配置中，列表响应仅返回 `hasApiKey`。
+内容生成会话与 Agent Session 使用不同的执行协议。一个内容生成会话固定绑定一个 API，执行链路为可选上传、提交、可选轮询和产物下载。API Key 只保存在服务端配置中：供应商列表仅返回 `hasApiKey`，API 列表仅返回 `hasApiKeyOverride`。
 
-### 12.1 管理内容生成 API
+### 12.1 管理内容生成供应商
+
+```http
+GET /api/content-generation/providers
+PUT /api/content-generation/providers
+DELETE /api/content-generation/providers?id=:id
+```
+
+`PUT` 接受 `SaveContentGenerationProviderRequest`。供应商包含 `id`、`name`、`type`、可选通用 `apiKey` 和通用 `commonHeaders`。`type` 当前支持 `runninghub` 与 `custom`。仍包含 API 的供应商不能删除。
+
+供应商用于保存可复用的认证和请求头。API 通过 `providerId` 归属供应商，并通过 `credentialMode` 选择继承供应商 API Key（`inherit`）或使用独立 API Key（`override`）。API 级请求头会覆盖同名的供应商通用请求头。
+
+### 12.2 管理内容生成 API
 
 ```http
 GET /api/content-generation/apis
@@ -2456,11 +2468,19 @@ PUT /api/content-generation/apis
 DELETE /api/content-generation/apis?id=:id
 ```
 
-`PUT` 接受 `SaveContentGenerationApiRequest`。配置支持四种能力：`text-to-image`、`text-to-video`、`image-to-image`、`image-to-video`。HTTP 模板仅支持 `GET` 与 `POST`，模板变量包括：
+`PUT` 接受 `SaveContentGenerationApiRequest`。配置支持五种能力：`text-to-image`、`text-to-video`、`image-to-image`、`image-to-video`、`multimodal-to-video`。HTTP 模板仅支持 `GET` 与 `POST`。
+
+API 可以通过 `inputSchema` 定义 Prompt 是否必填、动态参数以及具名素材槽位。参数支持文本、数字、布尔值、单选和多选；素材槽位支持图片、视频和音频的必填规则、数量、类型与文件大小限制。未提供 `inputSchema` 的已有自定义 API 继续使用旧的 Prompt 与图片输入规则。
+
+RunningHub API 目录项通过 `catalogId` 标识。目录仅用于在供应商详情页按需添加 API，不会自动创建全部 API；添加后得到普通的可编辑 API 配置。
+
+模板变量包括：
 
 ```text
 {{secret.apiKey}}
 {{input.prompt}}
+{{input.<parameterKey>}}
+{{input.<assetSlotKey>}}
 {{input.images}}
 {{upload.urls}}
 {{job.remoteTaskId}}
@@ -2468,7 +2488,23 @@ DELETE /api/content-generation/apis?id=:id
 
 已被会话引用的 API 不能删除。
 
-### 12.2 创建内容生成会话
+### 12.3 获取内置 API 文档
+
+```http
+GET /api/content-generation/documentation/:catalogId
+```
+
+接口返回与内置目录项对应的 Markdown 文档：
+
+```json
+{
+  "markdown": "# API 文档\n..."
+}
+```
+
+当前仅允许读取内置的 RunningHub Seedance 2.0 文档。API 详情页以只读方式渲染该文档，不向用户暴露提交、查询、上传和产物映射等内部协议配置。
+
+### 12.4 创建内容生成会话
 
 ```http
 POST /api/content-generation/sessions
@@ -2482,7 +2518,7 @@ Content-Type: application/json
 
 内容生成会话会出现在 `GET /api/sessions` 中，其 `mode` 为 `content-generation`，并包含 `contentGenerationApiId`。
 
-### 12.3 创建和列出生成任务
+### 12.5 创建和列出生成任务
 
 ```http
 GET /api/content-generation/sessions/:id/jobs
@@ -2492,12 +2528,14 @@ Content-Type: multipart/form-data
 
 `POST` 表单字段：
 
-- `prompt`：必填字符串。
+- `prompt`：字符串；是否允许为空由 API 的 `inputSchema.prompt.required` 决定。
+- `parameters`：JSON 对象字符串，字段和值按照 API 的动态参数定义校验。
 - `files`：零个或多个输入文件；只有 API 配置了上传步骤时可用。
+- `fileSlots`：与 `files` 一一对应的素材槽位名称。
 
 同一会话同时只允许一个活跃任务。提交请求不会自动重试，避免重复创建付费任务。
 
-### 12.4 查询一次远端任务
+### 12.6 查询一次远端任务
 
 ```http
 POST /api/content-generation/jobs/:id/poll

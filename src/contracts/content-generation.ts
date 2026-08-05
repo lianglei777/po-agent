@@ -3,6 +3,7 @@ export const CONTENT_GENERATION_CAPABILITIES = [
   "text-to-video",
   "image-to-image",
   "image-to-video",
+  "multimodal-to-video",
 ] as const;
 
 export type ContentGenerationCapability =
@@ -15,6 +16,53 @@ export type JsonValue =
   | string
   | JsonValue[]
   | { [key: string]: JsonValue };
+
+export type ContentGenerationParameterType =
+  | "text"
+  | "number"
+  | "boolean"
+  | "select"
+  | "multi-select";
+
+export interface ContentGenerationParameterOption {
+  label: string;
+  value: string | number | boolean;
+}
+
+export interface ContentGenerationParameterField {
+  key: string;
+  label: string;
+  description?: string;
+  type: ContentGenerationParameterType;
+  required?: boolean;
+  advanced?: boolean;
+  defaultValue?: JsonValue;
+  options?: ContentGenerationParameterOption[];
+  min?: number;
+  max?: number;
+}
+
+export interface ContentGenerationAssetSlot {
+  key: string;
+  label: string;
+  description?: string;
+  mediaType: "image" | "video" | "audio";
+  required?: boolean;
+  multiple?: boolean;
+  minFiles?: number;
+  maxFiles?: number;
+  maxFileSizeBytes?: number;
+  acceptedTypes?: string[];
+}
+
+export interface ContentGenerationInputSchema {
+  prompt: {
+    required: boolean;
+    maxLength?: number;
+  };
+  parameters?: ContentGenerationParameterField[];
+  assets?: ContentGenerationAssetSlot[];
+}
 
 export interface HttpRequestTemplate {
   method: "GET" | "POST";
@@ -67,21 +115,44 @@ export interface ContentOutputConfig {
 
 export interface ContentGenerationApi {
   id: string;
+  providerId: string;
   name: string;
-  providerName: string;
   capability: ContentGenerationCapability;
+  catalogId?: string;
+  credentialMode: "inherit" | "override";
   requiresImages: boolean;
-  hasApiKey: boolean;
+  hasApiKeyOverride: boolean;
   commonHeaders?: Record<string, string>;
   upload?: ContentUploadConfig;
   submit: ContentSubmitConfig;
   completion: ContentCompletionConfig;
   output: ContentOutputConfig;
+  inputSchema?: ContentGenerationInputSchema;
 }
 
 export interface SaveContentGenerationApiRequest
-  extends Omit<ContentGenerationApi, "hasApiKey"> {
+  extends Omit<ContentGenerationApi, "hasApiKeyOverride"> {
   apiKey?: string;
+}
+
+export interface ContentGenerationProvider {
+  id: string;
+  name: string;
+  type: "runninghub" | "custom";
+  hasApiKey: boolean;
+  commonHeaders?: Record<string, string>;
+}
+
+export interface SaveContentGenerationProviderRequest
+  extends Omit<ContentGenerationProvider, "hasApiKey"> {
+  apiKey?: string;
+}
+
+export type ListContentGenerationProvidersResponse = ContentGenerationProvider[];
+export type SaveContentGenerationProviderResponse = ContentGenerationProvider;
+
+export interface ContentGenerationDocumentationResponse {
+  markdown: string;
 }
 
 export type ListContentGenerationApisResponse = ContentGenerationApi[];
@@ -133,12 +204,14 @@ export interface ContentGenerationJob {
   apiId: string;
   phase: ContentGenerationJobPhase;
   prompt: string;
+  parameters?: Record<string, JsonValue>;
   remoteTaskId?: string;
   remoteStatus?: string;
   submitRequest?: ContentGenerationProviderResponse;
   submitResponse?: ContentGenerationProviderResponse;
   latestQueryResponse?: ContentGenerationProviderResponse;
   uploadedUrls: string[];
+  uploadedAssets?: ContentGenerationUploadedAsset[];
   outputs: ContentGenerationOutput[];
   created: string;
   modified: string;
@@ -146,6 +219,13 @@ export interface ContentGenerationJob {
     stage: "upload" | "submit" | "query" | "download";
     message: string;
   };
+}
+
+export interface ContentGenerationUploadedAsset {
+  slot: string;
+  name: string;
+  mediaType: "image" | "video" | "audio";
+  url: string;
 }
 
 export type ListContentGenerationJobsResponse = ContentGenerationJob[];

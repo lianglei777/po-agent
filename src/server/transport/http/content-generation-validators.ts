@@ -2,12 +2,14 @@ import {
   CONTENT_GENERATION_CAPABILITIES,
   type ContentCompletionConfig,
   type ContentGenerationCapability,
+  type ContentGenerationInputSchema,
   type ContentOutputConfig,
   type ContentSubmitConfig,
   type ContentUploadConfig,
   type HttpRequestTemplate,
   type JsonValue,
   type SaveContentGenerationApiRequest,
+  type SaveContentGenerationProviderRequest,
 } from "@/contracts/content-generation";
 import { AppError } from "@/server/domain/app-error";
 import { asObject, requiredBoolean, requiredString } from "./validators";
@@ -20,9 +22,11 @@ export function parseContentGenerationApi(value: unknown): SaveContentGeneration
   }
   return {
     id: requiredString(object, "id"),
+    providerId: requiredString(object, "providerId"),
     name: requiredString(object, "name"),
-    providerName: requiredString(object, "providerName"),
     capability: capability as ContentGenerationCapability,
+    catalogId: optionalString(object.catalogId, "catalogId"),
+    credentialMode: credentialMode(object.credentialMode),
     requiresImages: requiredBoolean(object, "requiresImages"),
     apiKey: optionalString(object.apiKey, "apiKey"),
     commonHeaders: stringRecord(object.commonHeaders, "commonHeaders"),
@@ -30,6 +34,95 @@ export function parseContentGenerationApi(value: unknown): SaveContentGeneration
     submit: parseSubmit(object.submit),
     completion: parseCompletion(object.completion),
     output: parseOutput(object.output),
+    inputSchema: object.inputSchema === undefined
+      ? undefined
+      : parseInputSchema(object.inputSchema),
+  };
+}
+
+export function parseContentGenerationProvider(
+  value: unknown,
+): SaveContentGenerationProviderRequest {
+  const object = asObject(value);
+  const type = requiredString(object, "type");
+  if (type !== "runninghub" && type !== "custom") {
+    invalid("type must be runninghub or custom");
+  }
+  return {
+    id: requiredString(object, "id"),
+    name: requiredString(object, "name"),
+    type,
+    apiKey: optionalString(object.apiKey, "apiKey"),
+    commonHeaders: stringRecord(object.commonHeaders, "commonHeaders"),
+  };
+}
+
+function credentialMode(value: unknown) {
+  const mode = requiredString({ value }, "value");
+  if (mode !== "inherit" && mode !== "override") {
+    invalid("credentialMode must be inherit or override");
+  }
+  return mode;
+}
+
+function parseInputSchema(value: unknown): ContentGenerationInputSchema {
+  const object = asObject(value, "inputSchema");
+  const prompt = asObject(object.prompt, "inputSchema.prompt");
+  return {
+    prompt: {
+      required: requiredBoolean(prompt, "required"),
+      maxLength: optionalPositiveNumber(prompt.maxLength, "inputSchema.prompt.maxLength"),
+    },
+    parameters: object.parameters === undefined
+      ? undefined
+      : array(object.parameters, "inputSchema.parameters").map((item, index) => {
+          const field = asObject(item, `inputSchema.parameters[${index}]`);
+          const type = requiredString(field, "type");
+          if (!["text", "number", "boolean", "select", "multi-select"].includes(type)) {
+            invalid(`inputSchema.parameters[${index}].type is unsupported`);
+          }
+          return {
+            key: requiredString(field, "key"),
+            label: requiredString(field, "label"),
+            description: optionalString(field.description, "description"),
+            type: type as "text" | "number" | "boolean" | "select" | "multi-select",
+            required: optionalBoolean(field.required, "required"),
+            advanced: optionalBoolean(field.advanced, "advanced"),
+            defaultValue: field.defaultValue === undefined ? undefined : jsonValue(field.defaultValue, "defaultValue"),
+            options: field.options === undefined
+              ? undefined
+              : array(field.options, "options").map((option) => {
+                  const parsed = asObject(option, "option");
+                  return {
+                    label: requiredString(parsed, "label"),
+                    value: primitive(parsed.value, "value"),
+                  };
+                }),
+            min: optionalNumber(field.min, "min"),
+            max: optionalNumber(field.max, "max"),
+          };
+        }),
+    assets: object.assets === undefined
+      ? undefined
+      : array(object.assets, "inputSchema.assets").map((item, index) => {
+          const slot = asObject(item, `inputSchema.assets[${index}]`);
+          const mediaType = requiredString(slot, "mediaType");
+          if (!["image", "video", "audio"].includes(mediaType)) {
+            invalid(`inputSchema.assets[${index}].mediaType is unsupported`);
+          }
+          return {
+            key: requiredString(slot, "key"),
+            label: requiredString(slot, "label"),
+            description: optionalString(slot.description, "description"),
+            mediaType: mediaType as "image" | "video" | "audio",
+            required: optionalBoolean(slot.required, "required"),
+            multiple: optionalBoolean(slot.multiple, "multiple"),
+            minFiles: optionalPositiveNumber(slot.minFiles, "minFiles"),
+            maxFiles: optionalPositiveNumber(slot.maxFiles, "maxFiles"),
+            maxFileSizeBytes: optionalPositiveNumber(slot.maxFileSizeBytes, "maxFileSizeBytes"),
+            acceptedTypes: stringArray(slot.acceptedTypes, "acceptedTypes"),
+          };
+        }),
   };
 }
 
@@ -125,6 +218,30 @@ function httpUrl(value: unknown, name: string) {
 function optionalString(value: unknown, name: string) {
   if (value === undefined) return undefined;
   if (typeof value !== "string") invalid(`${name} must be a string`);
+  return value;
+}
+
+function optionalBoolean(value: unknown, name: string) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") invalid(`${name} must be a boolean`);
+  return value;
+}
+
+function optionalNumber(value: unknown, name: string) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) invalid(`${name} must be a number`);
+  return value;
+}
+
+function primitive(value: unknown, name: string) {
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+    invalid(`${name} must be a string, number, or boolean`);
+  }
+  return value;
+}
+
+function array(value: unknown, name: string) {
+  if (!Array.isArray(value)) invalid(`${name} must be an array`);
   return value;
 }
 

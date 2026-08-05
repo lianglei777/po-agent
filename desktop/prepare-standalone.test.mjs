@@ -37,3 +37,29 @@ test("copies public assets when a public directory exists", () => {
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("copies bundled RunningHub API documentation", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "po-agent-runninghub-docs-"));
+  try {
+    const source = path.join(root, "docs", "RunningHubAPIs", "seedance2.0");
+    const target = path.join(
+      root,
+      ".next",
+      "standalone",
+      "docs",
+      "RunningHubAPIs",
+      "seedance2.0",
+    );
+    mkdirSync(source, { recursive: true });
+    writeFileSync(path.join(source, "text-to-video.md"), "# API 文档", { flush: true });
+
+    copyStandaloneStaticAssets(root);
+
+    assert.equal(
+      readFileSync(path.join(target, "text-to-video.md"), "utf8"),
+      "# API 文档",
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});

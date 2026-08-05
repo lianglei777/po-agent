@@ -4,7 +4,8 @@ import type { ContentGenerationState } from "@/server/domain/content-generation"
 import type { ContentGenerationRepository } from "@/server/ports/content-generation-repository";
 
 const EMPTY_STATE: ContentGenerationState = {
-  version: 1,
+  version: 2,
+  providers: [],
   apis: [],
   sessions: [],
   jobs: [],
@@ -20,8 +21,10 @@ export class JsonContentGenerationRepository
       const parsed = JSON.parse(
         await fs.readFile(this.filePath, "utf8"),
       ) as Partial<ContentGenerationState>;
+      if (parsed.version !== 2) return structuredClone(EMPTY_STATE);
       return {
-        version: 1,
+        version: 2,
+        providers: Array.isArray(parsed.providers) ? parsed.providers : [],
         apis: Array.isArray(parsed.apis) ? parsed.apis : [],
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
         jobs: Array.isArray(parsed.jobs) ? parsed.jobs : [],
@@ -43,6 +46,10 @@ export class JsonContentGenerationRepository
 
   async getApi(id: string) {
     return (await this.read()).apis.find((api) => api.id === id) ?? null;
+  }
+
+  async getProvider(id: string) {
+    return (await this.read()).providers.find((provider) => provider.id === id) ?? null;
   }
 
   async listSessions() {

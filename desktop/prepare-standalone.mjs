@@ -17,6 +17,10 @@ export function copyStandaloneStaticAssets(root = process.cwd()) {
     path.join(root, "public"),
     path.join(root, ".next", "standalone", "public"),
   );
+  copyDirectoryIfExists(
+    path.join(root, "docs", "RunningHubAPIs"),
+    path.join(root, ".next", "standalone", "docs", "RunningHubAPIs"),
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

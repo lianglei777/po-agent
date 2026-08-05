@@ -6,10 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
-  FileImage,
   LoaderCircle,
-  Send,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -17,11 +14,11 @@ import type {
   ContentGenerationJob,
   ContentGenerationOutput,
   ContentGenerationProviderResponse,
+  JsonValue,
 } from "@/contracts/content-generation";
 import type { SessionInfo } from "@/features/sessions/types";
 import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
-import { Textarea } from "@/components/ui/textarea";
 import { rawFileUrl } from "@/features/files/api";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -30,6 +27,10 @@ import {
   loadContentGenerationJobs,
   pollContentGenerationJob,
 } from "./api";
+import {
+  ContentGenerationComposer,
+  type SelectedGenerationAsset,
+} from "./content-generation-composer";
 
 const ACTIVE_PHASES = new Set([
   "created",
@@ -51,12 +52,9 @@ export function ContentGenerationCenter({
   const { t } = useI18n();
   const [apis, setApis] = useState<ContentGenerationApi[]>([]);
   const [jobs, setJobs] = useState<ContentGenerationJob[]>([]);
-  const [prompt, setPrompt] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const fileInput = useRef<HTMLInputElement>(null);
   const endOfConversation = useRef<HTMLDivElement>(null);
   const api = apis.find((item) => item.id === session.contentGenerationApiId);
   const activeJob = useMemo(
@@ -101,18 +99,27 @@ export function ContentGenerationCenter({
     endOfConversation.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [jobs]);
 
-  async function submit() {
-    if (!api || !prompt.trim() || activeJob || submitting) return;
+  async function submit(input: {
+    prompt: string;
+    parameters: Record<string, JsonValue>;
+    assets: SelectedGenerationAsset[];
+  }) {
+    if (!api || activeJob || submitting) return false;
     setSubmitting(true);
     setError("");
     try {
-      const job = await createContentGenerationJob(session.id, prompt, files);
+      const job = await createContentGenerationJob(
+        session.id,
+        input.prompt,
+        input.parameters,
+        input.assets.map((asset) => ({ slot: asset.slot, file: asset.file })),
+      );
       setJobs((current) => [...current, job]);
-      setPrompt("");
-      setFiles([]);
       onChanged?.();
+      return true;
     } catch (cause) {
       setError(messageOf(cause));
+      return false;
     } finally {
       setSubmitting(false);
     }
@@ -137,7 +144,7 @@ export function ContentGenerationCenter({
           {orderedJobs.length ? (
             <div className="space-y-8">
               {orderedJobs.map((job) => (
-                <GenerationTurn cwd={session.cwd} job={job} key={job.id} />
+                <GenerationTurn api={api} cwd={session.cwd} job={job} key={job.id} />
               ))}
             </div>
           ) : (
@@ -153,72 +160,43 @@ export function ContentGenerationCenter({
       </div>
 
       <div className="flex-none px-4 pb-4">
-        <div className="mx-auto max-w-[820px] rounded-[22px] border border-line-strong bg-canvas p-3 shadow-floating">
-          {files.length ? (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {files.map((file) => (
-                <span className="flex items-center gap-1 rounded-md bg-subtle px-2 py-1 text-caption" key={`${file.name}-${file.lastModified}`}>
-                  <FileImage className="size-3" />
-                  {file.name}
-                  <button aria-label={t.contentGeneration.removeFile} onClick={() => setFiles((current) => current.filter((item) => item !== file))} type="button">
-                    <X className="size-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          ) : null}
-          <Textarea
-            aria-label={t.contentGeneration.prompt}
-            className="min-h-20 resize-none border-0 px-1 shadow-none focus-visible:ring-0"
-            disabled={Boolean(activeJob)}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder={t.contentGeneration.promptPlaceholder}
-            value={prompt}
-          />
-          <div className="mt-2 flex items-center justify-between">
-            <div>
-              {api.requiresImages ? (
-                <>
-                  <input
-                    accept={api.upload?.acceptedTypes?.join(",")}
-                    className="hidden"
-                    multiple={Boolean(api.upload?.maxFiles && api.upload.maxFiles > 1)}
-                    onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-                    ref={fileInput}
-                    type="file"
-                  />
-                  <Button onClick={() => fileInput.current?.click()} size="sm" type="button" variant="ghost">
-                    <FileImage />
-                    {t.contentGeneration.addImage}
-                  </Button>
-                </>
-              ) : (
-                <span className="px-2 text-caption text-muted">{t.contentGeneration.textOnly}</span>
-              )}
-            </div>
-            <Button
-              aria-label={t.contentGeneration.generate}
-              disabled={!prompt.trim() || Boolean(activeJob) || submitting || (api.requiresImages && !files.length)}
-              onClick={() => void submit()}
-              size="icon"
-              type="button"
-            >
-              {submitting ? <LoaderCircle className="animate-spin" /> : <Send />}
-            </Button>
-          </div>
-          {error ? <p className="mt-2 text-xs text-destructive-text">{error}</p> : null}
-        </div>
+        <ContentGenerationComposer
+          api={api}
+          busy={Boolean(activeJob) || submitting}
+          error={error}
+          key={api.id}
+          onSubmit={submit}
+        />
       </div>
     </main>
   );
 }
 
-function GenerationTurn({ cwd, job }: { cwd: string; job: ContentGenerationJob }) {
+function GenerationTurn({ api, cwd, job }: { api: ContentGenerationApi; cwd: string; job: ContentGenerationJob }) {
+  const { t } = useI18n();
+  const inputLabels = t.contentGeneration.inputs as Readonly<Record<string, string>>;
+  const parameterEntries = Object.entries(job.parameters ?? {});
   return (
     <section className="space-y-5">
       <div className="flex justify-end">
         <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] whitespace-pre-wrap text-primary">
-          {job.prompt}
+          {job.prompt || t.contentGeneration.noPrompt}
+          {parameterEntries.length || job.uploadedAssets?.length ? (
+            <div className="mt-2 border-t border-line-subtle pt-2 text-caption text-muted">
+              {parameterEntries.map(([key, value]) => (
+                <div className="flex gap-2" key={key}>
+                  <span>{inputLabels[key] ?? api.inputSchema?.parameters?.find((field) => field.key === key)?.label ?? key}</span>
+                  <span className="ml-auto max-w-52 truncate font-ui-mono">{displayParameter(value)}</span>
+                </div>
+              ))}
+              {job.uploadedAssets?.map((asset) => (
+                <div className="flex gap-2" key={`${asset.slot}-${asset.name}`}>
+                  <span>{inputLabels[asset.slot] ?? api.inputSchema?.assets?.find((slot) => slot.key === asset.slot)?.label ?? asset.slot}</span>
+                  <span className="ml-auto max-w-52 truncate">{asset.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
       <GenerationResult cwd={cwd} job={job} />
@@ -374,4 +352,10 @@ function phaseLabel(
 
 function messageOf(value: unknown) {
   return value instanceof Error ? value.message : "Request failed";
+}
+
+function displayParameter(value: JsonValue) {
+  if (Array.isArray(value)) return value.join(", ");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }

@@ -6,9 +6,10 @@ import { ContentGenerationService } from "./content-generation-service";
 function api(): SaveContentGenerationApiRequest {
   return {
     id: "runninghub-video",
+    providerId: "runninghub",
     name: "RunningHub video",
-    providerName: "RunningHub",
     capability: "text-to-video",
+    credentialMode: "override",
     requiresImages: false,
     apiKey: "secret-key",
     commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
@@ -46,10 +47,16 @@ function api(): SaveContentGenerationApiRequest {
   };
 }
 
-function setup(queryResponse: unknown) {
+function setup(queryResponse: unknown, configuredApi = api()) {
   let state: ContentGenerationState = {
-    version: 1,
-    apis: [api()],
+    version: 2,
+    providers: [{
+      id: "runninghub",
+      name: "RunningHub",
+      type: "runninghub",
+      commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+    }],
+    apis: [configuredApi],
     sessions: [],
     jobs: [],
   };
@@ -61,6 +68,9 @@ function setup(queryResponse: unknown) {
     getApi: vi.fn(async (id: string) =>
       structuredClone(state.apis.find((item) => item.id === id) ?? null),
     ),
+    getProvider: vi.fn(async (id: string) =>
+      structuredClone(state.providers.find((item) => item.id === id) ?? null),
+    ),
     listSessions: vi.fn(async () => structuredClone(state.sessions)),
     getSession: vi.fn(async (id: string) =>
       structuredClone(state.sessions.find((item) => item.id === id) ?? null),
@@ -70,7 +80,7 @@ function setup(queryResponse: unknown) {
     ),
   };
   const provider = {
-    upload: vi.fn(),
+    upload: vi.fn(async () => ({ code: 0, data: { download_url: "https://provider.example/upload.png" } })),
     request: vi
       .fn()
       .mockResolvedValueOnce({ taskId: "remote-1", status: "RUNNING" })
@@ -200,5 +210,111 @@ describe("ContentGenerationService", () => {
       }),
     ).rejects.toMatchObject({ code: "CONTENT_JOB_ACTIVE" });
     expect(test.provider.request).toHaveBeenCalledOnce();
+  });
+
+  it("maps dynamic parameters and named assets into the provider request", async () => {
+    const configuredApi: SaveContentGenerationApiRequest = {
+      ...api(),
+      capability: "image-to-video",
+      requiresImages: true,
+      inputSchema: {
+        prompt: { required: false },
+        parameters: [{
+          key: "resolution",
+          label: "Resolution",
+          type: "select",
+          required: true,
+          defaultValue: "720p",
+          options: [{ label: "720p", value: "720p" }],
+        }],
+        assets: [{
+          key: "firstFrameUrl",
+          label: "First frame",
+          mediaType: "image",
+          required: true,
+          maxFiles: 1,
+          acceptedTypes: ["image/png"],
+        }],
+      },
+      upload: {
+        url: "https://provider.example/upload",
+        fileField: "file",
+        urlPath: "data.download_url",
+        successPath: "code",
+        successValues: [0],
+      },
+      submit: {
+        ...api().submit,
+        bodyTemplate: {
+          prompt: "{{input.prompt}}",
+          resolution: "{{input.resolution}}",
+          firstFrameUrl: "{{input.firstFrameUrl}}",
+        },
+      },
+    };
+    const test = setup({ status: "RUNNING" }, configuredApi);
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "runninghub-video",
+    });
+
+    const created = await test.service.createJob({
+      sessionId: session.id,
+      prompt: "",
+      parameters: {},
+      files: [{
+        slot: "firstFrameUrl",
+        name: "frame.png",
+        mimeType: "image/png",
+        data: new Uint8Array([1, 2, 3]),
+      }],
+    });
+
+    expect(created.submitRequest?.body).toEqual({
+      resolution: "720p",
+      firstFrameUrl: "https://provider.example/upload.png",
+    });
+    expect(created.uploadedAssets).toEqual([{
+      slot: "firstFrameUrl",
+      name: "frame.png",
+      mediaType: "image",
+      url: "https://provider.example/upload.png",
+    }]);
+  });
+
+  it("inherits the provider credential unless an API uses an override", async () => {
+    const test = setup({ status: "RUNNING" });
+    await test.service.saveProvider({
+      id: "runninghub",
+      name: "RunningHub",
+      type: "runninghub",
+      apiKey: "provider-key",
+      commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+    });
+    const next = {
+      ...api(),
+      id: "runninghub-image",
+      apiKey: undefined,
+      credentialMode: "inherit" as const,
+      catalogId: "runninghub-seedance-2-image-to-video",
+    };
+
+    await expect(test.service.saveApi(next)).resolves.toMatchObject({
+      id: "runninghub-image",
+      hasApiKeyOverride: false,
+    });
+    expect(test.getState().apis.find((item) => item.id === "runninghub-image")?.apiKey)
+      .toBeUndefined();
+
+    const session = await test.service.createSession({
+      cwd: "D:\\project",
+      apiId: "runninghub-image",
+    });
+    await test.service.createJob({ sessionId: session.id, prompt: "test", files: [] });
+    expect(test.provider.request).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ Authorization: "Bearer provider-key" }),
+      expect.any(Object),
+    );
   });
 });

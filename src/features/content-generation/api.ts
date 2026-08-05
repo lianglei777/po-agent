@@ -1,10 +1,15 @@
 import type {
   ContentGenerationApi,
+  ContentGenerationDocumentationResponse,
   ContentGenerationJob,
   ContentGenerationSession,
+  ContentGenerationProvider,
+  ListContentGenerationProvidersResponse,
   ListContentGenerationApisResponse,
   ListContentGenerationJobsResponse,
   SaveContentGenerationApiRequest,
+  SaveContentGenerationProviderRequest,
+  JsonValue,
 } from "@/contracts/content-generation";
 import type { ApiErrorResponse, SuccessResponse } from "@/contracts/common";
 
@@ -20,6 +25,31 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function loadContentGenerationApis() {
   return requestJson<ListContentGenerationApisResponse>("/api/content-generation/apis");
+}
+
+export function loadContentGenerationProviders() {
+  return requestJson<ListContentGenerationProvidersResponse>("/api/content-generation/providers");
+}
+
+export function loadContentGenerationDocumentation(catalogId: string) {
+  return requestJson<ContentGenerationDocumentationResponse>(
+    `/api/content-generation/documentation/${encodeURIComponent(catalogId)}`,
+  );
+}
+
+export function saveContentGenerationProvider(input: SaveContentGenerationProviderRequest) {
+  return requestJson<ContentGenerationProvider>("/api/content-generation/providers", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteContentGenerationProvider(id: string) {
+  return requestJson<SuccessResponse>(
+    `/api/content-generation/providers?id=${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function saveContentGenerationApi(input: SaveContentGenerationApiRequest) {
@@ -54,11 +84,16 @@ export function loadContentGenerationJobs(sessionId: string) {
 export function createContentGenerationJob(
   sessionId: string,
   prompt: string,
-  files: File[],
+  parameters: Record<string, JsonValue>,
+  assets: Array<{ slot: string; file: File }>,
 ) {
   const body = new FormData();
   body.append("prompt", prompt);
-  files.forEach((file) => body.append("files", file));
+  body.append("parameters", JSON.stringify(parameters));
+  assets.forEach(({ file, slot }) => {
+    body.append("files", file);
+    body.append("fileSlots", slot);
+  });
   return requestJson<ContentGenerationJob>(
     `/api/content-generation/sessions/${encodeURIComponent(sessionId)}/jobs`,
     { method: "POST", body },

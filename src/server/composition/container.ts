@@ -2,6 +2,7 @@ import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
 import { ContentGenerationService } from "@/server/application/content-generation-service";
+import { ContentGenerationDocumentationService } from "@/server/application/content-generation-documentation-service";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
 import { InstructionService } from "@/server/application/instruction-service";
@@ -13,6 +14,7 @@ import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
 import { NodeContentGenerationArtifactStore } from "@/server/infrastructure/filesystem/node-content-generation-artifact-store";
 import { JsonContentGenerationRepository } from "@/server/infrastructure/filesystem/json-content-generation-repository";
+import { MarkdownContentGenerationDocumentationRepository } from "@/server/infrastructure/filesystem/markdown-content-generation-documentation-repository";
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
 import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-directory-browser";
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
@@ -54,10 +56,16 @@ function createContainer() {
     new NodeContentGenerationArtifactStore(),
     roots,
   );
+  const contentGenerationDocumentationService = new ContentGenerationDocumentationService(
+    new MarkdownContentGenerationDocumentationRepository(
+      path.join(process.cwd(), "docs", "RunningHubAPIs", "seedance2.0"),
+    ),
+  );
 
   return {
     roots,
     contentGenerationService,
+    contentGenerationDocumentationService,
     sessionService: new SessionService(sessions, runtimes, contentGenerationService),
     agentService: new AgentService(
       sessions,

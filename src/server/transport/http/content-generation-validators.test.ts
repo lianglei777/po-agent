@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { parseContentGenerationApi } from "./content-generation-validators";
+import { parseContentGenerationApi, parseContentGenerationProvider } from "./content-generation-validators";
 
 describe("parseContentGenerationApi", () => {
   it("accepts the minimal polling protocol", () => {
     const parsed = parseContentGenerationApi({
       id: "api-1",
+      providerId: "provider-1",
       name: "Video API",
-      providerName: "Provider",
       capability: "text-to-video",
+      credentialMode: "inherit",
       requiresImages: false,
       submit: {
         method: "POST",
@@ -45,9 +46,10 @@ describe("parseContentGenerationApi", () => {
     expect(() =>
       parseContentGenerationApi({
         id: "api-1",
+        providerId: "provider-1",
         name: "Video API",
-        providerName: "Provider",
         capability: "text-to-video",
+        credentialMode: "inherit",
         requiresImages: false,
         submit: { method: "POST", url: "file:///secret", bodyTemplate: {} },
         completion: { mode: "immediate" },
@@ -58,5 +60,59 @@ describe("parseContentGenerationApi", () => {
         },
       }),
     ).toThrow("submit.url must use HTTP or HTTPS");
+  });
+
+  it("parses dynamic fields and named asset slots", () => {
+    const parsed = parseContentGenerationApi({
+      id: "seedance-image",
+      providerId: "runninghub",
+      name: "Seedance image to video",
+      capability: "image-to-video",
+      credentialMode: "inherit",
+      catalogId: "runninghub-seedance-2-image-to-video",
+      requiresImages: true,
+      inputSchema: {
+        prompt: { required: false, maxLength: 20480 },
+        parameters: [{
+          key: "resolution",
+          label: "Resolution",
+          type: "select",
+          options: [{ label: "720p", value: "720p" }],
+          defaultValue: "720p",
+        }],
+        assets: [{
+          key: "firstFrameUrl",
+          label: "First frame",
+          mediaType: "image",
+          required: true,
+          maxFiles: 1,
+        }],
+      },
+      submit: { method: "POST", url: "https://provider.example/generate" },
+      completion: { mode: "immediate" },
+      output: {
+        collectionPath: "results",
+        defaultMediaType: "video",
+        downloadRemoteFiles: true,
+      },
+    });
+
+    expect(parsed).toMatchObject({
+      catalogId: "runninghub-seedance-2-image-to-video",
+      inputSchema: {
+        prompt: { required: false, maxLength: 20480 },
+        assets: [{ key: "firstFrameUrl", mediaType: "image", required: true }],
+      },
+    });
+  });
+
+  it("parses a provider with shared credentials", () => {
+    expect(parseContentGenerationProvider({
+      id: "runninghub",
+      name: "RunningHub",
+      type: "runninghub",
+      apiKey: "secret",
+      commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+    })).toMatchObject({ id: "runninghub", type: "runninghub" });
   });
 });
