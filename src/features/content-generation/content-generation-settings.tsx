@@ -1,7 +1,7 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type {
   ContentGenerationApi,
   ContentGenerationParameterField,
@@ -23,9 +23,10 @@ import {
   saveContentGenerationProvider,
 } from "./api";
 import {
+  createBuiltinRunningHubApis,
+  createBuiltinRunningHubProvider,
   createContentGenerationApiDraft,
   createContentGenerationProviderDraft,
-  createRunningHubApiCatalog,
 } from "./defaults";
 import { ContentGenerationApiDocumentation } from "./content-generation-api-documentation";
 
@@ -64,6 +65,8 @@ export function ContentGenerationSettings({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showProviderMenu, setShowProviderMenu] = useState(false);
+  const [storedProviderIds, setStoredProviderIds] = useState<ReadonlySet<string>>(new Set());
+  const [storedApiIds, setStoredApiIds] = useState<ReadonlySet<string>>(new Set());
 
   const currentSnapshot = providerDraft
     ? JSON.stringify(providerDraft)
@@ -83,9 +86,29 @@ export function ContentGenerationSettings({
       loadContentGenerationApis(),
     ])
       .then(([nextProviders, nextApis]) => {
-        setProviders(nextProviders);
-        setApis(nextApis);
-        if (nextProviders[0]) selectProvider(nextProviders[0]);
+        setStoredProviderIds(new Set(nextProviders.map((p) => p.id)));
+        setStoredApiIds(new Set(nextApis.map((a) => a.id)));
+
+        // 合并内置 RunningHub 供应商——始终展示，无需手动添加
+        const storedRunninghub = nextProviders.find((p) => p.type === "runninghub");
+        const builtinProvider = createBuiltinRunningHubProvider();
+        const mergedProviders = storedRunninghub
+          ? nextProviders
+          : [builtinProvider, ...nextProviders];
+
+        // 合并内置 RunningHub API——作为子项直接展示
+        const runninghubId = storedRunninghub?.id ?? builtinProvider.id;
+        const builtinApis = createBuiltinRunningHubApis(runninghubId);
+        const mergedApis = [...nextApis];
+        for (const builtin of builtinApis) {
+          if (!mergedApis.some((a) => a.catalogId === builtin.catalogId)) {
+            mergedApis.push(builtin);
+          }
+        }
+
+        setProviders(mergedProviders);
+        setApis(mergedApis);
+        if (mergedProviders[0]) selectProvider(mergedProviders[0]);
       })
       .catch((cause) => setError(messageOf(cause)))
       .finally(() => setLoading(false));
@@ -134,6 +157,7 @@ export function ContentGenerationSettings({
     setError("");
     try {
       const saved = await saveContentGenerationProvider(fromProviderDraft(providerDraft));
+      setStoredProviderIds((current) => new Set([...current, saved.id]));
       setProviders((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       selectProvider(saved);
     } catch (cause) {
@@ -149,6 +173,7 @@ export function ContentGenerationSettings({
     setError("");
     try {
       const saved = await saveContentGenerationApi(fromApiDraft(apiDraft));
+      setStoredApiIds((current) => new Set([...current, saved.id]));
       setApis((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       selectApi(saved);
     } catch (cause) {
@@ -163,6 +188,11 @@ export function ContentGenerationSettings({
     if (!window.confirm(labels.deleteProviderConfirm)) return;
     try {
       await deleteContentGenerationProvider(providerDraft.id);
+      setStoredProviderIds((current) => {
+        const next = new Set(current);
+        next.delete(providerDraft.id);
+        return next;
+      });
       const next = providers.filter((item) => item.id !== providerDraft.id);
       setProviders(next);
       if (next[0]) selectProvider(next[0]);
@@ -177,6 +207,11 @@ export function ContentGenerationSettings({
     if (!window.confirm(labels.deleteConfirm)) return;
     try {
       await deleteContentGenerationApi(apiDraft.id);
+      setStoredApiIds((current) => {
+        const next = new Set(current);
+        next.delete(apiDraft.id);
+        return next;
+      });
       setApis((current) => current.filter((item) => item.id !== apiDraft.id));
       const provider = providers.find((item) => item.id === apiDraft.providerId);
       if (provider) selectProvider(provider);
@@ -210,9 +245,6 @@ export function ContentGenerationSettings({
         </div>
         {showProviderMenu ? (
           <div className="mb-3 space-y-1 rounded-md border border-line-subtle bg-subtle p-2">
-            <Button className="w-full justify-start" onClick={() => addProvider("runninghub")} size="sm" type="button" variant="ghost">
-              {labels.addRunningHubProvider}
-            </Button>
             <Button className="w-full justify-start" onClick={() => addProvider("custom")} size="sm" type="button" variant="ghost">
               {labels.addCustomProvider}
             </Button>
@@ -256,10 +288,8 @@ export function ContentGenerationSettings({
           <div className="grid min-h-72 place-items-center text-sm text-muted">{labels.emptyProviders}</div>
         ) : providerDraft ? (
           <ProviderDetail
-            apis={apis.filter((api) => api.providerId === providerDraft.id)}
             draft={providerDraft}
-            existing={providers.some((provider) => provider.id === providerDraft.id)}
-            inputLabels={inputLabels}
+            existing={storedProviderIds.has(providerDraft.id)}
             labels={labels}
             onAddApi={(source) => {
               const provider = providers.find((item) => item.id === providerDraft.id);
@@ -273,7 +303,7 @@ export function ContentGenerationSettings({
         ) : apiDraft ? (
           <ApiDetail
             draft={apiDraft}
-            existing={apis.some((api) => api.id === apiDraft.id)}
+            existing={storedApiIds.has(apiDraft.id)}
             inputLabels={inputLabels}
             labels={labels}
             onChange={setApiDraft}
@@ -290,7 +320,6 @@ export function ContentGenerationSettings({
 }
 
 function ProviderDetail({
-  apis,
   draft,
   existing,
   labels,
@@ -300,10 +329,8 @@ function ProviderDetail({
   onSave,
   saving,
 }: {
-  apis: ContentGenerationApi[];
   draft: ProviderDraft;
   existing: boolean;
-  inputLabels: Readonly<Record<string, string>>;
   labels: ReturnType<typeof useI18n>["t"]["contentGeneration"];
   onAddApi: (source?: SaveContentGenerationApiRequest) => void;
   onChange: (draft: ProviderDraft) => void;
@@ -311,12 +338,8 @@ function ProviderDetail({
   onSave: () => void;
   saving: boolean;
 }) {
-  const catalog = useMemo(
-    () => draft.type === "runninghub" ? createRunningHubApiCatalog(draft.id) : [],
-    [draft.id, draft.type],
-  );
-  const available = catalog.filter((candidate) =>
-    !apis.some((api) => api.catalogId === candidate.catalogId));
+  const [showApiKey, setShowApiKey] = useState(false);
+  const isRunningHub = draft.type === "runninghub";
   return (
     <div className="mx-auto max-w-4xl space-y-7">
       <PageHeader title={draft.name || labels.newProvider} description={labels.providerDescription} />
@@ -326,44 +349,41 @@ function ProviderDetail({
             <Input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} />
           </Field>
           <Field label={labels.providerType}>
-            <Input disabled value={draft.type === "runninghub" ? "RunningHub" : labels.customProvider} />
+            <Input disabled value={isRunningHub ? "RunningHub" : labels.customProvider} />
           </Field>
           <Field label={labels.commonApiKey}>
-            <Input
-              onChange={(event) => onChange({ ...draft, apiKey: event.target.value })}
-              placeholder={existing && !draft.apiKey ? labels.apiKeyStored : labels.apiKeyPlaceholder}
-              type="password"
-              value={draft.apiKey ?? ""}
-            />
+            <div className="relative">
+              <Input
+                className="pr-9"
+                onChange={(event) => onChange({ ...draft, apiKey: event.target.value })}
+                placeholder={existing && !draft.apiKey ? labels.apiKeyStored : labels.apiKeyPlaceholder}
+                type={showApiKey ? "text" : "password"}
+                value={draft.apiKey ?? ""}
+              />
+              <button
+                aria-label={showApiKey ? labels.hideApiKey : labels.showApiKey}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-primary"
+                onClick={() => setShowApiKey((value) => !value)}
+                type="button"
+              >
+                {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
           </Field>
         </div>
         <JsonField label={labels.commonHeaders} value={draft.rawCommonHeaders} onChange={(value) => onChange({ ...draft, rawCommonHeaders: value })} />
       </Section>
 
-      <Section title={labels.providerApis}>
-        {!existing ? (
-          <p className="text-body-sm text-muted">{labels.saveProviderBeforeAddingApi}</p>
-        ) : draft.type === "runninghub" ? (
-          available.length ? (
-            <div className="divide-y divide-line-subtle rounded-md border border-line-subtle">
-              {available.map((candidate) => (
-                <div className="flex items-center justify-between gap-4 px-3 py-3" key={candidate.catalogId}>
-                  <div>
-                    <p className="text-xs font-medium text-primary">{candidate.name}</p>
-                    <p className="mt-0.5 font-ui-mono text-caption text-muted">{candidate.capability}</p>
-                  </div>
-                  <Button onClick={() => onAddApi(candidate)} size="sm" type="button" variant="outline">
-                    <Plus />{labels.addApi}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : <p className="text-body-sm text-muted">{labels.allProviderApisAdded}</p>
-        ) : (
-          <Button onClick={() => onAddApi()} size="sm" type="button" variant="outline"><Plus />{labels.addCustomApi}</Button>
-        )}
-      </Section>
-      <EditorFooter existing={existing} onRemove={onRemove} onSave={onSave} saving={saving} />
+      {isRunningHub ? null : (
+        <Section title={labels.providerApis}>
+          {!existing ? (
+            <p className="text-body-sm text-muted">{labels.saveProviderBeforeAddingApi}</p>
+          ) : (
+            <Button onClick={() => onAddApi()} size="sm" type="button" variant="outline"><Plus />{labels.addCustomApi}</Button>
+          )}
+        </Section>
+      )}
+      <EditorFooter deletable={!isRunningHub} existing={existing} onRemove={onRemove} onSave={onSave} saving={saving} />
     </div>
   );
 }
@@ -389,6 +409,8 @@ function ApiDetail({
   provider?: ContentGenerationProvider;
   saving: boolean;
 }) {
+  const [docsExpanded, setDocsExpanded] = useState(false);
+  const isRunningHub = provider?.type === "runninghub";
   return (
     <div className="mx-auto max-w-4xl space-y-7">
       <PageHeader title={draft.name || labels.newApi} description={`${provider?.name ?? ""} · ${labels.apiDescription}`} />
@@ -454,18 +476,32 @@ function ApiDetail({
         </Section>
       ) : null}
 
-      <Section title={labels.apiDocumentation}>
-        <p className="max-w-3xl text-body-sm text-muted">{labels.apiDocumentationDescription}</p>
-        <ContentGenerationApiDocumentation
-          catalogId={draft.catalogId}
-          labels={{
-            loading: labels.documentationLoading,
-            loadFailed: labels.documentationLoadFailed,
-            unavailable: labels.documentationUnavailable,
-          }}
-        />
-      </Section>
-      <EditorFooter existing={existing} onRemove={onRemove} onSave={onSave} saving={saving} />
+      {/* API 文档--默认收起，点击展开后懒加载 */}
+      <div className="space-y-4">
+        <button
+          aria-expanded={docsExpanded}
+          className="flex w-full items-center gap-2 border-b border-line-subtle pb-2 text-left text-sm font-semibold text-primary"
+          onClick={() => setDocsExpanded((value) => !value)}
+          type="button"
+        >
+          <ChevronDown className={`size-4 transition-transform ${docsExpanded ? "" : "-rotate-90"}`} />
+          {labels.apiDocumentation}
+        </button>
+        {docsExpanded ? (
+          <>
+            <p className="max-w-3xl text-body-sm text-muted">{labels.apiDocumentationDescription}</p>
+            <ContentGenerationApiDocumentation
+              catalogId={draft.catalogId}
+              labels={{
+                loading: labels.documentationLoading,
+                loadFailed: labels.documentationLoadFailed,
+                unavailable: labels.documentationUnavailable,
+              }}
+            />
+          </>
+        ) : null}
+      </div>
+      <EditorFooter deletable={!isRunningHub} existing={existing} onRemove={onRemove} onSave={onSave} saving={saving} />
     </div>
   );
 }
@@ -481,9 +517,9 @@ function DefaultValueControl({ field, label, onChange }: { field: ContentGenerat
   return <Field label={label}><Input max={field.max} min={field.min} onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)} type={field.type === "number" ? "number" : "text"} value={typeof value === "string" || typeof value === "number" ? value : ""} /></Field>;
 }
 
-function EditorFooter({ existing, onRemove, onSave, saving }: { existing: boolean; onRemove: () => void; onSave: () => void; saving: boolean }) {
+function EditorFooter({ deletable = true, existing, onRemove, onSave, saving }: { deletable?: boolean; existing: boolean; onRemove: () => void; onSave: () => void; saving: boolean }) {
   const { t } = useI18n();
-  return <footer className="flex items-center justify-between border-t border-line-subtle pt-4"><Button disabled={!existing} onClick={onRemove} type="button" variant="destructive"><Trash2 />{t.common.delete}</Button><Button disabled={saving} onClick={onSave} type="button">{saving ? t.common.saving : t.common.save}</Button></footer>;
+  return <footer className="flex items-center justify-between border-t border-line-subtle pt-4">{deletable ? <Button disabled={!existing} onClick={onRemove} type="button" variant="destructive"><Trash2 />{t.common.delete}</Button> : <div />}<Button disabled={saving} onClick={onSave} type="button">{saving ? t.common.saving : t.common.save}</Button></footer>;
 }
 
 function PageHeader({ description, title }: { description: string; title: string }) { return <header className="border-b border-line-subtle pb-4"><h2 className="text-lg font-semibold text-primary">{title}</h2><p className="mt-1 text-body-sm text-muted">{description}</p></header>; }

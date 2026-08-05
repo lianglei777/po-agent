@@ -60,7 +60,7 @@ export const en = {
       "Choose the interface language used across navigation, dialogs, and status messages.",
   },
   contentGeneration: {
-    title: "Content generation APIs",
+    title: "Content generation",
     description:
       "Configure upload, submit, polling, and output mappings for external image and video generation providers.",
     providers: "Content providers",
@@ -109,6 +109,8 @@ export const en = {
     apiKeyStored: "Stored. Enter a new key to replace it.",
     apiKeyShared: "The saved RunningHub API key will be reused.",
     apiKeyPlaceholder: "Enter API key",
+    showApiKey: "Show API key",
+    hideApiKey: "Hide API key",
     commonHeaders: "Common headers (JSON)",
     requiresImages: "This API requires image input",
     submitApi: "Submit API",
@@ -152,8 +154,6 @@ export const en = {
     prompt: "Generation prompt",
     promptPlaceholder: "Describe the image or video to generate...",
     optionalPromptPlaceholder: "Add motion, camera, or style directions (optional)...",
-    showAdvanced: "Advanced parameters",
-    hideAdvanced: "Hide advanced parameters",
     assetsReady: "Reference assets supported",
     chooseFile: "Choose file",
     addMoreFiles: "Add more",

@@ -13,4 +13,25 @@ describe("content generation API settings", () => {
     expect(source).not.toContain("AdvancedApiEditor");
     expect(source).not.toContain("labels.advancedProtocol");
   });
+
+  it("renders RunningHub as a built-in provider", () => {
+    expect(source).toContain("createBuiltinRunningHubProvider");
+    expect(source).toContain("createBuiltinRunningHubApis");
+  });
+
+  it("collapses API documentation by default with lazy loading", () => {
+    expect(source).toContain("docsExpanded");
+    expect(source).toContain("setDocsExpanded");
+  });
+
+  it("supports show/hide toggle for the common API key", () => {
+    expect(source).toContain("Eye");
+    expect(source).toContain("EyeOff");
+    expect(source).toContain("showApiKey");
+  });
+
+  it("hides delete for RunningHub provider and APIs", () => {
+    expect(source).toContain("deletable");
+    expect(source).toContain("isRunningHub");
+  });
 });

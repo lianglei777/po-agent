@@ -1,4 +1,6 @@
 import type {
+  ContentGenerationApi,
+  ContentGenerationProvider,
   SaveContentGenerationApiRequest,
   SaveContentGenerationProviderRequest,
 } from "@/contracts/content-generation";
@@ -79,6 +81,33 @@ export function createContentGenerationProviderDraft(
       ? { Authorization: "Bearer {{secret.apiKey}}" }
       : {},
   };
+}
+
+// 内置 RunningHub 供应商使用稳定 ID，确保虚拟项与已存储项之间正确匹配
+const BUILTIN_RUNNINGHUB_PROVIDER_ID = "builtin-runninghub";
+
+export function createBuiltinRunningHubProvider(): ContentGenerationProvider {
+  return {
+    id: BUILTIN_RUNNINGHUB_PROVIDER_ID,
+    name: "RunningHub",
+    type: "runninghub",
+    hasApiKey: false,
+    commonHeaders: { Authorization: "Bearer {{secret.apiKey}}" },
+  };
+}
+
+export function createBuiltinRunningHubApis(
+  providerId: string,
+): ContentGenerationApi[] {
+  return createRunningHubApiCatalog(providerId).map((draft) => {
+    const rest = { ...draft } as Omit<SaveContentGenerationApiRequest, "apiKey">;
+    delete (rest as { apiKey?: string }).apiKey;
+    return {
+      ...rest,
+      id: `builtin-${rest.catalogId}`,
+      hasApiKeyOverride: false,
+    };
+  });
 }
 
 function createRunningHubTextToVideoDraft(providerId: string): SaveContentGenerationApiRequest {
