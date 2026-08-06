@@ -2557,6 +2557,175 @@ POST /api/content-generation/jobs/:id/poll
 内容生成客户端的轮询间隔不得低于 5 秒。服务商配置仍可为不同 API 保存
 独立间隔，但当前 HTTP 校验范围为 5000 至 60000 毫秒。
 
+### 12.7 创建和列出持久化 Generation Run
+
+创建 Run 前，客户端可以查询当前启用的 Route：
+
+```http
+GET /api/generation/routes
+```
+
+响应是 Route 数组，只包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision` 和 `defaults`。供应商 operation、credential reference 与 adapter 配置不对外返回。
+
+浏览器原始文件必须先登记为 workspace 文件：
+
+```http
+POST /api/sessions/:id/generation-assets
+Content-Type: multipart/form-data
+
+file=<binary>
+```
+
+单个文件限制为 50 MiB，保存到 `<workspace>/.po-agent/generation-inputs/`。响应中的 `ref` 可以直接放入创建 Run 请求的 `assets[].ref`；绝对路径和 workspace 外路径仍会被拒绝。
+
+```http
+GET /api/sessions/:id/generation-runs
+POST /api/sessions/:id/generation-runs
+Content-Type: application/json
+```
+
+`POST` 请求示例：
+
+```json
+{
+  "capability": "image-to-video",
+  "prompt": "镜头缓慢推近人物",
+  "idempotencyKey": "client-request-019f...",
+  "source": "direct-ui",
+  "parameters": {
+    "durationSeconds": 5,
+    "aspectRatio": "16:9"
+  },
+  "assets": [
+    {
+      "slot": "firstFrameUrl",
+      "ref": {
+        "type": "workspace-file",
+        "relativePath": "assets/first-frame.png"
+      }
+    }
+  ]
+}
+```
+
+字段说明：
+
+- `capability`：`text-to-image`、`image-to-image`、`text-to-video`、`image-to-video` 或 `multimodal-to-video`。
+- `routeId`：可选；不提供时选择该 capability 的显式默认 Route。
+- `idempotencyKey`：必填且最大 200 字符；相同请求重复提交时返回原 Run，不创建第二个供应商任务。相同 key 对应不同请求时返回 `409 GENERATION_IDEMPOTENCY_CONFLICT`。
+- `assets[].slot`：供应商无关的语义素材槽，例如 `firstFrameUrl`、`lastFrameUrl` 或 `imageUrls`。
+- `assets[].ref`：支持 `{ "type": "artifact", "artifactId": "..." }` 或 workspace 相对路径引用。
+- `source`：HTTP 调用只允许 `direct-ui` 或 `api`。
+
+首次针对已有 Pi Session 或开发期旧内容生成 Session 创建 Run 时，服务端会把 Session 元数据懒投影到 SQLite。旧 JSON Job 不会迁移。响应：
+
+```json
+{
+  "created": true,
+  "run": {
+    "id": "run-id",
+    "sessionId": "session-id",
+    "capability": "image-to-video",
+    "routeId": "runninghub-seedance-2-image-to-video",
+    "status": "queued",
+    "prompt": "镜头缓慢推近人物",
+    "input": {},
+    "source": "direct-ui",
+    "createdAt": "2026-08-06T00:00:00.000Z",
+    "updatedAt": "2026-08-06T00:00:00.000Z"
+  },
+  "jobs": [
+    {
+      "id": "job-id",
+      "runId": "run-id",
+      "attempt": 1,
+      "providerId": "runninghub",
+      "providerOperation": "seedance-2-image-to-video",
+      "status": "created",
+      "createdAt": "2026-08-06T00:00:00.000Z",
+      "updatedAt": "2026-08-06T00:00:00.000Z"
+    }
+  ],
+  "artifacts": []
+}
+```
+
+响应不会返回 credential reference、API Key、lease 或 adapter 配置快照。`GET` 返回当前 Session 的完整 Run view 数组。
+
+### 12.8 查询单个 Generation Run
+
+```http
+GET /api/generation-runs/:id
+```
+
+返回 `{ run, jobs, artifacts }`。Run 状态为：
+
+```text
+queued | running | succeeded | failed | cancel_requested | cancelled
+```
+
+Provider Job 状态为：
+
+```text
+created | uploading | submitting | submitted | polling | downloading |
+succeeded | failed | submission_unknown | cancelled
+```
+
+`submission_unknown` 表示请求可能已到达供应商，但本地未收到确认；服务端不会自动重新提交，避免重复计费。
+
+显式取消：
+
+```http
+POST /api/generation-runs/:id/cancel
+```
+
+当前 RunningHub adapter 没有远端取消能力。接口会停止本地执行和轮询并把 Run/活动 Job 标记为 `cancelled`；若任务已经提交，供应商侧仍可能继续运行和计费，因此 UI 必须在确认文案中说明这一点。
+
+显式重试失败或已取消的 Run：
+
+```http
+POST /api/generation-runs/:id/retry
+Content-Type: application/json
+
+{ "idempotencyKey": "retry-request-019f..." }
+```
+
+重试保留原 Run ID，并在同一 Run 下新增 `attempt + 1` 的 Provider Job。重试幂等键最多 200 字符；相同键重复提交只返回同一个重试 Job，不会再次创建可能计费的供应商任务。
+
+### 12.9 RunningHub 生成凭证
+
+```http
+GET    /api/generation/credentials/runninghub
+PUT    /api/generation/credentials/runninghub
+DELETE /api/generation/credentials/runninghub
+```
+
+`GET` 和变更响应只返回：
+
+```json
+{ "hasCredential": true }
+```
+
+`PUT` 请求：
+
+```json
+{ "apiKey": "runninghub-api-key" }
+```
+
+API Key 保存在 Agent data dir 的服务端凭证文件中，不写入 SQLite、Run、Job、Artifact、日志或 HTTP 响应。未保存文件凭证时，可以通过服务端 `RUNNINGHUB_API_KEY` 环境变量提供。
+
+### 12.10 当前持久化执行行为
+
+- Run、Provider Job、Route 和 Artifact 使用 `<agent-data-dir>/po-agent.sqlite`。
+- 进程内 Worker 使用 lease claim 推进到期 Job。
+- SSE/页面断开不会取消 Run。
+- 查询失败会保留远端 task ID 并延迟重试。
+- 服务在 `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
+- 成功结果下载到 `<workspace>/.po-agent/generated/<runId>/`。
+- 直接生成页面通过读取 Run view 刷新本地状态，不直接触发供应商查询；供应商轮询只由 Worker 执行。
+- RunningHub 设置页重新保存 API Key 时，会同步写入新运行时的服务端凭证文件。
+- 当前不迁移 `content-generation.json` 中的开发期测试数据。
+
 ## 13. SSE 通用行为
 
 Agent、OAuth 和 File Watch 使用相同的 SSE Transport。

@@ -9,15 +9,16 @@ const source = readFileSync(
 );
 
 describe("content generation conversation", () => {
-  it("uses a five-second polling floor and five-second configuration defaults", () => {
+  it("uses local durable-run refreshes without directly polling the provider", () => {
     expect(createContentGenerationApiDraft().completion).toMatchObject({
       intervalMs: 5000,
     });
     expect(createRunningHubDraft().completion).toMatchObject({
       intervalMs: 5000,
     });
-    expect(source).toContain("MIN_POLL_INTERVAL_MS = 5000");
-    expect(source).toContain("Math.max(api.completion.intervalMs, MIN_POLL_INTERVAL_MS)");
+    expect(source).toContain("REFRESH_INTERVAL_MS = 2_000");
+    expect(source).toContain("loadGenerationRuns(session.id)");
+    expect(source).not.toContain("pollContentGenerationJob");
   });
 
   it("provides five RunningHub catalog APIs with per-job input schemas", () => {
@@ -45,24 +46,22 @@ describe("content generation conversation", () => {
     ]);
   });
 
-  it("renders jobs as user and provider turns with local media and response details", () => {
+  it("renders durable runs as user and provider turns with local artifacts", () => {
     expect(source).toContain("<GenerationTurn");
     expect(source).toContain("<GenerationResult");
     expect(source).toContain("<MediaPreview");
-    expect(source).toContain("job.submitRequest");
-    expect(source).toContain("job.submitResponse");
-    expect(source).toContain("job.latestQueryResponse");
-    expect(source).toContain("job.outputs.filter(isDisplayOutput)");
-    expect(source).not.toContain("providerTextOutput");
-    expect(source).not.toContain("submitting || activeJob ?");
+    expect(source).toContain("view.run.input.assets");
+    expect(source).toContain("view.artifacts");
+    expect(source).toContain("artifact.localPath");
+    expect(source).not.toContain("submitResponse");
   });
 
-  it("provides a retry button for query-stage failures", () => {
-    expect(source).toContain("retryPoll");
-    expect(source).toContain("retryingJobId");
-    expect(source).toContain('job.error?.stage === "query"');
+  it("provides explicit cancellation and child-run retry actions", () => {
+    expect(source).toContain("cancelGenerationRun");
+    expect(source).toContain("retryGenerationRun");
+    expect(source).toContain('status === "failed" || status === "cancelled"');
     expect(source).toContain("RotateCcw");
-    expect(source).toContain("retryQuery");
-    expect(source).toContain("retrying");
+    expect(source).toContain("retryRun");
+    expect(source).toContain("cancelRun");
   });
 });

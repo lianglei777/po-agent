@@ -170,6 +170,9 @@ export const zh = {
     openRemoteOutput: "打开远程结果",
     retryQuery: "重新查询",
     retrying: "查询中...",
+    cancelRun: "取消生成",
+    cancelRunConfirm: "确定取消本地跟踪吗？如果任务已提交，供应商任务可能仍会继续运行，并可能继续产生费用。",
+    retryRun: "重新生成",
     inputs: {
       resolution: "分辨率",
       duration: "时长",
@@ -195,6 +198,14 @@ export const zh = {
       downloading: "正在保存产物",
       succeeded: "已完成",
       failed: "失败",
+    },
+    runStatuses: {
+      queued: "排队中",
+      running: "生成中",
+      succeeded: "已完成",
+      failed: "失败",
+      cancel_requested: "正在取消",
+      cancelled: "已取消",
     },
   },
   chat: {

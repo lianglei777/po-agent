@@ -1,8 +1,14 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
 import { ContentGenerationService } from "@/server/application/content-generation-service";
 import { ContentGenerationDocumentationService } from "@/server/application/content-generation-documentation-service";
+import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
+import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
+import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
+import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
+import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
 import { InstructionService } from "@/server/application/instruction-service";
@@ -13,6 +19,8 @@ import { SkillPackService } from "@/server/application/skill-pack-service";
 import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
 import { NodeContentGenerationArtifactStore } from "@/server/infrastructure/filesystem/node-content-generation-artifact-store";
+import { FileGenerationCredentialStore } from "@/server/infrastructure/filesystem/file-generation-credential-store";
+import { NodeGenerationFileStore } from "@/server/infrastructure/filesystem/node-generation-file-store";
 import { JsonContentGenerationRepository } from "@/server/infrastructure/filesystem/json-content-generation-repository";
 import { MarkdownContentGenerationDocumentationRepository } from "@/server/infrastructure/filesystem/markdown-content-generation-documentation-repository";
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
@@ -29,6 +37,10 @@ import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { PendingInputRegistry } from "@/server/infrastructure/runtime/pending-input-registry";
 import { HttpContentGenerationProvider } from "@/server/infrastructure/http/http-content-generation-provider";
+import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
+import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
+import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
+import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
 
 function createContainer() {
   const sessions = new PiSessionRepository();
@@ -61,11 +73,74 @@ function createContainer() {
       path.join(process.cwd(), "docs", "RunningHubAPIs"),
     ),
   );
+  let generationRunService: GenerationRunService | undefined;
+  let generationAssetService: GenerationAssetService | undefined;
+  let generationCredentialStore: FileGenerationCredentialStore | undefined;
+
+  function getGenerationRunService() {
+    if (generationRunService) return generationRunService;
+    const database = new SqliteDatabase(
+      path.join(getAgentDir(), "po-agent.sqlite"),
+    );
+    const repository = new SqliteGenerationRepository(database);
+    const ready = seedGenerationRoutes(repository, createRunningHubRoutes());
+    generationCredentialStore = new FileGenerationCredentialStore(
+      path.join(getAgentDir(), "generation-credentials.json"),
+    );
+    generationRunService = new GenerationRunService(repository, {
+      ready,
+      sessions,
+      contentSessions: contentGenerationRepository,
+    });
+    const generationFiles = new NodeGenerationFileStore();
+    generationAssetService = new GenerationAssetService(
+      generationRunService,
+      generationFiles,
+    );
+    const execution = new GenerationExecutionService(
+      repository,
+      [new RunningHubAdapter()],
+      generationCredentialStore,
+      generationFiles,
+    );
+    const worker = new GenerationWorker(
+      repository,
+      execution,
+      `generation-worker-${randomUUID()}`,
+    );
+    void ready.then(() => worker.start());
+    return generationRunService;
+  }
+
+  function getGenerationCredentialStore() {
+    getGenerationRunService();
+    if (!generationCredentialStore) {
+      throw new Error("Generation credential store was not initialized");
+    }
+    return generationCredentialStore;
+  }
+
+  function getGenerationAssetService() {
+    getGenerationRunService();
+    if (!generationAssetService) {
+      throw new Error("Generation asset service was not initialized");
+    }
+    return generationAssetService;
+  }
 
   return {
     roots,
     contentGenerationService,
     contentGenerationDocumentationService,
+    get generationRunService() {
+      return getGenerationRunService();
+    },
+    get generationCredentialStore() {
+      return getGenerationCredentialStore();
+    },
+    get generationAssetService() {
+      return getGenerationAssetService();
+    },
     sessionService: new SessionService(sessions, runtimes, contentGenerationService),
     agentService: new AgentService(
       sessions,

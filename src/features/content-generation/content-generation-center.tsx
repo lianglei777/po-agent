@@ -4,44 +4,43 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
-  ChevronDown,
   Copy,
   LoaderCircle,
   RotateCcw,
+  Square,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ContentGenerationApi, JsonValue } from "@/contracts/content-generation";
 import type {
-  ContentGenerationApi,
-  ContentGenerationJob,
-  ContentGenerationOutput,
-  ContentGenerationProviderResponse,
-  JsonValue,
-} from "@/contracts/content-generation";
-import type { SessionInfo } from "@/features/sessions/types";
+  GenerationArtifactDto,
+  GenerationRunStatus,
+  GenerationRunViewDto,
+  ProviderJobDto,
+} from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
 import { rawFileUrl } from "@/features/files/api";
+import type { SessionInfo } from "@/features/sessions/types";
 import { useI18n } from "@/i18n/use-i18n";
 import {
-  createContentGenerationJob,
+  cancelGenerationRun,
+  createGenerationRun,
   loadContentGenerationApis,
-  loadContentGenerationJobs,
-  pollContentGenerationJob,
+  loadGenerationRuns,
+  retryGenerationRun,
+  uploadGenerationAsset,
 } from "./api";
 import {
   ContentGenerationComposer,
   type SelectedGenerationAsset,
 } from "./content-generation-composer";
 
-const ACTIVE_PHASES = new Set([
-  "created",
-  "uploading",
-  "submitting",
+const ACTIVE_STATUSES = new Set<GenerationRunStatus>([
   "queued",
   "running",
-  "downloading",
+  "cancel_requested",
 ]);
-const MIN_POLL_INTERVAL_MS = 5000;
+const REFRESH_INTERVAL_MS = 2_000;
 
 export function ContentGenerationCenter({
   session,
@@ -52,71 +51,89 @@ export function ContentGenerationCenter({
 }) {
   const { t } = useI18n();
   const [apis, setApis] = useState<ContentGenerationApi[]>([]);
-  const [jobs, setJobs] = useState<ContentGenerationJob[]>([]);
+  const [runs, setRuns] = useState<GenerationRunViewDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const endOfConversation = useRef<HTMLDivElement>(null);
   const api = apis.find((item) => item.id === session.contentGenerationApiId);
-  const activeJob = useMemo(
-    () => jobs.find((job) => ACTIVE_PHASES.has(job.phase)),
-    [jobs],
+  const composerApi = useMemo(() => api ? {
+    ...api,
+    inputSchema: api.inputSchema ? {
+      ...api.inputSchema,
+      prompt: { ...api.inputSchema.prompt, required: true },
+    } : api.inputSchema,
+  } : undefined, [api]);
+  const activeRun = useMemo(
+    () => runs.find((view) => ACTIVE_STATUSES.has(view.run.status)),
+    [runs],
   );
-  const orderedJobs = useMemo(
-    () => [...jobs].sort((left, right) => left.created.localeCompare(right.created)),
-    [jobs],
+  const orderedRuns = useMemo(
+    () => [...runs].sort((left, right) => left.run.createdAt.localeCompare(right.run.createdAt)),
+    [runs],
   );
 
   useEffect(() => {
+    let disposed = false;
     void Promise.all([
       loadContentGenerationApis(),
-      loadContentGenerationJobs(session.id),
+      loadGenerationRuns(session.id),
     ])
-      .then(([nextApis, nextJobs]) => {
+      .then(([nextApis, nextRuns]) => {
+        if (disposed) return;
         setApis(nextApis);
-        setJobs(nextJobs);
+        setRuns(nextRuns);
         setError("");
       })
-      .catch((cause) => setError(messageOf(cause)))
-      .finally(() => setLoading(false));
+      .catch((cause) => !disposed && setError(messageOf(cause)))
+      .finally(() => !disposed && setLoading(false));
+    return () => { disposed = true; };
   }, [session.id]);
 
   useEffect(() => {
-    if (!activeJob || !api || api.completion.mode !== "polling") return;
+    if (!activeRun) return;
     const timer = window.setTimeout(() => {
-      void pollContentGenerationJob(activeJob.id)
-        .then((next) => {
-          setJobs((current) =>
-            current.map((job) => (job.id === next.id ? next : job)),
-          );
-          if (next.phase === "succeeded") onChanged?.();
+      void loadGenerationRuns(session.id)
+        .then((nextRuns) => {
+          setRuns(nextRuns);
+          if (!nextRuns.some((view) => ACTIVE_STATUSES.has(view.run.status))) {
+            onChanged?.();
+          }
         })
         .catch((cause) => setError(messageOf(cause)));
-    }, Math.max(api.completion.intervalMs, MIN_POLL_INTERVAL_MS));
+    }, REFRESH_INTERVAL_MS);
     return () => window.clearTimeout(timer);
-  }, [activeJob, api, onChanged]);
+  }, [activeRun, onChanged, session.id]);
 
   useEffect(() => {
     endOfConversation.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [jobs]);
+  }, [runs]);
 
   async function submit(input: {
     prompt: string;
     parameters: Record<string, JsonValue>;
     assets: SelectedGenerationAsset[];
   }) {
-    if (!api || activeJob || submitting) return false;
+    if (!api || activeRun || submitting) return false;
     setSubmitting(true);
     setError("");
     try {
-      const job = await createContentGenerationJob(
-        session.id,
-        input.prompt,
-        input.parameters,
-        input.assets.map((asset) => ({ slot: asset.slot, file: asset.file })),
-      );
-      setJobs((current) => [...current, job]);
+      const assets = await Promise.all(input.assets.map(async (asset) => ({
+        slot: asset.slot,
+        ref: (await uploadGenerationAsset(session.id, asset.file)).ref,
+      })));
+      const created = await createGenerationRun(session.id, {
+        capability: api.capability,
+        prompt: input.prompt,
+        parameters: normalizeParameters(input.parameters),
+        assets,
+        source: "direct-ui",
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setRuns((current) => current.some((view) => view.run.id === created.run.id)
+        ? current
+        : [...current, created]);
       onChanged?.();
       return true;
     } catch (cause) {
@@ -127,28 +144,44 @@ export function ContentGenerationCenter({
     }
   }
 
-  async function retryPoll(jobId: string) {
-    setRetryingJobId(jobId);
+  async function cancel(runId: string) {
+    setPendingActionId(runId);
     setError("");
     try {
-      const next = await pollContentGenerationJob(jobId);
-      setJobs((current) =>
-        current.map((job) => (job.id === next.id ? next : job)),
-      );
-      if (next.phase === "succeeded") onChanged?.();
+      replaceRun(await cancelGenerationRun(runId));
+      onChanged?.();
     } catch (cause) {
       setError(messageOf(cause));
     } finally {
-      setRetryingJobId(null);
+      setPendingActionId(null);
     }
+  }
+
+  async function retry(runId: string) {
+    setPendingActionId(runId);
+    setError("");
+    try {
+      const created = await retryGenerationRun(runId, crypto.randomUUID());
+      setRuns((current) => [...current, created]);
+      onChanged?.();
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  function replaceRun(next: GenerationRunViewDto) {
+    setRuns((current) => current.map((view) => view.run.id === next.run.id ? next : view));
   }
 
   if (loading) {
     return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
   }
-  if (!api) {
+  if (!composerApi) {
     return <div className="grid flex-1 place-items-center text-sm text-destructive-text">{t.contentGeneration.apiUnavailable}</div>;
   }
+  const selectedApi = composerApi;
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
@@ -156,19 +189,20 @@ export function ContentGenerationCenter({
         <div className="mx-auto max-w-[820px]">
           <header className="mb-8 border-b border-line-subtle pb-4">
             <p className="text-caption text-muted">{t.contentGeneration.mode}</p>
-            <h1 className="mt-1 text-lg font-semibold text-primary">{api.name}</h1>
-            <p className="mt-1 font-ui-mono text-meta text-muted">{api.capability}</p>
+            <h1 className="mt-1 text-lg font-semibold text-primary">{selectedApi.name}</h1>
+            <p className="mt-1 font-ui-mono text-meta text-muted">{selectedApi.capability}</p>
           </header>
-          {orderedJobs.length ? (
+          {orderedRuns.length ? (
             <div className="space-y-8">
-              {orderedJobs.map((job) => (
+              {orderedRuns.map((view) => (
                 <GenerationTurn
-                  api={api}
+                  api={selectedApi}
+                  busy={pendingActionId === view.run.id}
                   cwd={session.cwd}
-                  job={job}
-                  key={job.id}
-                  onRetry={retryPoll}
-                  retrying={retryingJobId === job.id}
+                  key={view.run.id}
+                  onCancel={cancel}
+                  onRetry={retry}
+                  view={view}
                 />
               ))}
             </div>
@@ -183,13 +217,12 @@ export function ContentGenerationCenter({
           <div ref={endOfConversation} />
         </div>
       </div>
-
       <div className="flex-none px-4 pb-4">
         <ContentGenerationComposer
-          api={api}
-          busy={Boolean(activeJob) || submitting}
+          api={composerApi}
+          busy={Boolean(activeRun) || submitting}
           error={error}
-          key={api.id}
+          key={composerApi.id}
           onSubmit={submit}
         />
       </div>
@@ -199,216 +232,164 @@ export function ContentGenerationCenter({
 
 function GenerationTurn({
   api,
+  busy,
   cwd,
-  job,
+  onCancel,
   onRetry,
-  retrying,
+  view,
 }: {
   api: ContentGenerationApi;
+  busy: boolean;
   cwd: string;
-  job: ContentGenerationJob;
-  onRetry: (jobId: string) => void;
-  retrying: boolean;
+  onCancel: (runId: string) => void;
+  onRetry: (runId: string) => void;
+  view: GenerationRunViewDto;
 }) {
   const { t } = useI18n();
   const inputLabels = t.contentGeneration.inputs as Readonly<Record<string, string>>;
-  const parameterEntries = Object.entries(job.parameters ?? {});
+  const parameterEntries = Object.entries(view.run.input.parameters ?? {});
+  const latestJob = view.jobs.at(-1);
   return (
     <section className="space-y-5">
       <div className="flex justify-end">
         <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] whitespace-pre-wrap text-primary">
-          {job.prompt || t.contentGeneration.noPrompt}
-          {parameterEntries.length || job.uploadedAssets?.length ? (
+          {view.run.prompt}
+          {parameterEntries.length || view.run.input.assets?.length ? (
             <div className="mt-2 border-t border-line-subtle pt-2 text-caption text-muted">
               {parameterEntries.map(([key, value]) => (
                 <div className="flex gap-2" key={key}>
-                  <span>{inputLabels[key] ?? api.inputSchema?.parameters?.find((field) => field.key === key)?.label ?? key}</span>
+                  <span>{inputLabels[key] ?? api.inputSchema?.parameters?.find((field) => normalizeParameterKey(field.key) === key)?.label ?? key}</span>
                   <span className="ml-auto max-w-52 truncate font-ui-mono">{displayParameter(value)}</span>
                 </div>
               ))}
-              {job.uploadedAssets?.map((asset) => (
-                <div className="flex gap-2" key={`${asset.slot}-${asset.name}`}>
-                  <span>{inputLabels[asset.slot] ?? api.inputSchema?.assets?.find((slot) => slot.key === asset.slot)?.label ?? asset.slot}</span>
-                  <span className="ml-auto max-w-52 truncate">{asset.name}</span>
+              {view.run.input.assets?.map((asset, index) => (
+                <div className="flex gap-2" key={`${asset.slot}-${index}`}>
+                  <span>{inputLabels[asset.slot] ?? asset.slot}</span>
+                  <span className="ml-auto max-w-52 truncate">{assetName(asset)}</span>
                 </div>
               ))}
             </div>
           ) : null}
         </div>
       </div>
-      <GenerationResult cwd={cwd} job={job} onRetry={onRetry} retrying={retrying} />
+      <GenerationResult
+        artifacts={view.artifacts}
+        busy={busy}
+        cwd={cwd}
+        job={latestJob}
+        onCancel={() => onCancel(view.run.id)}
+        onRetry={() => onRetry(view.run.id)}
+        status={view.run.status}
+        errorMessage={view.run.errorMessage}
+      />
     </section>
   );
 }
 
 function GenerationResult({
+  artifacts,
+  busy,
   cwd,
+  errorMessage,
   job,
+  onCancel,
   onRetry,
-  retrying,
+  status,
 }: {
+  artifacts: GenerationArtifactDto[];
+  busy: boolean;
   cwd: string;
-  job: ContentGenerationJob;
-  onRetry: (jobId: string) => void;
-  retrying: boolean;
+  errorMessage?: string;
+  job?: ProviderJobDto;
+  onCancel: () => void;
+  onRetry: () => void;
+  status: GenerationRunStatus;
 }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const active = ACTIVE_PHASES.has(job.phase);
-  const displayOutputs = job.outputs.filter(isDisplayOutput);
+  const active = ACTIVE_STATUSES.has(status);
   return (
     <article className="max-w-[92%] text-sm text-primary">
       <div className="flex items-center gap-2 font-medium">
-        {active ? <LoaderCircle className="size-4 animate-spin text-muted" /> : job.phase === "succeeded" ? <CheckCircle2 className="size-4 text-success-text" /> : <AlertTriangle className="size-4 text-destructive-text" />}
-        <span>{phaseLabel(job.phase, t.contentGeneration)}</span>
+        {active ? <LoaderCircle className="size-4 animate-spin text-muted" /> : status === "succeeded" ? <CheckCircle2 className="size-4 text-success-text" /> : <AlertTriangle className="size-4 text-destructive-text" />}
+        <span>{runStatusLabel(status, t.contentGeneration)}</span>
       </div>
-
-      {job.remoteTaskId ? (
+      {job?.remoteTaskId ? (
         <div className="mt-3 flex max-w-xl items-center gap-2 rounded-md border border-line-subtle bg-subtle px-3 py-2">
           <span className="shrink-0 text-caption text-muted">{t.contentGeneration.taskId}</span>
           <code className="min-w-0 flex-1 truncate font-ui-mono text-xs">{job.remoteTaskId}</code>
-          <Button
-            aria-label={copied ? t.contentGeneration.copied : t.contentGeneration.copyTaskId}
-            onClick={() => void navigator.clipboard.writeText(job.remoteTaskId ?? "").then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
+          <Button aria-label={copied ? t.contentGeneration.copied : t.contentGeneration.copyTaskId} onClick={() => void navigator.clipboard.writeText(job.remoteTaskId ?? "").then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })} size="icon-sm" type="button" variant="ghost">
             {copied ? <Check /> : <Copy />}
           </Button>
         </div>
       ) : null}
-
-      {job.error ? <p className="mt-3 text-xs text-destructive-text">{job.error.message}</p> : null}
-
-      {job.phase === "failed" && job.error?.stage === "query" ? (
-        <Button
-          className="mt-2"
-          disabled={retrying}
-          onClick={() => onRetry(job.id)}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          {retrying ? <LoaderCircle className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-          {retrying ? t.contentGeneration.retrying : t.contentGeneration.retryQuery}
+      {errorMessage ? <p className="mt-3 text-xs text-destructive-text">{errorMessage}</p> : null}
+      {active ? (
+        <Button className="mt-2" disabled={busy} onClick={() => {
+          if (window.confirm(t.contentGeneration.cancelRunConfirm)) onCancel();
+        }} size="sm" type="button" variant="ghost">
+          {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
+          {t.contentGeneration.cancelRun}
+        </Button>
+      ) : status === "failed" || status === "cancelled" ? (
+        <Button className="mt-2" disabled={busy} onClick={onRetry} size="sm" type="button" variant="ghost">
+          {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+          {t.contentGeneration.retryRun}
         </Button>
       ) : null}
-
-      {displayOutputs.length ? (
+      {artifacts.length ? (
         <div className="mt-4 space-y-4">
-          {displayOutputs.map((output, index) => (
-            <GenerationOutput cwd={cwd} index={index} key={`${job.id}-${index}`} output={output} />
+          {artifacts.map((artifact, index) => (
+            <GenerationOutput artifact={artifact} cwd={cwd} index={index} key={artifact.id} />
           ))}
         </div>
       ) : null}
-
-      <div className="mt-3 space-y-2">
-        {job.submitRequest ? <ResponseDetails label={t.contentGeneration.submitRequest} response={job.submitRequest} /> : null}
-        {job.submitResponse ? <ResponseDetails label={t.contentGeneration.submitResponse} response={job.submitResponse} /> : null}
-        {job.latestQueryResponse ? <ResponseDetails label={t.contentGeneration.latestQueryResponse} response={job.latestQueryResponse} /> : null}
-      </div>
     </article>
   );
 }
 
-function GenerationOutput({
-  cwd,
-  index,
-  output,
-}: {
-  cwd: string;
-  index: number;
-  output: ContentGenerationOutput;
-}) {
+function GenerationOutput({ artifact, cwd, index }: { artifact: GenerationArtifactDto; cwd: string; index: number }) {
   const { t } = useI18n();
-  const contentType = mediaContentType(output);
-  const absolutePath = output.localPath ? workspacePath(cwd, output.localPath) : null;
+  const absolutePath = artifact.localPath ? workspacePath(cwd, artifact.localPath) : null;
   return (
     <div className="overflow-hidden rounded-xl border border-line-subtle bg-subtle">
-      {absolutePath && contentType ? (
-        <MediaPreview
-          className="max-h-[480px] min-h-52"
-          contentType={contentType}
-          name={`${t.contentGeneration.output} ${index + 1}`}
-          src={rawFileUrl(absolutePath)}
-        />
+      {absolutePath && artifact.contentType && artifact.kind !== "text" ? (
+        <MediaPreview className="max-h-[480px] min-h-52" contentType={artifact.contentType} name={`${t.contentGeneration.output} ${index + 1}`} src={rawFileUrl(absolutePath)} />
       ) : null}
-      {output.text ? <p className="whitespace-pre-wrap p-3 text-sm">{output.text}</p> : null}
-      {output.localPath ? (
-        <p className="border-t border-line-subtle px-3 py-2 font-ui-mono text-caption text-muted" title={output.localPath}>
-          {output.localPath}
-        </p>
-      ) : null}
-      {!absolutePath && output.remoteUrl ? (
-        <a className="block px-3 py-2 text-xs underline" href={output.remoteUrl} rel="noreferrer" target="_blank">
-          {t.contentGeneration.openRemoteOutput}
-        </a>
-      ) : null}
+      {artifact.text ? <p className="whitespace-pre-wrap p-3 text-sm">{artifact.text}</p> : null}
+      {artifact.localPath ? <p className="border-t border-line-subtle px-3 py-2 font-ui-mono text-caption text-muted" title={artifact.localPath}>{artifact.localPath}</p> : null}
+      {!absolutePath && artifact.remoteUrl ? <a className="block px-3 py-2 text-xs underline" href={artifact.remoteUrl} rel="noreferrer" target="_blank">{t.contentGeneration.openRemoteOutput}</a> : null}
     </div>
   );
 }
 
-function ResponseDetails({
-  label,
-  response,
-}: {
-  label: string;
-  response: ContentGenerationProviderResponse;
-}) {
-  return (
-    <details className="max-w-2xl rounded-md border border-line-subtle bg-subtle text-xs">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-muted marker:hidden">
-        <ChevronDown className="size-3" />
-        {label}
-      </summary>
-      <pre className="max-h-72 overflow-auto border-t border-line-subtle p-3 font-ui-mono leading-5 whitespace-pre-wrap text-primary">
-        {JSON.stringify(response.body, null, 2)}
-      </pre>
-    </details>
-  );
+function normalizeParameters(parameters: Record<string, JsonValue>) {
+  return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [
+    normalizeParameterKey(key),
+    value,
+  ]));
 }
 
-function contentTypeForOutput(outputType?: string) {
-  const normalized = outputType?.replace(/^\./, "").toLowerCase();
-  return ({
-    mp4: "video/mp4",
-    webm: "video/webm",
-    mov: "video/quicktime",
-    m4v: "video/x-m4v",
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    webp: "image/webp",
-    gif: "image/gif",
-    mp3: "audio/mpeg",
-    wav: "audio/wav",
-    ogg: "audio/ogg",
-  } as Record<string, string>)[normalized ?? ""];
+function normalizeParameterKey(key: string) {
+  if (key === "duration") return "durationSeconds";
+  if (key === "ratio") return "aspectRatio";
+  return key;
 }
 
-function mediaContentType(output: ContentGenerationOutput) {
-  if (/^(?:image|video|audio)\//.test(output.contentType ?? "")) {
-    return output.contentType;
-  }
-  return contentTypeForOutput(output.outputType);
+function runStatusLabel(status: GenerationRunStatus, labels: ReturnType<typeof useI18n>["t"]["contentGeneration"]) {
+  return labels.runStatuses[status];
 }
 
-function isDisplayOutput(output: ContentGenerationOutput) {
-  return output.outputType?.toLowerCase() !== "text";
+function assetName(asset: NonNullable<GenerationRunViewDto["run"]["input"]["assets"]>[number]) {
+  return asset.ref.type === "workspace-file"
+    ? asset.ref.relativePath.split(/[\\/]/).at(-1) ?? asset.ref.relativePath
+    : asset.ref.artifactId;
 }
 
 function workspacePath(cwd: string, localPath: string) {
   if (/^(?:[a-zA-Z]:[\\/]|\/)/.test(localPath)) return localPath;
   const separator = cwd.includes("\\") ? "\\" : "/";
   return `${cwd.replace(/[\\/]+$/, "")}${separator}${localPath.replace(/^[\\/]+/, "")}`;
-}
-
-function phaseLabel(
-  phase: ContentGenerationJob["phase"],
-  labels: ReturnType<typeof useI18n>["t"]["contentGeneration"],
-) {
-  return labels.phases[phase];
 }
 
 function messageOf(value: unknown) {

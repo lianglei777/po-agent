@@ -5,6 +5,9 @@
   "author": "Leon Wei",
   "private": true,
   "main": "desktop/main.mjs",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
   "scripts": {
     "dev": "next dev -p 9000",
     "build": "next build",
@@ -46,11 +49,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
-    "@types/node": "^25",
+    "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "cross-env": "^10.1.0",
-    "electron": "^43.1.0",
+    "electron": "43.2.0",
     "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",

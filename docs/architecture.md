@@ -86,6 +86,8 @@ Application Service 编排用例和业务流程，只依赖 domain 和 ports。�
 
 - Pi SDK 适配器
 - Node.js 文件系统
+- `node:sqlite` Repository 与 schema migration
+- RunningHub 内容生成适配器
 - 子进程执行
 - 进程内 registry
 
@@ -176,6 +178,14 @@ src/layouts/agent-workspace
 - stream close
 
 修改 SSE helper 或订阅逻辑时必须增加生命周期测试。
+
+### 持久化后台任务
+
+内容生成 Run 和供应商 Job 使用 `node:sqlite` 持久化。任务编排和状态机位于 application，SQLite、RunningHub、文件系统和凭证存储分别通过 ports 隔离。进程内 Worker 由 composition 启动，只通过 application 和 ports 推进 Job，不允许 Route Handler 或供应商 adapter 直接修改任务状态。
+
+浏览器原始素材先经受控资产接口写入 workspace 的 `.po-agent/generation-inputs/`，再以 workspace-relative `AssetRef` 创建 Run。直接生成 UI 只读取持久化 Run view；它不会直接调用 RunningHub 查询接口。显式重试保留 Run，并原子新增带独立幂等键的 Provider Job。
+
+当前部署要求长期运行的 Node.js 进程。Electron 和自托管 Next.js 满足该约束；若迁移到 Serverless，必须先将 Worker 替换为独立常驻执行器或托管队列。
 
 ### 安全
 

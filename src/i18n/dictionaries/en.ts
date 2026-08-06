@@ -173,6 +173,9 @@ export const en = {
     openRemoteOutput: "Open remote output",
     retryQuery: "Retry query",
     retrying: "Querying...",
+    cancelRun: "Cancel generation",
+    cancelRunConfirm: "Cancel local tracking for this generation? If it was already submitted, the provider task may continue running and billing may still apply.",
+    retryRun: "Generate again",
     inputs: {
       resolution: "Resolution",
       duration: "Duration",
@@ -198,6 +201,14 @@ export const en = {
       downloading: "Saving output",
       succeeded: "Completed",
       failed: "Failed",
+    },
+    runStatuses: {
+      queued: "Queued",
+      running: "Generating",
+      succeeded: "Completed",
+      failed: "Failed",
+      cancel_requested: "Cancelling",
+      cancelled: "Cancelled",
     },
   },
   chat: {
