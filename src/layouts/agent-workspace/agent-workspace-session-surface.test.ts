@@ -28,12 +28,9 @@ describe("unified session surfaces", () => {
     expect(topBarSource).toContain('role="tab"');
   });
 
-  it("keeps legacy generation-only sessions on their compatible surface", () => {
-    expect(workspaceSource).toContain(
-      'session.mode === "content-generation" ? "generation" : "chat"',
-    );
-    expect(workspaceSource).toContain(
-      'selectedSession?.mode === "content-generation"',
-    );
+  it("does not special-case legacy generation-only sessions", () => {
+    expect(workspaceSource).toContain('setSessionSurface("chat")');
+    expect(workspaceSource).toContain("sessionSurface={selectedSession ? sessionSurface : undefined}");
+    expect(workspaceSource).not.toContain('mode === "content-generation"');
   });
 });

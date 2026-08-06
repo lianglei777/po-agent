@@ -162,6 +162,7 @@ function route(): GenerationRoute {
     isDefault: true,
     revision: 1,
     defaults: { durationSeconds: 5 },
+    inputSchema: { prompt: { required: true } },
     adapterConfig: { workflowId: "workflow-1" },
     credentialRef: "runninghub:default",
     createdAt: NOW,

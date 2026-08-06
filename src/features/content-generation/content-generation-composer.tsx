@@ -3,11 +3,11 @@
 import { FileImage, FileMusic, FileVideo, Send, X } from "lucide-react";
 import { useState } from "react";
 import type {
-  ContentGenerationApi,
-  ContentGenerationAssetSlot,
-  ContentGenerationParameterField,
+  GenerationAssetSlot,
+  GenerationParameterField,
+  GenerationRouteDto,
   JsonValue,
-} from "@/contracts/content-generation";
+} from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,12 +23,12 @@ export interface SelectedGenerationAsset {
 }
 
 export function ContentGenerationComposer({
-  api,
+  route,
   busy,
   error,
   onSubmit,
 }: {
-  api: ContentGenerationApi;
+  route: GenerationRouteDto;
   busy: boolean;
   error: string;
   onSubmit: (input: {
@@ -40,25 +40,16 @@ export function ContentGenerationComposer({
   const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [parameters, setParameters] = useState<Record<string, JsonValue>>(
-    () => defaultParameters(api),
+    () => defaultParameters(route),
   );
   const [assets, setAssets] = useState<SelectedGenerationAsset[]>([]);
-  const schema = api.inputSchema;
+  const schema = route.inputSchema;
   const inputLabels = t.contentGeneration.inputs as Readonly<Record<string, string>>;
-  const assetSlots = schema?.assets ?? (api.requiresImages ? [{
-    key: "images",
-    label: t.contentGeneration.addImage,
-    mediaType: "image" as const,
-    required: true,
-    multiple: Boolean(api.upload?.maxFiles && api.upload.maxFiles > 1),
-    maxFiles: api.upload?.maxFiles ?? 1,
-    maxFileSizeBytes: api.upload?.maxFileSizeBytes,
-    acceptedTypes: api.upload?.acceptedTypes,
-  }] : []);
+  const assetSlots = schema.assets ?? [];
 
   const missingRequiredAsset = assetSlots.some((slot) =>
     slot.required && !assets.some((asset) => asset.slot === slot.key));
-  const promptMissing = (schema?.prompt.required ?? true) && !prompt.trim();
+  const promptMissing = schema.prompt.required && !prompt.trim();
   const disabled = busy || promptMissing || missingRequiredAsset;
 
   async function submit() {
@@ -71,7 +62,7 @@ export function ContentGenerationComposer({
   }
 
   // 按控件类型分组--select/number/text 统一网格，boolean 横向开关，multi-select chip 切换
-  const allFields = schema?.parameters ?? [];
+  const allFields = schema.parameters ?? [];
   const selectFields = allFields.filter((f) => f.type === "select" || f.type === "number" || f.type === "text");
   const booleanFields = allFields.filter((f) => f.type === "boolean");
   const multiSelectFields = allFields.filter((f) => f.type === "multi-select");
@@ -97,7 +88,7 @@ export function ContentGenerationComposer({
         </div>
       ) : null}
 
-      {api.capability === "multimodal-to-video" && assets.length ? (
+      {route.capability === "multimodal-to-video" && assets.length ? (
         <div className="mb-2 flex flex-wrap items-center gap-1 px-1">
           <span className="mr-1 text-caption text-muted">{t.contentGeneration.insertReference}</span>
           {assets.map((asset) => {
@@ -122,7 +113,7 @@ export function ContentGenerationComposer({
         className="min-h-20 resize-none rounded-control border border-line-subtle bg-subtle px-3 py-2.5 shadow-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         disabled={busy}
         onChange={(event) => setPrompt(event.target.value)}
-        placeholder={schema?.prompt.required === false
+        placeholder={schema.prompt.required === false
           ? t.contentGeneration.optionalPromptPlaceholder
           : t.contentGeneration.promptPlaceholder}
         value={prompt}
@@ -207,7 +198,7 @@ function AssetSlotInput({
   disabled: boolean;
   onAdd: (files: File[]) => void;
   onRemove: (id: string) => void;
-  slot: ContentGenerationAssetSlot;
+  slot: GenerationAssetSlot;
   translatedLabel: string;
 }) {
   const { t } = useI18n();
@@ -262,7 +253,7 @@ function SelectParameterControl({
   translatedLabel,
 }: {
   disabled: boolean;
-  field: ContentGenerationParameterField;
+  field: GenerationParameterField;
   onChange: (value: JsonValue) => void;
   value: JsonValue | undefined;
   translatedLabel: string;
@@ -314,7 +305,7 @@ function SwitchParameterControl({
   translatedLabel,
 }: {
   disabled: boolean;
-  field: ContentGenerationParameterField;
+  field: GenerationParameterField;
   onChange: (value: JsonValue) => void;
   value: JsonValue | undefined;
   translatedLabel: string;
@@ -336,7 +327,7 @@ function MultiSelectParameterControl({
   translatedLabel,
 }: {
   disabled: boolean;
-  field: ContentGenerationParameterField;
+  field: GenerationParameterField;
   onChange: (value: JsonValue) => void;
   value: JsonValue | undefined;
   translatedLabel: string;
@@ -372,15 +363,15 @@ function MultiSelectParameterControl({
   );
 }
 
-function defaultParameters(api: ContentGenerationApi) {
+function defaultParameters(route: GenerationRouteDto) {
   return Object.fromEntries(
-    (api.inputSchema?.parameters ?? [])
+    (route.inputSchema.parameters ?? [])
       .filter((field) => field.defaultValue !== undefined)
       .map((field) => [field.key, structuredClone(field.defaultValue) as JsonValue]),
   );
 }
 
-function optionValue(field: ContentGenerationParameterField, serialized: string) {
+function optionValue(field: GenerationParameterField, serialized: string) {
   return field.options?.find((option) => String(option.value) === serialized)?.value ?? serialized;
 }
 

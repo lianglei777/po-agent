@@ -49,6 +49,14 @@ describe("parseCreateGenerationRun", () => {
       assets: [{ slot: "firstFrameUrl", ref: { type: "url" } }],
     })).toThrow("must be artifact or workspace-file");
   });
+
+  it("allows an empty prompt for routes whose application schema marks it optional", () => {
+    expect(parseCreateGenerationRun({
+      capability: "image-to-video",
+      prompt: "",
+      idempotencyKey: "request-1",
+    }).prompt).toBe("");
+  });
 });
 
 describe("parseRetryGenerationRun", () => {

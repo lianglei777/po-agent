@@ -14,6 +14,7 @@ describe("SqliteDatabase", () => {
     ).all()).toEqual([
       { version: 1, name: "initial_generation_schema" },
       { version: 2, name: "generation_retry_idempotency" },
+      { version: 3, name: "generation_route_input_schema" },
     ]);
     expect(database.prepare(`
       SELECT name FROM sqlite_master

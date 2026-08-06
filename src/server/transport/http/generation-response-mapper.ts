@@ -17,6 +17,7 @@ export function generationRouteDto(route: GenerationRoute): GenerationRouteDto {
     isDefault: route.isDefault,
     revision: route.revision,
     defaults: route.defaults,
+    inputSchema: route.inputSchema,
   };
 }
 

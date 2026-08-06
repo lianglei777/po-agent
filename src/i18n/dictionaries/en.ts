@@ -65,7 +65,18 @@ export const en = {
   contentGeneration: {
     title: "Content generation",
     description:
-      "Configure upload, submit, polling, and output mappings for external image and video generation providers.",
+      "Manage the credential used for image and video generation. Generation routes are built into the application.",
+    runningHubCredential: "RunningHub credential",
+    runningHubCredentialDescription:
+      "The API key is stored locally and is never returned by the API after it is saved.",
+    credentialMissing: "No API key is configured.",
+    removeCredential: "Remove API key",
+    removeCredentialConfirm: "Remove the saved RunningHub API key?",
+    availableRoutes: "Available routes",
+    availableRoutesDescription:
+      "These application-managed routes define the supported capabilities and inputs. They are read-only.",
+    routeEnabled: "Enabled",
+    routeDisabled: "Disabled",
     providers: "Content providers",
     addProvider: "Add provider",
     addRunningHubProvider: "Add RunningHub",
@@ -172,8 +183,8 @@ export const en = {
     retryRun: "Generate again",
     inputs: {
       resolution: "Resolution",
-      duration: "Duration",
-      ratio: "Aspect ratio",
+      durationSeconds: "Duration",
+      aspectRatio: "Aspect ratio",
       generateAudio: "Generate audio",
       webSearch: "Web search enhancement",
       returnLastFrame: "Return last frame",

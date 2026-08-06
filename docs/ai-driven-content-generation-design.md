@@ -799,7 +799,7 @@ src/server/composition/
 - 用新 Run API 和 use cases 直接替换现有内容生成接口及其前端调用方。
 - 删除旧 JSON Repository 的生产组装，不提供双写或兼容回退。
 
-当前实现进度：Run/Job/Artifact、Worker、受控素材登记、Route 查询、取消与幂等重试已经完成；直接生成 UI 已改为读取 Run API。为了让开发期已有内容生成 Session 可继续用于验证，只保留 Session 元数据的懒投影，不迁移旧 Job，也不双写新 Run。旧 JSON 生产组装将在 Phase 4/6 完成统一 Session 后删除。
+当前实现进度：Run/Job/Artifact、Worker、受控素材登记、Route 查询、取消与幂等重试已经完成；直接生成 UI 已改为读取 Run API。旧 JSON Repository、Job、Session 与通用 HTTP 模板执行路径已经删除，不迁移旧数据，也不双写新 Run。
 
 ### Phase 4：统一 Session 投影
 
@@ -809,7 +809,7 @@ src/server/composition/
 - UI 从 `mode` 分支迁移为同一 Session 的不同视图。
 - Session 默认使用软删除；生成文件不随 Session 删除自动清除，产物删除需要单独、明确的用户操作。
 
-当前实现进度：新建 Session 已移除固定模式选择；持久化 Pi Session 可以在 Chat 与 Generate surface 间切换，并在 Generate 中按 Run 选择能力。受 Pi SDK“首个 assistant 消息前不落盘”的约束，草稿 Session 暂不开放 Generate。开发期旧 JSON 生成 Session 继续进入兼容 Generate surface，待 SQLite 成为 Session 元数据唯一来源后删除。
+当前实现进度：新建 Session 已移除固定模式选择；持久化 Pi Session 可以在 Chat 与 Generate surface 间切换，并在 Generate 中按 Run 选择能力。受 Pi SDK“首个 assistant 消息前不落盘”的约束，草稿 Session 暂不开放 Generate。旧生成专用 Session 和 `mode` 兼容分支已经删除。
 
 ### Phase 5：Agent 工具和结构化 UI
 
@@ -825,6 +825,8 @@ src/server/composition/
 - 新链路验证完成后，移除 JSON Job 持久化和通用 HTTP 模板执行路径。
 - 更新 `docs/architecture.md` 和 `docs/agent-api-reference.md`。
 - 如统一 Session/SQLite 成为长期边界，补充 ADR。
+
+当前实现进度：已完成。旧 JSON 持久化、通用 HTTP 模板、旧内容生成 API、独立 Session 投影和协议编辑 UI 已删除；设置页仅管理 RunningHub 凭证并只读展示内置 Route。长期边界记录在 `docs/adr/0001-unified-session-and-generation-runtime.md`。
 
 ## 17. 测试与验收
 
@@ -917,6 +919,6 @@ src/server/composition/
 - [ ] 接受产物和输入主要通过 Artifact ID/AssetRef 关联，而不是 LLM 传绝对路径。
 - [ ] 接受 `node:sqlite`、无 ORM、进程内 Worker 的当前技术组合。
 - [ ] 接受 Node 最新 LTS + Electron 最新稳定版，而不是直接追 Node Current。
-- [ ] 接受不迁移 `content-generation.json` 测试数据、不双写、不保留旧数据读取路径。
+- [x] 接受不迁移 `content-generation.json` 测试数据、不双写、不保留旧数据读取路径。
 
 Review 通过后，应先把关键决定拆成 ADR，再开始实现 Phase 0 和 Phase 1。

@@ -1,7 +1,8 @@
-import type { JsonValue } from "@/contracts/content-generation";
 import type {
   GenerationCapability,
   GenerationInput,
+  GenerationInputSchema,
+  JsonValue,
   GenerationRunStatus,
   GenerationSource,
   ProviderJobStatus,
@@ -40,6 +41,7 @@ export interface GenerationRoute {
   isDefault: boolean;
   revision: number;
   defaults: Record<string, JsonValue>;
+  inputSchema: GenerationInputSchema;
   adapterConfig: JsonValue;
   credentialRef?: string;
   createdAt: string;

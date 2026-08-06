@@ -66,8 +66,8 @@ export class SqliteGenerationRepository implements GenerationRepository {
         INSERT INTO generation_routes(
           id, name, capability, provider_id, provider_operation,
           enabled, is_default, revision, defaults_json, adapter_config_json,
-          credential_ref, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          input_schema_json, credential_ref, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
           capability = excluded.capability,
@@ -78,6 +78,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
           revision = excluded.revision,
           defaults_json = excluded.defaults_json,
           adapter_config_json = excluded.adapter_config_json,
+          input_schema_json = excluded.input_schema_json,
           credential_ref = excluded.credential_ref,
           updated_at = excluded.updated_at
       `).run(
@@ -91,6 +92,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         route.revision,
         JSON.stringify(route.defaults),
         JSON.stringify(route.adapterConfig),
+        JSON.stringify(route.inputSchema),
         route.credentialRef ?? null,
         route.createdAt,
         route.updatedAt,
@@ -471,6 +473,10 @@ function routeFromRow(row: SqliteRow): GenerationRoute {
     adapterConfig: parseJson<GenerationRoute["adapterConfig"]>(
       row,
       "adapter_config_json",
+    ),
+    inputSchema: parseJson<GenerationRoute["inputSchema"]>(
+      row,
+      "input_schema_json",
     ),
     credentialRef: optionalString(row, "credential_ref"),
     createdAt: requiredString(row, "created_at"),

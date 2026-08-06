@@ -1,4 +1,4 @@
-import type { JsonValue } from "@/contracts/content-generation";
+import type { JsonValue } from "@/contracts/generation";
 import type { GenerationInput } from "@/server/domain/generation";
 import type { PreparedGenerationAsset } from "@/server/domain/generation";
 import { AppError } from "@/server/domain/app-error";

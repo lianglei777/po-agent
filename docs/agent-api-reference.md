@@ -2444,132 +2444,23 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 保存指令文件后，新建会话会自动使用最新文件。已有会话需要通过
 `reload_instructions` 命令显式重载才能生效。
 
-## 12. Content Generation API
+## 12. Generation API
 
-内容生成会话与 Agent Session 使用不同的执行协议。一个内容生成会话固定绑定一个 API，执行链路为可选上传、提交、可选轮询和产物下载。API Key 只保存在服务端配置中：供应商列表仅返回 `hasApiKey`，API 列表仅返回 `hasApiKeyOverride`。
+内容生成与聊天共用同一种持久化 Pi Session。生成请求创建 SQLite 中的 Generation Run，进程内 Worker 负责供应商提交、轮询、下载与恢复。旧的 `/api/content-generation/*`、JSON Session/Job 和可编辑 HTTP 模板接口已删除。
 
-### 12.1 管理内容生成供应商
-
-```http
-GET /api/content-generation/providers
-PUT /api/content-generation/providers
-DELETE /api/content-generation/providers?id=:id
-```
-
-`PUT` 接受 `SaveContentGenerationProviderRequest`。供应商包含 `id`、`name`、`type`、可选通用 `apiKey` 和通用 `commonHeaders`。`type` 当前支持 `runninghub` 与 `custom`。仍包含 API 的供应商不能删除。
-
-供应商用于保存可复用的认证和请求头。API 通过 `providerId` 归属供应商，并通过 `credentialMode` 选择继承供应商 API Key（`inherit`）或使用独立 API Key（`override`）。API 级请求头会覆盖同名的供应商通用请求头。
-
-### 12.2 管理内容生成 API
-
-```http
-GET /api/content-generation/apis
-PUT /api/content-generation/apis
-DELETE /api/content-generation/apis?id=:id
-```
-
-`PUT` 接受 `SaveContentGenerationApiRequest`。配置支持五种能力：`text-to-image`、`text-to-video`、`image-to-image`、`image-to-video`、`multimodal-to-video`。HTTP 模板仅支持 `GET` 与 `POST`。
-
-API 可以通过 `inputSchema` 定义 Prompt 是否必填、动态参数以及具名素材槽位。参数支持文本、数字、布尔值、单选和多选；素材槽位支持图片、视频和音频的必填规则、数量、类型与文件大小限制。未提供 `inputSchema` 的已有自定义 API 继续使用旧的 Prompt 与图片输入规则。
-
-RunningHub API 目录项通过 `catalogId` 标识。目录仅用于在供应商详情页按需添加 API，不会自动创建全部 API；添加后得到普通的可编辑 API 配置。
-
-模板变量包括：
-
-```text
-{{secret.apiKey}}
-{{input.prompt}}
-{{input.<parameterKey>}}
-{{input.<assetSlotKey>}}
-{{input.images}}
-{{upload.urls}}
-{{job.remoteTaskId}}
-```
-
-已被会话引用的 API 不能删除。
-
-### 12.3 获取内置 API 文档
-
-```http
-GET /api/content-generation/documentation/:catalogId
-```
-
-接口返回与内置目录项对应的 Markdown 文档：
-
-```json
-{
-  "markdown": "# API 文档\n..."
-}
-```
-
-当前仅允许读取内置的 RunningHub Seedance 2.0 文档。API 详情页以只读方式渲染该文档，不向用户暴露提交、查询、上传和产物映射等内部协议配置。
-
-### 12.4 创建内容生成会话
-
-> 过渡接口：新 UI 不再调用此接口。新建 Session 不区分聊天/内容生成模式；已有 Pi Session 直接通过 Generation Run API 使用生成能力。本接口仅用于读取和清理开发期旧 JSON Session，后续会随旧执行路径删除。
-
-```http
-POST /api/content-generation/sessions
-Content-Type: application/json
-
-{
-  "cwd": "D:\\workspace",
-  "apiId": "runninghub-seedance-2"
-}
-```
-
-内容生成会话会出现在 `GET /api/sessions` 中，其 `mode` 为 `content-generation`，并包含 `contentGenerationApiId`。
-
-### 12.5 创建和列出生成任务
-
-```http
-GET /api/content-generation/sessions/:id/jobs
-POST /api/content-generation/sessions/:id/jobs
-Content-Type: multipart/form-data
-```
-
-`POST` 表单字段：
-
-- `prompt`：字符串；是否允许为空由 API 的 `inputSchema.prompt.required` 决定。
-- `parameters`：JSON 对象字符串，字段和值按照 API 的动态参数定义校验。
-- `files`：零个或多个输入文件；只有 API 配置了上传步骤时可用。
-- `fileSlots`：与 `files` 一一对应的素材槽位名称。
-
-同一会话同时只允许一个活跃任务。提交请求不会自动重试，避免重复创建付费任务。
-
-### 12.6 查询一次远端任务
-
-```http
-POST /api/content-generation/jobs/:id/poll
-```
-
-该接口只执行一次 Query API 请求。查询失败会保留 `remoteTaskId`，后续调用继续查询同一个任务，不会重新提交。成功后远端产物会立即下载到：
-
-```text
-<workspace>/.po-agent/generated/<jobId>/
-```
-
-任务阶段为：`created`、`uploading`、`submitting`、`queued`、`running`、`downloading`、`succeeded`、`failed`。
-
-`ContentGenerationJob` 还会返回实际发送的 `submitRequest` Body，以及脱敏后的
-`submitResponse` 与 `latestQueryResponse`。请求和响应快照最大为 64 KiB，疑似凭证字段会替换为
-`[REDACTED]`。下载产物包含 `contentType`，前端通过现有
-`GET /api/files/_?type=raw&path=...` 的 Range 响应播放本地媒体。
-
-内容生成客户端的轮询间隔不得低于 5 秒。服务商配置仍可为不同 API 保存
-独立间隔，但当前 HTTP 校验范围为 5000 至 60000 毫秒。
-
-### 12.7 创建和列出持久化 Generation Run
-
-创建 Run 前，客户端可以查询当前启用的 Route：
+### 12.1 查询生成路由
 
 ```http
 GET /api/generation/routes
 ```
 
-响应是 Route 数组，只包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision` 和 `defaults`。供应商 operation、credential reference 与 adapter 配置不对外返回。
+仅返回启用的、由应用管理的 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
 
-浏览器原始文件必须先登记为 workspace 文件：
+`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。
+
+### 12.2 注册素材并创建或列出 Run
+
+浏览器文件先登记为 workspace 文件：
 
 ```http
 POST /api/sessions/:id/generation-assets
@@ -2578,20 +2469,21 @@ Content-Type: multipart/form-data
 file=<binary>
 ```
 
-单个文件限制为 50 MiB，保存到 `<workspace>/.po-agent/generation-inputs/`。响应中的 `ref` 可以直接放入创建 Run 请求的 `assets[].ref`；绝对路径和 workspace 外路径仍会被拒绝。
+单文件上限 50 MiB，写入 `<workspace>/.po-agent/generation-inputs/`。绝对路径和 workspace 外路径会被拒绝。
 
 ```http
-GET /api/sessions/:id/generation-runs
+GET  /api/sessions/:id/generation-runs
 POST /api/sessions/:id/generation-runs
 Content-Type: application/json
 ```
 
-`POST` 请求示例：
+`POST` 示例：
 
 ```json
 {
   "capability": "image-to-video",
-  "prompt": "镜头缓慢推近人物",
+  "routeId": "runninghub-seedance-2-image-to-video",
+  "prompt": "镜头缓慢推进人物",
   "idempotencyKey": "client-request-019f...",
   "source": "direct-ui",
   "parameters": {
@@ -2603,98 +2495,48 @@ Content-Type: application/json
       "slot": "firstFrameUrl",
       "ref": {
         "type": "workspace-file",
-        "relativePath": "assets/first-frame.png"
+        "relativePath": ".po-agent/generation-inputs/first-frame.png"
       }
     }
   ]
 }
 ```
 
-字段说明：
+- `routeId` 可省略；此时选择 capability 的默认 Route。
+- `idempotencyKey` 必填且最长 200 字符；相同 key 与相同请求返回原 Run，不会重复创建供应商任务；内容冲突返回 `409 GENERATION_IDEMPOTENCY_CONFLICT`。
+- `assets[].slot` 使用 `firstFrameUrl`、`imageUrls` 等语义槽位。
+- `assets[].ref` 支持同 Session Artifact 或 workspace-relative 文件。
+- HTTP 来源只允许 `direct-ui` 或 `api`。
 
-- `capability`：`text-to-image`、`image-to-image`、`text-to-video`、`image-to-video` 或 `multimodal-to-video`。
-- `routeId`：可选；不提供时选择该 capability 的显式默认 Route。
-- `idempotencyKey`：必填且最大 200 字符；相同请求重复提交时返回原 Run，不创建第二个供应商任务。相同 key 对应不同请求时返回 `409 GENERATION_IDEMPOTENCY_CONFLICT`。
-- `assets[].slot`：供应商无关的语义素材槽，例如 `firstFrameUrl`、`lastFrameUrl` 或 `imageUrls`。
-- `assets[].ref`：支持 `{ "type": "artifact", "artifactId": "..." }` 或 workspace 相对路径引用。
-- `source`：HTTP 调用只允许 `direct-ui` 或 `api`。
+只有已经持久化的 Pi Session 可以创建 Run。首次创建时，服务端把 Session 元数据投影到 SQLite；Pi 消息树仍由 Pi Session 文件保存。响应为 `{ created, run, jobs, artifacts }`，不包含凭证、lease 或 adapter 快照。
 
-首次针对已有 Pi Session 或开发期旧内容生成 Session 创建 Run 时，服务端会把 Session 元数据懒投影到 SQLite。旧 JSON Job 不会迁移。响应：
-
-```json
-{
-  "created": true,
-  "run": {
-    "id": "run-id",
-    "sessionId": "session-id",
-    "capability": "image-to-video",
-    "routeId": "runninghub-seedance-2-image-to-video",
-    "status": "queued",
-    "prompt": "镜头缓慢推近人物",
-    "input": {},
-    "source": "direct-ui",
-    "createdAt": "2026-08-06T00:00:00.000Z",
-    "updatedAt": "2026-08-06T00:00:00.000Z"
-  },
-  "jobs": [
-    {
-      "id": "job-id",
-      "runId": "run-id",
-      "attempt": 1,
-      "providerId": "runninghub",
-      "providerOperation": "seedance-2-image-to-video",
-      "status": "created",
-      "createdAt": "2026-08-06T00:00:00.000Z",
-      "updatedAt": "2026-08-06T00:00:00.000Z"
-    }
-  ],
-  "artifacts": []
-}
-```
-
-响应不会返回 credential reference、API Key、lease 或 adapter 配置快照。`GET` 返回当前 Session 的完整 Run view 数组。
-
-### 12.8 查询单个 Generation Run
+### 12.3 查询、取消和重试 Run
 
 ```http
-GET /api/generation-runs/:id
+GET  /api/generation-runs/:id
+POST /api/generation-runs/:id/cancel
+POST /api/generation-runs/:id/retry
+Content-Type: application/json
 ```
 
-返回 `{ run, jobs, artifacts }`。Run 状态为：
+Run 状态：
 
 ```text
 queued | running | succeeded | failed | cancel_requested | cancelled
 ```
 
-Provider Job 状态为：
+Provider Job 状态：
 
 ```text
 created | uploading | submitting | submitted | polling | downloading |
 succeeded | failed | submission_unknown | cancelled
 ```
 
-`submission_unknown` 表示请求可能已到达供应商，但本地未收到确认；服务端不会自动重新提交，避免重复计费。
+`submission_unknown` 表示提交可能已到达供应商但本地未收到确认，Worker 不会自动重提，以避免重复计费。
 
-显式取消：
+RunningHub 当前不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
 
-```http
-POST /api/generation-runs/:id/cancel
-```
-
-当前 RunningHub adapter 没有远端取消能力。接口会停止本地执行和轮询并把 Run/活动 Job 标记为 `cancelled`；若任务已经提交，供应商侧仍可能继续运行和计费，因此 UI 必须在确认文案中说明这一点。
-
-显式重试失败或已取消的 Run：
-
-```http
-POST /api/generation-runs/:id/retry
-Content-Type: application/json
-
-{ "idempotencyKey": "retry-request-019f..." }
-```
-
-重试保留原 Run ID，并在同一 Run 下新增 `attempt + 1` 的 Provider Job。重试幂等键最多 200 字符；相同键重复提交只返回同一个重试 Job，不会再次创建可能计费的供应商任务。
-
-### 12.9 RunningHub 生成凭证
+### 12.4 RunningHub 凭证
 
 ```http
 GET    /api/generation/credentials/runninghub
@@ -2702,31 +2544,19 @@ PUT    /api/generation/credentials/runninghub
 DELETE /api/generation/credentials/runninghub
 ```
 
-`GET` 和变更响应只返回：
+响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可使用服务端 `RUNNINGHUB_API_KEY` 环境变量。
 
-```json
-{ "hasCredential": true }
-```
+### 12.5 持久化执行行为
 
-`PUT` 请求：
+- Session 元数据、Run、Provider Job、Route 和 Artifact 使用 `<agent-data-dir>/po-agent.sqlite`。
+- Worker 使用 lease claim 推进到期 Job，页面断开不会取消 Run。
+- 轮询失败保留 remote task ID 并延迟重试。
+- `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
+- 成功产物下载到 `<workspace>/.po-agent/generated/<runId>/`。
 
-```json
-{ "apiKey": "runninghub-api-key" }
-```
+### 12.6 Agent 内容生成工具
 
-API Key 保存在 Agent data dir 的服务端凭证文件中，不写入 SQLite、Run、Job、Artifact、日志或 HTTP 响应。未保存文件凭证时，可以通过服务端 `RUNNINGHUB_API_KEY` 环境变量提供。
-
-### 12.10 当前持久化执行行为
-
-- Run、Provider Job、Route 和 Artifact 使用 `<agent-data-dir>/po-agent.sqlite`。
-- 进程内 Worker 使用 lease claim 推进到期 Job。
-- SSE/页面断开不会取消 Run。
-- 查询失败会保留远端 task ID 并延迟重试。
-- 服务在 `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
-
-### 12.11 Agent 内容生成工具
-
-每个持久化 Pi Session 固定注册四个项目自有语义工具：
+每个持久化 Pi Session 注册：
 
 ```text
 generate_image
@@ -2735,29 +2565,11 @@ get_generation
 cancel_generation
 ```
 
-`generate_image` 与 `generate_video` 接受跨供应商语义参数：`prompt`、可选 `routeId`、可选 `parameters` 和可选 `assets`。素材项包含 `slot`，并且必须且只能提供 `artifactId` 或 workspace-relative `relativePath`。视频工具还接受 `durationSeconds` 与 `aspectRatio`。工具不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。
+生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
 
-无素材时分别选择 `text-to-image` / `text-to-video`；图片生成带素材时选择 `image-to-image`；视频生成带一个素材时选择 `image-to-video`，多个素材时选择 `multimodal-to-video`。显式 `routeId` 仍必须匹配推导出的 capability。
+工具最多等待 30 秒并通过 Pi `onUpdate` 报告状态。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run。`get_generation` 与 `cancel_generation` 只能访问当前 Session 的 Run。
 
-生成工具使用 Pi tool-call ID 和 Session ID 组成持久化幂等键。相同工具调用被恢复或重放时返回同一个 Run，不会创建第二个供应商 Job。工具最多等待 30 秒，并通过 Pi `onUpdate` 发送状态变化；超时或 `AbortSignal` 中止只结束本次等待，Run 继续由 Worker 执行。后续必须用 `get_generation` 查询，不应再次调用 `generate_*`。
-
-成功的 Pi Tool Result 在提供给模型的简短文本之外，还包含结构化 `details`：
-
-```ts
-interface GenerationToolDetails {
-  runId: string;
-  status: GenerationRunStatus;
-  artifacts: GenerationArtifactDto[];
-  error?: { code: string; message: string };
-}
-```
-
-消息合同中的 `ToolResultMessage.details` 原样保留这份数据，Chat UI 直接渲染状态和本地产物，不解析工具文本或供应商 JSON。`get_generation` 和 `cancel_generation` 只允许访问当前 Session 的 Run；跨 Session 的 Run ID 返回 `404 GENERATION_RUN_NOT_FOUND`。`cancel_generation` 与 HTTP 取消接口具有相同语义，供应商任务可能仍继续运行和计费。
-- 成功结果下载到 `<workspace>/.po-agent/generated/<runId>/`。
-- 直接生成页面通过读取 Run view 刷新本地状态，不直接触发供应商查询；供应商轮询只由 Worker 执行。
-- 普通 Pi Session 可在 Chat 与 Generate surface 间切换；切换不会创建第二个 Session，能力选择属于生成视图和具体 Run。
-- RunningHub 设置页重新保存 API Key 时，会同步写入新运行时的服务端凭证文件。
-- 当前不迁移 `content-generation.json` 中的开发期测试数据。
+成功结果的 `ToolResultMessage.details` 保留 `runId`、`status`、`artifacts` 和可选错误，Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
 
 ## 13. SSE 通用行为
 

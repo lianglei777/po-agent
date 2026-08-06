@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   GitFork,
-  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -29,15 +28,6 @@ import { useI18n } from "@/i18n/use-i18n";
 import { deleteSession, renameSession } from "./api";
 import { getSessionTitle } from "./session-utils";
 import type { SessionInfo, SessionTreeNode } from "./types";
-
-const ACTIVE_CONTENT_PHASES = new Set([
-  "created",
-  "uploading",
-  "submitting",
-  "queued",
-  "running",
-  "downloading",
-]);
 
 export function SessionTree({
   nodes,
@@ -263,16 +253,6 @@ function SessionRow({
         ) : isDraft ? (
           <span className="ml-2 min-w-0 max-w-28 flex-none truncate text-caption tabular-nums text-dim">
             {t.sessions.draftHint}
-          </span>
-        ) : null}
-        {session.mode === "content-generation" && session.contentGenerationPhase ? (
-          <span className="ml-2 flex max-w-24 flex-none items-center gap-1 truncate text-caption text-dim">
-            {ACTIVE_CONTENT_PHASES.has(session.contentGenerationPhase) ? (
-              <LoaderCircle className="size-3 animate-spin" />
-            ) : null}
-            <span className="truncate">
-              {t.contentGeneration.phases[session.contentGenerationPhase]}
-            </span>
           </span>
         ) : null}
         {isDraft ? null : (

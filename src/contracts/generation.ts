@@ -1,4 +1,57 @@
-import type { JsonValue } from "./content-generation";
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type GenerationParameterType =
+  | "text"
+  | "number"
+  | "boolean"
+  | "select"
+  | "multi-select";
+
+export interface GenerationParameterOption {
+  label: string;
+  value: string | number | boolean;
+}
+
+export interface GenerationParameterField {
+  key: string;
+  label: string;
+  description?: string;
+  type: GenerationParameterType;
+  required?: boolean;
+  advanced?: boolean;
+  defaultValue?: JsonValue;
+  options?: GenerationParameterOption[];
+  min?: number;
+  max?: number;
+}
+
+export interface GenerationAssetSlot {
+  key: string;
+  label: string;
+  description?: string;
+  mediaType: "image" | "video" | "audio";
+  required?: boolean;
+  multiple?: boolean;
+  minFiles?: number;
+  maxFiles?: number;
+  maxFileSizeBytes?: number;
+  acceptedTypes?: string[];
+}
+
+export interface GenerationInputSchema {
+  prompt: {
+    required: boolean;
+    maxLength?: number;
+  };
+  parameters?: GenerationParameterField[];
+  assets?: GenerationAssetSlot[];
+}
 
 export const GENERATION_CAPABILITIES = [
   "text-to-image",
@@ -147,6 +200,7 @@ export interface GenerationRouteDto {
   isDefault: boolean;
   revision: number;
   defaults: Record<string, JsonValue>;
+  inputSchema: GenerationInputSchema;
 }
 
 export type ListGenerationRoutesResponse = GenerationRouteDto[];

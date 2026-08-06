@@ -120,6 +120,41 @@ describe("GenerationRunService", () => {
     });
   });
 
+  it("validates semantic parameters and asset slots before creating billable work", async () => {
+    await expect(service.createRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      prompt: "test",
+      parameters: { durationSeconds: 99 },
+      source: "api",
+      idempotencyKey: "invalid-option",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+
+    await expect(service.createRun({
+      sessionId: "session-1",
+      capability: "image-to-image",
+      prompt: "test",
+      source: "api",
+      idempotencyKey: "missing-asset",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+  });
+
+  it("accepts an empty prompt when the selected route marks it optional", async () => {
+    const result = await service.createRun({
+      sessionId: "session-1",
+      capability: "image-to-video",
+      prompt: "",
+      assets: [{
+        slot: "firstFrameUrl",
+        ref: { type: "workspace-file", relativePath: "first.png" },
+      }],
+      source: "api",
+      idempotencyKey: "optional-prompt",
+    });
+
+    expect(result.run.prompt).toBe("");
+  });
+
   it("cancels active work without exposing it to the worker again", async () => {
     const created = await service.createRun({
       sessionId: "session-1",

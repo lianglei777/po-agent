@@ -1,4 +1,3 @@
-import type { JsonValue } from "@/contracts/content-generation";
 import {
   GENERATION_CAPABILITIES,
   type CreateGenerationRunRequest,
@@ -6,6 +5,7 @@ import {
   type GenerationInputAsset,
   type RetryGenerationRunRequest,
 } from "@/contracts/generation";
+import type { JsonValue } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import {
   asObject,
@@ -31,13 +31,19 @@ export function parseCreateGenerationRun(
     capability: capability as CreateGenerationRunRequest["capability"],
     routeId: optionalString(object, "routeId"),
     parentRunId: optionalString(object, "parentRunId"),
-    prompt: requiredString(object, "prompt"),
+    prompt: requiredText(object, "prompt"),
     assets: parseAssets(object.assets),
     parameters: parseJsonRecord(object.parameters, "parameters"),
     source,
     sourceRef: optionalString(object, "sourceRef"),
     idempotencyKey: requiredString(object, "idempotencyKey"),
   };
+}
+
+function requiredText(object: Record<string, unknown>, key: string): string {
+  const value = object[key];
+  if (typeof value !== "string") invalid(`${key} must be a string`);
+  return value;
 }
 
 export function parseRetryGenerationRun(value: unknown): RetryGenerationRunRequest {

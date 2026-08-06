@@ -1,4 +1,5 @@
 import type { GenerationRoute } from "@/server/domain/generation";
+import { runningHubInputSchema } from "./runninghub-input-schemas";
 
 export const RUNNINGHUB_PROVIDER_ID = "runninghub";
 export const RUNNINGHUB_CREDENTIAL_REF = "runninghub:default";
@@ -72,8 +73,9 @@ function route(input: {
     providerOperation: input.operation,
     enabled: true,
     isDefault: true,
-    revision: 1,
+    revision: 2,
     defaults: input.defaults,
+    inputSchema: runningHubInputSchema(input.capability),
     adapterConfig: {},
     credentialRef: RUNNINGHUB_CREDENTIAL_REF,
     createdAt: input.now,

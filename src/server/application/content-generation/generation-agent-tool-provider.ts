@@ -1,10 +1,10 @@
-import type { JsonValue } from "@/contracts/content-generation";
 import type {
   GenerationArtifactDto,
   GenerationCapability,
   GenerationInputAsset,
   GenerationRunStatus,
   GenerationToolDetails,
+  JsonValue,
 } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import type {

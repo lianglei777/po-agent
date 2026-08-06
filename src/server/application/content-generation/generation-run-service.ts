@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { JsonValue } from "@/contracts/content-generation";
+import type {
+  GenerationAssetSlot,
+  GenerationParameterField,
+  JsonValue,
+} from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import type {
   GenerationArtifact,
@@ -10,7 +14,6 @@ import type {
   GenerationSource,
   ProviderJob,
 } from "@/server/domain/generation";
-import type { ContentGenerationRepository } from "@/server/ports/content-generation-repository";
 import type { GenerationRepository } from "@/server/ports/generation-repository";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { GenerationRouter } from "./generation-router";
@@ -27,7 +30,6 @@ export class GenerationRunService {
   private readonly createId: () => string;
   private readonly now: () => Date;
   private readonly sessions?: SessionRepository;
-  private readonly contentSessions?: ContentGenerationRepository;
 
   constructor(
     private readonly repository: GenerationRepository,
@@ -36,7 +38,6 @@ export class GenerationRunService {
       createId?: () => string;
       now?: () => Date;
       sessions?: SessionRepository;
-      contentSessions?: ContentGenerationRepository;
     } = {},
   ) {
     this.router = new GenerationRouter(repository);
@@ -44,7 +45,6 @@ export class GenerationRunService {
     this.createId = options.createId ?? randomUUID;
     this.now = options.now ?? (() => new Date());
     this.sessions = options.sessions;
-    this.contentSessions = options.contentSessions;
   }
 
   async upsertSession(session: GenerationSession): Promise<void> {
@@ -75,14 +75,6 @@ export class GenerationRunService {
   }): Promise<GenerationRunView & { created: boolean }> {
     await this.ready;
     const session = await this.requireSession(input.sessionId);
-    const prompt = input.prompt.trim();
-    if (!prompt || prompt.length > 20_480) {
-      throw new AppError(
-        "VALIDATION_ERROR",
-        "Generation prompt must contain between 1 and 20480 characters",
-        400,
-      );
-    }
     const idempotencyKey = input.idempotencyKey.trim();
     if (!idempotencyKey || idempotencyKey.length > 200) {
       throw new AppError(
@@ -95,8 +87,14 @@ export class GenerationRunService {
       capability: input.capability,
       routeId: input.routeId,
     });
+    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
+    const parameters = validateParameters(
+      route.inputSchema.parameters ?? [],
+      route.defaults,
+      input.parameters,
+    );
+    validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
     const timestamp = this.now().toISOString();
-    const parameters = { ...route.defaults, ...input.parameters };
     const run: GenerationRun = {
       id: this.createId(),
       sessionId: session.id,
@@ -269,9 +267,8 @@ export class GenerationRunService {
     const stored = await this.repository.getSession(id);
     if (stored) return stored;
     const detail = await this.sessions?.findById(id);
-    const legacy = detail?.info ? null : await this.contentSessions?.getSession(id);
-    if (!detail?.info && !legacy) return null;
-    const projected: GenerationSession = detail?.info ? {
+    if (!detail?.info) return null;
+    const projected: GenerationSession = {
       id: detail.sessionId,
       cwd: detail.info.cwd,
       title: detail.info.name,
@@ -279,17 +276,96 @@ export class GenerationRunService {
       agentSessionRef: detail.filePath,
       createdAt: detail.info.created,
       updatedAt: detail.info.modified,
-    } : {
-      id: legacy!.id,
-      cwd: legacy!.cwd,
-      title: legacy!.name,
-      origin: "direct-generation",
-      createdAt: legacy!.created,
-      updatedAt: legacy!.modified,
     };
     await this.repository.upsertSession(projected);
     return projected;
   }
+}
+
+function validatePrompt(
+  value: string,
+  rule: { required: boolean; maxLength?: number },
+) {
+  const prompt = value.trim();
+  const maxLength = rule.maxLength ?? 20_480;
+  if ((rule.required && !prompt) || prompt.length > maxLength) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      rule.required
+        ? `Generation prompt must contain between 1 and ${maxLength} characters`
+        : `Generation prompt must not exceed ${maxLength} characters`,
+      400,
+    );
+  }
+  return prompt;
+}
+
+function validateParameters(
+  fields: GenerationParameterField[],
+  defaults: Record<string, JsonValue>,
+  input: Record<string, JsonValue> | undefined,
+) {
+  const definitions = new Map(fields.map((field) => [field.key, field]));
+  for (const key of Object.keys(input ?? {})) {
+    if (!definitions.has(key)) invalidInput(`Unknown generation parameter: ${key}`);
+  }
+  const parameters = { ...defaults, ...input };
+  for (const field of fields) {
+    const value = parameters[field.key];
+    if (value === undefined) {
+      if (field.required) invalidInput(`Generation parameter is required: ${field.key}`);
+      continue;
+    }
+    validateParameter(field, value);
+  }
+  return parameters;
+}
+
+function validateParameter(field: GenerationParameterField, value: JsonValue) {
+  if (field.type === "text" && typeof value !== "string") {
+    invalidInput(`Generation parameter must be text: ${field.key}`);
+  }
+  if (field.type === "number") {
+    if (typeof value !== "number") invalidInput(`Generation parameter must be a number: ${field.key}`);
+    if (field.min !== undefined && value < field.min) invalidInput(`Generation parameter is below its minimum: ${field.key}`);
+    if (field.max !== undefined && value > field.max) invalidInput(`Generation parameter exceeds its maximum: ${field.key}`);
+  }
+  if (field.type === "boolean" && typeof value !== "boolean") {
+    invalidInput(`Generation parameter must be a boolean: ${field.key}`);
+  }
+  if (field.type === "select") {
+    const allowed = field.options?.some((option) => option.value === value) ?? false;
+    if (!allowed) invalidInput(`Generation parameter has an unsupported option: ${field.key}`);
+  }
+  if (field.type === "multi-select") {
+    const options = new Set(field.options?.map((option) => option.value) ?? []);
+    if (!Array.isArray(value) || value.some((item) => !options.has(item as string))) {
+      invalidInput(`Generation parameter has unsupported options: ${field.key}`);
+    }
+  }
+}
+
+function validateAssets(
+  slots: GenerationAssetSlot[],
+  assets: NonNullable<GenerationInput["assets"]>,
+) {
+  const definitions = new Map(slots.map((slot) => [slot.key, slot]));
+  const counts = new Map<string, number>();
+  for (const asset of assets) {
+    if (!definitions.has(asset.slot)) invalidInput(`Unknown generation asset slot: ${asset.slot}`);
+    counts.set(asset.slot, (counts.get(asset.slot) ?? 0) + 1);
+  }
+  for (const slot of slots) {
+    const count = counts.get(slot.key) ?? 0;
+    const minimum = slot.minFiles ?? (slot.required ? 1 : 0);
+    const maximum = slot.maxFiles ?? (slot.multiple ? Number.POSITIVE_INFINITY : 1);
+    if (count < minimum) invalidInput(`Generation asset slot requires at least ${minimum} file(s): ${slot.key}`);
+    if (count > maximum) invalidInput(`Generation asset slot accepts at most ${maximum} file(s): ${slot.key}`);
+  }
+}
+
+function invalidInput(message: string): never {
+  throw new AppError("VALIDATION_ERROR", message, 400);
 }
 
 function sameRequest(existing: GenerationRun, requested: GenerationRun): boolean {

@@ -16,7 +16,8 @@ describe("createRunningHubRoutes", () => {
       route.providerId === "runninghub" &&
       route.enabled &&
       route.isDefault &&
-      route.revision === 1
+      route.revision === 2 &&
+      route.inputSchema.prompt.required !== undefined
     )).toBe(true);
   });
 });

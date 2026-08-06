@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
-import { ContentGenerationService } from "@/server/application/content-generation-service";
-import { ContentGenerationDocumentationService } from "@/server/application/content-generation-documentation-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
@@ -19,11 +17,8 @@ import { SessionService } from "@/server/application/session-service";
 import { SkillPackService } from "@/server/application/skill-pack-service";
 import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
-import { NodeContentGenerationArtifactStore } from "@/server/infrastructure/filesystem/node-content-generation-artifact-store";
 import { FileGenerationCredentialStore } from "@/server/infrastructure/filesystem/file-generation-credential-store";
 import { NodeGenerationFileStore } from "@/server/infrastructure/filesystem/node-generation-file-store";
-import { JsonContentGenerationRepository } from "@/server/infrastructure/filesystem/json-content-generation-repository";
-import { MarkdownContentGenerationDocumentationRepository } from "@/server/infrastructure/filesystem/markdown-content-generation-documentation-repository";
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
 import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-directory-browser";
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
@@ -37,7 +32,6 @@ import { PiSkillProvider } from "@/server/infrastructure/pi/pi-skill-provider";
 import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-runner";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { PendingInputRegistry } from "@/server/infrastructure/runtime/pending-input-registry";
-import { HttpContentGenerationProvider } from "@/server/infrastructure/http/http-content-generation-provider";
 import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
 import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
@@ -60,20 +54,6 @@ function createContainer() {
   const skills = new PiSkillProvider(processes);
   const skillPacks = new PiSkillPackProvider(undefined, undefined, undefined, roots);
   const instructionStore = new NodeInstructionStore(getAgentDir());
-  const contentGenerationRepository = new JsonContentGenerationRepository(
-    path.join(getAgentDir(), "content-generation.json"),
-  );
-  const contentGenerationService = new ContentGenerationService(
-    contentGenerationRepository,
-    new HttpContentGenerationProvider(),
-    new NodeContentGenerationArtifactStore(),
-    roots,
-  );
-  const contentGenerationDocumentationService = new ContentGenerationDocumentationService(
-    new MarkdownContentGenerationDocumentationRepository(
-      path.join(process.cwd(), "docs", "RunningHubAPIs"),
-    ),
-  );
   let generationRunService: GenerationRunService | undefined;
   let generationAssetService: GenerationAssetService | undefined;
   let generationCredentialStore: FileGenerationCredentialStore | undefined;
@@ -94,7 +74,6 @@ function createContainer() {
     generationRunService = new GenerationRunService(repository, {
       ready,
       sessions,
-      contentSessions: contentGenerationRepository,
     });
     const generationFiles = new NodeGenerationFileStore();
     generationAssetService = new GenerationAssetService(
@@ -134,8 +113,6 @@ function createContainer() {
 
   return {
     roots,
-    contentGenerationService,
-    contentGenerationDocumentationService,
     get generationRunService() {
       return getGenerationRunService();
     },
@@ -145,7 +122,7 @@ function createContainer() {
     get generationAssetService() {
       return getGenerationAssetService();
     },
-    sessionService: new SessionService(sessions, runtimes, contentGenerationService),
+    sessionService: new SessionService(sessions, runtimes),
     agentService: new AgentService(
       sessions,
       runtimes,

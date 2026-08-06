@@ -308,7 +308,7 @@ export function AgentWorkspace() {
       setNewSessionCwd(null);
       setDraftSession(null);
       setActiveView("chat");
-      setSessionSurface(session.mode === "content-generation" ? "generation" : "chat");
+      setSessionSurface("chat");
       if (!isRestore) updateSessionUrl(session.id);
       setChatInstanceKey((current) => current + 1);
     },
@@ -622,19 +622,9 @@ export function AgentWorkspace() {
                   setConversationOpen((open) => !open)
                 }
                 primaryNavigationHidden={primaryNavHidden}
-                showBranchHistory={selectedSession?.mode !== "content-generation"}
-                sessionSurface={
-                  selectedSession?.mode === "content-generation"
-                    ? undefined
-                    : selectedSession
-                      ? sessionSurface
-                      : undefined
-                }
-                onSessionSurfaceChange={
-                  selectedSession?.mode === "content-generation"
-                    ? undefined
-                    : setSessionSurface
-                }
+                showBranchHistory={Boolean(selectedSession)}
+                sessionSurface={selectedSession ? sessionSurface : undefined}
+                onSessionSurfaceChange={selectedSession ? setSessionSurface : undefined}
               />
 
               <div className="flex min-h-0 flex-1">

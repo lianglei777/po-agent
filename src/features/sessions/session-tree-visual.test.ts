@@ -69,11 +69,9 @@ describe("session tree destructive actions", () => {
     expect(sessionTreeSource).not.toContain('mt-0.5 truncate');
   });
 
-  it("shows the persisted content generation phase and animates active sessions", () => {
-    expect(sessionTreeSource).toContain("session.contentGenerationPhase");
-    expect(sessionTreeSource).toContain("ACTIVE_CONTENT_PHASES");
-    expect(sessionTreeSource).toContain("LoaderCircle");
-    expect(sessionTreeSource).toContain("animate-spin");
+  it("does not project generation run state into session rows", () => {
+    expect(sessionTreeSource).not.toContain("contentGenerationPhase");
+    expect(sessionTreeSource).not.toContain("ACTIVE_CONTENT_PHASES");
   });
 
   it("defaults focus to cancel and uses explicit deletion copy", () => {

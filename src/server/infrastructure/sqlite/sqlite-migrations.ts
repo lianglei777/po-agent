@@ -120,4 +120,13 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         WHERE retry_key IS NOT NULL;
     `,
   },
+  {
+    version: 3,
+    name: "generation_route_input_schema",
+    sql: `
+      ALTER TABLE generation_routes
+        ADD COLUMN input_schema_json TEXT NOT NULL
+        DEFAULT '{"prompt":{"required":true}}';
+    `,
+  },
 ];

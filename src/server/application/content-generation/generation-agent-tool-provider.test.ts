@@ -67,8 +67,8 @@ describe("GenerationAgentToolProvider", () => {
         prompt: "Animate these references",
         durationSeconds: 8,
         assets: [
-          { slot: "first", relativePath: "inputs/first.png" },
-          { slot: "second", artifactId: "artifact-2" },
+          { slot: "imageUrls", relativePath: "inputs/first.png" },
+          { slot: "imageUrls", artifactId: "artifact-2" },
         ],
       },
     });

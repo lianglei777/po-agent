@@ -64,6 +64,7 @@ describe("generationRouteDto", () => {
       isDefault: true,
       revision: 2,
       defaults: { durationSeconds: 5 },
+      inputSchema: { prompt: { required: true } },
       adapterConfig: { secretProtocolValue: true },
       credentialRef: "runninghub:default",
       createdAt: "now",
@@ -79,6 +80,7 @@ describe("generationRouteDto", () => {
       isDefault: true,
       revision: 2,
       defaults: { durationSeconds: 5 },
+      inputSchema: { prompt: { required: true } },
     });
     expect(JSON.stringify(dto)).not.toContain("credentialRef");
     expect(JSON.stringify(dto)).not.toContain("internal-operation");

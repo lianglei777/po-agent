@@ -10,11 +10,12 @@ import {
   Square,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ContentGenerationApi, JsonValue } from "@/contracts/content-generation";
 import type {
   GenerationArtifactDto,
+  GenerationRouteDto,
   GenerationRunStatus,
   GenerationRunViewDto,
+  JsonValue,
   ProviderJobDto,
 } from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ import { useI18n } from "@/i18n/use-i18n";
 import {
   cancelGenerationRun,
   createGenerationRun,
-  loadContentGenerationApis,
+  loadGenerationRoutes,
   loadGenerationRuns,
   retryGenerationRun,
   uploadGenerationAsset,
@@ -51,24 +52,15 @@ export function ContentGenerationCenter({
   onChanged?: () => void;
 }) {
   const { t } = useI18n();
-  const [apis, setApis] = useState<ContentGenerationApi[]>([]);
+  const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [runs, setRuns] = useState<GenerationRunViewDto[]>([]);
-  const [selectedApiId, setSelectedApiId] = useState(
-    session.contentGenerationApiId ?? "",
-  );
+  const [selectedRouteId, setSelectedRouteId] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const endOfConversation = useRef<HTMLDivElement>(null);
-  const api = apis.find((item) => item.id === selectedApiId);
-  const composerApi = useMemo(() => api ? {
-    ...api,
-    inputSchema: api.inputSchema ? {
-      ...api.inputSchema,
-      prompt: { ...api.inputSchema.prompt, required: true },
-    } : api.inputSchema,
-  } : undefined, [api]);
+  const route = routes.find((item) => item.id === selectedRouteId);
   const activeRun = useMemo(
     () => runs.find((view) => ACTIVE_STATUSES.has(view.run.status)),
     [runs],
@@ -81,18 +73,16 @@ export function ContentGenerationCenter({
   useEffect(() => {
     let disposed = false;
     void Promise.all([
-      loadContentGenerationApis(),
+      loadGenerationRoutes(),
       loadGenerationRuns(session.id),
     ])
-      .then(([nextApis, nextRuns]) => {
+      .then(([nextRoutes, nextRuns]) => {
         if (disposed) return;
-        setApis(nextApis);
-        setSelectedApiId((current) => {
-          if (nextApis.some((item) => item.id === current)) return current;
-          const legacyId = session.contentGenerationApiId;
-          return nextApis.some((item) => item.id === legacyId)
-            ? legacyId ?? ""
-            : nextApis[0]?.id ?? "";
+        const enabledRoutes = nextRoutes.filter((item) => item.enabled);
+        setRoutes(enabledRoutes);
+        setSelectedRouteId((current) => {
+          if (enabledRoutes.some((item) => item.id === current)) return current;
+          return enabledRoutes[0]?.id ?? "";
         });
         setRuns(nextRuns);
         setError("");
@@ -100,7 +90,7 @@ export function ContentGenerationCenter({
       .catch((cause) => !disposed && setError(messageOf(cause)))
       .finally(() => !disposed && setLoading(false));
     return () => { disposed = true; };
-  }, [session.contentGenerationApiId, session.id]);
+  }, [session.id]);
 
   useEffect(() => {
     if (!activeRun) return;
@@ -126,7 +116,7 @@ export function ContentGenerationCenter({
     parameters: Record<string, JsonValue>;
     assets: SelectedGenerationAsset[];
   }) {
-    if (!api || activeRun || submitting) return false;
+    if (!route || activeRun || submitting) return false;
     setSubmitting(true);
     setError("");
     try {
@@ -135,9 +125,10 @@ export function ContentGenerationCenter({
         ref: (await uploadGenerationAsset(session.id, asset.file)).ref,
       })));
       const created = await createGenerationRun(session.id, {
-        capability: api.capability,
+        capability: route.capability,
+        routeId: route.id,
         prompt: input.prompt,
-        parameters: normalizeParameters(input.parameters),
+        parameters: input.parameters,
         assets,
         source: "direct-ui",
         idempotencyKey: crypto.randomUUID(),
@@ -173,7 +164,7 @@ export function ContentGenerationCenter({
     setError("");
     try {
       const created = await retryGenerationRun(runId, crypto.randomUUID());
-      setRuns((current) => [...current, created]);
+      replaceRun(created);
       onChanged?.();
     } catch (cause) {
       setError(messageOf(cause));
@@ -189,10 +180,10 @@ export function ContentGenerationCenter({
   if (loading) {
     return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
   }
-  if (!composerApi) {
+  if (!route) {
     return <div className="grid flex-1 place-items-center text-sm text-destructive-text">{t.contentGeneration.apiUnavailable}</div>;
   }
-  const selectedApi = composerApi;
+  const selectedRoute = route;
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
@@ -201,17 +192,17 @@ export function ContentGenerationCenter({
           <header className="mb-8 flex items-end justify-between gap-4 border-b border-line-subtle pb-4">
             <div>
               <p className="text-caption text-muted">{t.contentGeneration.mode}</p>
-              <h1 className="mt-1 text-lg font-semibold text-primary">{selectedApi.name}</h1>
-              <p className="mt-1 font-ui-mono text-meta text-muted">{selectedApi.capability}</p>
+              <h1 className="mt-1 text-lg font-semibold text-primary">{selectedRoute.name}</h1>
+              <p className="mt-1 font-ui-mono text-meta text-muted">{selectedRoute.capability}</p>
             </div>
             <label className="w-64 space-y-1 text-caption text-muted">
               <span>{t.contentGeneration.capability}</span>
-              <Select onValueChange={setSelectedApiId} value={selectedApi.id}>
+              <Select onValueChange={setSelectedRouteId} value={selectedRoute.id}>
                 <SelectTrigger className="w-full" aria-label={t.contentGeneration.capability}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {apis.map((item) => (
+                  {routes.map((item) => (
                     <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -222,7 +213,7 @@ export function ContentGenerationCenter({
             <div className="space-y-8">
               {orderedRuns.map((view) => (
                 <GenerationTurn
-                  api={apis.find((item) => item.capability === view.run.capability) ?? selectedApi}
+                  route={routes.find((item) => item.id === view.run.routeId) ?? selectedRoute}
                   busy={pendingActionId === view.run.id}
                   cwd={session.cwd}
                   key={view.run.id}
@@ -245,10 +236,10 @@ export function ContentGenerationCenter({
       </div>
       <div className="flex-none px-4 pb-4">
         <ContentGenerationComposer
-          api={composerApi}
+          route={selectedRoute}
           busy={Boolean(activeRun) || submitting}
           error={error}
-          key={composerApi.id}
+          key={selectedRoute.id}
           onSubmit={submit}
         />
       </div>
@@ -257,14 +248,14 @@ export function ContentGenerationCenter({
 }
 
 function GenerationTurn({
-  api,
+  route,
   busy,
   cwd,
   onCancel,
   onRetry,
   view,
 }: {
-  api: ContentGenerationApi;
+  route: GenerationRouteDto;
   busy: boolean;
   cwd: string;
   onCancel: (runId: string) => void;
@@ -284,7 +275,7 @@ function GenerationTurn({
             <div className="mt-2 border-t border-line-subtle pt-2 text-caption text-muted">
               {parameterEntries.map(([key, value]) => (
                 <div className="flex gap-2" key={key}>
-                  <span>{inputLabels[key] ?? api.inputSchema?.parameters?.find((field) => normalizeParameterKey(field.key) === key)?.label ?? key}</span>
+                  <span>{inputLabels[key] ?? route.inputSchema.parameters?.find((field) => field.key === key)?.label ?? key}</span>
                   <span className="ml-auto max-w-52 truncate font-ui-mono">{displayParameter(value)}</span>
                 </div>
               ))}
@@ -387,19 +378,6 @@ function GenerationOutput({ artifact, cwd, index }: { artifact: GenerationArtifa
       {!absolutePath && artifact.remoteUrl ? <a className="block px-3 py-2 text-xs underline" href={artifact.remoteUrl} rel="noreferrer" target="_blank">{t.contentGeneration.openRemoteOutput}</a> : null}
     </div>
   );
-}
-
-function normalizeParameters(parameters: Record<string, JsonValue>) {
-  return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [
-    normalizeParameterKey(key),
-    value,
-  ]));
-}
-
-function normalizeParameterKey(key: string) {
-  if (key === "duration") return "durationSeconds";
-  if (key === "ratio") return "aspectRatio";
-  return key;
 }
 
 function runStatusLabel(status: GenerationRunStatus, labels: ReturnType<typeof useI18n>["t"]["contentGeneration"]) {
