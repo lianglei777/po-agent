@@ -240,7 +240,13 @@ export class GenerationExecutionService {
       }, ["submitting", "polling"]);
       return;
     }
-    await this.complete(job, run, provider, result.outputs);
+    await this.complete(
+      job,
+      run,
+      provider,
+      result.outputs,
+      result.remoteStatus,
+    );
   }
 
   private async complete(
@@ -248,6 +254,7 @@ export class GenerationExecutionService {
     run: GenerationRun,
     provider: GenerationProvider,
     outputs: ProviderOutput[],
+    remoteStatus?: string,
   ): Promise<void> {
     const job = {
       ...originalJob,
@@ -300,6 +307,7 @@ export class GenerationExecutionService {
       await this.repository.updateJob({
         ...job,
         status: "succeeded",
+        remoteStatus: remoteStatus ?? job.remoteStatus,
         leaseOwner: undefined,
         leaseExpiresAt: undefined,
         lastErrorCode: undefined,
@@ -440,6 +448,7 @@ function artifactKind(
 ): GenerationArtifact["kind"] {
   if (text && !outputType && !contentType) return "text";
   const value = `${contentType ?? ""} ${outputType ?? ""}`.toLowerCase();
+  if (/\b(text|txt|json|markdown|md)\b/.test(value)) return "text";
   if (value.includes("video") || /\b(mp4|mov|webm)\b/.test(value)) return "video";
   if (value.includes("audio") || /\b(mp3|wav|m4a)\b/.test(value)) return "audio";
   return "image";

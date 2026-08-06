@@ -48,6 +48,9 @@ describe("GenerationWorker", () => {
         outputs: [{
           url: "https://bucket.myqcloud.com/output.mp4",
           outputType: "mp4",
+        }, {
+          outputType: "text",
+          text: "22819",
         }],
       })),
       download: vi.fn(async () => ({
@@ -104,13 +107,17 @@ describe("GenerationWorker", () => {
 
     await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
       run: { status: "succeeded", completedAt: now.toISOString() },
-      jobs: [{ status: "succeeded" }],
+      jobs: [{ status: "succeeded", remoteStatus: "SUCCESS" }],
       artifacts: [{
         id: "id-2-1",
         kind: "video",
         localPath: ".po-agent/generated/id-1/output-1.mp4",
         contentType: "video/mp4",
         sizeBytes: 3,
+      }, {
+        id: "id-2-2",
+        kind: "text",
+        text: "22819",
       }],
     });
     expect(provider.submit).toHaveBeenCalledOnce();
