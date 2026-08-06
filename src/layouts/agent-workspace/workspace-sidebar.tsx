@@ -4,6 +4,7 @@ import {
   PanelLeftOpen,
   Settings,
 } from "lucide-react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -45,10 +46,12 @@ export function WorkspaceSidebar({
         }`}
       >
         {compact ? null : (
-          <img
+          <Image
             alt="Po Agent"
             className="size-8 shrink-0"
+            height={32}
             src="/po-agent-icon.png"
+            width={32}
           />
         )}
         <Tooltip>

@@ -20,7 +20,6 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatCenter, type BranchState } from "@/features/chat/chat-center";
 import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
-import type { OpenFile } from "@/features/files/file-panel";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
 import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
@@ -51,56 +50,36 @@ import {
   readLayoutPreferences,
   writeLayoutPreferences,
 } from "./layout-preferences";
-import {
-  shouldConfirmWorkspaceNavigation,
-  type WorkspaceView,
-} from "./workspace-navigation";
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { WorkspaceSettings } from "./workspace-settings";
 import { WorkspaceTopBar } from "./workspace-top-bar";
-
-type DraftSession = {
-  id: string;
-  cwd: string;
-  created: string;
-};
+import {
+  WorkspaceStoreProvider,
+} from "./state/workspace-store-provider";
+import {
+  useWorkspaceSessionState,
+  useWorkspaceSettingsActions,
+  useWorkspaceViewState,
+} from "./state/workspace-selectors";
+import { useWorkspaceNavigationGuard } from "./state/use-workspace-navigation-guard";
 
 export function AgentWorkspace() {
+  return (
+    <WorkspaceStoreProvider>
+      <AgentWorkspaceContent />
+    </WorkspaceStoreProvider>
+  );
+}
+
+function AgentWorkspaceContent() {
   const [primaryNavExpanded, setPrimaryNavExpanded] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(true);
-  const [projectPanelOpen, setProjectPanelOpen] = useState(false);
-  const [projectPanelTab, setProjectPanelTab] =
-    useState<ProjectPanelTab>("files");
-  const [activeView, setActiveView] = useState<WorkspaceView>("chat");
-  const [modelProviderDirty, setModelProviderDirty] = useState(false);
-  const [contentGenerationDirty, setContentGenerationDirty] = useState(false);
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<SessionInfo | null>(
-    null,
-  );
-  const [activeCwd, setActiveCwd] = useState<string | null>(null);
-  const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
-  const [draftSession, setDraftSession] = useState<DraftSession | null>(null);
-  const [sessionSurface, setSessionSurface] = useState<"chat" | "generation">("chat");
-  const [chatInstanceKey, setChatInstanceKey] = useState(0);
   const [branchState, setBranchState] = useState<BranchState | null>(null);
-  const [modelsRevision, setModelsRevision] = useState(0);
   const [modelProviderSaveStatus, setModelProviderSaveStatus] =
     useState<ModelProviderSaveStatus>({ phase: "idle" });
-  const [openFile, setOpenFile] = useState<OpenFile | null>(null);
-  const [systemPromptDirty, setSystemPromptDirty] = useState(false);
-  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(
-    null,
-  );
-  const [instructionsNeedApply, setInstructionsNeedApply] = useState(false);
-  const [projectInstructionsOpen, setProjectInstructionsOpen] = useState(false);
-  const [projectInstructionsDirty, setProjectInstructionsDirty] =
-    useState(false);
   const [initialSessionId, setInitialSessionId] = useState<
     string | null | undefined
   >(undefined);
-  const [sessionRefreshKey, setSessionRefreshKey] = useState(0);
-  const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
   const [panelWidths, setPanelWidths] = useState<PanelWidths>({
     conversation: DEFAULT_CONVERSATION_WIDTH,
     inspector: DEFAULT_INSPECTOR_WIDTH,
@@ -110,8 +89,56 @@ export function AgentWorkspace() {
   >(null);
   const [layoutPreferencesReady, setLayoutPreferencesReady] = useState(false);
   const [workspaceWidth, setWorkspaceWidth] = useState(1280);
+  const {
+    activeView,
+    projectPanelOpen,
+    projectPanelTab,
+    openFile,
+    setActiveView,
+    setProjectPanelOpen,
+    setProjectPanelTab,
+    setOpenFile,
+    setProjectInstructionsOpen,
+  } = useWorkspaceViewState();
+  const {
+    activeCwd,
+    selectedSession,
+    newSessionCwd,
+    draftSession,
+    sessionSurface,
+    chatInstanceKey,
+    currentSystemPrompt,
+    instructionsNeedApply,
+    sessionRefreshKey,
+    explorerRefreshKey,
+    modelsRevision,
+    setSessionSurface,
+    setCurrentSystemPrompt,
+    setInstructionsNeedApply,
+    changeCwd,
+    selectSession,
+    startDraftSession,
+    completeDraftSession,
+    replaceDeletedSession,
+    markAgentEnd,
+    markSessionsChanged,
+    markInstructionsChanged,
+  } = useWorkspaceSessionState();
+  const {
+    setModelProviderDirty,
+    setContentGenerationDirty,
+    setSystemPromptDirty,
+    setProjectInstructionsDirty,
+    markModelsSaved,
+  } = useWorkspaceSettingsActions();
+  const {
+    confirmingDiscard,
+    instructionChangesDirty,
+    requestNavigation,
+    cancelDiscard,
+    confirmDiscard,
+  } = useWorkspaceNavigationGuard();
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const pendingNavigationRef = useRef<(() => void) | null>(null);
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
   const panelTransition = reduceMotion
@@ -164,7 +191,7 @@ export function AgentWorkspace() {
       setLayoutPreferencesReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [setProjectPanelOpen]);
 
   useEffect(() => {
     if (!layoutPreferencesReady) return;
@@ -210,42 +237,12 @@ export function AgentWorkspace() {
     showProjectPanel,
   ]);
 
-  const requestNavigation = useCallback(
-    (targetView: WorkspaceView, action: () => void) => {
-      if (projectInstructionsOpen && projectInstructionsDirty) {
-        pendingNavigationRef.current = action;
-        setConfirmingDiscard(true);
-        return;
-      }
-      if (
-        shouldConfirmWorkspaceNavigation(
-          activeView,
-          targetView,
-          modelProviderDirty || contentGenerationDirty || systemPromptDirty,
-        )
-      ) {
-        pendingNavigationRef.current = action;
-        setConfirmingDiscard(true);
-        return;
-      }
-      action();
-    },
-    [
-      activeView,
-      contentGenerationDirty,
-      modelProviderDirty,
-      projectInstructionsDirty,
-      projectInstructionsOpen,
-      systemPromptDirty,
-    ],
-  );
-
   const handleOpenModelProvider = useCallback(
     () =>
       requestNavigation("model-provider", () =>
         setActiveView("model-provider"),
       ),
-    [requestNavigation],
+    [requestNavigation, setActiveView],
   );
   const handleOpenSkills = useCallback(
     () =>
@@ -255,24 +252,14 @@ export function AgentWorkspace() {
         setProjectPanelOpen(true);
         setProjectInstructionsOpen(false);
       }),
-    [requestNavigation],
+    [
+      requestNavigation,
+      setActiveView,
+      setProjectInstructionsOpen,
+      setProjectPanelOpen,
+      setProjectPanelTab,
+    ],
   );
-  function cancelDiscard() {
-    pendingNavigationRef.current = null;
-    setConfirmingDiscard(false);
-  }
-
-  function confirmDiscard() {
-    const action = pendingNavigationRef.current;
-    pendingNavigationRef.current = null;
-    setModelProviderDirty(false);
-    setProjectInstructionsDirty(false);
-    setSystemPromptDirty(false);
-    setProjectInstructionsOpen(false);
-    setConfirmingDiscard(false);
-    action?.();
-  }
-
   const updateSessionUrl = useCallback((sessionId: string | null) => {
     const url = new URL(window.location.href);
     if (sessionId) url.searchParams.set("session", sessionId);
@@ -280,73 +267,45 @@ export function AgentWorkspace() {
     window.history.replaceState(null, "", url);
   }, []);
 
-  const resetChat = useCallback(() => {
-    setChatInstanceKey((current) => current + 1);
-    setCurrentSystemPrompt(null);
-    setInstructionsNeedApply(false);
-  }, []);
-
   const handleCwdChange = useCallback(
     (cwd: string) => {
-      setActiveCwd(cwd);
-      setOpenFile(null);
-      if (selectedSession?.cwd !== cwd) setSelectedSession(null);
-      setNewSessionCwd(cwd);
-      setDraftSession(null);
-      setActiveView("chat");
-      setSessionSurface("chat");
+      changeCwd(cwd);
       updateSessionUrl(null);
-      resetChat();
     },
-    [resetChat, selectedSession, updateSessionUrl],
+    [changeCwd, updateSessionUrl],
   );
 
   const handleSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) => {
-      setActiveCwd(session.cwd);
-      setSelectedSession(session);
-      setNewSessionCwd(null);
-      setDraftSession(null);
-      setActiveView("chat");
-      setSessionSurface("chat");
+      selectSession(session);
       if (!isRestore) updateSessionUrl(session.id);
-      setChatInstanceKey((current) => current + 1);
     },
-    [updateSessionUrl],
+    [selectSession, updateSessionUrl],
   );
 
   const handleNewSession = useCallback(
     (temporaryId: string, cwd: string) => {
-      resetChat();
-      setSelectedSession(null);
-      setNewSessionCwd(cwd);
-      setDraftSession({
+      startDraftSession({
         id: temporaryId,
         cwd,
         created: new Date().toISOString(),
       });
-      setActiveView("chat");
-      setSessionSurface("chat");
       updateSessionUrl(null);
     },
-    [resetChat, updateSessionUrl],
+    [startDraftSession, updateSessionUrl],
   );
 
   const handleSessionDeleted = useCallback(
     (session: SessionInfo) => {
-      if (selectedSession?.id !== session.id) return;
-      setSelectedSession(null);
-      setNewSessionCwd(session.cwd);
-      setDraftSession({
+      const replaced = replaceDeletedSession(session, {
         id: crypto.randomUUID(),
         cwd: session.cwd,
         created: new Date().toISOString(),
       });
+      if (!replaced) return;
       updateSessionUrl(null);
-      setSessionSurface("chat");
-      resetChat();
     },
-    [resetChat, selectedSession, updateSessionUrl],
+    [replaceDeletedSession, updateSessionUrl],
   );
 
   const selectSessionById = useCallback(
@@ -356,27 +315,23 @@ export function AgentWorkspace() {
         const next = sessions.find((item) => item.id === sessionId);
         if (next) {
           handleSelectSession(next);
-          setSessionRefreshKey((current) => current + 1);
+          markSessionsChanged();
           return;
         }
         await new Promise((resolve) => window.setTimeout(resolve, 150));
       }
     },
-    [handleSelectSession],
+    [handleSelectSession, markSessionsChanged],
   );
 
-  const handleAgentEnd = useCallback(() => {
-    setSessionRefreshKey((current) => current + 1);
-    setExplorerRefreshKey((current) => current + 1);
-  }, []);
+  const handleAgentEnd = markAgentEnd;
 
   const handleSessionCreated = useCallback(
     (sessionId: string) => {
-      setNewSessionCwd(null);
-      setDraftSession(null);
+      completeDraftSession();
       void selectSessionById(sessionId);
     },
-    [selectSessionById],
+    [completeDraftSession, selectSessionById],
   );
 
   const handleSessionForked = useCallback(
@@ -399,7 +354,14 @@ export function AgentWorkspace() {
         setProjectPanelOpen(true);
       });
     },
-    [activeCwd, requestNavigation],
+    [
+      activeCwd,
+      requestNavigation,
+      setOpenFile,
+      setProjectInstructionsOpen,
+      setProjectPanelOpen,
+      setProjectPanelTab,
+    ],
   );
 
   const handleOpenProjectInstructions = useCallback(() => {
@@ -410,12 +372,16 @@ export function AgentWorkspace() {
       setProjectPanelTab("settings");
       setProjectPanelOpen(true);
     });
-  }, [requestNavigation]);
+  }, [
+    requestNavigation,
+    setActiveView,
+    setOpenFile,
+    setProjectInstructionsOpen,
+    setProjectPanelOpen,
+    setProjectPanelTab,
+  ]);
 
-  const handleInstructionsChanged = useCallback(() => {
-    setExplorerRefreshKey((current) => current + 1);
-    if (selectedSession) setInstructionsNeedApply(true);
-  }, [selectedSession]);
+  const handleInstructionsChanged = markInstructionsChanged;
 
   const handleToggleProjectPanel = useCallback(() => {
     if (!projectPanelOpen) {
@@ -426,7 +392,12 @@ export function AgentWorkspace() {
       setProjectPanelOpen(false);
       setProjectInstructionsOpen(false);
     });
-  }, [projectPanelOpen, requestNavigation]);
+  }, [
+    projectPanelOpen,
+    requestNavigation,
+    setProjectInstructionsOpen,
+    setProjectPanelOpen,
+  ]);
 
   const handleProjectPanelTabChange = useCallback(
     (tab: ProjectPanelTab) => {
@@ -442,7 +413,15 @@ export function AgentWorkspace() {
         setProjectInstructionsOpen(tab === "settings");
       });
     },
-    [projectPanelOpen, projectPanelTab, requestNavigation],
+    [
+      projectPanelOpen,
+      projectPanelTab,
+      requestNavigation,
+      setActiveView,
+      setProjectInstructionsOpen,
+      setProjectPanelOpen,
+      setProjectPanelTab,
+    ],
   );
 
   const handleAtMention = useCallback((path: string) => {
@@ -781,7 +760,7 @@ export function AgentWorkspace() {
             onInstructionsChanged={handleInstructionsChanged}
             onContentGenerationDirtyChange={setContentGenerationDirty}
             onModelDirtyChange={setModelProviderDirty}
-            onModelsSaved={() => setModelsRevision((current) => current + 1)}
+            onModelsSaved={markModelsSaved}
             onModelSaveStatusChange={setModelProviderSaveStatus}
             onOpenProjectInstructions={handleOpenProjectInstructions}
             onSystemPromptChange={setCurrentSystemPrompt}
@@ -798,24 +777,24 @@ export function AgentWorkspace() {
           <DialogContent showCloseButton={false}>
             <DialogHeader>
               <DialogTitle>
-                {projectInstructionsDirty || systemPromptDirty
+                {instructionChangesDirty
                   ? t.instructions.discardChangesTitle
                   : t.models.discardChangesTitle}
               </DialogTitle>
               <DialogDescription>
-                {projectInstructionsDirty || systemPromptDirty
+                {instructionChangesDirty
                   ? t.instructions.discardChangesDescription
                   : t.models.discardChangesDescription}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button autoFocus onClick={cancelDiscard} variant="outline">
-                {projectInstructionsDirty || systemPromptDirty
+                {instructionChangesDirty
                   ? t.instructions.continueEditing
                   : t.models.continueEditing}
               </Button>
               <Button onClick={confirmDiscard} variant="destructive">
-                {projectInstructionsDirty || systemPromptDirty
+                {instructionChangesDirty
                   ? t.instructions.discardChanges
                   : t.models.discardChanges}
               </Button>

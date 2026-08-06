@@ -10,6 +10,10 @@ const topBarSource = readFileSync(
   fileURLToPath(new URL("./workspace-top-bar.tsx", import.meta.url)),
   "utf8",
 );
+const storeSource = readFileSync(
+  fileURLToPath(new URL("./state/workspace-store.ts", import.meta.url)),
+  "utf8",
+);
 
 describe("unified session surfaces", () => {
   it("creates a normal session without a fixed mode selection dialog", () => {
@@ -21,7 +25,8 @@ describe("unified session surfaces", () => {
   });
 
   it("lets persisted chat sessions switch between chat and generation", () => {
-    expect(workspaceSource).toContain('useState<"chat" | "generation">("chat")');
+    expect(storeSource).toContain('sessionSurface: "chat"');
+    expect(storeSource).toContain("setSessionSurface");
     expect(workspaceSource).toContain('sessionSurface === "generation"');
     expect(workspaceSource).toContain("onSessionSurfaceChange");
     expect(topBarSource).toContain('role="tablist"');
@@ -29,7 +34,7 @@ describe("unified session surfaces", () => {
   });
 
   it("does not special-case legacy generation-only sessions", () => {
-    expect(workspaceSource).toContain('setSessionSurface("chat")');
+    expect(storeSource).toContain('sessionSurface: "chat"');
     expect(workspaceSource).toContain("sessionSurface={selectedSession ? sessionSurface : undefined}");
     expect(workspaceSource).not.toContain('mode === "content-generation"');
   });
