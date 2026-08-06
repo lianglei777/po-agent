@@ -46,6 +46,7 @@ import type {
   SessionStats,
   SessionTreeNode,
   ThinkingLevel,
+  ToolResultMessage,
   UserMessage,
 } from "./agent-types";
 
@@ -89,6 +90,9 @@ export function useChatController(options: ChatControllerOptions) {
   const [runningTools, setRunningTools] = useState<
     Array<{ toolCallId: string; toolName: string }>
   >([]);
+  const [partialToolResults, setPartialToolResults] = useState<
+    Map<string, ToolResultMessage>
+  >(new Map());
   const [retryInfo, setRetryInfo] = useState<{
     attempt: number;
     maxAttempts: number;
@@ -253,6 +257,7 @@ export function useChatController(options: ChatControllerOptions) {
           runningRef.current = false;
           setStopping(false);
           setRunningTools([]);
+          setPartialToolResults(new Map());
           dispatchStream({ type: "end" });
           break;
         case "message_start":
@@ -263,6 +268,14 @@ export function useChatController(options: ChatControllerOptions) {
           if (event.message.role !== "user") {
             setMessages((current) => [...current, event.message]);
           }
+          if (event.message.role === "toolResult") {
+            const toolCallId = event.message.toolCallId;
+            setPartialToolResults((current) => {
+              const next = new Map(current);
+              next.delete(toolCallId);
+              return next;
+            });
+          }
           dispatchStream({ type: "end" });
           break;
         case "tool_execution_start":
@@ -270,6 +283,15 @@ export function useChatController(options: ChatControllerOptions) {
             ...current.filter((tool) => tool.toolCallId !== event.toolCallId),
             { toolCallId: event.toolCallId, toolName: event.toolName },
           ]);
+          break;
+        case "tool_execution_update":
+          setPartialToolResults((current) => new Map(current).set(event.toolCallId, {
+            role: "toolResult",
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            content: event.content,
+            details: event.details,
+          }));
           break;
         case "tool_execution_end":
           setRunningTools((current) =>
@@ -294,6 +316,7 @@ export function useChatController(options: ChatControllerOptions) {
           }
           break;
         case "agent_end":
+          setPartialToolResults(new Map());
           void handleAgentEnd();
           break;
       }
@@ -379,6 +402,7 @@ export function useChatController(options: ChatControllerOptions) {
     if (!session) return;
     const timer = window.setTimeout(async () => {
       sessionIdRef.current = session.id;
+      setPartialToolResults(new Map());
       setLoading(true);
       try {
         const detail = await loadSession(session.id);
@@ -836,6 +860,7 @@ export function useChatController(options: ChatControllerOptions) {
 
   return {
     messages,
+    partialToolResults,
     entryIds,
     stream,
     loading,

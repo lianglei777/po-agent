@@ -8,10 +8,15 @@ describe("generation tool presentation", () => {
   it("accepts structured generation details without parsing result text", () => {
     const details = {
       runId: "run-1",
+      providerId: "runninghub",
+      providerTaskId: "remote-1",
       status: "succeeded",
       artifacts: [{ id: "artifact-1", kind: "image" }],
     };
-    expect(generationToolDetails(details)).toBe(details);
+    expect(generationToolDetails(details)).toEqual({
+      ...details,
+      phase: "completed",
+    });
     expect(generationToolDetails({ runId: "run-1" })).toBeNull();
     expect(generationToolDetails("{\"runId\":\"run-1\"}")).toBeNull();
   });

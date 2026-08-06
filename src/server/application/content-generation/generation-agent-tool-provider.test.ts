@@ -64,9 +64,54 @@ describe("GenerationAgentToolProvider", () => {
     const first = await generate.execute(context);
     const repeated = await generate.execute(context);
 
-    expect(first.details).toMatchObject({ runId: "id-1", status: "queued" });
+    expect(first.details).toMatchObject({
+      runId: "id-1",
+      status: "queued",
+      phase: "queued",
+      waitTimedOut: true,
+      createdAt: NOW,
+    });
+    expect(generate.promptGuidelines).toContain(
+      "The generation tool waits for completion. Do not poll get_generation automatically. Use it only when the user explicitly asks about an existing run.",
+    );
+    expect(generate.promptGuidelines?.join(" ")).toContain(
+      "Do not mention pricing, billing, or paid APIs unless the user asks about them.",
+    );
     expect(repeated.details).toEqual(first.details);
     await expect(service.listRuns("session-1")).resolves.toHaveLength(1);
+  });
+
+  it("returns the provider task ID after the provider accepts the job", async () => {
+    const tools = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" });
+    const created = await service.createRun({
+      sessionId: "session-1",
+      capability: "text-to-image",
+      prompt: "A quiet lake",
+      source: "agent-tool",
+      sourceRef: "call-provider-task",
+      idempotencyKey: "session-1:call-provider-task",
+    });
+    const job = created.jobs[0]!;
+    await repository.updateJob({
+      ...job,
+      status: "submitted",
+      remoteTaskId: "2013508786110730241",
+      updatedAt: NOW,
+    }, ["created"]);
+
+    const result = await tools[2]!.execute({
+      toolCallId: "get-provider-task",
+      input: { runId: created.run.id },
+    });
+
+    expect(result.details).toMatchObject({
+      providerId: "runninghub",
+      providerTaskId: "2013508786110730241",
+    });
+    expect(result.content).toEqual([expect.objectContaining({
+      type: "text",
+      text: expect.stringContaining("RunningHub task ID: 2013508786110730241"),
+    })]);
   });
 
   it("maps assets to a multimodal video run without exposing provider fields", async () => {

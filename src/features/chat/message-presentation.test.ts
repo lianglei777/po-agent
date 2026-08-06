@@ -6,6 +6,7 @@ import type {
 } from "./agent-types";
 import {
   buildMessagePresentation,
+  collapseGenerationQueries,
   executionProcessStatus,
   partitionAssistantTurn,
 } from "./message-presentation";
@@ -45,6 +46,35 @@ const toolResult: ToolResultMessage = {
 };
 
 describe("chat message presentation", () => {
+  it("collapses repeated generation status queries to the latest step", () => {
+    const query = (id: string): AssistantMessage => ({
+      role: "assistant",
+      provider: "provider",
+      model: "model",
+      stopReason: "toolUse",
+      content: [{
+        type: "toolCall",
+        toolCallId: id,
+        toolName: "get_generation",
+        input: { runId: "run-1" },
+      }],
+    });
+    const turn = {
+      kind: "assistantTurn" as const,
+      entryIds: [],
+      messages: [query("query-1"), query("query-2"), query("query-3")],
+      originalIndexes: [0, 1, 2],
+      streaming: false,
+    };
+
+    const collapsed = collapseGenerationQueries(partitionAssistantTurn(turn).process);
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]).toMatchObject({
+      repeatCount: 3,
+      block: { toolCallId: "query-3" },
+    });
+  });
+
   it("groups assistant messages separated by tool results into one turn", () => {
     const messages: AgentMessage[] = [
       { role: "user", content: "Check the model configuration" },
@@ -159,6 +189,36 @@ describe("chat message presentation", () => {
         false,
       ),
     ).toMatchObject({ errorCount: 1, state: "completed" });
+  });
+
+  it("keeps a partially updated generation tool in the running state", () => {
+    const process = partitionAssistantTurn({
+      kind: "assistantTurn",
+      entryIds: [],
+      messages: [{
+        role: "assistant",
+        provider: "provider",
+        model: "model",
+        stopReason: "toolUse",
+        content: [{
+          type: "toolCall",
+          toolCallId: "generation-1",
+          toolName: "generate_image",
+          input: { prompt: "lake" },
+        }],
+      }],
+      originalIndexes: [0],
+      streaming: false,
+    }).process;
+    const partial: ToolResultMessage = {
+      role: "toolResult",
+      toolCallId: "generation-1",
+      content: [],
+      details: { runId: "run-1", status: "running", artifacts: [] },
+    };
+
+    expect(executionProcessStatus(process, new Map([["generation-1", partial]]), false))
+      .toMatchObject({ runningCount: 1, state: "running" });
   });
 
   it("keeps compaction summaries out of the chat presentation", () => {

@@ -608,8 +608,9 @@ interface GenerateVideoToolInput {
 2. 订阅/等待 Run，但不亲自轮询 RunningHub。
 3. 通过 `onUpdate` 发送排队、上传、生成和下载状态。
 4. 在合理等待上限内完成时返回 Artifact。
-5. 超过等待上限时返回 `{ runId, status }`，而不是把仍在运行的任务标记为失败。
-6. 后续可调用 `get_generation` 获取结果。
+5. 供应商接受任务后，工具结果同时返回本地 `runId` 与标准化 `providerTaskId`；RunningHub 的 `providerTaskId` 即提交接口返回的 `taskId`。
+6. 超过等待上限时返回 `{ runId, status }`，而不是把仍在运行的任务标记为失败。
+7. 正常生成期间模型不得自动调用 `get_generation`；它只用于用户明确查询历史任务或中断恢复。
 
 工具等待被中断后，Run 继续执行。LLM 不应因为超时自动重新调用 `generate_*`，避免重复计费。
 
@@ -620,6 +621,8 @@ interface GenerateVideoToolInput {
 ```ts
 interface GenerationToolDetails {
   runId: string;
+  providerId?: string;
+  providerTaskId?: string;
   status: GenerationRunStatus;
   artifacts: Array<{
     id: string;
@@ -818,7 +821,7 @@ src/server/composition/
 - 让 Chat 工具卡片直接消费 Run/Artifact DTO。
 - 验证刷新、断线、Agent 中止和服务重启后任务仍可查看与恢复。
 
-当前实现进度：已增加项目自有工具 port 与 Pi adapter，并固定注册 `generate_image`、`generate_video`、`get_generation`、`cancel_generation`。生成调用使用 Session ID + tool-call ID 幂等创建持久化 Run，等待超时或 Agent 中止不会取消任务；Pi message mapper 保留结构化 `details`，Chat 工具卡片直接展示 Run 状态和本地产物。持久化恢复由既有 SQLite lease Worker 覆盖。2026-08-06 已使用有效 RunningHub 凭证完成文生图、图生图、文生视频、图生视频和多模态视频的真实端到端验收，包括素材上传、异步轮询、本地下载和 Artifact 持久化。
+当前实现进度：已增加项目自有工具 port 与 Pi adapter，并固定注册 `generate_image`、`generate_video`、`get_generation`、`cancel_generation`。生成调用使用 Session ID + tool-call ID 幂等创建持久化 Run，图片和视频分别在单次工具执行内最多等待 5 分钟与 20 分钟；Pi `tool_execution_update` 通过 Agent SSE 增量更新同一工具步骤，模型不参与正常状态轮询。等待超时或 Agent 中止不会取消任务；Chat 工具卡片展示标准化阶段、耗时、失败原因和本地产物，历史重复状态查询在展示层合并。持久化恢复由既有 SQLite lease Worker 覆盖。2026-08-06 已使用有效 RunningHub 凭证完成文生图、图生图、文生视频、图生视频和多模态视频的真实端到端验收，包括素材上传、异步轮询、本地下载和 Artifact 持久化。
 
 ### Phase 6：清理旧实现
 

@@ -189,6 +189,8 @@ src/layouts/agent-workspace
 
 聊天 Agent 通过项目自有 `AgentToolDefinition` port 使用 `generate_image`、`generate_video`、`get_generation` 和 `cancel_generation`。application 工具只创建或读取持久化 Run；Pi adapter 负责把稳定定义转换为 SDK `ToolDefinition`，供应商字段不会进入 Agent 工具合同。生成工具以 Session ID 与 Pi tool-call ID 组成幂等键，工具等待被中止时只停止等待，不取消已持久化的 Run。Pi tool result 的 `details` 被消息映射保留，Chat UI 直接消费结构化 Run/Artifact 数据。
 
+正常生成期间由 `generate_image` 或 `generate_video` 在单次工具执行内等待 SQLite Run，Worker 独立轮询供应商。Pi `tool_execution_update` 通过既有 Agent SSE 转发到 Chat，前端按稳定 `toolCallId` 原地更新标准化阶段；模型不负责定时轮询。`get_generation` 仅用于用户明确查询或中断恢复。工具结果使用本地 `runId` 标识 Po Agent 的持久化 Run，并把最新 Provider Job 的 `providerId` 与 `remoteTaskId` 标准化为 `providerTaskId` 返回；Chat 分别标注本地 Run ID 与供应商 Task ID。
+
 付费内容生成采用服务端纵深防护：供应商总开关与逐 Route 开关共同控制新 Run，默认关闭并持久化于 SQLite；种子 Route 升级不得覆盖用户开关。Agent 生成工具还要求本轮用户明确授权，直接 Generate UI 在创建和重试前进行费用确认。前端隐藏或 Prompt 约束不能替代 application 层的开关校验。
 
 当前部署要求长期运行的 Node.js 进程。Electron 和自托管 Next.js 满足该约束；若迁移到 Serverless，必须先将 Worker 替换为独立常驻执行器或托管队列。

@@ -183,6 +183,13 @@ export type AgentEvent =
   | { type: "message_update"; message: Partial<AssistantMessage> }
   | { type: "message_end"; message: AgentMessage }
   | { type: "tool_execution_start"; toolCallId: string; toolName: string }
+  | {
+      type: "tool_execution_update";
+      toolCallId: string;
+      toolName: string;
+      content: Array<TextContent | ImageContent>;
+      details?: unknown;
+    }
   | { type: "tool_execution_end"; toolCallId: string; isError?: boolean }
   | {
       type: "retry_start";

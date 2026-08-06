@@ -446,6 +446,14 @@ function mapEvent(event: AgentSessionEvent): AgentEvent | null {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
       };
+    case "tool_execution_update":
+      return {
+        type: "tool_execution_update",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        content: event.partialResult.content ?? [],
+        details: event.partialResult.details,
+      };
     case "tool_execution_end":
       return {
         type: "tool_execution_end",

@@ -38,6 +38,7 @@ export type AssistantTurnBlock = {
   block: AssistantContent;
   message: AssistantMessage;
   messageIndex: number;
+  repeatCount?: number;
 };
 
 export type FinalAssistantTurnBlock = AssistantTurnBlock & {
@@ -137,6 +138,32 @@ export function partitionAssistantTurn(turn: AssistantTurnPresentationItem) {
   return { final, process };
 }
 
+export function collapseGenerationQueries(process: AssistantTurnBlock[]) {
+  const groups = new Map<string, { count: number; lastIndex: number }>();
+  process.forEach((step, index) => {
+    const key = generationQueryKey(step);
+    if (!key) return;
+    const previous = groups.get(key);
+    groups.set(key, { count: (previous?.count ?? 0) + 1, lastIndex: index });
+  });
+  return process.flatMap((step, index) => {
+    const key = generationQueryKey(step);
+    if (!key) return [step];
+    const group = groups.get(key)!;
+    return group.lastIndex === index
+      ? [{ ...step, repeatCount: group.count }]
+      : [];
+  });
+}
+
+function generationQueryKey(step: AssistantTurnBlock) {
+  if (step.block.type !== "toolCall" || step.block.toolName !== "get_generation") {
+    return null;
+  }
+  const runId = step.block.input.runId;
+  return typeof runId === "string" && runId ? `get_generation:${runId}` : null;
+}
+
 export function executionProcessStatus(
   process: AssistantTurnBlock[],
   results: Map<string, ToolResultMessage>,
@@ -149,7 +176,7 @@ export function executionProcessStatus(
     if (step.block.type !== "toolCall") continue;
     const result = results.get(step.block.toolCallId);
     if (result?.isError) errorCount += 1;
-    else if (!result) runningCount += 1;
+    else if (!result || isRunningGenerationResult(result.details)) runningCount += 1;
   }
 
   if (streaming && runningCount === 0 && process.length > 0) {
@@ -167,6 +194,14 @@ export function executionProcessStatus(
     state: runningCount > 0 ? "running" : "completed",
     stepCount: process.length,
   };
+}
+
+function isRunningGenerationResult(details: unknown) {
+  if (!details || typeof details !== "object") return false;
+  const status = (details as { status?: unknown }).status;
+  const runId = (details as { runId?: unknown }).runId;
+  return typeof runId === "string" &&
+    (status === "queued" || status === "running" || status === "cancel_requested");
 }
 
 function completeAssistantMessage(

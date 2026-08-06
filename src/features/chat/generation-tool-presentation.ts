@@ -8,8 +8,18 @@ export function generationToolDetails(
   return typeof details.runId === "string" &&
     typeof details.status === "string" &&
     Array.isArray(details.artifacts)
-    ? (details as GenerationToolDetails)
+    ? ({
+        ...details,
+        phase: details.phase ?? phaseFromStatus(details.status),
+      } as GenerationToolDetails)
     : null;
+}
+
+function phaseFromStatus(status: GenerationToolDetails["status"]): GenerationToolDetails["phase"] {
+  if (status === "succeeded") return "completed";
+  if (status === "failed") return "failed";
+  if (status === "cancelled") return "cancelled";
+  return status === "running" ? "generating" : "queued";
 }
 
 export function generationArtifactPath(cwd: string, localPath: string) {

@@ -227,6 +227,7 @@ export function ChatCenter({
                   forkingEntryId={controller.forkingEntryId}
                   lastUserRef={controller.lastUserRef}
                   messages={controller.messages}
+                  partialToolResults={controller.partialToolResults}
                   onEdit={(targetId, text) =>
                     void controller.editFromHere(targetId, text)
                   }

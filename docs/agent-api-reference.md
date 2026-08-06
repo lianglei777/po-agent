@@ -2586,11 +2586,11 @@ cancel_generation
 
 生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
 
-`generate_image` 与 `generate_video` 还要求 `userAuthorized: true`。只有最新用户消息明确请求或批准本次付费生成时才允许设置；否则 Agent 必须先征求确认。Generate UI 每次创建或重试任务前也会显示付费确认。
+`generate_image` 与 `generate_video` 还要求 `userAuthorized: true`。只有最新用户消息明确请求或批准本次生成时才允许设置；否则 Agent 必须先进行简短、中性的确认。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
 
-工具最多等待 30 秒并通过 Pi `onUpdate` 报告状态。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run。`get_generation` 与 `cancel_generation` 只能访问当前 Session 的 Run。
+`generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Pi `onUpdate` 与现有 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。前端按同一 `toolCallId` 原地更新工具步骤，不创建新的查询步骤。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；模型不得在正常生成期间自动轮询 `get_generation`。`get_generation` 仅用于用户明确查询历史 Run 或中断恢复，并与 `cancel_generation` 一样只能访问当前 Session 的 Run。
 
-成功结果的 `ToolResultMessage.details` 保留 `runId`、`status`、`artifacts` 和可选错误，Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
+生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`providerId`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、`artifacts` 和可选错误。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现对应其响应中的 `taskId`。Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
 
 ## 13. SSE 通用行为
 

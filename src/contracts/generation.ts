@@ -162,7 +162,22 @@ export interface GenerationArtifactDto {
 
 export interface GenerationToolDetails {
   runId: string;
+  providerId?: string;
+  providerTaskId?: string;
   status: GenerationRunStatus;
+  phase:
+    | "queued"
+    | "preparing"
+    | "submitting"
+    | "generating"
+    | "downloading"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  waitTimedOut?: boolean;
   artifacts: GenerationArtifactDto[];
   error?: {
     code: string;

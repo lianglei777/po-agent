@@ -33,15 +33,22 @@ type GenerateInput = {
 };
 
 export class GenerationAgentToolProvider implements AgentToolProvider {
-  private readonly waitTimeoutMs: number;
+  private readonly imageWaitTimeoutMs: number;
+  private readonly videoWaitTimeoutMs: number;
   private readonly pollIntervalMs: number;
 
   constructor(
     private readonly getRunService: () => GenerationRunService,
-    options: { waitTimeoutMs?: number; pollIntervalMs?: number } = {},
+    options: {
+      waitTimeoutMs?: number;
+      imageWaitTimeoutMs?: number;
+      videoWaitTimeoutMs?: number;
+      pollIntervalMs?: number;
+    } = {},
   ) {
-    this.waitTimeoutMs = options.waitTimeoutMs ?? 30_000;
-    this.pollIntervalMs = options.pollIntervalMs ?? 1_000;
+    this.imageWaitTimeoutMs = options.imageWaitTimeoutMs ?? options.waitTimeoutMs ?? 5 * 60_000;
+    this.videoWaitTimeoutMs = options.videoWaitTimeoutMs ?? options.waitTimeoutMs ?? 20 * 60_000;
+    this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
   }
 
   getTools(input: { sessionId: string; cwd: string }): AgentToolDefinition[] {
@@ -67,8 +74,9 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         : "Create a durable image generation run. The run continues if this tool call is interrupted.",
       promptSnippet: `${name}: create durable ${video ? "video" : "image"} generation work`,
       promptGuidelines: [
-        "This is a paid operation. Call it only after the user explicitly requested or approved this exact generation in the latest user turn. Otherwise ask for confirmation first.",
-        "Do not repeat a generate call after a timeout; use get_generation with the returned runId.",
+        "Call this tool only after the latest user turn explicitly requested or approved this exact generation. Otherwise ask a brief, neutral confirmation such as whether to generate it now. Do not mention pricing, billing, or paid APIs unless the user asks about them.",
+        "The generation tool waits for completion. Do not poll get_generation automatically. Use it only when the user explicitly asks about an existing run.",
+        "When referring to identifiers, distinguish the Po Agent local run ID from the provider task ID.",
         "Use workspace-relative paths or artifact IDs for generation assets.",
       ],
       parameters: generateSchema(video),
@@ -102,7 +110,12 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
           sourceRef: toolCallId,
           idempotencyKey: `agent-tool:${sessionId}:${toolCallId}`,
         });
-        return this.waitForRun(view, signal, onUpdate);
+        return this.waitForRun(
+          view,
+          video ? this.videoWaitTimeoutMs : this.imageWaitTimeoutMs,
+          signal,
+          onUpdate,
+        );
       },
     };
   }
@@ -153,13 +166,15 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
 
   private async waitForRun(
     initial: GenerationRunView,
+    waitTimeoutMs: number,
     signal?: AbortSignal,
     onUpdate?: (result: AgentToolResult<GenerationToolDetails>) => void,
   ): Promise<AgentToolResult<GenerationToolDetails>> {
     let current = initial;
     let lastStatus = current.run.status;
+    let lastPhase = generationPhase(current);
     onUpdate?.(generationToolResult(current));
-    const deadline = Date.now() + this.waitTimeoutMs;
+    const deadline = Date.now() + waitTimeoutMs;
     while (
       !TERMINAL_STATUSES.has(current.run.status) &&
       !signal?.aborted &&
@@ -168,12 +183,17 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       await delay(Math.min(this.pollIntervalMs, Math.max(0, deadline - Date.now())), signal);
       if (signal?.aborted) break;
       current = (await this.getRunService().getRun(current.run.id)) ?? current;
-      if (current.run.status !== lastStatus) {
+      const currentPhase = generationPhase(current);
+      if (current.run.status !== lastStatus || currentPhase !== lastPhase) {
         lastStatus = current.run.status;
+        lastPhase = currentPhase;
         onUpdate?.(generationToolResult(current));
       }
     }
-    return generationToolResult(current);
+    return generationToolResult(current, {
+      waitTimedOut:
+        !TERMINAL_STATUSES.has(current.run.status) && !signal?.aborted,
+    });
   }
 }
 
@@ -184,7 +204,7 @@ function generateSchema(video: boolean) {
       prompt: { type: "string", minLength: 1, maxLength: 20_480 },
       userAuthorized: {
         type: "boolean",
-        description: "True only when the latest user turn explicitly requested or approved this paid generation.",
+        description: "True only when the latest user turn explicitly requested or approved this exact generation.",
       },
       routeId: { type: "string", minLength: 1 },
       assets: {
@@ -274,10 +294,19 @@ function generationCapability(
 
 function generationToolResult(
   view: GenerationRunView,
+  options: { waitTimedOut?: boolean } = {},
 ): AgentToolResult<GenerationToolDetails> {
+  const providerJob = view.jobs.at(-1);
   const details: GenerationToolDetails = {
     runId: view.run.id,
+    providerId: providerJob?.providerId,
+    providerTaskId: providerJob?.remoteTaskId,
     status: view.run.status,
+    phase: generationPhase(view),
+    createdAt: view.run.createdAt,
+    updatedAt: view.run.updatedAt,
+    completedAt: view.run.completedAt,
+    waitTimedOut: options.waitTimedOut || undefined,
     artifacts: view.artifacts.map((artifact): GenerationArtifactDto => ({
       ...artifact,
     })),
@@ -293,13 +322,36 @@ function generationToolResult(
   const suffix = details.artifacts.length
     ? ` with ${details.artifacts.length} artifact(s)`
     : "";
+  const providerTask = details.providerTaskId
+    ? `; ${details.providerId === "runninghub" ? "RunningHub" : "provider"} task ID: ${details.providerTaskId}`
+    : "";
   return {
     content: [{
       type: "text",
-      text: `Generation ${details.runId} is ${details.status}${suffix}.`,
+      text: `Local generation run ID: ${details.runId}${providerTask}; status: ${details.status}${suffix}.`,
     }],
     details,
   };
+}
+
+function generationPhase(view: GenerationRunView): GenerationToolDetails["phase"] {
+  if (view.run.status === "succeeded") return "completed";
+  if (view.run.status === "failed") return "failed";
+  if (view.run.status === "cancelled") return "cancelled";
+  const job = view.jobs.at(-1);
+  switch (job?.status) {
+    case "uploading":
+      return "preparing";
+    case "submitting":
+      return "submitting";
+    case "submitted":
+    case "polling":
+      return "generating";
+    case "downloading":
+      return "downloading";
+    default:
+      return "queued";
+  }
 }
 
 function requiredString(input: Record<string, unknown>, key: string): string {

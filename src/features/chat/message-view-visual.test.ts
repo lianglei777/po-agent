@@ -24,6 +24,8 @@ describe("chat execution process visual contract", () => {
     expect(source).toContain("t.chat.message.executionProcess");
     expect(source).toContain('value="execution-process"');
     expect(source).toContain("styles.stepList");
+    expect(source).toContain("wasActive");
+    expect(source).not.toContain("const automaticValue = streaming");
   });
 
   it("keeps tool status and disclosure controls in stable columns", () => {

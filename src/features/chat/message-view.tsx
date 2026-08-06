@@ -49,6 +49,7 @@ import {
 } from "./generation-tool-presentation";
 import {
   buildMessagePresentation,
+  collapseGenerationQueries,
   executionProcessStatus,
   partitionAssistantTurn,
   type AssistantTurnBlock,
@@ -69,6 +70,7 @@ const CodeBlock = dynamic(
 
 export function MessageList({
   messages,
+  partialToolResults,
   cwd,
   entryIds,
   streamingMessage,
@@ -81,6 +83,7 @@ export function MessageList({
   onEdit,
 }: {
   messages: AgentMessage[];
+  partialToolResults?: Map<string, ToolResultMessage>;
   cwd?: string;
   entryIds: string[];
   streamingMessage: Partial<AssistantMessage> | null;
@@ -92,7 +95,13 @@ export function MessageList({
   onFork: (entryId: string) => void;
   onEdit: (targetId: string, text: string) => void;
 }) {
-  const results = useMemo(() => toolResults(messages), [messages]);
+  const results = useMemo(() => {
+    const merged = toolResults(messages);
+    for (const [toolCallId, result] of partialToolResults ?? []) {
+      merged.set(toolCallId, result);
+    }
+    return merged;
+  }, [messages, partialToolResults]);
   const presentation = useMemo(
     () => buildMessagePresentation(messages, entryIds, streamingMessage),
     [entryIds, messages, streamingMessage],
@@ -158,6 +167,12 @@ export function MessageList({
           highlightedMessageId !== null &&
           highlightedMessageId !== undefined &&
           messageIds.includes(highlightedMessageId);
+        const previousUser = [...presentation.slice(0, presentationIndex)]
+          .reverse()
+          .find((candidate) => candidate.kind === "user");
+        const logicalTurnKey = previousUser?.kind === "user"
+          ? previousUser.entryId ?? previousUser.message.clientId ?? previousUser.message.timestamp
+          : undefined;
         return (
           <article
             className={cn(
@@ -166,14 +181,19 @@ export function MessageList({
             )}
             data-message-role="assistant"
             data-streaming={item.streaming || undefined}
-            key={messageId}
+            key={logicalTurnKey ? `assistant-turn-${logicalTurnKey}` : messageId}
             ref={(element) => {
               for (const id of messageIds) {
                 onMessageElement?.(id, element);
               }
             }}
           >
-            <AssistantTurnView cwd={cwd} results={results} turn={item} />
+            <AssistantTurnView
+              active={running && presentationIndex === presentation.length - 1}
+              cwd={cwd}
+              results={results}
+              turn={item}
+            />
           </article>
         );
       })}
@@ -288,10 +308,12 @@ function UserMessageView({
 }
 
 function AssistantTurnView({
+  active,
   turn,
   results,
   cwd,
 }: {
+  active: boolean;
   turn: AssistantTurnPresentationItem;
   results: Map<string, ToolResultMessage>;
   cwd?: string;
@@ -299,10 +321,11 @@ function AssistantTurnView({
   const [copied, setCopied] = useState(false);
   const [errorCopied, setErrorCopied] = useState(false);
   const { t } = useI18n();
-  const { final, process } = useMemo(
+  const { final, process: rawProcess } = useMemo(
     () => partitionAssistantTurn(turn),
     [turn],
   );
+  const process = useMemo(() => collapseGenerationQueries(rawProcess), [rawProcess]);
   const status = useMemo(
     () => executionProcessStatus(process, results, turn.streaming),
     [process, results, turn.streaming],
@@ -354,12 +377,12 @@ function AssistantTurnView({
 
       {process.length ? (
         <ExecutionProcess
+          active={active}
           assistantError={Boolean(error)}
           cwd={cwd}
           process={process}
           results={results}
           status={status}
-          streaming={turn.streaming}
         />
       ) : null}
 
@@ -449,28 +472,31 @@ function AssistantTurnView({
 }
 
 function ExecutionProcess({
+  active,
   process,
   results,
   status,
-  streaming,
   assistantError,
   cwd,
 }: {
+  active: boolean;
   process: AssistantTurnBlock[];
   results: Map<string, ToolResultMessage>;
   status: ReturnType<typeof executionProcessStatus>;
-  streaming: boolean;
   assistantError: boolean;
   cwd?: string;
 }) {
   const { t } = useI18n();
-  const automaticValue = streaming || assistantError ? "execution-process" : "";
-  const [value, setValue] = useState(automaticValue);
+  const [value, setValue] = useState(active || assistantError ? "execution-process" : "");
   const userControlled = useRef(false);
+  const wasActive = useRef(active);
 
   useEffect(() => {
-    if (!userControlled.current) setValue(automaticValue);
-  }, [automaticValue]);
+    if (active && !wasActive.current && !userControlled.current) {
+      setValue("execution-process");
+    }
+    wasActive.current = active;
+  }, [active]);
 
   return (
     <Accordion
@@ -535,9 +561,13 @@ function ExecutionStep({
   if (block.type === "toolCall") {
     const summary = toolSummary(block.input);
     const generation = generationToolDetails(result?.details);
-    const statusLabel = result?.isError
+    const generationFinished = generation
+      ? ["succeeded", "failed", "cancelled"].includes(generation.status)
+      : Boolean(result);
+    const toolFailed = Boolean(result?.isError || generation?.status === "failed");
+    const statusLabel = toolFailed
       ? t.chat.message.toolError
-      : result
+      : generationFinished
         ? t.chat.message.toolDone
         : t.chat.message.toolRunning;
     return (
@@ -550,11 +580,16 @@ function ExecutionStep({
           <span className="min-w-0 truncate font-ui-mono text-meta text-muted">
             <span className="font-medium text-primary">{block.toolName}</span>
             {summary ? ` ${summary}` : ""}
+            {step.repeatCount && step.repeatCount > 1 ? ` × ${step.repeatCount}` : ""}
           </span>
           <Badge
             className={styles.stepStatus}
             variant={
-              result?.isError ? "destructive" : result ? "success" : "outline"
+              toolFailed
+                ? "destructive"
+                : generationFinished
+                  ? "success"
+                  : "outline"
             }
           >
             {statusLabel}
@@ -610,11 +645,12 @@ function GenerationToolResult({
   cwd?: string;
 }) {
   const { t } = useI18n();
+  const elapsedMs = useElapsedMs(details.createdAt, details.completedAt);
   return (
     <div className="space-y-2 border-t border-line-subtle bg-[var(--tool-bg)] p-3">
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="font-ui-mono text-muted" title={details.runId}>
-          {t.chat.message.generationRun} {details.runId.slice(0, 8)}
+          {t.chat.message.generationRunId} {details.runId.slice(0, 8)}
         </span>
         <Badge
           variant={
@@ -625,9 +661,31 @@ function GenerationToolResult({
                 : "outline"
           }
         >
-          {t.contentGeneration.runStatuses[details.status]}
+          {t.contentGeneration.toolPhases[details.phase]}
         </Badge>
       </div>
+      {details.providerTaskId ? (
+        <div className="flex min-w-0 items-center gap-2 text-caption text-muted">
+          <span className="shrink-0">
+            {details.providerId === "runninghub"
+              ? t.chat.message.runningHubTaskId
+              : t.chat.message.providerTaskId}
+          </span>
+          <span
+            className="truncate font-ui-mono text-foreground"
+            title={details.providerTaskId}
+          >
+            {details.providerTaskId}
+          </span>
+        </div>
+      ) : null}
+      {details.createdAt ? (
+        <p className="text-caption text-muted">
+          {details.completedAt ? t.chat.message.generationDuration : t.chat.message.generationElapsed}{" "}
+          {formatDuration(elapsedMs)}
+          {details.waitTimedOut ? ` · ${t.chat.message.generationContinuesInBackground}` : ""}
+        </p>
+      ) : null}
       {details.error ? (
         <p className="text-xs text-destructive-text">
           {details.error.code}: {details.error.message}
@@ -669,6 +727,24 @@ function GenerationToolResult({
       })}
     </div>
   );
+}
+
+function useElapsedMs(createdAt?: string, completedAt?: string) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (completedAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [completedAt]);
+  const start = createdAt ? Date.parse(createdAt) : Number.NaN;
+  const end = completedAt ? Date.parse(completedAt) : now;
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0;
+}
+
+function formatDuration(milliseconds: number) {
+  const seconds = Math.floor(milliseconds / 1_000);
+  const minutes = Math.floor(seconds / 60);
+  return minutes ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
 }
 
 function GenerationArtifactGallery({

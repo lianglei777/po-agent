@@ -6,6 +6,25 @@ import {
 import { mapEvents, PiAgentRuntime } from "./pi-agent-runtime";
 
 describe("mapEvents", () => {
+  it("forwards partial tool results for incremental UI updates", () => {
+    expect(mapEvents({
+      type: "tool_execution_update",
+      toolCallId: "tool-1",
+      toolName: "generate_image",
+      args: {},
+      partialResult: {
+        content: [{ type: "text", text: "Generation is running" }],
+        details: { runId: "run-1", status: "running" },
+      },
+    })).toEqual([{
+      type: "tool_execution_update",
+      toolCallId: "tool-1",
+      toolName: "generate_image",
+      content: [{ type: "text", text: "Generation is running" }],
+      details: { runId: "run-1", status: "running" },
+    }]);
+  });
+
   it("emits a structured agent error after an errored assistant message", () => {
     const events = mapEvents({
       type: "message_end",
