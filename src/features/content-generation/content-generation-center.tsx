@@ -20,7 +20,7 @@ import type {
 import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { rawFileUrl } from "@/features/files/api";
+import { rawFileUrl } from "@/lib/raw-file-url";
 import type { SessionInfo } from "@/features/sessions/types";
 import { useI18n } from "@/i18n/use-i18n";
 import {

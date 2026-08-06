@@ -124,6 +124,7 @@ export interface ToolResultMessage {
   toolCallId: string;
   toolName?: string;
   content: Array<TextContent | ImageContent>;
+  details?: unknown;
   isError?: boolean;
   timestamp?: number;
 }

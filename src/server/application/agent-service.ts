@@ -13,6 +13,7 @@ import type {
   AgentRuntimeFactory,
   AgentRuntimeRegistry,
 } from "@/server/ports/agent-runtime";
+import type { AgentToolProvider } from "@/server/ports/agent-tool";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import type { SessionRepository } from "@/server/ports/session-repository";
 
@@ -34,6 +35,7 @@ export class AgentService {
     private readonly runtimes: AgentRuntimeRegistry,
     private readonly runtimeFactory: AgentRuntimeFactory,
     private readonly roots: WorkspaceRootProvider,
+    private readonly tools?: AgentToolProvider,
   ) {}
 
   /**
@@ -48,11 +50,17 @@ export class AgentService {
     input: CreateAgentRequest,
   ): Promise<CreateAgentResponse> {
     this.roots.addRoot(input.cwd);
-    const startKey = `new:${randomUUID()}`;
+    const requestedSessionId = randomUUID();
+    const startKey = `new:${requestedSessionId}`;
     const runtime = await this.runtimes.getOrStart(startKey, () =>
       this.runtimeFactory.create({
+        requestedSessionId,
         cwd: input.cwd,
         toolNames: input.toolNames,
+        customTools: this.tools?.getTools({
+          sessionId: requestedSessionId,
+          cwd: input.cwd,
+        }),
       }),
     );
     if (input.provider && input.modelId) {
@@ -162,6 +170,10 @@ export class AgentService {
         requestedSessionId: sessionId,
         sessionFile: detail.filePath,
         cwd: detail.info?.cwd ?? process.cwd(),
+        customTools: this.tools?.getTools({
+          sessionId,
+          cwd: detail.info?.cwd ?? process.cwd(),
+        }),
       });
     });
   }

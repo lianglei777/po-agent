@@ -311,6 +311,8 @@ export const zh = {
       waitingForOutput: "（等待输出）",
       noOutput: "（无输出）",
       messageActions: "消息操作",
+      generationRun: "生成任务",
+      generationArtifact: "生成产物",
     },
   },
   sessions: {

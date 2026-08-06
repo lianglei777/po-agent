@@ -5,7 +5,9 @@ import {
   type AgentSession,
   type AgentSessionEvent,
   type SessionEntry,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import type { AgentCommand, ImageInput } from "@/server/domain/agent-command";
 import { AppError } from "@/server/domain/app-error";
 import type { AgentEvent } from "@/server/domain/agent-event";
@@ -16,6 +18,7 @@ import type {
   CreateRuntimeInput,
   ModelConfigInvalidation,
 } from "@/server/ports/agent-runtime";
+import type { AgentToolDefinition } from "@/server/ports/agent-tool";
 import { mapPiMessage } from "./message-mapper";
 import { createPiResourceLoader } from "./pi-resource-loader";
 
@@ -38,14 +41,24 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
       manager.newSession({ id: input.requestedSessionId });
     }
     const resourceLoader = await createPiResourceLoader({ cwd: input.cwd });
+    const customTools = input.customTools?.map(toPiToolDefinition) ?? [];
+    const requiredToolNames = customTools.map((tool) => tool.name);
+    const selectedToolNames = [
+      ...(input.toolNames ?? FULL_BUILTIN_TOOLS),
+      ...requiredToolNames,
+    ];
     const { session } = await createAgentSession({
       cwd: input.cwd,
       resourceLoader,
       sessionManager: manager,
-      tools: input.toolNames ?? FULL_BUILTIN_TOOLS,
-      noTools: input.toolNames?.length === 0 ? "all" : undefined,
+      tools: [...new Set(selectedToolNames)],
+      customTools,
+      noTools:
+        input.toolNames?.length === 0 && requiredToolNames.length === 0
+          ? "all"
+          : undefined,
     });
-    return new PiAgentRuntime(session);
+    return new PiAgentRuntime(session, requiredToolNames);
   }
 }
 
@@ -54,7 +67,10 @@ export class PiAgentRuntime implements AgentRuntime {
   private modelConfigRevision = 0;
   private appliedModelConfigRevision = 0;
 
-  constructor(private readonly session: AgentSession) {}
+  constructor(
+    private readonly session: AgentSession,
+    private readonly requiredToolNames: string[] = [],
+  ) {}
 
   get sessionId(): string {
     return this.session.sessionId;
@@ -171,7 +187,9 @@ export class PiAgentRuntime implements AgentRuntime {
           available: this.session.getAllTools(),
         } as T;
       case "set_tools":
-        this.session.setActiveToolsByName(command.toolNames);
+        this.session.setActiveToolsByName([
+          ...new Set([...command.toolNames, ...this.requiredToolNames]),
+        ]);
         return undefined as T;
       case "abort_compaction":
         this.session.abortCompaction();
@@ -286,6 +304,26 @@ export class PiAgentRuntime implements AgentRuntime {
     }
     this.appliedModelConfigRevision = targetRevision;
   }
+}
+
+function toPiToolDefinition(
+  definition: AgentToolDefinition,
+): ToolDefinition {
+  return {
+    name: definition.name,
+    label: definition.label,
+    description: definition.description,
+    promptSnippet: definition.promptSnippet,
+    promptGuidelines: definition.promptGuidelines,
+    parameters: Type.Unsafe<Record<string, unknown>>(definition.parameters),
+    execute: async (toolCallId, params, signal, onUpdate) =>
+      definition.execute({
+        toolCallId,
+        input: params as Record<string, unknown>,
+        signal,
+        onUpdate,
+      }),
+  };
 }
 
 function hasCompactableHistory(

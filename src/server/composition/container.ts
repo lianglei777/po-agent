@@ -8,6 +8,7 @@ import { GenerationRunService } from "@/server/application/content-generation/ge
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
+import { GenerationAgentToolProvider } from "@/server/application/content-generation/generation-agent-tool-provider";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
@@ -76,6 +77,9 @@ function createContainer() {
   let generationRunService: GenerationRunService | undefined;
   let generationAssetService: GenerationAssetService | undefined;
   let generationCredentialStore: FileGenerationCredentialStore | undefined;
+  const generationAgentTools = new GenerationAgentToolProvider(
+    () => getGenerationRunService(),
+  );
 
   function getGenerationRunService() {
     if (generationRunService) return generationRunService;
@@ -147,6 +151,7 @@ function createContainer() {
       runtimes,
       runtimeFactory,
       roots,
+      generationAgentTools,
     ),
     modelService: new ModelService(models, runtimes),
     projectService: new ProjectService(

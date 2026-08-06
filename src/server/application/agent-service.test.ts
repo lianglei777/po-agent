@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AgentRuntime } from "@/server/ports/agent-runtime";
+import type {
+  AgentRuntime,
+  CreateRuntimeInput,
+} from "@/server/ports/agent-runtime";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { AgentService } from "./agent-service";
@@ -35,6 +38,36 @@ describe("AgentService", () => {
       { type: "set_thinking_level", level: "high" },
       { type: "set_tools", toolNames: ["read"] },
     ]);
+  });
+
+  it("binds project tools to the requested session id on create", async () => {
+    const runtime = runtimeStub();
+    const create = vi
+      .fn<(input: CreateRuntimeInput) => Promise<AgentRuntime>>()
+      .mockResolvedValue(runtime);
+    const getTools = vi
+      .fn<(input: { sessionId: string; cwd: string }) => []>()
+      .mockReturnValue([]);
+    const service = new AgentService(
+      {} as SessionRepository,
+      new InMemoryAgentRegistry(),
+      { create },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      { getTools },
+    );
+
+    await service.create({ cwd: "C:\\work" });
+
+    const requestedSessionId = create.mock.calls[0]?.[0].requestedSessionId;
+    expect(requestedSessionId).toEqual(expect.any(String));
+    expect(getTools).toHaveBeenCalledWith({
+      sessionId: requestedSessionId,
+      cwd: "C:\\work",
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      requestedSessionId,
+      customTools: [],
+    }));
   });
 
   it("destroys the original runtime after a successful fork", async () => {

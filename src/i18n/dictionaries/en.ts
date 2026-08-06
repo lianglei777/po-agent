@@ -315,6 +315,8 @@ export const en = {
       waitingForOutput: "(waiting for output)",
       noOutput: "(no output)",
       messageActions: "Message actions",
+      generationRun: "Generation",
+      generationArtifact: "Generated artifact",
     },
   },
   sessions: {

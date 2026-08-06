@@ -3,6 +3,7 @@ import type {
   ReadTextFileResponse,
 } from "@/contracts/files";
 import type { ApiErrorResponse } from "@/contracts/common";
+export { rawFileUrl } from "@/lib/raw-file-url";
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -26,9 +27,4 @@ export function loadFile(path: string, signal?: AbortSignal) {
   return requestJson<ReadTextFileResponse>(`/api/files/_?${params}`, {
     signal,
   });
-}
-
-export function rawFileUrl(path: string) {
-  const params = new URLSearchParams({ path, type: "raw" });
-  return `/api/files/_?${params}`;
 }

@@ -818,6 +818,8 @@ src/server/composition/
 - 让 Chat 工具卡片直接消费 Run/Artifact DTO。
 - 验证刷新、断线、Agent 中止和服务重启后任务仍可查看与恢复。
 
+当前实现进度：已增加项目自有工具 port 与 Pi adapter，并固定注册 `generate_image`、`generate_video`、`get_generation`、`cancel_generation`。生成调用使用 Session ID + tool-call ID 幂等创建持久化 Run，等待超时或 Agent 中止不会取消任务；Pi message mapper 保留结构化 `details`，Chat 工具卡片直接展示 Run 状态和本地产物。持久化恢复由既有 SQLite lease Worker 覆盖，真实 RunningHub 端到端调用仍需使用有效凭证手工验收。
+
 ### Phase 6：清理旧实现
 
 - 新链路验证完成后，移除 JSON Job 持久化和通用 HTTP 模板执行路径。

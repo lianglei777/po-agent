@@ -222,6 +222,7 @@ export function ChatCenter({
                 ) : null}
 
                 <MessageList
+                  cwd={session?.cwd ?? newSessionCwd ?? undefined}
                   entryIds={controller.entryIds}
                   forkingEntryId={controller.forkingEntryId}
                   lastUserRef={controller.lastUserRef}

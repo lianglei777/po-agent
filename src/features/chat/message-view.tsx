@@ -21,6 +21,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { MediaPreview } from "@/components/ui/media-preview";
+import type { GenerationToolDetails } from "@/contracts/generation";
+import { rawFileUrl } from "@/lib/raw-file-url";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/use-i18n";
 import { assistantErrorDetails } from "./assistant-error";
@@ -34,6 +37,10 @@ import type {
   UserMessage,
 } from "./agent-types";
 import { toolResults } from "./chat-logic";
+import {
+  generationArtifactPath,
+  generationToolDetails,
+} from "./generation-tool-presentation";
 import {
   buildMessagePresentation,
   executionProcessStatus,
@@ -56,6 +63,7 @@ const CodeBlock = dynamic(
 
 export function MessageList({
   messages,
+  cwd,
   entryIds,
   streamingMessage,
   running,
@@ -67,6 +75,7 @@ export function MessageList({
   onEdit,
 }: {
   messages: AgentMessage[];
+  cwd?: string;
   entryIds: string[];
   streamingMessage: Partial<AssistantMessage> | null;
   running: boolean;
@@ -158,7 +167,7 @@ export function MessageList({
               }
             }}
           >
-            <AssistantTurnView results={results} turn={item} />
+            <AssistantTurnView cwd={cwd} results={results} turn={item} />
           </article>
         );
       })}
@@ -275,9 +284,11 @@ function UserMessageView({
 function AssistantTurnView({
   turn,
   results,
+  cwd,
 }: {
   turn: AssistantTurnPresentationItem;
   results: Map<string, ToolResultMessage>;
+  cwd?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const [errorCopied, setErrorCopied] = useState(false);
@@ -326,6 +337,7 @@ function AssistantTurnView({
       {process.length ? (
         <ExecutionProcess
           assistantError={Boolean(error)}
+          cwd={cwd}
           process={process}
           results={results}
           status={status}
@@ -420,12 +432,14 @@ function ExecutionProcess({
   status,
   streaming,
   assistantError,
+  cwd,
 }: {
   process: AssistantTurnBlock[];
   results: Map<string, ToolResultMessage>;
   status: ReturnType<typeof executionProcessStatus>;
   streaming: boolean;
   assistantError: boolean;
+  cwd?: string;
 }) {
   const { t } = useI18n();
   const automaticValue = streaming || assistantError ? "execution-process" : "";
@@ -459,6 +473,7 @@ function ExecutionProcess({
           <div className={styles.stepList}>
             {process.map((step, index) => (
               <ExecutionStep
+                cwd={cwd}
                 key={executionStepKey(step, index)}
                 result={
                   step.block.type === "toolCall"
@@ -478,9 +493,11 @@ function ExecutionProcess({
 function ExecutionStep({
   step,
   result,
+  cwd,
 }: {
   step: AssistantTurnBlock;
   result?: ToolResultMessage;
+  cwd?: string;
 }) {
   const { t } = useI18n();
   const { block } = step;
@@ -495,6 +512,7 @@ function ExecutionStep({
 
   if (block.type === "toolCall") {
     const summary = toolSummary(block.input);
+    const generation = generationToolDetails(result?.details);
     const statusLabel = result?.isError
       ? t.chat.message.toolError
       : result
@@ -521,11 +539,15 @@ function ExecutionStep({
           </Badge>
           <ChevronRight className={styles.stepChevron} />
         </summary>
-        <pre className="max-h-[400px] overflow-auto border-t border-line-subtle bg-[var(--tool-bg)] px-3 py-2.5 font-ui-mono text-meta leading-[1.65] whitespace-pre-wrap text-muted">
-          {JSON.stringify(block.input, null, 2)}
-          {"\n\n"}
-          {result ? resultText(result, t) : t.chat.message.waitingForOutput}
-        </pre>
+        {generation ? (
+          <GenerationToolResult cwd={cwd} details={generation} />
+        ) : (
+          <pre className="max-h-[400px] overflow-auto border-t border-line-subtle bg-[var(--tool-bg)] px-3 py-2.5 font-ui-mono text-meta leading-[1.65] whitespace-pre-wrap text-muted">
+            {JSON.stringify(block.input, null, 2)}
+            {"\n\n"}
+            {result ? resultText(result, t) : t.chat.message.waitingForOutput}
+          </pre>
+        )}
       </details>
     );
   }
@@ -558,6 +580,73 @@ function FinalAssistantBlock({ block }: { block: TextContent | ImageContent }) {
   return <AssistantImage block={block} />;
 }
 
+function GenerationToolResult({
+  details,
+  cwd,
+}: {
+  details: GenerationToolDetails;
+  cwd?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="space-y-2 border-t border-line-subtle bg-[var(--tool-bg)] p-3">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="font-ui-mono text-muted" title={details.runId}>
+          {t.chat.message.generationRun} {details.runId.slice(0, 8)}
+        </span>
+        <Badge
+          variant={
+            details.error
+              ? "destructive"
+              : details.status === "succeeded"
+                ? "success"
+                : "outline"
+          }
+        >
+          {t.contentGeneration.runStatuses[details.status]}
+        </Badge>
+      </div>
+      {details.error ? (
+        <p className="text-xs text-destructive-text">
+          {details.error.code}: {details.error.message}
+        </p>
+      ) : null}
+      {details.artifacts.map((artifact, index) => {
+        const absolutePath =
+          artifact.localPath && cwd
+            ? generationArtifactPath(cwd, artifact.localPath)
+            : null;
+        return (
+          <div
+            className="overflow-hidden rounded-md border border-line-subtle bg-canvas"
+            key={artifact.id}
+          >
+            {absolutePath &&
+            artifact.contentType &&
+            artifact.kind !== "text" ? (
+              <MediaPreview
+                className="max-h-72 min-h-36"
+                contentType={artifact.contentType}
+                name={`${t.chat.message.generationArtifact} ${index + 1}`}
+                src={rawFileUrl(absolutePath)}
+              />
+            ) : null}
+            {artifact.text ? (
+              <p className="whitespace-pre-wrap p-3 text-sm">
+                {artifact.text}
+              </p>
+            ) : null}
+            {artifact.localPath ? (
+              <p className="border-t border-line-subtle px-3 py-2 font-ui-mono text-caption text-muted">
+                {artifact.localPath}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function AssistantImage({ block }: { block: ImageContent }) {
   const { t } = useI18n();
   return (

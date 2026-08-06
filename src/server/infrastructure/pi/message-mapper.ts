@@ -134,6 +134,7 @@ export function mapPiMessage(value: unknown): AgentMessage {
         typeof value.toolCallId === "string" ? value.toolCallId : "",
       toolName: typeof value.toolName === "string" ? value.toolName : undefined,
       content: mapBasicContent(value.content),
+      details: value.details,
       isError: value.isError === true,
       timestamp,
     };

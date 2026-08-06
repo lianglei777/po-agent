@@ -107,6 +107,16 @@ export interface GenerationArtifactDto {
   createdAt: string;
 }
 
+export interface GenerationToolDetails {
+  runId: string;
+  status: GenerationRunStatus;
+  artifacts: GenerationArtifactDto[];
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
 export interface GenerationRunViewDto {
   run: GenerationRunDto;
   jobs: ProviderJobDto[];

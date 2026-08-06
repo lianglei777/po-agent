@@ -725,7 +725,7 @@ interface CreateAgentRequest {
 - `cwd` 必需且不能为空。
 - 只有同时提供 `provider` 和 `modelId` 才会设置模型。
 - 未提供 `toolNames` 时启用全部内置工具：`bash`、`read`、`edit`、`write`、`grep`、`find`、`ls`。
-- `toolNames: []` 表示禁用所有工具。
+- `toolNames: []` 表示禁用所有内置工具。项目自有的持久化生成工具始终可用，不属于这份内置工具 allowlist。
 - 此接口不会启动 Prompt。客户端必须先建立 SSE，再通过统一 command endpoint 发送首条 `prompt`。
 
 成功响应：
@@ -2723,6 +2723,36 @@ API Key 保存在 Agent data dir 的服务端凭证文件中，不写入 SQLite�
 - SSE/页面断开不会取消 Run。
 - 查询失败会保留远端 task ID 并延迟重试。
 - 服务在 `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
+
+### 12.11 Agent 内容生成工具
+
+每个持久化 Pi Session 固定注册四个项目自有语义工具：
+
+```text
+generate_image
+generate_video
+get_generation
+cancel_generation
+```
+
+`generate_image` 与 `generate_video` 接受跨供应商语义参数：`prompt`、可选 `routeId`、可选 `parameters` 和可选 `assets`。素材项包含 `slot`，并且必须且只能提供 `artifactId` 或 workspace-relative `relativePath`。视频工具还接受 `durationSeconds` 与 `aspectRatio`。工具不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。
+
+无素材时分别选择 `text-to-image` / `text-to-video`；图片生成带素材时选择 `image-to-image`；视频生成带一个素材时选择 `image-to-video`，多个素材时选择 `multimodal-to-video`。显式 `routeId` 仍必须匹配推导出的 capability。
+
+生成工具使用 Pi tool-call ID 和 Session ID 组成持久化幂等键。相同工具调用被恢复或重放时返回同一个 Run，不会创建第二个供应商 Job。工具最多等待 30 秒，并通过 Pi `onUpdate` 发送状态变化；超时或 `AbortSignal` 中止只结束本次等待，Run 继续由 Worker 执行。后续必须用 `get_generation` 查询，不应再次调用 `generate_*`。
+
+成功的 Pi Tool Result 在提供给模型的简短文本之外，还包含结构化 `details`：
+
+```ts
+interface GenerationToolDetails {
+  runId: string;
+  status: GenerationRunStatus;
+  artifacts: GenerationArtifactDto[];
+  error?: { code: string; message: string };
+}
+```
+
+消息合同中的 `ToolResultMessage.details` 原样保留这份数据，Chat UI 直接渲染状态和本地产物，不解析工具文本或供应商 JSON。`get_generation` 和 `cancel_generation` 只允许访问当前 Session 的 Run；跨 Session 的 Run ID 返回 `404 GENERATION_RUN_NOT_FOUND`。`cancel_generation` 与 HTTP 取消接口具有相同语义，供应商任务可能仍继续运行和计费。
 - 成功结果下载到 `<workspace>/.po-agent/generated/<runId>/`。
 - 直接生成页面通过读取 Run view 刷新本地状态，不直接触发供应商查询；供应商轮询只由 Worker 执行。
 - 普通 Pi Session 可在 Chat 与 Generate surface 间切换；切换不会创建第二个 Session，能力选择属于生成视图和具体 Run。

@@ -1,6 +1,7 @@
 import type { AgentCommand } from "@/server/domain/agent-command";
 import type { AgentEvent } from "@/server/domain/agent-event";
 import type { AgentRuntimeState } from "@/server/domain/agent-state";
+import type { AgentToolDefinition } from "@/server/ports/agent-tool";
 
 export interface ModelConfigTarget {
   provider: string;
@@ -50,6 +51,8 @@ export interface CreateRuntimeInput {
   cwd: string;
   /** 允许 Agent 使用的工具名称列表；未提供时使用默认工具集。 */
   toolNames?: string[];
+  /** 项目自有工具，由 infrastructure 适配为底层 SDK 工具。 */
+  customTools?: AgentToolDefinition[];
 }
 
 /** Agent 运行时工厂端口，负责创建新的运行时实例。 */

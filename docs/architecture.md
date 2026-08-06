@@ -187,6 +187,8 @@ src/layouts/agent-workspace
 
 前端把 Chat 与 Generate 作为同一持久化 Session 的两个 workspace surface。新建 Session 不再选择固定模式；已有 Pi Session 可以直接创建 Generation Run。开发期旧 `content-generation.json` Session 仅作为过渡兼容项继续显示在 Generate surface，不能据此扩展新的 mode 分支。
 
+聊天 Agent 通过项目自有 `AgentToolDefinition` port 使用 `generate_image`、`generate_video`、`get_generation` 和 `cancel_generation`。application 工具只创建或读取持久化 Run；Pi adapter 负责把稳定定义转换为 SDK `ToolDefinition`，供应商字段不会进入 Agent 工具合同。生成工具以 Session ID 与 Pi tool-call ID 组成幂等键，工具等待被中止时只停止等待，不取消已持久化的 Run。Pi tool result 的 `details` 被消息映射保留，Chat UI 直接消费结构化 Run/Artifact 数据。
+
 当前部署要求长期运行的 Node.js 进程。Electron 和自托管 Next.js 满足该约束；若迁移到 Serverless，必须先将 Worker 替换为独立常驻执行器或托管队列。
 
 ### 安全
