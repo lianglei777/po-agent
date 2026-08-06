@@ -15,10 +15,13 @@ describe("file tree", () => {
     expect(source).toContain("t.files.refreshFiles");
     expect(source).not.toContain("<Input");
     expect(source).not.toContain("placeholder=");
+    expect(source).toContain("compactGeneratedEntries");
+    expect(source).toContain("isGeneratedArtifactsPath");
   });
 
   it("uses the white canvas background", () => {
     expect(source).toContain("bg-canvas");
+    expect(source).toContain("min-w-0 flex-1 flex-col overflow-hidden");
     expect(source).not.toContain("bg-panel");
   });
 });

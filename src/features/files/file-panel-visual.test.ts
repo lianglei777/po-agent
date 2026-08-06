@@ -34,7 +34,10 @@ describe("file panel visual contract", () => {
   it("uses the same quiet header and rail widths as settings", () => {
     expect(source).toContain('h-9 flex-none');
     expect(source).toContain('border-line-subtle bg-canvas');
-    expect(source).toContain('w-[clamp(160px,42%,224px)]');
+    expect(source).toContain('w-[clamp(152px,32%,192px)]');
+    expect(source).toContain("min-w-0 shrink-0 overflow-hidden");
+    expect(source).toContain("setExplorerVisible(false)");
+    expect(source).toContain("t.files.showExplorer");
   });
 
   it("shows the current project-relative file hierarchy without a shortcut action", () => {

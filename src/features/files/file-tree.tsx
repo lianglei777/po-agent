@@ -8,18 +8,24 @@ import {
   FileCode2,
   Folder,
   FolderOpen,
+  PanelLeftClose,
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadDirectory } from "./api";
+import {
+  compactGeneratedEntries,
+  isGeneratedArtifactsPath,
+} from "./file-tree-model";
 import { joinPath, relativePath } from "./path";
 import type { FileEntry } from "./types";
 
 export type FileTreeProps = {
   cwd: string;
   onAtMention?: (path: string) => void;
+  onCollapse?: () => void;
   onOpenFile: (path: string, name: string, contentType?: string) => void;
   refreshKey?: number;
 };
@@ -27,6 +33,7 @@ export type FileTreeProps = {
 export function FileTree({
   cwd,
   onAtMention,
+  onCollapse,
   onOpenFile,
   refreshKey = 0,
 }: FileTreeProps) {
@@ -45,6 +52,7 @@ export function FileTree({
         const entries = await loadDirectory(path);
         setEntriesByPath((current) => ({ ...current, [path]: entries }));
         setError("");
+        return entries;
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : t.files.unableToLoadFiles,
@@ -56,6 +64,7 @@ export function FileTree({
           return next;
         });
       }
+      return null;
     },
     [t.files.unableToLoadFiles],
   );
@@ -65,29 +74,62 @@ export function FileTree({
     return () => window.clearTimeout(timer);
   }, [cwd, load]);
 
+  const refreshDirectory = useCallback(
+    async (path: string) => {
+      const entries = await load(path);
+      if (!entries || !isGeneratedArtifactsPath(cwd, path)) return;
+      await Promise.all(
+        entries.filter((entry) => entry.isDir).map((entry) => load(entry.path)),
+      );
+    },
+    [cwd, load],
+  );
+
   useEffect(() => {
     if (!refreshKey) return;
     const timer = window.setTimeout(() => {
       void load(cwd);
-      expanded.forEach((path) => void load(path));
+      expanded.forEach((path) => void refreshDirectory(path));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [cwd, expanded, load, refreshKey]);
+  }, [cwd, expanded, load, refreshDirectory, refreshKey]);
 
   async function toggleDirectory(path: string) {
     const next = new Set(expanded);
-    if (next.has(path)) next.delete(path);
-    else {
+    if (next.has(path)) {
+      next.delete(path);
+      setExpanded(next);
+    } else {
       next.add(path);
-      if (!entriesByPath[path]) await load(path);
+      setExpanded(next);
+      const entries = entriesByPath[path] ?? (await load(path));
+      if (entries && isGeneratedArtifactsPath(cwd, path)) {
+        await Promise.all(
+          entries
+            .filter((entry) => entry.isDir && !entriesByPath[entry.path])
+            .map((entry) => load(entry.path)),
+        );
+      }
     }
-    setExpanded(next);
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-canvas">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
       <div className="flex h-9 flex-none items-center border-b border-line-subtle px-2 text-meta font-medium text-muted">
         <span className="flex-1">{t.files.explorer}</span>
+        {onCollapse ? (
+          <Button
+            aria-label={t.files.hideExplorer}
+            className="size-7"
+            onClick={onCollapse}
+            size="icon-sm"
+            title={t.files.hideExplorer}
+            type="button"
+            variant="ghost"
+          >
+            <PanelLeftClose className="size-3.5" />
+          </Button>
+        ) : null}
         <Button
           aria-label={t.files.refreshFiles}
           className="size-7"
@@ -99,7 +141,7 @@ export function FileTree({
           <RefreshCw className="size-3.5" />
         </Button>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 min-w-0 flex-1">
         {error ? (
           <div className="p-3 text-meta text-destructive-text">
             <p>{error}</p>
@@ -115,6 +157,7 @@ export function FileTree({
         ) : (
           <FileNodes
             cwd={cwd}
+            directoryPath={cwd}
             entries={entriesByPath[cwd] ?? []}
             entriesByPath={entriesByPath}
             expanded={expanded}
@@ -136,6 +179,7 @@ export function FileTree({
 
 function FileNodes({
   cwd,
+  directoryPath,
   entries,
   entriesByPath,
   expanded,
@@ -147,6 +191,7 @@ function FileNodes({
   depth = 0,
 }: {
   cwd: string;
+  directoryPath: string;
   entries: FileEntry[];
   entriesByPath: Record<string, FileEntry[]>;
   expanded: Set<string>;
@@ -161,7 +206,14 @@ function FileNodes({
     return <div className="px-4 py-2 text-caption text-dim">{text.empty}</div>;
   }
 
-  return entries.map((entry) => {
+  const displayEntries = compactGeneratedEntries({
+    cwd,
+    directoryPath,
+    entries,
+    entriesByPath,
+  });
+
+  return displayEntries.map(({ entry, runName }) => {
     const path = entry.path || joinPath(cwd, entry.name);
     const isExpanded = expanded.has(path);
     const Icon = entry.isDir
@@ -205,6 +257,11 @@ function FileNodes({
           )}
           <Icon className="mr-1.5 size-3.5 flex-none text-muted" />
           <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+          {runName ? (
+            <span className="ml-2 max-w-16 flex-none truncate font-ui-mono text-caption text-dim">
+              {runName.slice(0, 8)}
+            </span>
+          ) : null}
           {onAtMention ? (
             <Button
               aria-label={`${text.mention} ${entry.name}`}
@@ -232,6 +289,7 @@ function FileNodes({
           ) : (
             <FileNodes
               cwd={cwd}
+              directoryPath={path}
               depth={depth + 1}
               entries={entriesByPath[path] ?? []}
               entriesByPath={entriesByPath}

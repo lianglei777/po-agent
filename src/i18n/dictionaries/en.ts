@@ -400,6 +400,8 @@ export const en = {
     unableToOpenFile: "Unable to open file",
     requestFailed: "Request failed",
     explorer: "Explorer",
+    hideExplorer: "Hide file explorer",
+    showExplorer: "Show file explorer",
     refreshFiles: "Refresh files",
     unableToLoadFiles: "Unable to load files",
     empty: "empty",

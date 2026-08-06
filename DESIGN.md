@@ -55,7 +55,7 @@ Po Agent is a focused desktop developer tool, not a marketing or entertainment s
 - On narrow workspaces, the Project inspector becomes an overlay so Chat retains a usable minimum width. Its active tab, open state, rail state, and user-adjusted widths survive reloads.
 - The minimum supported viewport width is 1024px; there is no mobile-specific layout.
 - Projects and sessions use compact single-line rows. Secondary metadata must not overpower titles or displace row actions.
-- The File tree is the inspector's primary surface when no file is open. When previewing a file, it adapts between 160px and 224px so the preview remains usable. Skills uses single-column list, detail, and add states rather than nesting another settings rail inside the inspector.
+- The File tree is the inspector's primary surface when no file is open. When previewing a file, it adapts between 152px and 192px and can be collapsed so the preview remains usable. Managed generation run directories stay isolated on disk, while the tree flattens completed runs that contain only artifact files and orders them newest first. Skills uses single-column list, detail, and add states rather than nesting another settings rail inside the inspector.
 
 ## Project dock and inspector
 

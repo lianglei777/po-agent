@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, PanelLeftOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/use-i18n";
 import { MediaPreview } from "@/components/ui/media-preview";
 import { loadFile, rawFileUrl } from "./api";
@@ -25,6 +26,7 @@ export function FilePanel({
   refreshKey?: number;
 }) {
   const { t } = useI18n();
+  const [explorerVisible, setExplorerVisible] = useState(true);
   const currentPath = file?.path ?? null;
   const pathSegments = currentPath && cwd
     ? relativePath(cwd, currentPath).split("/").filter(Boolean)
@@ -50,20 +52,34 @@ export function FilePanel({
               ))}
             </ol>
           </nav>
+          {!explorerVisible ? (
+            <Button
+              aria-label={t.files.showExplorer}
+              className="mr-1.5 self-center"
+              onClick={() => setExplorerVisible(true)}
+              size="icon-sm"
+              title={t.files.showExplorer}
+              type="button"
+              variant="ghost"
+            >
+              <PanelLeftOpen className="size-3.5" />
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1">
-        {cwd && onOpenFile ? (
+        {cwd && onOpenFile && explorerVisible ? (
           <aside
-            className={`flex shrink-0 bg-canvas ${
+            className={`flex min-w-0 shrink-0 overflow-hidden bg-canvas ${
               file
-                ? "w-[clamp(160px,42%,224px)] border-r border-line-subtle"
+                ? "w-[clamp(152px,32%,192px)] border-r border-line-subtle"
                 : "w-full"
             }`}
           >
             <FileTree
               cwd={cwd}
               onAtMention={onAtMention}
+              onCollapse={file ? () => setExplorerVisible(false) : undefined}
               onOpenFile={onOpenFile}
               refreshKey={refreshKey}
             />

@@ -394,6 +394,8 @@ export const zh = {
     unableToOpenFile: "无法打开文件",
     requestFailed: "请求失败",
     explorer: "文件浏览",
+    hideExplorer: "收起文件目录",
+    showExplorer: "显示文件目录",
     refreshFiles: "刷新文件",
     unableToLoadFiles: "无法加载文件",
     empty: "空",
