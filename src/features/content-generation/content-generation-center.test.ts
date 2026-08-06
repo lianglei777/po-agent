@@ -7,6 +7,10 @@ const source = readFileSync(
   fileURLToPath(new URL("./content-generation-center.tsx", import.meta.url)),
   "utf8",
 );
+const composerSource = readFileSync(
+  fileURLToPath(new URL("./content-generation-composer.tsx", import.meta.url)),
+  "utf8",
+);
 
 describe("content generation conversation", () => {
   it("refreshes durable local runs without directly polling the provider", () => {
@@ -56,10 +60,16 @@ describe("content generation conversation", () => {
     expect(source).toContain("cancelRun");
   });
 
-  it("lets every persisted session select an enabled generation route", () => {
+  it("keeps route selection with the route-dependent composer inputs", () => {
     expect(source).toContain("selectedRouteId");
     expect(source).toContain("setSelectedRouteId");
-    expect(source).toContain("routes.map((item)");
+    expect(source).toContain("onRouteChange={setSelectedRouteId}");
+    expect(source).not.toContain("<header");
+    expect(composerSource).toContain("routes: GenerationRouteDto[]");
+    expect(composerSource).toContain("onValueChange={onRouteChange}");
+    expect(composerSource).toContain("routes.map((item)");
+    expect(composerSource.indexOf("t.contentGeneration.capability"))
+      .toBeLessThan(composerSource.indexOf("<AssetSlotInput"));
     expect(source).not.toContain("contentGenerationApiId");
   });
 });

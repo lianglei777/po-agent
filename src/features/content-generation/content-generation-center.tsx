@@ -20,7 +20,6 @@ import type {
 } from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { rawFileUrl } from "@/lib/raw-file-url";
 import type { SessionInfo } from "@/features/sessions/types";
 import { useI18n } from "@/i18n/use-i18n";
@@ -191,26 +190,7 @@ export function ContentGenerationCenter({
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
         <div className="mx-auto max-w-[820px]">
-          <header className="mb-8 flex items-end justify-between gap-4 border-b border-line-subtle pb-4">
-            <div>
-              <p className="text-caption text-muted">{t.contentGeneration.mode}</p>
-              <h1 className="mt-1 text-lg font-semibold text-primary">{selectedRoute.name}</h1>
-              <p className="mt-1 font-ui-mono text-meta text-muted">{selectedRoute.capability}</p>
-            </div>
-            <label className="w-64 space-y-1 text-caption text-muted">
-              <span>{t.contentGeneration.capability}</span>
-              <Select onValueChange={setSelectedRouteId} value={selectedRoute.id}>
-                <SelectTrigger className="w-full" aria-label={t.contentGeneration.capability}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {routes.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-          </header>
+          <h1 className="sr-only">{t.contentGeneration.mode}</h1>
           {orderedRuns.length ? (
             <div className="space-y-8">
               {orderedRuns.map((view) => (
@@ -238,11 +218,13 @@ export function ContentGenerationCenter({
       </div>
       <div className="flex-none px-4 pb-4">
         <ContentGenerationComposer
-          route={selectedRoute}
           busy={Boolean(activeRun) || submitting}
           error={error}
           key={selectedRoute.id}
+          onRouteChange={setSelectedRouteId}
           onSubmit={submit}
+          route={selectedRoute}
+          routes={routes}
         />
       </div>
     </main>

@@ -24,13 +24,17 @@ export interface SelectedGenerationAsset {
 
 export function ContentGenerationComposer({
   route,
+  routes,
   busy,
   error,
+  onRouteChange,
   onSubmit,
 }: {
   route: GenerationRouteDto;
+  routes: GenerationRouteDto[];
   busy: boolean;
   error: string;
+  onRouteChange: (routeId: string) => void;
   onSubmit: (input: {
     prompt: string;
     parameters: Record<string, JsonValue>;
@@ -69,6 +73,36 @@ export function ContentGenerationComposer({
 
   return (
     <div className="mx-auto max-w-[820px] rounded-[22px] border border-line-strong bg-canvas p-3 shadow-floating">
+      <div className="mb-3 flex flex-col gap-2 border-b border-line-subtle pb-3 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1 px-1">
+          <p className="text-caption font-medium text-primary">
+            {t.contentGeneration.capability}
+          </p>
+          <p className="mt-0.5 truncate font-ui-mono text-caption text-muted">
+            {route.capability}
+          </p>
+        </div>
+        <Select
+          disabled={busy}
+          onValueChange={onRouteChange}
+          value={route.id}
+        >
+          <SelectTrigger
+            aria-label={t.contentGeneration.capability}
+            className="w-full sm:w-72"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {routes.map((item) => (
+              <SelectItem key={item.id} value={item.id}>
+                {item.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {assetSlots.length ? (
         <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {assetSlots.map((slot) => (
