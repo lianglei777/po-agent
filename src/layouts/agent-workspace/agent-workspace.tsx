@@ -20,11 +20,6 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatCenter, type BranchState } from "@/features/chat/chat-center";
 import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
-import {
-  createContentGenerationSession,
-  loadContentGenerationApis,
-} from "@/features/content-generation/api";
-import type { ContentGenerationApi } from "@/contracts/content-generation";
 import type { OpenFile } from "@/features/files/file-panel";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
@@ -86,14 +81,7 @@ export function AgentWorkspace() {
   const [activeCwd, setActiveCwd] = useState<string | null>(null);
   const [newSessionCwd, setNewSessionCwd] = useState<string | null>(null);
   const [draftSession, setDraftSession] = useState<DraftSession | null>(null);
-  const [newSessionChoice, setNewSessionChoice] = useState<{
-    temporaryId: string;
-    cwd: string;
-  } | null>(null);
-  const [contentGenerationApis, setContentGenerationApis] = useState<ContentGenerationApi[]>([]);
-  const [selectedContentGenerationApiId, setSelectedContentGenerationApiId] = useState("");
-  const [creatingContentSession, setCreatingContentSession] = useState(false);
-  const [contentSessionError, setContentSessionError] = useState("");
+  const [sessionSurface, setSessionSurface] = useState<"chat" | "generation">("chat");
   const [chatInstanceKey, setChatInstanceKey] = useState(0);
   const [branchState, setBranchState] = useState<BranchState | null>(null);
   const [modelsRevision, setModelsRevision] = useState(0);
@@ -306,6 +294,7 @@ export function AgentWorkspace() {
       setNewSessionCwd(cwd);
       setDraftSession(null);
       setActiveView("chat");
+      setSessionSurface("chat");
       updateSessionUrl(null);
       resetChat();
     },
@@ -319,6 +308,7 @@ export function AgentWorkspace() {
       setNewSessionCwd(null);
       setDraftSession(null);
       setActiveView("chat");
+      setSessionSurface(session.mode === "content-generation" ? "generation" : "chat");
       if (!isRestore) updateSessionUrl(session.id);
       setChatInstanceKey((current) => current + 1);
     },
@@ -336,6 +326,7 @@ export function AgentWorkspace() {
         created: new Date().toISOString(),
       });
       setActiveView("chat");
+      setSessionSurface("chat");
       updateSessionUrl(null);
     },
     [resetChat, updateSessionUrl],
@@ -352,6 +343,7 @@ export function AgentWorkspace() {
         created: new Date().toISOString(),
       });
       updateSessionUrl(null);
+      setSessionSurface("chat");
       resetChat();
     },
     [resetChat, selectedSession, updateSessionUrl],
@@ -463,47 +455,9 @@ export function AgentWorkspace() {
   );
   const handleNavigationNewSession = useCallback(
     (temporaryId: string, cwd: string) =>
-      requestNavigation("chat", () => {
-        setNewSessionChoice({ temporaryId, cwd });
-        setContentSessionError("");
-        void loadContentGenerationApis()
-          .then((apis) => {
-            setContentGenerationApis(apis);
-            setSelectedContentGenerationApiId(apis[0]?.id ?? "");
-          })
-          .catch((cause) =>
-            setContentSessionError(
-              cause instanceof Error ? cause.message : "Unable to load APIs",
-            ),
-          );
-      }),
-    [requestNavigation],
+      requestNavigation("chat", () => handleNewSession(temporaryId, cwd)),
+    [handleNewSession, requestNavigation],
   );
-
-  const createSelectedContentSession = useCallback(async () => {
-    if (!newSessionChoice || !selectedContentGenerationApiId || creatingContentSession) return;
-    setCreatingContentSession(true);
-    setContentSessionError("");
-    try {
-      const session = await createContentGenerationSession(
-        newSessionChoice.cwd,
-        selectedContentGenerationApiId,
-      );
-      setNewSessionChoice(null);
-      await selectSessionById(session.id);
-    } catch (cause) {
-      setContentSessionError(
-        cause instanceof Error ? cause.message : "Unable to create session",
-      );
-    } finally {
-      setCreatingContentSession(false);
-    }
-  }, [
-    creatingContentSession,
-    newSessionChoice,
-    selectSessionById,
-    selectedContentGenerationApiId,
-  ]);
   const handleNavigationSelectSession = useCallback(
     (session: SessionInfo, isRestore = false) =>
       requestNavigation("chat", () => handleSelectSession(session, isRestore)),
@@ -669,10 +623,22 @@ export function AgentWorkspace() {
                 }
                 primaryNavigationHidden={primaryNavHidden}
                 showBranchHistory={selectedSession?.mode !== "content-generation"}
+                sessionSurface={
+                  selectedSession?.mode === "content-generation"
+                    ? undefined
+                    : selectedSession
+                      ? sessionSurface
+                      : undefined
+                }
+                onSessionSurfaceChange={
+                  selectedSession?.mode === "content-generation"
+                    ? undefined
+                    : setSessionSurface
+                }
               />
 
               <div className="flex min-h-0 flex-1">
-                {selectedSession?.mode === "content-generation" ? (
+                {selectedSession && sessionSurface === "generation" ? (
                   <ContentGenerationCenter
                     key={selectedSession.id}
                     onChanged={handleAgentEnd}
@@ -832,89 +798,6 @@ export function AgentWorkspace() {
             onSystemPromptDirtyChange={setSystemPromptDirty}
           />
         ) : null}
-
-        <Dialog
-          onOpenChange={(open) => {
-            if (!open && !creatingContentSession) setNewSessionChoice(null);
-          }}
-          open={Boolean(newSessionChoice)}
-        >
-          <DialogContent showCloseButton={false}>
-            <DialogHeader>
-              <DialogTitle>{t.contentGeneration.newSessionTitle}</DialogTitle>
-              <DialogDescription>
-                {t.contentGeneration.newSessionDescription}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3 py-2">
-              <button
-                className="rounded-lg border border-line-strong p-3 text-left hover:bg-hover"
-                onClick={() => {
-                  if (!newSessionChoice) return;
-                  const choice = newSessionChoice;
-                  setNewSessionChoice(null);
-                  handleNewSession(choice.temporaryId, choice.cwd);
-                }}
-                type="button"
-              >
-                <span className="block text-sm font-semibold text-primary">
-                  {t.contentGeneration.chatMode}
-                </span>
-                <span className="mt-1 block text-xs text-muted">
-                  {t.contentGeneration.chatModeDescription}
-                </span>
-              </button>
-              <div className="rounded-lg border border-line-strong p-3">
-                <p className="text-sm font-semibold text-primary">
-                  {t.contentGeneration.mode}
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  {t.contentGeneration.modeDescription}
-                </p>
-                <select
-                  className="mt-3 h-9 w-full rounded-md border border-line-strong bg-canvas px-2 text-xs"
-                  disabled={!contentGenerationApis.length}
-                  onChange={(event) =>
-                    setSelectedContentGenerationApiId(event.target.value)
-                  }
-                  value={selectedContentGenerationApiId}
-                >
-                  {!contentGenerationApis.length ? (
-                    <option value="">{t.contentGeneration.noConfiguredApis}</option>
-                  ) : null}
-                  {contentGenerationApis.map((api) => (
-                    <option key={api.id} value={api.id}>
-                      {api.name}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  className="mt-3 w-full"
-                  disabled={!selectedContentGenerationApiId || creatingContentSession}
-                  onClick={() => void createSelectedContentSession()}
-                  type="button"
-                >
-                  {creatingContentSession
-                    ? t.contentGeneration.creatingSession
-                    : t.contentGeneration.createSession}
-                </Button>
-              </div>
-              {contentSessionError ? (
-                <p className="text-xs text-destructive-text">{contentSessionError}</p>
-              ) : null}
-            </div>
-            <DialogFooter>
-              <Button
-                autoFocus
-                disabled={creatingContentSession}
-                onClick={() => setNewSessionChoice(null)}
-                variant="outline"
-              >
-                {t.common.cancel}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         <Dialog
           onOpenChange={(open) => {

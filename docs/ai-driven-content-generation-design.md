@@ -809,6 +809,8 @@ src/server/composition/
 - UI 从 `mode` 分支迁移为同一 Session 的不同视图。
 - Session 默认使用软删除；生成文件不随 Session 删除自动清除，产物删除需要单独、明确的用户操作。
 
+当前实现进度：新建 Session 已移除固定模式选择；持久化 Pi Session 可以在 Chat 与 Generate surface 间切换，并在 Generate 中按 Run 选择能力。受 Pi SDK“首个 assistant 消息前不落盘”的约束，草稿 Session 暂不开放 Generate。开发期旧 JSON 生成 Session 继续进入兼容 Generate surface，待 SQLite 成为 Session 元数据唯一来源后删除。
+
 ### Phase 5：Agent 工具和结构化 UI
 
 - 增加项目自有 `AgentToolDefinition` 抽象和 Pi adapter。

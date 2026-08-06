@@ -38,6 +38,7 @@ Focused productivity tools: Linear, Vercel dashboard, Notion. The relevant quali
 6. **Stable workflows over novelty.** Preserve Chat state and established operation paths while central workspace views change; configuration navigation must not interrupt a running conversation.
 7. **Explicit destructive actions.** Important deletion, credential removal, and disconnect operations require confirmation with concrete action language.
 8. **Dialogs close deliberately.** Dialogs remain open on backdrop clicks and Escape; users leave through visible close, cancel, save, or confirmation actions.
+9. **Sessions are capability containers.** A persisted session can expose both Chat and content-generation views. Creating a session does not permanently assign it to one interaction mode.
 
 ## Accessibility & Inclusion
 

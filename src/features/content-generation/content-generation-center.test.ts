@@ -56,12 +56,19 @@ describe("content generation conversation", () => {
     expect(source).not.toContain("submitResponse");
   });
 
-  it("provides explicit cancellation and child-run retry actions", () => {
+  it("provides explicit cancellation and same-run retry actions", () => {
     expect(source).toContain("cancelGenerationRun");
     expect(source).toContain("retryGenerationRun");
     expect(source).toContain('status === "failed" || status === "cancelled"');
     expect(source).toContain("RotateCcw");
     expect(source).toContain("retryRun");
     expect(source).toContain("cancelRun");
+  });
+
+  it("allows one session to select different generation capabilities", () => {
+    expect(source).toContain("selectedApiId");
+    expect(source).toContain("setSelectedApiId");
+    expect(source).toContain("apis.map((item)");
+    expect(source).not.toContain("session.contentGenerationApiId);");
   });
 });

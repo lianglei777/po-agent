@@ -19,6 +19,7 @@ import type {
 } from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { rawFileUrl } from "@/features/files/api";
 import type { SessionInfo } from "@/features/sessions/types";
 import { useI18n } from "@/i18n/use-i18n";
@@ -52,12 +53,15 @@ export function ContentGenerationCenter({
   const { t } = useI18n();
   const [apis, setApis] = useState<ContentGenerationApi[]>([]);
   const [runs, setRuns] = useState<GenerationRunViewDto[]>([]);
+  const [selectedApiId, setSelectedApiId] = useState(
+    session.contentGenerationApiId ?? "",
+  );
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const endOfConversation = useRef<HTMLDivElement>(null);
-  const api = apis.find((item) => item.id === session.contentGenerationApiId);
+  const api = apis.find((item) => item.id === selectedApiId);
   const composerApi = useMemo(() => api ? {
     ...api,
     inputSchema: api.inputSchema ? {
@@ -83,13 +87,20 @@ export function ContentGenerationCenter({
       .then(([nextApis, nextRuns]) => {
         if (disposed) return;
         setApis(nextApis);
+        setSelectedApiId((current) => {
+          if (nextApis.some((item) => item.id === current)) return current;
+          const legacyId = session.contentGenerationApiId;
+          return nextApis.some((item) => item.id === legacyId)
+            ? legacyId ?? ""
+            : nextApis[0]?.id ?? "";
+        });
         setRuns(nextRuns);
         setError("");
       })
       .catch((cause) => !disposed && setError(messageOf(cause)))
       .finally(() => !disposed && setLoading(false));
     return () => { disposed = true; };
-  }, [session.id]);
+  }, [session.contentGenerationApiId, session.id]);
 
   useEffect(() => {
     if (!activeRun) return;
@@ -187,16 +198,31 @@ export function ContentGenerationCenter({
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas">
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
         <div className="mx-auto max-w-[820px]">
-          <header className="mb-8 border-b border-line-subtle pb-4">
-            <p className="text-caption text-muted">{t.contentGeneration.mode}</p>
-            <h1 className="mt-1 text-lg font-semibold text-primary">{selectedApi.name}</h1>
-            <p className="mt-1 font-ui-mono text-meta text-muted">{selectedApi.capability}</p>
+          <header className="mb-8 flex items-end justify-between gap-4 border-b border-line-subtle pb-4">
+            <div>
+              <p className="text-caption text-muted">{t.contentGeneration.mode}</p>
+              <h1 className="mt-1 text-lg font-semibold text-primary">{selectedApi.name}</h1>
+              <p className="mt-1 font-ui-mono text-meta text-muted">{selectedApi.capability}</p>
+            </div>
+            <label className="w-64 space-y-1 text-caption text-muted">
+              <span>{t.contentGeneration.capability}</span>
+              <Select onValueChange={setSelectedApiId} value={selectedApi.id}>
+                <SelectTrigger className="w-full" aria-label={t.contentGeneration.capability}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {apis.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
           </header>
           {orderedRuns.length ? (
             <div className="space-y-8">
               {orderedRuns.map((view) => (
                 <GenerationTurn
-                  api={selectedApi}
+                  api={apis.find((item) => item.capability === view.run.capability) ?? selectedApi}
                   busy={pendingActionId === view.run.id}
                   cwd={session.cwd}
                   key={view.run.id}

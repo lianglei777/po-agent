@@ -49,6 +49,7 @@ Po Agent is a focused desktop developer tool, not a marketing or entertainment s
 - The primary navigation rail owns projects, Settings, and locale. Its bottom actions are icon-only and horizontal; System Prompt lives inside Settings. The user collapse action fully hides the rail. Its reveal control moves into a dedicated top row of the visible Conversation panel; when Conversation is also hidden, the control falls back to the Chat top bar and is separated from the distinct conversation-list control. Compact icon mode remains automatic on narrower workspaces.
 - The project Conversation panel owns New chat, session search, and the current project's session tree. It is independently resizable and closable so project selection and conversation selection remain separate concepts.
 - Chat uses one continuous white workspace surface containing the project Conversation panel and the conversation canvas. Resize handles show a subtle `border-subtle` resting line so the panel boundary and drag affordance stay discoverable; the line emphasizes to `border-emphasis` on hover and drag.
+- A persisted Session may switch between Chat and Generate from a compact control in the workspace top bar. The switch changes the center view without creating another Session or discarding Chat state; Generate selects a capability within the Session instead of binding the Session to one API at creation time.
 - Settings is an exclusive full-screen application state with an explicit Exit Settings action. The project navigation, Conversation panel, Chat, and Project dock are hidden while Settings is visible, while Chat remains mounted to preserve its state.
 - A permanent right-side Project dock exposes Files, Skills, and Project Settings as vertical tabs. The dock and expanded inspector are one continuous white surface, with the resize handle placed only between Chat and the complete right-side surface. Selecting a tab opens a resizable inspector; selecting the active tab or its close button collapses it.
 - On narrow workspaces, the Project inspector becomes an overlay so Chat retains a usable minimum width. Its active tab, open state, rail state, and user-adjusted widths survive reloads.
@@ -129,6 +130,7 @@ Codex blue (`#339cff`) is reserved for active state fills, switches, live state,
 - Final answer content stays outside the execution disclosure and remains directly readable.
 - Tool rows reserve stable columns for command summary, status, and disclosure controls.
 - The floating Composer keeps model, thinking, compaction, attachments, queue/steer/stop, and send controls in one compact toolbar.
+- Generate is a sibling Session view, not a separate Session type. Returning to Chat restores the same conversation, while generation Runs remain associated with the same Session.
 - Long conversations use a Codex-style turn navigator overlaid on the Chat panel's right edge. User turns form a quiet continuous rail of short marks; hovering one mark expands nearby marks into a wave and reveals the user prompt plus the following assistant summary. Clicking a mark jumps to that turn without changing panel widths.
 
 ## Settings and detail pages

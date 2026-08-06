@@ -185,6 +185,8 @@ src/layouts/agent-workspace
 
 浏览器原始素材先经受控资产接口写入 workspace 的 `.po-agent/generation-inputs/`，再以 workspace-relative `AssetRef` 创建 Run。直接生成 UI 只读取持久化 Run view；它不会直接调用 RunningHub 查询接口。显式重试保留 Run，并原子新增带独立幂等键的 Provider Job。
 
+前端把 Chat 与 Generate 作为同一持久化 Session 的两个 workspace surface。新建 Session 不再选择固定模式；已有 Pi Session 可以直接创建 Generation Run。开发期旧 `content-generation.json` Session 仅作为过渡兼容项继续显示在 Generate surface，不能据此扩展新的 mode 分支。
+
 当前部署要求长期运行的 Node.js 进程。Electron 和自托管 Next.js 满足该约束；若迁移到 Serverless，必须先将 Worker 替换为独立常驻执行器或托管队列。
 
 ### 安全

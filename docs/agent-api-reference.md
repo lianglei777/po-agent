@@ -2506,6 +2506,8 @@ GET /api/content-generation/documentation/:catalogId
 
 ### 12.4 创建内容生成会话
 
+> 过渡接口：新 UI 不再调用此接口。新建 Session 不区分聊天/内容生成模式；已有 Pi Session 直接通过 Generation Run API 使用生成能力。本接口仅用于读取和清理开发期旧 JSON Session，后续会随旧执行路径删除。
+
 ```http
 POST /api/content-generation/sessions
 Content-Type: application/json
@@ -2723,6 +2725,7 @@ API Key 保存在 Agent data dir 的服务端凭证文件中，不写入 SQLite�
 - 服务在 `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
 - 成功结果下载到 `<workspace>/.po-agent/generated/<runId>/`。
 - 直接生成页面通过读取 Run view 刷新本地状态，不直接触发供应商查询；供应商轮询只由 Worker 执行。
+- 普通 Pi Session 可在 Chat 与 Generate surface 间切换；切换不会创建第二个 Session，能力选择属于生成视图和具体 Run。
 - RunningHub 设置页重新保存 API Key 时，会同步写入新运行时的服务端凭证文件。
 - 当前不迁移 `content-generation.json` 中的开发期测试数据。
 
