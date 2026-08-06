@@ -168,8 +168,14 @@ bypass it with relative paths, re-exports, lint disables, or duplicated types.
   pass.
 - Avoid `any`, `@ts-ignore`, and lint disables. If unavoidable, keep the scope
   narrow and explain the reason in code.
-- Write new or updated code comments in Chinese. Do not churn existing comments
-  only to translate them unless the surrounding code is already being changed.
+- AI-authored code changes must add concise Chinese comments wherever they are
+  necessary to help developers understand non-obvious intent, invariants,
+  architectural boundaries, lifecycle or concurrency behavior, cleanup
+  requirements, compatibility workarounds, or important tradeoffs.
+- Chinese comments should explain why the code exists or what constraints it
+  preserves instead of restating the syntax. Do not add comments to obvious
+  code, and do not churn existing comments only to translate them unless the
+  surrounding code is already being changed.
 - Use existing naming, import aliases, response helpers, validators, and test
   patterns.
 - Add abstractions only when they enforce a boundary, remove meaningful
