@@ -5,12 +5,16 @@ import { useEffect, useState } from "react";
 import type { GenerationRouteDto } from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   deleteRunningHubGenerationCredential,
   loadGenerationRoutes,
   loadRunningHubGenerationCredential,
+  loadRunningHubGenerationSettings,
   saveRunningHubGenerationCredential,
+  updateGenerationRoute,
+  updateRunningHubGenerationSettings,
 } from "./api";
 
 export function ContentGenerationSettings({
@@ -23,6 +27,8 @@ export function ContentGenerationSettings({
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [hasCredential, setHasCredential] = useState(false);
+  const [providerEnabled, setProviderEnabled] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,11 +39,13 @@ export function ContentGenerationSettings({
     void Promise.all([
       loadRunningHubGenerationCredential(),
       loadGenerationRoutes(),
+      loadRunningHubGenerationSettings(),
     ])
-      .then(([credential, nextRoutes]) => {
+      .then(([credential, nextRoutes, provider]) => {
         if (disposed) return;
         setHasCredential(credential.hasCredential);
         setRoutes(nextRoutes);
+        setProviderEnabled(provider.enabled);
       })
       .catch((cause) => !disposed && setError(messageOf(cause)))
       .finally(() => !disposed && setLoading(false));
@@ -83,6 +91,31 @@ export function ContentGenerationSettings({
     }
   }
 
+  async function toggleProvider(enabled: boolean) {
+    setUpdatingId("runninghub");
+    setError("");
+    try {
+      setProviderEnabled((await updateRunningHubGenerationSettings(enabled)).enabled);
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function toggleRoute(routeId: string, enabled: boolean) {
+    setUpdatingId(routeId);
+    setError("");
+    try {
+      const updated = await updateGenerationRoute(routeId, enabled);
+      setRoutes((current) => current.map((route) => route.id === routeId ? updated : route));
+    } catch (cause) {
+      setError(messageOf(cause));
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -92,6 +125,13 @@ export function ContentGenerationSettings({
         </header>
 
         <section className="space-y-4">
+          <div className="flex items-center justify-between gap-6 rounded-lg border border-line-subtle p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-primary">{labels.runningHubEnabled}</h3>
+              <p className="mt-1 text-xs text-muted">{labels.runningHubEnabledDescription}</p>
+            </div>
+            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} loading={updatingId === "runninghub"} onCheckedChange={(enabled) => void toggleProvider(enabled)} />
+          </div>
           <div>
             <h3 className="text-sm font-semibold text-primary">{labels.runningHubCredential}</h3>
             <p className="mt-1 text-xs text-muted">{labels.runningHubCredentialDescription}</p>
@@ -152,9 +192,7 @@ export function ContentGenerationSettings({
                   <p className="truncate text-sm font-medium text-primary">{route.name}</p>
                   <p className="mt-1 font-ui-mono text-caption text-muted">{route.capability}</p>
                 </div>
-                <span className="rounded border border-line-subtle px-2 py-1 text-caption text-muted">
-                  {route.enabled ? labels.routeEnabled : labels.routeDisabled}
-                </span>
+                <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onCheckedChange={(enabled) => void toggleRoute(route.id, enabled)} title={!providerEnabled ? labels.enableProviderFirst : undefined} />
               </div>
             ))}
           </div>

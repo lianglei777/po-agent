@@ -125,6 +125,27 @@ export class SqliteGenerationRepository implements GenerationRepository {
       .map(routeFromRow);
   }
 
+  async setRouteEnabled(id: string, enabled: boolean, updatedAt: string): Promise<boolean> {
+    return this.database.prepare(`
+      UPDATE generation_routes SET enabled = ?, updated_at = ? WHERE id = ?
+    `).run(enabled ? 1 : 0, updatedAt, id).changes > 0;
+  }
+
+  async isProviderEnabled(providerId: string): Promise<boolean> {
+    const row = this.database.prepare(`
+      SELECT enabled FROM generation_provider_settings WHERE provider_id = ?
+    `).get(providerId);
+    return Boolean(row && requiredNumber(row, "enabled") === 1);
+  }
+
+  async setProviderEnabled(providerId: string, enabled: boolean, updatedAt: string): Promise<void> {
+    this.database.prepare(`
+      INSERT INTO generation_provider_settings(provider_id, enabled, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(provider_id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at
+    `).run(providerId, enabled ? 1 : 0, updatedAt);
+  }
+
   async createRun(
     run: GenerationRun,
     job: ProviderJob,

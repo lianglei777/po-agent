@@ -87,6 +87,13 @@ export class GenerationRunService {
       capability: input.capability,
       routeId: input.routeId,
     });
+    if (!await this.repository.isProviderEnabled(route.providerId)) {
+      throw new AppError(
+        "GENERATION_PROVIDER_DISABLED",
+        `${route.providerId} content generation is not enabled`,
+        403,
+      );
+    }
     const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
     const parameters = validateParameters(
       route.inputSchema.parameters ?? [],
@@ -161,6 +168,25 @@ export class GenerationRunService {
   async listRoutes() {
     await this.ready;
     return this.repository.listRoutes();
+  }
+
+  async getProviderSettings(providerId: string) {
+    await this.ready;
+    return { providerId, enabled: await this.repository.isProviderEnabled(providerId) };
+  }
+
+  async setProviderEnabled(providerId: string, enabled: boolean) {
+    await this.ready;
+    await this.repository.setProviderEnabled(providerId, enabled, this.now().toISOString());
+    return { providerId, enabled };
+  }
+
+  async setRouteEnabled(routeId: string, enabled: boolean) {
+    await this.ready;
+    if (!await this.repository.setRouteEnabled(routeId, enabled, this.now().toISOString())) {
+      throw new AppError("GENERATION_ROUTE_NOT_FOUND", "Generation route was not found", 404);
+    }
+    return (await this.repository.getRoute(routeId))!;
   }
 
   async cancelRun(id: string): Promise<GenerationRunView> {

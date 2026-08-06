@@ -23,6 +23,16 @@ describe("SqliteGenerationRepository", () => {
 
   afterEach(() => database.close());
 
+  it("persists paid provider and route switches independently", async () => {
+    await expect(repository.isProviderEnabled("runninghub")).resolves.toBe(false);
+    await repository.setProviderEnabled("runninghub", true, NOW);
+    await expect(repository.isProviderEnabled("runninghub")).resolves.toBe(true);
+    await expect(repository.setRouteEnabled("route-1", false, NOW)).resolves.toBe(true);
+    await expect(repository.getRoute("route-1")).resolves.toEqual(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
   it("creates a run and provider job atomically and reuses the idempotency key", async () => {
     const first = await repository.createRun(run(), job());
     const duplicate = await repository.createRun(

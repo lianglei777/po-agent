@@ -187,6 +187,15 @@ export interface GenerationCredentialStatusResponse {
   hasCredential: boolean;
 }
 
+export interface GenerationProviderSettingsDto {
+  providerId: string;
+  enabled: boolean;
+}
+
+export interface UpdateGenerationEnabledRequest {
+  enabled: boolean;
+}
+
 export interface SaveGenerationCredentialRequest {
   apiKey: string;
 }

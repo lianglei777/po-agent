@@ -4,6 +4,8 @@ import type {
   CreateGenerationRunResponse,
   GenerationAssetUploadResponse,
   GenerationCredentialStatusResponse,
+  GenerationProviderSettingsDto,
+  GenerationRouteDto,
   GenerationRunViewDto,
   ListGenerationRoutesResponse,
   ListGenerationRunsResponse,
@@ -29,6 +31,26 @@ export function loadRunningHubGenerationCredential() {
   return requestJson<GenerationCredentialStatusResponse>(
     "/api/generation/credentials/runninghub",
   );
+}
+
+export function loadRunningHubGenerationSettings() {
+  return requestJson<GenerationProviderSettingsDto>("/api/generation/providers/runninghub");
+}
+
+export function updateRunningHubGenerationSettings(enabled: boolean) {
+  return requestJson<GenerationProviderSettingsDto>("/api/generation/providers/runninghub", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function updateGenerationRoute(routeId: string, enabled: boolean) {
+  return requestJson<GenerationRouteDto>(`/api/generation/routes/${encodeURIComponent(routeId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
 }
 
 export function saveRunningHubGenerationCredential(apiKey: string) {

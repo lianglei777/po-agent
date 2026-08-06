@@ -14,7 +14,7 @@ describe("createRunningHubRoutes", () => {
     ]);
     expect(routes.every((route) =>
       route.providerId === "runninghub" &&
-      route.enabled &&
+      !route.enabled &&
       route.isDefault &&
       route.revision === 2 &&
       route.inputSchema.prompt.required !== undefined

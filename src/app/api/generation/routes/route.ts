@@ -8,7 +8,6 @@ export const runtime = "nodejs";
 export async function GET() {
   return handleRoute<ListGenerationRoutesResponse>(async () =>
     (await container.generationRunService.listRoutes())
-      .filter((route) => route.enabled)
       .map(generationRouteDto),
   );
 }

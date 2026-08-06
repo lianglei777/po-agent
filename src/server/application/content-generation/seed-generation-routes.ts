@@ -8,6 +8,6 @@ export async function seedGenerationRoutes(
   for (const route of routes) {
     const existing = await repository.getRoute(route.id);
     if (existing && existing.revision >= route.revision) continue;
-    await repository.upsertRoute(route);
+    await repository.upsertRoute(existing ? { ...route, enabled: existing.enabled } : route);
   }
 }

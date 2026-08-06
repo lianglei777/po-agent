@@ -63,6 +63,11 @@ export const en = {
       "Choose the interface language used across navigation, dialogs, and status messages.",
   },
   contentGeneration: {
+    paidGenerationConfirm: "This action calls a paid content generation API. Submit this generation task?",
+    paidGenerationRetryConfirm: "Retrying calls the paid content generation API again. Retry this task?",
+    runningHubEnabled: "Enable RunningHub generation",
+    runningHubEnabledDescription: "Master switch. When off, no new paid generation task is submitted. Every generation still requires explicit user approval.",
+    enableProviderFirst: "Enable the RunningHub master switch first.",
     title: "Content generation",
     description:
       "Manage the credential used for image and video generation. Generation routes are built into the application.",
@@ -328,6 +333,7 @@ export const en = {
       messageActions: "Message actions",
       generationRun: "Generation",
       generationArtifact: "Generated artifact",
+      openGenerationArtifact: "Open generated artifact",
     },
   },
   sessions: {

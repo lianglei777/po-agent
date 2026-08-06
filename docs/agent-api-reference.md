@@ -2454,7 +2454,26 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 GET /api/generation/routes
 ```
 
-仅返回启用的、由应用管理的 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
+返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
+
+```http
+PATCH /api/generation/routes/:id
+Content-Type: application/json
+
+{ "enabled": true }
+```
+
+RunningHub 另有默认关闭的付费能力总开关：
+
+```http
+GET   /api/generation/providers/runninghub
+PATCH /api/generation/providers/runninghub
+Content-Type: application/json
+
+{ "enabled": true }
+```
+
+总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。
 
 `inputSchema` 定义 Prompt 规则、语义参数和素材槽位。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。
 
@@ -2566,6 +2585,8 @@ cancel_generation
 ```
 
 生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
+
+`generate_image` 与 `generate_video` 还要求 `userAuthorized: true`。只有最新用户消息明确请求或批准本次付费生成时才允许设置；否则 Agent 必须先征求确认。Generate UI 每次创建或重试任务前也会显示付费确认。
 
 工具最多等待 30 秒并通过 Pi `onUpdate` 报告状态。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run。`get_generation` 与 `cancel_generation` 只能访问当前 Session 的 Run。
 

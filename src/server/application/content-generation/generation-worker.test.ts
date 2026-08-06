@@ -23,8 +23,9 @@ describe("GenerationWorker", () => {
     now = new Date("2026-08-06T00:00:00.000Z");
     await seedGenerationRoutes(
       repository,
-      createRunningHubRoutes(now.toISOString()),
+      createRunningHubRoutes(now.toISOString()).map((route) => ({ ...route, enabled: true })),
     );
+    await repository.setProviderEnabled("runninghub", true, now.toISOString());
     await repository.upsertSession({
       id: "session-1",
       cwd: "D:\\project",

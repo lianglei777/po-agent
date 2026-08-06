@@ -71,7 +71,7 @@ function route(input: {
     capability: input.capability,
     providerId: RUNNINGHUB_PROVIDER_ID,
     providerOperation: input.operation,
-    enabled: true,
+    enabled: false,
     isDefault: true,
     revision: 2,
     defaults: input.defaults,

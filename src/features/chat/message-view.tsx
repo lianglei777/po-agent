@@ -21,6 +21,12 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { MediaPreview } from "@/components/ui/media-preview";
 import type { GenerationToolDetails } from "@/contracts/generation";
 import { rawFileUrl } from "@/lib/raw-file-url";
@@ -318,6 +324,18 @@ function AssistantTurnView({
     )
     .map((item) => item.block.text)
     .join("\n\n");
+  const generatedArtifacts = useMemo(() => {
+    const unique = new Map<string, GenerationToolDetails["artifacts"][number]>();
+    for (const step of process) {
+      if (step.block.type !== "toolCall") continue;
+      const details = generationToolDetails(results.get(step.block.toolCallId)?.details);
+      if (details?.status !== "succeeded") continue;
+      for (const artifact of details.artifacts) {
+        if (artifact.kind === "image" || artifact.kind === "video") unique.set(artifact.id, artifact);
+      }
+    }
+    return [...unique.values()];
+  }, [process, results]);
 
   return (
     <div>
@@ -398,6 +416,10 @@ function AssistantTurnView({
             <FinalAssistantBlock block={block} key={index} />
           ))}
         </div>
+      ) : null}
+
+      {generatedArtifacts.length ? (
+        <GenerationArtifactGallery artifacts={generatedArtifacts} cwd={cwd} />
       ) : null}
 
       {!turn.streaming ? (
@@ -611,6 +633,7 @@ function GenerationToolResult({
           {details.error.code}: {details.error.message}
         </p>
       ) : null}
+
       {details.artifacts.map((artifact, index) => {
         const absolutePath =
           artifact.localPath && cwd
@@ -644,6 +667,72 @@ function GenerationToolResult({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function GenerationArtifactGallery({
+  artifacts,
+  cwd,
+}: {
+  artifacts: GenerationToolDetails["artifacts"];
+  cwd?: string;
+}) {
+  const { t } = useI18n();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = artifacts.find((artifact) => artifact.id === selectedId);
+  return (
+    <div className="mt-3 space-y-2" data-generation-artifacts>
+      <div className="flex flex-wrap gap-2">
+        {artifacts.map((artifact, index) => {
+          const absolutePath = artifact.localPath && cwd
+            ? generationArtifactPath(cwd, artifact.localPath)
+            : null;
+          const src = absolutePath ? rawFileUrl(absolutePath) : artifact.remoteUrl;
+          if (!src || !artifact.contentType) return null;
+          return (
+            <button
+              aria-label={`${t.chat.message.openGenerationArtifact} ${index + 1}`}
+              className="h-28 w-40 overflow-hidden rounded-md border border-line-subtle bg-subtle outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
+              key={artifact.id}
+              onClick={() => setSelectedId(artifact.id)}
+              type="button"
+            >
+              {artifact.kind === "video" ? (
+                <video className="size-full object-cover" muted playsInline preload="metadata" src={src} />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img alt="" className="size-full object-cover" src={src} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {artifacts.map((artifact) => artifact.localPath ? (
+        <p className="break-all font-ui-mono text-caption text-muted" key={`${artifact.id}-path`}>
+          {artifact.localPath}
+        </p>
+      ) : null)}
+      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelectedId(null)}>
+        {selected ? (
+          <DialogContent className="max-h-[90vh] max-w-5xl grid-rows-[auto,minmax(0,1fr),auto]" closeLabel={t.common.close}>
+            <DialogHeader>
+              <DialogTitle>{t.chat.message.generationArtifact}</DialogTitle>
+            </DialogHeader>
+            {selected.contentType ? (
+              <MediaPreview
+                className="min-h-64 max-h-[70vh]"
+                contentType={selected.contentType}
+                name={t.chat.message.generationArtifact}
+                src={selected.localPath && cwd
+                  ? rawFileUrl(generationArtifactPath(cwd, selected.localPath))
+                  : selected.remoteUrl ?? ""}
+              />
+            ) : null}
+            {selected.localPath ? <p className="break-all font-ui-mono text-caption text-muted">{selected.localPath}</p> : null}
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </div>
   );
 }

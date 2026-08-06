@@ -17,7 +17,8 @@ describe("GenerationRunService", () => {
   beforeEach(async () => {
     database = new SqliteDatabase(":memory:");
     repository = new SqliteGenerationRepository(database);
-    await seedGenerationRoutes(repository, createRunningHubRoutes(NOW));
+    await seedGenerationRoutes(repository, createRunningHubRoutes(NOW).map((route) => ({ ...route, enabled: true })));
+    await repository.setProviderEnabled("runninghub", true, NOW);
     await repository.upsertSession(session());
     sequence = 0;
     service = new GenerationRunService(

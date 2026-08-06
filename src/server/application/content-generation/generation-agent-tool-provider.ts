@@ -67,12 +67,20 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         : "Create a durable image generation run. The run continues if this tool call is interrupted.",
       promptSnippet: `${name}: create durable ${video ? "video" : "image"} generation work`,
       promptGuidelines: [
+        "This is a paid operation. Call it only after the user explicitly requested or approved this exact generation in the latest user turn. Otherwise ask for confirmation first.",
         "Do not repeat a generate call after a timeout; use get_generation with the returned runId.",
         "Use workspace-relative paths or artifact IDs for generation assets.",
       ],
       parameters: generateSchema(video),
       execute: async ({ toolCallId, input, signal, onUpdate }) => {
         const parsed = parseGenerateInput(input, video);
+        if (input.userAuthorized !== true) {
+          throw new AppError(
+            "GENERATION_USER_AUTHORIZATION_REQUIRED",
+            "Explicit user authorization is required before paid content generation",
+            403,
+          );
+        }
         const capability = generationCapability(video, parsed.assets);
         const parameters = {
           ...parsed.parameters,
@@ -174,6 +182,10 @@ function generateSchema(video: boolean) {
     type: "object" as const,
     properties: {
       prompt: { type: "string", minLength: 1, maxLength: 20_480 },
+      userAuthorized: {
+        type: "boolean",
+        description: "True only when the latest user turn explicitly requested or approved this paid generation.",
+      },
       routeId: { type: "string", minLength: 1 },
       assets: {
         type: "array",
@@ -196,7 +208,7 @@ function generateSchema(video: boolean) {
           }
         : {}),
     },
-    required: ["prompt"],
+    required: ["prompt", "userAuthorized"],
     additionalProperties: false,
   };
 }

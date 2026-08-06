@@ -20,7 +20,8 @@ describe("GenerationAgentToolProvider", () => {
   beforeEach(async () => {
     database = new SqliteDatabase(":memory:");
     repository = new SqliteGenerationRepository(database);
-    await seedGenerationRoutes(repository, createRunningHubRoutes(NOW));
+    await seedGenerationRoutes(repository, createRunningHubRoutes(NOW).map((route) => ({ ...route, enabled: true })));
+    await repository.setProviderEnabled("runninghub", true, NOW);
     await repository.upsertSession(session());
     sequence = 0;
     service = new GenerationRunService(repository, {
@@ -35,6 +36,18 @@ describe("GenerationAgentToolProvider", () => {
 
   afterEach(() => database.close());
 
+  it("rejects paid generation without explicit user authorization", async () => {
+    const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
+    await expect(generate.execute({
+      toolCallId: "call-without-approval",
+      input: { prompt: "A quiet lake", userAuthorized: false },
+    })).rejects.toMatchObject({
+      code: "GENERATION_USER_AUTHORIZATION_REQUIRED",
+      status: 403,
+    });
+    await expect(service.listRuns("session-1")).resolves.toHaveLength(0);
+  });
+
   it("exposes stable semantic tools and creates an idempotent durable run", async () => {
     const tools = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" });
     expect(tools.map((tool) => tool.name)).toEqual([
@@ -46,7 +59,7 @@ describe("GenerationAgentToolProvider", () => {
     const generate = tools[0]!;
     const context = {
       toolCallId: "call-1",
-      input: { prompt: "A quiet lake" },
+      input: { prompt: "A quiet lake", userAuthorized: true },
     };
     const first = await generate.execute(context);
     const repeated = await generate.execute(context);
@@ -64,6 +77,7 @@ describe("GenerationAgentToolProvider", () => {
     const result = await generate.execute({
       toolCallId: "call-video",
       input: {
+        userAuthorized: true,
         prompt: "Animate these references",
         durationSeconds: 8,
         assets: [
@@ -94,7 +108,7 @@ describe("GenerationAgentToolProvider", () => {
     const updates = vi.fn();
     const pending = generate.execute({
       toolCallId: "call-abort",
-      input: { prompt: "Keep running" },
+      input: { prompt: "Keep running", userAuthorized: true },
       signal: controller.signal,
       onUpdate: updates,
     });

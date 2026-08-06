@@ -129,4 +129,18 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         DEFAULT '{"prompt":{"required":true}}';
     `,
   },
+  {
+    version: 4,
+    name: "generation_paid_capability_settings",
+    sql: `
+      CREATE TABLE generation_provider_settings (
+        provider_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO generation_provider_settings(provider_id, enabled, updated_at)
+      VALUES ('runninghub', 0, CURRENT_TIMESTAMP);
+    `,
+  },
 ];

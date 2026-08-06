@@ -63,6 +63,11 @@ export const zh = {
     languageDescription: "选择导航、对话框和状态信息使用的界面语言。",
   },
   contentGeneration: {
+    paidGenerationConfirm: "此操作将调用付费内容生成接口。确认提交本次生成任务？",
+    paidGenerationRetryConfirm: "重试会再次调用付费内容生成接口。确认重试？",
+    runningHubEnabled: "启用 RunningHub 内容生成",
+    runningHubEnabledDescription: "总开关。关闭后不会提交新的付费生成任务。每次生成仍需用户明确授权。",
+    enableProviderFirst: "请先启用 RunningHub 总开关。",
     title: "内容生成",
     description: "管理图像和视频生成使用的凭证。生成路由由应用内置维护。",
     runningHubCredential: "RunningHub 凭证",
@@ -322,6 +327,7 @@ export const zh = {
       messageActions: "消息操作",
       generationRun: "生成任务",
       generationArtifact: "生成产物",
+      openGenerationArtifact: "查看生成产物",
     },
   },
   sessions: {

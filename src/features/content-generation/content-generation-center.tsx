@@ -117,6 +117,7 @@ export function ContentGenerationCenter({
     assets: SelectedGenerationAsset[];
   }) {
     if (!route || activeRun || submitting) return false;
+    if (!window.confirm(t.contentGeneration.paidGenerationConfirm)) return false;
     setSubmitting(true);
     setError("");
     try {
@@ -160,6 +161,7 @@ export function ContentGenerationCenter({
   }
 
   async function retry(runId: string) {
+    if (!window.confirm(t.contentGeneration.paidGenerationRetryConfirm)) return;
     setPendingActionId(runId);
     setError("");
     try {
