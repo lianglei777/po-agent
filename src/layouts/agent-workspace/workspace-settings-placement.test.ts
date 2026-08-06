@@ -74,12 +74,13 @@ describe("workspace composition", () => {
     expect(settingsSource).toContain("<ModelProviderSaveIndicator");
     expect(saveIndicatorSource).toContain('role="status"');
     expect(saveIndicatorSource).toContain('role="alert"');
-    expect(workspaceSource).toContain(
-      "modelProviderSaveStatus={modelProviderSaveStatus}",
+    expect(settingsSource).toContain(
+      "useState<ModelProviderSaveStatus>({ phase: \"idle\" })",
     );
-    expect(workspaceSource).toContain(
-      "onModelSaveStatusChange={setModelProviderSaveStatus}",
+    expect(settingsSource).toContain(
+      "onSaveStatusChange={setModelProviderSaveStatus}",
     );
+    expect(workspaceSource).not.toContain("modelProviderSaveStatus");
   });
 
   it("uses a desktop-only workspace floor", () => {

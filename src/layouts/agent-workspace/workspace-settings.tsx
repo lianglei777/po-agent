@@ -21,14 +21,12 @@ export function WorkspaceSettings({
   cwd,
   instructionsNeedApply,
   isRunning,
-  modelProviderSaveStatus,
   onBack,
   onInstructionsApplied,
   onInstructionsChanged,
   onContentGenerationDirtyChange,
   onModelDirtyChange,
   onModelsSaved,
-  onModelSaveStatusChange,
   onOpenProjectInstructions,
   onSystemPromptChange,
   onSystemPromptDirtyChange,
@@ -38,19 +36,19 @@ export function WorkspaceSettings({
   cwd?: string;
   instructionsNeedApply?: boolean;
   isRunning?: boolean;
-  modelProviderSaveStatus?: ModelProviderSaveStatus;
   onBack: () => void;
   onInstructionsApplied: () => void;
   onInstructionsChanged: () => void;
   onContentGenerationDirtyChange: (dirty: boolean) => void;
   onModelDirtyChange: (dirty: boolean) => void;
   onModelsSaved: () => void;
-  onModelSaveStatusChange: (status: ModelProviderSaveStatus) => void;
   onOpenProjectInstructions: () => void;
   onSystemPromptChange: (prompt: string) => void;
   onSystemPromptDirtyChange: (dirty: boolean) => void;
 }) {
   const [section, setSection] = useState<SettingsSection>("models");
+  const [modelProviderSaveStatus, setModelProviderSaveStatus] =
+    useState<ModelProviderSaveStatus>({ phase: "idle" });
   const { locale, setLocale, t } = useI18n();
 
   return (
@@ -118,7 +116,7 @@ export function WorkspaceSettings({
             <ModelProviderPage
               onDirtyChange={onModelDirtyChange}
               onSaved={onModelsSaved}
-              onSaveStatusChange={onModelSaveStatusChange}
+              onSaveStatusChange={setModelProviderSaveStatus}
             />
           </div>
 

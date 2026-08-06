@@ -29,17 +29,9 @@ import styles from "./welcome.module.css";
 import type {
   ContextUsage,
   SessionStats,
-  SessionTreeNode,
 } from "./agent-types";
+import type { BranchState } from "./branch-state";
 import { type ChatSession, useChatController } from "./use-chat-controller";
-
-export type BranchState = {
-  tree: SessionTreeNode[];
-  activeLeafId: string | null;
-  running: boolean;
-  busy: boolean;
-  changeLeaf: (leafId: string) => Promise<boolean>;
-};
 
 export function ChatCenter({
   session,

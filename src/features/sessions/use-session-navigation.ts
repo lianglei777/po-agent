@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadProjects, loadSessions, removeProject } from "./api";
 import { createDraftSession } from "./session-draft";
 import { groupSessionsByProject } from "./session-utils";
+import { useSessionNavigationStore } from "./state/session-navigation-store-provider";
 import type { Project, SessionInfo, SessionTreeNode } from "./types";
 
 export type SessionNavigationOptions = {
@@ -52,39 +54,68 @@ export function useSessionNavigation({
   onCwdChange,
   onInitialRestoreDone,
 }: SessionNavigationOptions): SessionNavigationController {
-  const [sessions, setSessions] = useState<SessionInfo[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [projectError, setProjectError] = useState("");
-  const [removingProject, setRemovingProject] = useState<string | null>(null);
-  const [refreshed, setRefreshed] = useState(false);
+  const {
+    sessions,
+    projects,
+    loading,
+    error,
+    projectError,
+    removingProject,
+    refreshed,
+    beginRefresh,
+    completeRefresh,
+    failRefresh,
+    setRefreshed,
+    beginProjectRemoval,
+    completeProjectRemoval,
+    failProjectRemoval,
+  } = useSessionNavigationStore(
+    useShallow((state) => ({
+      sessions: state.sessions,
+      projects: state.projects,
+      loading: state.loading,
+      error: state.error,
+      projectError: state.projectError,
+      removingProject: state.removingProject,
+      refreshed: state.refreshed,
+      beginRefresh: state.beginRefresh,
+      completeRefresh: state.completeRefresh,
+      failRefresh: state.failRefresh,
+      setRefreshed: state.setRefreshed,
+      beginProjectRemoval: state.beginProjectRemoval,
+      completeProjectRemoval: state.completeProjectRemoval,
+      failProjectRemoval: state.failProjectRemoval,
+    })),
+  );
+  // 一次性恢复和反馈计时器属于副作用生命周期，不进入可观察的 Zustand 状态。
   const restoreAttempted = useRef(false);
   const feedbackTimer = useRef<number | null>(null);
   const { t } = useI18n();
 
   const refresh = useCallback(
     async (showLoading = false) => {
-      if (showLoading) setLoading(true);
+      beginRefresh(showLoading);
       try {
         const [nextProjects, nextSessions] = await Promise.all([
           loadProjects(),
           loadSessions(),
         ]);
-        setProjects(nextProjects);
-        setSessions(nextSessions);
-        setError("");
+        completeRefresh(nextProjects, nextSessions, showLoading);
       } catch (cause) {
-        setError(
+        failRefresh(
           cause instanceof Error
             ? cause.message
             : t.sessions.unableToLoadSessions,
+          showLoading,
         );
-      } finally {
-        if (showLoading) setLoading(false);
       }
     },
-    [t.sessions.unableToLoadSessions],
+    [
+      beginRefresh,
+      completeRefresh,
+      failRefresh,
+      t.sessions.unableToLoadSessions,
+    ],
   );
 
   useEffect(() => {
@@ -168,7 +199,7 @@ export function useSessionNavigation({
       window.clearTimeout(feedbackTimer.current);
     }
     feedbackTimer.current = window.setTimeout(() => setRefreshed(false), 2000);
-  }, [refresh]);
+  }, [refresh, setRefreshed]);
 
   const selectProject = useCallback(
     (cwd: string) => {
@@ -179,25 +210,24 @@ export function useSessionNavigation({
 
   const removeProjectFromList = useCallback(
     async (cwd: string) => {
-      if (removingProject) return;
-      setRemovingProject(cwd);
+      if (!beginProjectRemoval(cwd)) return;
       try {
         await removeProject(cwd);
-        setProjects((current) =>
-          current.filter((project) => project.path !== cwd),
-        );
-        setProjectError("");
+        completeProjectRemoval(cwd);
       } catch (cause) {
-        setProjectError(
+        failProjectRemoval(
           cause instanceof Error
             ? cause.message
             : t.sessions.removeProjectFailed,
         );
-      } finally {
-        setRemovingProject(null);
       }
     },
-    [removingProject, t.sessions.removeProjectFailed],
+    [
+      beginProjectRemoval,
+      completeProjectRemoval,
+      failProjectRemoval,
+      t.sessions.removeProjectFailed,
+    ],
   );
 
   const newSession = useCallback(() => {

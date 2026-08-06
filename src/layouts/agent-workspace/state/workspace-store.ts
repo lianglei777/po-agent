@@ -1,6 +1,12 @@
 import { createStore } from "zustand/vanilla";
+import type { BranchState } from "@/features/chat/branch-state";
 import type { OpenFile } from "@/features/files/file-panel";
 import type { SessionInfo } from "@/features/sessions/types";
+import {
+  DEFAULT_CONVERSATION_WIDTH,
+  DEFAULT_INSPECTOR_WIDTH,
+  type PanelWidths,
+} from "../panel-sizing";
 import type { ProjectPanelTab } from "../project-panel";
 import type { WorkspaceView } from "../workspace-navigation";
 
@@ -33,6 +39,10 @@ export type WorkspaceState = {
   sessionRefreshKey: number;
   explorerRefreshKey: number;
   modelsRevision: number;
+  primaryNavExpanded: boolean;
+  conversationOpen: boolean;
+  panelWidths: PanelWidths;
+  branchState: BranchState | null;
 };
 
 export type WorkspaceActions = {
@@ -48,6 +58,19 @@ export type WorkspaceActions = {
   setContentGenerationDirty: (dirty: boolean) => void;
   setSystemPromptDirty: (dirty: boolean) => void;
   setProjectInstructionsDirty: (dirty: boolean) => void;
+  setPrimaryNavExpanded: (expanded: boolean) => void;
+  setConversationOpen: (open: boolean) => void;
+  toggleConversation: () => void;
+  setPanelWidths: (
+    next: PanelWidths | ((current: PanelWidths) => PanelWidths),
+  ) => void;
+  applyLayoutPreferences: (preferences: {
+    primaryNavExpanded: boolean;
+    conversationOpen: boolean;
+    inspectorOpen: boolean;
+    widths: PanelWidths;
+  }) => void;
+  setBranchState: (branchState: BranchState | null) => void;
   changeCwd: (cwd: string) => void;
   selectSession: (session: SessionInfo) => void;
   startDraftSession: (draft: DraftSession) => void;
@@ -87,6 +110,13 @@ export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
   sessionRefreshKey: 0,
   explorerRefreshKey: 0,
   modelsRevision: 0,
+  primaryNavExpanded: true,
+  conversationOpen: true,
+  panelWidths: {
+    conversation: DEFAULT_CONVERSATION_WIDTH,
+    inspector: DEFAULT_INSPECTOR_WIDTH,
+  },
+  branchState: null,
 };
 
 export function createWorkspaceStore(
@@ -112,6 +142,25 @@ export function createWorkspaceStore(
     setSystemPromptDirty: (systemPromptDirty) => set({ systemPromptDirty }),
     setProjectInstructionsDirty: (projectInstructionsDirty) =>
       set({ projectInstructionsDirty }),
+    setPrimaryNavExpanded: (primaryNavExpanded) =>
+      set({ primaryNavExpanded }),
+    setConversationOpen: (conversationOpen) => set({ conversationOpen }),
+    toggleConversation: () =>
+      set((state) => ({ conversationOpen: !state.conversationOpen })),
+    setPanelWidths: (next) =>
+      set((state) => ({
+        panelWidths:
+          typeof next === "function" ? next(state.panelWidths) : next,
+      })),
+    // 偏好恢复必须一次提交，避免多个面板在 hydration 后短暂使用互相矛盾的布局状态。
+    applyLayoutPreferences: (preferences) =>
+      set({
+        primaryNavExpanded: preferences.primaryNavExpanded,
+        conversationOpen: preferences.conversationOpen,
+        projectPanelOpen: preferences.inspectorOpen,
+        panelWidths: preferences.widths,
+      }),
+    setBranchState: (branchState) => set({ branchState }),
     changeCwd: (cwd) =>
       set((state) => ({
         activeCwd: cwd,

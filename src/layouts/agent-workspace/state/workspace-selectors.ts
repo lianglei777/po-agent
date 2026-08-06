@@ -59,3 +59,20 @@ export function useWorkspaceSettingsActions() {
     })),
   );
 }
+
+export function useWorkspaceLayoutState() {
+  return useWorkspaceStore(
+    useShallow((state) => ({
+      primaryNavExpanded: state.primaryNavExpanded,
+      conversationOpen: state.conversationOpen,
+      panelWidths: state.panelWidths,
+      branchState: state.branchState,
+      setPrimaryNavExpanded: state.setPrimaryNavExpanded,
+      setConversationOpen: state.setConversationOpen,
+      toggleConversation: state.toggleConversation,
+      setPanelWidths: state.setPanelWidths,
+      applyLayoutPreferences: state.applyLayoutPreferences,
+      setBranchState: state.setBranchState,
+    })),
+  );
+}

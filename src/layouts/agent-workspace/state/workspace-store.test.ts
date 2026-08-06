@@ -116,4 +116,37 @@ describe("agent workspace store", () => {
       projectInstructionsOpen: false,
     });
   });
+
+  it("restores persisted layout preferences as one transition", () => {
+    const store = createWorkspaceStore();
+
+    store.getState().applyLayoutPreferences({
+      primaryNavExpanded: false,
+      conversationOpen: false,
+      inspectorOpen: true,
+      widths: { conversation: 310, inspector: 520 },
+    });
+
+    expect(store.getState()).toMatchObject({
+      primaryNavExpanded: false,
+      conversationOpen: false,
+      projectPanelOpen: true,
+      panelWidths: { conversation: 310, inspector: 520 },
+    });
+  });
+
+  it("updates panel widths from the latest store state", () => {
+    const store = createWorkspaceStore({
+      panelWidths: { conversation: 300, inspector: 440 },
+    });
+
+    store
+      .getState()
+      .setPanelWidths((current) => ({ ...current, conversation: 360 }));
+
+    expect(store.getState().panelWidths).toEqual({
+      conversation: 360,
+      inspector: 440,
+    });
+  });
 });

@@ -18,20 +18,18 @@ import {
 } from "@/components/ui/dialog";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ChatCenter, type BranchState } from "@/features/chat/chat-center";
+import { ChatCenter } from "@/features/chat/chat-center";
 import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
-import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
 import { loadSessions } from "@/features/sessions/api";
 import { getProjectName } from "@/features/sessions/session-utils";
+import { SessionNavigationStoreProvider } from "@/features/sessions/state/session-navigation-store-provider";
 import type { SessionInfo } from "@/features/sessions/types";
 import { useSessionNavigation } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   COLLAPSED_PRIMARY_NAV_WIDTH,
-  DEFAULT_CONVERSATION_WIDTH,
-  DEFAULT_INSPECTOR_WIDTH,
   DEFAULT_PRIMARY_NAV_WIDTH,
   HIDDEN_PRIMARY_NAV_WIDTH,
   fitPanelWidths,
@@ -39,7 +37,6 @@ import {
   getEffectivePrimaryNavWidth,
   getInspectorWidthBounds,
   isNarrowWorkspace,
-  type PanelWidths,
 } from "./panel-sizing";
 import {
   ProjectPanel,
@@ -53,11 +50,10 @@ import {
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { WorkspaceSettings } from "./workspace-settings";
 import { WorkspaceTopBar } from "./workspace-top-bar";
-import {
-  WorkspaceStoreProvider,
-} from "./state/workspace-store-provider";
+import { WorkspaceStoreProvider } from "./state/workspace-store-provider";
 import {
   useWorkspaceSessionState,
+  useWorkspaceLayoutState,
   useWorkspaceSettingsActions,
   useWorkspaceViewState,
 } from "./state/workspace-selectors";
@@ -66,29 +62,34 @@ import { useWorkspaceNavigationGuard } from "./state/use-workspace-navigation-gu
 export function AgentWorkspace() {
   return (
     <WorkspaceStoreProvider>
-      <AgentWorkspaceContent />
+      <SessionNavigationStoreProvider>
+        <AgentWorkspaceContent />
+      </SessionNavigationStoreProvider>
     </WorkspaceStoreProvider>
   );
 }
 
 function AgentWorkspaceContent() {
-  const [primaryNavExpanded, setPrimaryNavExpanded] = useState(true);
-  const [conversationOpen, setConversationOpen] = useState(true);
-  const [branchState, setBranchState] = useState<BranchState | null>(null);
-  const [modelProviderSaveStatus, setModelProviderSaveStatus] =
-    useState<ModelProviderSaveStatus>({ phase: "idle" });
   const [initialSessionId, setInitialSessionId] = useState<
     string | null | undefined
   >(undefined);
-  const [panelWidths, setPanelWidths] = useState<PanelWidths>({
-    conversation: DEFAULT_CONVERSATION_WIDTH,
-    inspector: DEFAULT_INSPECTOR_WIDTH,
-  });
   const [resizingPanel, setResizingPanel] = useState<
     "conversation" | "inspector" | null
   >(null);
   const [layoutPreferencesReady, setLayoutPreferencesReady] = useState(false);
   const [workspaceWidth, setWorkspaceWidth] = useState(1280);
+  const {
+    primaryNavExpanded,
+    conversationOpen,
+    panelWidths,
+    branchState,
+    setPrimaryNavExpanded,
+    setConversationOpen,
+    toggleConversation,
+    setPanelWidths,
+    applyLayoutPreferences,
+    setBranchState,
+  } = useWorkspaceLayoutState();
   const {
     activeView,
     projectPanelOpen,
@@ -184,14 +185,11 @@ function AgentWorkspaceContent() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const preferences = readLayoutPreferences();
-      setPrimaryNavExpanded(preferences.primaryNavExpanded);
-      setConversationOpen(preferences.conversationOpen);
-      setProjectPanelOpen(preferences.inspectorOpen);
-      setPanelWidths(preferences.widths);
+      applyLayoutPreferences(preferences);
       setLayoutPreferencesReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [setProjectPanelOpen]);
+  }, [applyLayoutPreferences]);
 
   useEffect(() => {
     if (!layoutPreferencesReady) return;
@@ -233,6 +231,7 @@ function AgentWorkspaceContent() {
     activeView,
     conversationOpen,
     primaryNavExpanded,
+    setPanelWidths,
     showProjectDock,
     showProjectPanel,
   ]);
@@ -598,7 +597,7 @@ function AgentWorkspaceContent() {
                 conversationOpen={conversationOpen}
                 onExpandPrimaryNavigation={() => setPrimaryNavExpanded(true)}
                 onToggleConversation={() =>
-                  setConversationOpen((open) => !open)
+                  toggleConversation()
                 }
                 primaryNavigationHidden={primaryNavHidden}
                 showBranchHistory={Boolean(selectedSession)}
@@ -752,7 +751,6 @@ function AgentWorkspaceContent() {
             cwd={activeCwd ?? undefined}
             instructionsNeedApply={instructionsNeedApply}
             isRunning={branchState?.busy}
-            modelProviderSaveStatus={modelProviderSaveStatus}
             onBack={() =>
               requestNavigation("chat", () => setActiveView("chat"))
             }
@@ -761,7 +759,6 @@ function AgentWorkspaceContent() {
             onContentGenerationDirtyChange={setContentGenerationDirty}
             onModelDirtyChange={setModelProviderDirty}
             onModelsSaved={markModelsSaved}
-            onModelSaveStatusChange={setModelProviderSaveStatus}
             onOpenProjectInstructions={handleOpenProjectInstructions}
             onSystemPromptChange={setCurrentSystemPrompt}
             onSystemPromptDirtyChange={setSystemPromptDirty}
