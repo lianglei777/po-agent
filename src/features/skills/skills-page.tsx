@@ -189,7 +189,9 @@ function SkillsPageContent({ cwd, projectName }: SkillsPageProps) {
                   : t.skills.packs.refresh
               }
               disabled={
-                view === "skills" ? skills.loading : packs.loading || packBusy
+                view === "skills"
+                  ? skills.loading || skills.busy
+                  : packs.loading || packBusy
               }
               onClick={() =>
                 void (view === "skills" ? skills.refresh() : packs.refresh())

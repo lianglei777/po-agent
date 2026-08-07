@@ -90,23 +90,34 @@ export function useSessionNavigation({
   // 一次性恢复和反馈计时器属于副作用生命周期，不进入可观察的 Zustand 状态。
   const restoreAttempted = useRef(false);
   const feedbackTimer = useRef<number | null>(null);
+  const refreshRevision = useRef(0);
+  const loadingRefreshPending = useRef(false);
   const { t } = useI18n();
 
   const refresh = useCallback(
     async (showLoading = false) => {
+      const revision = ++refreshRevision.current;
+      if (showLoading) loadingRefreshPending.current = true;
       beginRefresh(showLoading);
       try {
         const [nextProjects, nextSessions] = await Promise.all([
           loadProjects(),
           loadSessions(),
         ]);
-        completeRefresh(nextProjects, nextSessions, showLoading);
+        // 多个刷新并行时，只允许最后发起的请求提交列表快照。
+        if (revision !== refreshRevision.current) return;
+        const finishLoading = loadingRefreshPending.current;
+        loadingRefreshPending.current = false;
+        completeRefresh(nextProjects, nextSessions, finishLoading);
       } catch (cause) {
+        if (revision !== refreshRevision.current) return;
+        const finishLoading = loadingRefreshPending.current;
+        loadingRefreshPending.current = false;
         failRefresh(
           cause instanceof Error
             ? cause.message
             : t.sessions.unableToLoadSessions,
-          showLoading,
+          finishLoading,
         );
       }
     },
@@ -131,6 +142,7 @@ export function useSessionNavigation({
 
   useEffect(
     () => () => {
+      refreshRevision.current += 1;
       if (feedbackTimer.current !== null) {
         window.clearTimeout(feedbackTimer.current);
       }

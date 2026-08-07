@@ -53,6 +53,13 @@ describe("Model Provider page", () => {
     expect(controllerSource).not.toContain("}, [t.models.failedToSave]);");
   });
 
+  it("ignores stale model discovery responses", () => {
+    expect(controllerSource).toContain("discoveryRevisionRef");
+    expect(controllerSource).toContain(
+      "revision !== discoveryRevisionRef.current",
+    );
+  });
+
   it("keeps nested detail components", () => {
     expect(source).toContain("ProviderDetail");
     expect(source).toContain("ModelDetail");

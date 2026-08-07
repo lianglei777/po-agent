@@ -12,4 +12,10 @@ describe("chat runtime state synchronization", () => {
     expect(source).toContain('type: "get_state"');
     expect(source).toContain("syncRuntimeState(runtimeState)");
   });
+
+  it("ignores a session load after its effect loses ownership", () => {
+    expect(source).toContain("let active = true");
+    expect(source).toContain("if (!active) return");
+    expect(source).toContain("active = false");
+  });
 });

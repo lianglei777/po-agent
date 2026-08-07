@@ -78,7 +78,7 @@ export async function loadModelsConfigData() {
   };
 }
 
-export function saveModelsConfig(config: ModelsJson) {
+export function saveModelsConfig(config: ModelsJson, signal?: AbortSignal) {
   const body = sanitizeModelsConfig(
     config as Record<string, unknown>,
   ) satisfies SaveModelsConfigRequest;
@@ -86,6 +86,7 @@ export function saveModelsConfig(config: ModelsJson) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 }
 

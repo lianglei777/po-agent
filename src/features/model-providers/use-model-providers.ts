@@ -108,6 +108,7 @@ export function useModelProviders(onSaved?: () => void) {
   const onSavedRef = useRef(onSaved);
   const failedToSaveRef = useRef(t.models.failedToSave);
   const savedTimerRef = useRef<number | null>(null);
+  const discoveryRevisionRef = useRef(0);
   const saveQueueRef = useRef<ReturnType<
     typeof createDebouncedSaveQueue<ModelsJson>
   > | null>(null);
@@ -117,6 +118,13 @@ export function useModelProviders(onSaved?: () => void) {
     onSavedRef.current = onSaved;
     failedToSaveRef.current = t.models.failedToSave;
   }, [config, onSaved, t.models.failedToSave]);
+
+  useEffect(
+    () => () => {
+      discoveryRevisionRef.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     const queue = createDebouncedSaveQueue<ModelsJson>({
@@ -280,11 +288,15 @@ export function useModelProviders(onSaved?: () => void) {
     async (providerName: string) => {
       const provider = config.providers?.[providerName];
       if (!provider) return;
+      const revision = ++discoveryRevisionRef.current;
       setDiscovery({ phase: "discovering", providerName });
       try {
         const result = await discoverModelsConfig({ providerName, provider });
+        // Provider 切换后，旧发现结果不能覆盖最后一次请求的状态。
+        if (revision !== discoveryRevisionRef.current) return;
         setDiscovery({ phase: "result", providerName, ...result });
       } catch (error) {
+        if (revision !== discoveryRevisionRef.current) return;
         setDiscovery({
           phase: "error",
           providerName,

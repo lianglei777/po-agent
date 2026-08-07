@@ -67,6 +67,26 @@ describe("latest save queue", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toEqual(new Error("offline"));
   });
+
+  it("aborts an in-flight save when disposed", () => {
+    const activeSignals: AbortSignal[] = [];
+    const queue = createLatestSaveQueue<string>({
+      save: (_value, signal) => {
+        activeSignals.push(signal);
+        return new Promise((_, reject) => {
+          signal.addEventListener("abort", () => reject(new Error("aborted")));
+        });
+      },
+      onError: vi.fn(),
+      onSaved: vi.fn(),
+      onSavingChange: vi.fn(),
+    });
+
+    queue.enqueue("active");
+    expect(activeSignals[0]?.aborted).toBe(false);
+    queue.dispose();
+    expect(activeSignals[0]?.aborted).toBe(true);
+  });
 });
 
 describe("debounced save queue", () => {
@@ -90,7 +110,7 @@ describe("debounced save queue", () => {
 
       await vi.advanceTimersByTimeAsync(1);
       expect(save).toHaveBeenCalledOnce();
-      expect(save).toHaveBeenCalledWith("latest");
+      expect(save).toHaveBeenCalledWith("latest", expect.any(AbortSignal));
     } finally {
       vi.useRealTimers();
     }

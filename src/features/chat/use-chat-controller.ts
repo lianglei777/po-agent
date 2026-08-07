@@ -548,17 +548,21 @@ export function useChatController(options: ChatControllerOptions) {
 
   useEffect(() => {
     if (!session) return;
+    let active = true;
     const timer = window.setTimeout(async () => {
       sessionIdRef.current = session.id;
       setPartialToolResults(new Map());
       setLoading(true);
       try {
         const detail = await loadSession(session.id);
+        // 会话切换后，旧请求不得再同步 Workspace 状态或重新建立旧 SSE。
+        if (!active) return;
         applyDetail(detail);
         if (!detail.agentState?.state) {
           const runtimeState = await sendCommand(session.id, {
             type: "get_state",
           });
+          if (!active) return;
           syncRuntimeState(runtimeState);
         }
         setError("");
@@ -569,12 +573,19 @@ export function useChatController(options: ChatControllerOptions) {
           connectSse(session.id);
         }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Unable to load session");
+        if (active) {
+          setError(
+            cause instanceof Error ? cause.message : "Unable to load session",
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }, 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
   }, [
     applyDetail,
     connectSse,

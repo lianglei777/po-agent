@@ -1,5 +1,5 @@
 interface LatestSaveQueueOptions<T> {
-  save: (value: T) => Promise<unknown>;
+  save: (value: T, signal: AbortSignal) => Promise<unknown>;
   onSavingChange: (saving: boolean) => void;
   onSaved: (value: T) => void;
   onError: (error: unknown) => void;
@@ -15,6 +15,7 @@ export function createLatestSaveQueue<T>({
   let hasPending = false;
   let running = false;
   let disposed = false;
+  let activeController: AbortController | null = null;
 
   async function pump() {
     if (running || disposed) return;
@@ -25,11 +26,15 @@ export function createLatestSaveQueue<T>({
       const value = pending as T;
       pending = undefined;
       hasPending = false;
+      const controller = new AbortController();
+      activeController = controller;
       try {
-        await save(value);
+        await save(value, controller.signal);
         if (!disposed) onSaved(value);
       } catch (error) {
         if (!disposed) onError(error);
+      } finally {
+        if (activeController === controller) activeController = null;
       }
     }
 
@@ -48,6 +53,9 @@ export function createLatestSaveQueue<T>({
       disposed = true;
       pending = undefined;
       hasPending = false;
+      // 页面离开时同时取消尚未发送和正在发送的保存，避免“放弃”后继续写入。
+      activeController?.abort();
+      activeController = null;
     },
   };
 }

@@ -124,16 +124,21 @@ describe("models config client contract", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await saveModelsConfig({
-      providers: {
-        custom: {
-          api: "openai-responses",
-          compat: {
-            sendSessionIdHeader: false,
-            supportsDeveloperRole: false,
+    const controller = new AbortController();
+    await saveModelsConfig(
+      {
+        providers: {
+          custom: {
+            api: "openai-responses",
+            compat: {
+              sendSessionIdHeader: false,
+              supportsDeveloperRole: false,
+            },
           },
         },
       },
-    });
+      controller.signal,
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
 });

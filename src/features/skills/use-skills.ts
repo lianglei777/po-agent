@@ -52,13 +52,15 @@ export function useSkills(cwd: string) {
       }),
     ),
   );
-  const requestRef = useRef<AbortController | null>(null);
+  const refreshRequestRef = useRef<AbortController | null>(null);
+  const mutationRequestRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
-    requestRef.current?.abort();
+    // 列表刷新不能取消已经发送到服务端的技能修改操作。
+    if (mutationRequestRef.current) return;
+    refreshRequestRef.current?.abort();
     const controller = new AbortController();
-    requestRef.current = controller;
-    setSavingSkillId(null);
+    refreshRequestRef.current = controller;
     setSkillsLoading(true);
     setSkillsError(null);
     try {
@@ -68,12 +70,14 @@ export function useSkills(cwd: string) {
         setSkillsError(errorMessage(nextError, t.skills.somethingWentWrong));
       }
     } finally {
-      if (!controller.signal.aborted) setSkillsLoading(false);
+      if (refreshRequestRef.current === controller) {
+        refreshRequestRef.current = null;
+        setSkillsLoading(false);
+      }
     }
   }, [
     applySkillsResult,
     cwd,
-    setSavingSkillId,
     setSkillsError,
     setSkillsLoading,
     t.skills.somethingWentWrong,
@@ -83,7 +87,8 @@ export function useSkills(cwd: string) {
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => {
       window.clearTimeout(timer);
-      requestRef.current?.abort();
+      refreshRequestRef.current?.abort();
+      mutationRequestRef.current?.abort();
     };
   }, [cwd, refresh]);
 
@@ -96,9 +101,11 @@ export function useSkills(cwd: string) {
 
   const toggleModelInvocation = useCallback(async () => {
     if (!selectedSkill) return;
-    requestRef.current?.abort();
+    if (mutationRequestRef.current) return;
+    refreshRequestRef.current?.abort();
+    refreshRequestRef.current = null;
     const controller = new AbortController();
-    requestRef.current = controller;
+    mutationRequestRef.current = controller;
     setSkillsLoading(false);
     setSavingSkillId(selectedSkill.skillId);
     setSkillsError(null);
@@ -119,7 +126,10 @@ export function useSkills(cwd: string) {
         setSkillsError(errorMessage(nextError, t.skills.somethingWentWrong));
       }
     } finally {
-      if (!controller.signal.aborted) setSavingSkillId(null);
+      if (mutationRequestRef.current === controller) {
+        mutationRequestRef.current = null;
+        setSavingSkillId(null);
+      }
     }
   }, [
     applySkillsResult,
@@ -133,9 +143,11 @@ export function useSkills(cwd: string) {
 
   const removeSkill = useCallback(async (): Promise<boolean> => {
     if (!selectedSkill) return false;
-    requestRef.current?.abort();
+    if (mutationRequestRef.current) return false;
+    refreshRequestRef.current?.abort();
+    refreshRequestRef.current = null;
     const controller = new AbortController();
-    requestRef.current = controller;
+    mutationRequestRef.current = controller;
     setSkillsLoading(false);
     setRemovingSkillId(selectedSkill.skillId);
     setSkillsError(null);
@@ -153,7 +165,10 @@ export function useSkills(cwd: string) {
       }
       return false;
     } finally {
-      if (!controller.signal.aborted) setRemovingSkillId(null);
+      if (mutationRequestRef.current === controller) {
+        mutationRequestRef.current = null;
+        setRemovingSkillId(null);
+      }
     }
   }, [
     applySkillsResult,
@@ -167,6 +182,7 @@ export function useSkills(cwd: string) {
 
   return {
     ...skillsResult,
+    busy: savingSkillId !== null || removingSkillId !== null,
     error: skillsError,
     loading: skillsLoading,
     refresh,

@@ -64,12 +64,15 @@ describe("skills config UI contract", () => {
     expect(detailSource).toContain("t.skills.packs.viewPack");
   });
 
-  it("clears an interrupted save when refreshing", () => {
+  it("does not let list refreshes abort skill mutations", () => {
     const refreshStart = hookSource.indexOf("const refresh");
     const refreshEnd = hookSource.indexOf("useEffect", refreshStart);
-    expect(hookSource.slice(refreshStart, refreshEnd)).toContain(
-      "setSavingSkillId(null)",
-    );
+    const refreshSource = hookSource.slice(refreshStart, refreshEnd);
+    expect(hookSource).toContain("refreshRequestRef");
+    expect(hookSource).toContain("mutationRequestRef");
+    expect(refreshSource).toContain("if (mutationRequestRef.current) return");
+    expect(refreshSource).not.toContain("setSavingSkillId(null)");
+    expect(pageSource).toContain("skills.loading || skills.busy");
   });
 
   it("clears an interrupted refresh when saving", () => {
