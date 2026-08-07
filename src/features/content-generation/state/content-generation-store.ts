@@ -8,6 +8,8 @@ type StateUpdater<T> = T | ((current: T) => T);
 
 export type ContentGenerationState = {
   routes: GenerationRouteDto[];
+  centerSessionId: string | null;
+  centerRevision: number;
   runs: GenerationRunViewDto[];
   selectedRouteId: string;
   centerLoading: boolean;
@@ -24,18 +26,48 @@ export type ContentGenerationState = {
 
 export type ContentGenerationActions = {
   setRoutes: (next: GenerationRouteDto[]) => void;
-  setRuns: (next: StateUpdater<GenerationRunViewDto[]>) => void;
-  setSelectedRouteId: (next: StateUpdater<string>) => void;
+  setRuns: (
+    sessionId: string,
+    revision: number,
+    next: StateUpdater<GenerationRunViewDto[]>,
+  ) => boolean;
+  setSelectedRouteId: (
+    sessionId: string,
+    revision: number,
+    next: StateUpdater<string>,
+  ) => boolean;
   applyCenterData: (
+    sessionId: string,
+    revision: number,
     routes: GenerationRouteDto[],
     runs: GenerationRunViewDto[],
-  ) => void;
-  resetCenter: () => void;
-  replaceRun: (next: GenerationRunViewDto) => void;
-  setCenterLoading: (next: boolean) => void;
-  setSubmitting: (next: boolean) => void;
-  setPendingActionId: (next: string | null) => void;
-  setCenterError: (next: string) => void;
+  ) => boolean;
+  activateCenterSession: (sessionId: string) => number;
+  replaceRun: (
+    sessionId: string,
+    revision: number,
+    next: GenerationRunViewDto,
+  ) => boolean;
+  setCenterLoading: (
+    sessionId: string,
+    revision: number,
+    next: boolean,
+  ) => boolean;
+  setSubmitting: (
+    sessionId: string,
+    revision: number,
+    next: boolean,
+  ) => boolean;
+  setPendingActionId: (
+    sessionId: string,
+    revision: number,
+    next: string | null,
+  ) => boolean;
+  setCenterError: (
+    sessionId: string,
+    revision: number,
+    next: string,
+  ) => boolean;
   applySettingsData: (
     routes: GenerationRouteDto[],
     hasCredential: boolean,
@@ -58,6 +90,8 @@ export type ContentGenerationStoreApi = ReturnType<
 
 export const DEFAULT_CONTENT_GENERATION_STATE: ContentGenerationState = {
   routes: [],
+  centerSessionId: null,
+  centerRevision: 0,
   runs: [],
   selectedRouteId: "",
   centerLoading: true,
@@ -75,7 +109,7 @@ export const DEFAULT_CONTENT_GENERATION_STATE: ContentGenerationState = {
 export function createContentGenerationStore(
   initialState: Partial<ContentGenerationState> = {},
 ) {
-  return createStore<ContentGenerationStore>()((set) => ({
+  return createStore<ContentGenerationStore>()((set, get) => ({
     ...DEFAULT_CONTENT_GENERATION_STATE,
     ...initialState,
     setRoutes: (routes) =>
@@ -83,48 +117,63 @@ export function createContentGenerationStore(
         routes,
         selectedRouteId: reconcileSelectedRoute(routes, state.selectedRouteId),
       })),
-    setRuns: (next) =>
-      set((state) => ({
+    setRuns: (sessionId, revision, next) =>
+      updateCenterSession(get, set, sessionId, revision, (state) => ({
         runs: typeof next === "function" ? next(state.runs) : next,
       })),
-    setSelectedRouteId: (next) =>
-      set((state) => ({
+    setSelectedRouteId: (sessionId, revision, next) =>
+      updateCenterSession(get, set, sessionId, revision, (state) => ({
         selectedRouteId:
           typeof next === "function" ? next(state.selectedRouteId) : next,
       })),
     // 路由和会话任务一起落库，确保首屏不会渲染半完成的远程状态。
-    applyCenterData: (routes, runs) =>
-      set((state) => {
-        return {
+    applyCenterData: (sessionId, revision, routes, runs) =>
+      updateCenterSession(get, set, sessionId, revision, (state) => ({
+        routes,
+        runs,
+        selectedRouteId: reconcileSelectedRoute(
           routes,
-          runs,
-          selectedRouteId: reconcileSelectedRoute(
-            routes,
-            state.selectedRouteId,
-          ),
-          centerError: "",
-          centerLoading: false,
-        };
-      }),
-    resetCenter: () =>
+          state.selectedRouteId,
+        ),
+        centerError: "",
+        centerLoading: false,
+      })),
+    activateCenterSession: (centerSessionId) => {
+      const centerRevision = get().centerRevision + 1;
       set({
+        centerSessionId,
+        centerRevision,
         runs: [],
         selectedRouteId: "",
         centerLoading: true,
         submitting: false,
         pendingActionId: null,
         centerError: "",
-      }),
-    replaceRun: (next) =>
-      set((state) => ({
+      });
+      return centerRevision;
+    },
+    replaceRun: (sessionId, revision, next) =>
+      updateCenterSession(get, set, sessionId, revision, (state) => ({
         runs: state.runs.map((view) =>
           view.run.id === next.run.id ? next : view,
         ),
       })),
-    setCenterLoading: (centerLoading) => set({ centerLoading }),
-    setSubmitting: (submitting) => set({ submitting }),
-    setPendingActionId: (pendingActionId) => set({ pendingActionId }),
-    setCenterError: (centerError) => set({ centerError }),
+    setCenterLoading: (sessionId, revision, centerLoading) =>
+      updateCenterSession(get, set, sessionId, revision, () => ({
+        centerLoading,
+      })),
+    setSubmitting: (sessionId, revision, submitting) =>
+      updateCenterSession(get, set, sessionId, revision, () => ({
+        submitting,
+      })),
+    setPendingActionId: (sessionId, revision, pendingActionId) =>
+      updateCenterSession(get, set, sessionId, revision, () => ({
+        pendingActionId,
+      })),
+    setCenterError: (sessionId, revision, centerError) =>
+      updateCenterSession(get, set, sessionId, revision, () => ({
+        centerError,
+      })),
     applySettingsData: (routes, hasCredential, providerEnabled) =>
       set((state) => ({
         routes,
@@ -157,6 +206,31 @@ export function createContentGenerationStore(
     setSavingCredential: (savingCredential) => set({ savingCredential }),
     setSettingsError: (settingsError) => set({ settingsError }),
   }));
+}
+
+function updateCenterSession(
+  get: () => ContentGenerationStore,
+  set: (
+    next:
+      | Partial<ContentGenerationStore>
+      | ((state: ContentGenerationStore) => Partial<ContentGenerationStore>),
+  ) => void,
+  sessionId: string,
+  revision: number,
+  update: (
+    state: ContentGenerationStore,
+  ) => Partial<ContentGenerationState>,
+): boolean {
+  // Workspace 级 Store 会跨 Session 存活，旧请求只能写回发起它的 Session。
+  const current = get();
+  if (
+    current.centerSessionId !== sessionId ||
+    current.centerRevision !== revision
+  ) {
+    return false;
+  }
+  set((state) => update(state));
+  return true;
 }
 
 function reconcileSelectedRoute(

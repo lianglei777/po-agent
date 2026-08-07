@@ -63,7 +63,8 @@ describe("content generation conversation", () => {
   it("keeps route selection with the route-dependent composer inputs", () => {
     expect(source).toContain("selectedRouteId");
     expect(source).toContain("setSelectedRouteId");
-    expect(source).toContain("onRouteChange={setSelectedRouteId}");
+    expect(source).toContain("centerRevisionRef.current");
+    expect(source).toContain("void setSelectedRouteId(");
     expect(source).not.toContain("<header");
     expect(composerSource).toContain("routes: GenerationRouteDto[]");
     expect(composerSource).toContain("onValueChange={onRouteChange}");

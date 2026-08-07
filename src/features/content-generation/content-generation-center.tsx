@@ -54,12 +54,12 @@ export function ContentGenerationCenter({
 }) {
   const { t } = useI18n();
   const {
+    activateCenterSession,
     applyCenterData,
     centerError,
     centerLoading,
     pendingActionId,
     replaceRun,
-    resetCenter,
     routes,
     runs,
     selectedRouteId,
@@ -73,12 +73,12 @@ export function ContentGenerationCenter({
   } = useContentGenerationStore(
     useShallow(
       ({
+        activateCenterSession,
         applyCenterData,
         centerError,
         centerLoading,
         pendingActionId,
         replaceRun,
-        resetCenter,
         routes,
         runs,
         selectedRouteId,
@@ -90,12 +90,12 @@ export function ContentGenerationCenter({
         setSubmitting,
         submitting,
       }) => ({
+        activateCenterSession,
         applyCenterData,
         centerError,
         centerLoading,
         pendingActionId,
         replaceRun,
-        resetCenter,
         routes,
         runs,
         selectedRouteId,
@@ -110,6 +110,7 @@ export function ContentGenerationCenter({
     ),
   );
   const endOfConversation = useRef<HTMLDivElement>(null);
+  const centerRevisionRef = useRef(0);
   const enabledRoutes = useMemo(
     () => routes.filter((item) => item.enabled),
     [routes],
@@ -126,21 +127,28 @@ export function ContentGenerationCenter({
 
   useEffect(() => {
     let disposed = false;
-    resetCenter();
+    const revision = activateCenterSession(session.id);
+    centerRevisionRef.current = revision;
     void Promise.all([
       loadGenerationRoutes(),
       loadGenerationRuns(session.id),
     ])
       .then(([nextRoutes, nextRuns]) => {
         if (disposed) return;
-        applyCenterData(nextRoutes, nextRuns);
+        applyCenterData(session.id, revision, nextRoutes, nextRuns);
       })
-      .catch((cause) => !disposed && setCenterError(messageOf(cause)))
-      .finally(() => !disposed && setCenterLoading(false));
+      .catch(
+        (cause) =>
+          !disposed &&
+          setCenterError(session.id, revision, messageOf(cause)),
+      )
+      .finally(
+        () => !disposed && setCenterLoading(session.id, revision, false),
+      );
     return () => { disposed = true; };
   }, [
+    activateCenterSession,
     applyCenterData,
-    resetCenter,
     session.id,
     setCenterError,
     setCenterLoading,
@@ -148,15 +156,21 @@ export function ContentGenerationCenter({
 
   useEffect(() => {
     if (!activeRun) return;
+    const revision = centerRevisionRef.current;
     const timer = window.setTimeout(() => {
       void loadGenerationRuns(session.id)
         .then((nextRuns) => {
-          setRuns(nextRuns);
-          if (!nextRuns.some((view) => ACTIVE_STATUSES.has(view.run.status))) {
+          const applied = setRuns(session.id, revision, nextRuns);
+          if (
+            applied &&
+            !nextRuns.some((view) => ACTIVE_STATUSES.has(view.run.status))
+          ) {
             onChanged?.();
           }
         })
-        .catch((cause) => setCenterError(messageOf(cause)));
+        .catch((cause) =>
+          setCenterError(session.id, revision, messageOf(cause)),
+        );
     }, REFRESH_INTERVAL_MS);
     return () => window.clearTimeout(timer);
   }, [activeRun, onChanged, session.id, setCenterError, setRuns]);
@@ -172,8 +186,9 @@ export function ContentGenerationCenter({
   }) {
     if (!route || activeRun || submitting) return false;
     if (!window.confirm(t.contentGeneration.paidGenerationConfirm)) return false;
-    setSubmitting(true);
-    setCenterError("");
+    const revision = centerRevisionRef.current;
+    if (!setSubmitting(session.id, revision, true)) return false;
+    setCenterError(session.id, revision, "");
     try {
       const assets = await Promise.all(input.assets.map(async (asset) => ({
         slot: asset.slot,
@@ -188,44 +203,54 @@ export function ContentGenerationCenter({
         source: "direct-ui",
         idempotencyKey: crypto.randomUUID(),
       });
-      setRuns((current) => current.some((view) => view.run.id === created.run.id)
-        ? current
-        : [...current, created]);
-      onChanged?.();
-      return true;
+      const applied = setRuns(
+        session.id,
+        revision,
+        (current) =>
+          current.some((view) => view.run.id === created.run.id)
+            ? current
+            : [...current, created],
+      );
+      if (applied) onChanged?.();
+      return applied;
     } catch (cause) {
-      setCenterError(messageOf(cause));
+      setCenterError(session.id, revision, messageOf(cause));
       return false;
     } finally {
-      setSubmitting(false);
+      setSubmitting(session.id, revision, false);
     }
   }
 
   async function cancel(runId: string) {
-    setPendingActionId(runId);
-    setCenterError("");
+    const revision = centerRevisionRef.current;
+    if (!setPendingActionId(session.id, revision, runId)) return;
+    setCenterError(session.id, revision, "");
     try {
-      replaceRun(await cancelGenerationRun(runId));
-      onChanged?.();
+      const applied = replaceRun(
+        session.id,
+        revision,
+        await cancelGenerationRun(runId),
+      );
+      if (applied) onChanged?.();
     } catch (cause) {
-      setCenterError(messageOf(cause));
+      setCenterError(session.id, revision, messageOf(cause));
     } finally {
-      setPendingActionId(null);
+      setPendingActionId(session.id, revision, null);
     }
   }
 
   async function retry(runId: string) {
     if (!window.confirm(t.contentGeneration.paidGenerationRetryConfirm)) return;
-    setPendingActionId(runId);
-    setCenterError("");
+    const revision = centerRevisionRef.current;
+    if (!setPendingActionId(session.id, revision, runId)) return;
+    setCenterError(session.id, revision, "");
     try {
       const created = await retryGenerationRun(runId, crypto.randomUUID());
-      replaceRun(created);
-      onChanged?.();
+      if (replaceRun(session.id, revision, created)) onChanged?.();
     } catch (cause) {
-      setCenterError(messageOf(cause));
+      setCenterError(session.id, revision, messageOf(cause));
     } finally {
-      setPendingActionId(null);
+      setPendingActionId(session.id, revision, null);
     }
   }
 
@@ -272,7 +297,13 @@ export function ContentGenerationCenter({
           busy={Boolean(activeRun) || submitting}
           error={centerError}
           key={selectedRoute.id}
-          onRouteChange={setSelectedRouteId}
+          onRouteChange={(routeId) =>
+            void setSelectedRouteId(
+              session.id,
+              centerRevisionRef.current,
+              routeId,
+            )
+          }
           onSubmit={submit}
           route={selectedRoute}
           routes={enabledRoutes}
