@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { loadSkills, removeSkill as removeSkillApi, setSkillModelInvocation } from "./api";
 import { useI18n } from "@/i18n/use-i18n";
 import { useSkillsStore } from "./state/skills-store-provider";
@@ -20,7 +21,37 @@ export function useSkills(cwd: string) {
     skillsError,
     skillsLoading,
     skillsResult,
-  } = useSkillsStore((state) => state);
+  } = useSkillsStore(
+    useShallow(
+      ({
+        applySkillsResult,
+        removingSkillId,
+        savingSkillId,
+        selectedSkillId,
+        setRemovingSkillId,
+        setSavingSkillId,
+        setSelectedSkillId,
+        setSkillsError,
+        setSkillsLoading,
+        skillsError,
+        skillsLoading,
+        skillsResult,
+      }) => ({
+        applySkillsResult,
+        removingSkillId,
+        savingSkillId,
+        selectedSkillId,
+        setRemovingSkillId,
+        setSavingSkillId,
+        setSelectedSkillId,
+        setSkillsError,
+        setSkillsLoading,
+        skillsError,
+        skillsLoading,
+        skillsResult,
+      }),
+    ),
+  );
   const requestRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {

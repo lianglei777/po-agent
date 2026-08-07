@@ -170,6 +170,8 @@ Zustand Store 按拥有状态的业务边界就近放置，不建立承载所有
   `src/features/<feature>/state`，并由 feature Provider 创建独立 Store 实例。
 - Store 保存可观察的状态和原子业务转换；请求、SSE、AbortController、定时器和
   DOM observer 等副作用生命周期保留在 feature controller hook 或组件中。
+- Store 消费者只订阅当前职责需要的字段；组合选择多个字段时使用浅比较，避免无关
+  状态变化扩大组件重渲染范围。
 - 输入草稿、单个弹窗、hover、复制提示、DOM 节点和尺寸测量等组件私有状态继续使用
   React 本地状态，不为消除 `useState` 而迁入 Zustand。
 - Next.js 中禁止使用模块级单例 Store 承载请求相关状态。Provider 应尽可能靠近实际

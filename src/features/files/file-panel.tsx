@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { ChevronRight, FileText, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/use-i18n";
@@ -43,7 +44,10 @@ function FilePanelContent({
 }: FilePanelProps) {
   const { t } = useI18n();
   const { explorerVisible, setExplorerVisible } = useFilesStore(
-    (state) => state,
+    useShallow(({ explorerVisible, setExplorerVisible }) => ({
+      explorerVisible,
+      setExplorerVisible,
+    })),
   );
   const currentPath = file?.path ?? null;
   const pathSegments = currentPath && cwd

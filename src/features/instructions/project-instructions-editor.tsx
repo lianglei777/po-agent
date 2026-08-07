@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { LoaderCircle, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +74,33 @@ function ProjectInstructionsEditorContent({
     setProjectApplyError: setApplyError,
     setProjectApplySuccess: setApplySuccess,
     setProjectEditorField,
-  } = useInstructionsStore((state) => state);
+  } = useInstructionsStore(
+    useShallow(
+      ({
+        applyingProject,
+        confirmProjectDelete,
+        projectApplyError,
+        projectApplySuccess,
+        projectEditor,
+        setApplyingProject,
+        setConfirmProjectDelete,
+        setProjectApplyError,
+        setProjectApplySuccess,
+        setProjectEditorField,
+      }) => ({
+        applyingProject,
+        confirmProjectDelete,
+        projectApplyError,
+        projectApplySuccess,
+        projectEditor,
+        setApplyingProject,
+        setConfirmProjectDelete,
+        setProjectApplyError,
+        setProjectApplySuccess,
+        setProjectEditorField,
+      }),
+    ),
+  );
   const dirty = Boolean(doc && draft !== doc.content);
 
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);

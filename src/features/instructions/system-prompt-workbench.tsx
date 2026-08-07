@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   ChevronRight,
   ExternalLink,
@@ -96,7 +97,45 @@ function SystemPromptWorkbenchContent({
     setWorkbenchProjectLoading: setProjectLoading,
     workbenchProjectDoc: projectDoc,
     workbenchProjectLoading: projectLoading,
-  } = useInstructionsStore((state) => state);
+  } = useInstructionsStore(
+    useShallow(
+      ({
+        activeView,
+        confirmGlobalDelete,
+        globalEditor,
+        reloadBusy,
+        reloadError,
+        reloadSuccess,
+        setActiveView,
+        setConfirmGlobalDelete,
+        setGlobalEditor,
+        setReloadBusy,
+        setReloadError,
+        setReloadSuccess,
+        setWorkbenchProjectDoc,
+        setWorkbenchProjectLoading,
+        workbenchProjectDoc,
+        workbenchProjectLoading,
+      }) => ({
+        activeView,
+        confirmGlobalDelete,
+        globalEditor,
+        reloadBusy,
+        reloadError,
+        reloadSuccess,
+        setActiveView,
+        setConfirmGlobalDelete,
+        setGlobalEditor,
+        setReloadBusy,
+        setReloadError,
+        setReloadSuccess,
+        setWorkbenchProjectDoc,
+        setWorkbenchProjectLoading,
+        workbenchProjectDoc,
+        workbenchProjectLoading,
+      }),
+    ),
+  );
 
   const loadGlobal = useCallback(async () => {
     setGlobalState((state) => ({ ...state, loading: true, error: "" }));

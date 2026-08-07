@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   installSkillPack as installSkillPackApi,
@@ -27,7 +28,33 @@ export function useSkillPacks(cwd: string) {
     setPacksError,
     setPacksLoading,
     setSelectedPackId,
-  } = useSkillsStore((state) => state);
+  } = useSkillsStore(
+    useShallow(
+      ({
+        applyPacksResult,
+        packMutation,
+        packsError,
+        packsLoading,
+        packsResult,
+        selectedPackId,
+        setPackMutation,
+        setPacksError,
+        setPacksLoading,
+        setSelectedPackId,
+      }) => ({
+        applyPacksResult,
+        packMutation,
+        packsError,
+        packsLoading,
+        packsResult,
+        selectedPackId,
+        setPackMutation,
+        setPacksError,
+        setPacksLoading,
+        setSelectedPackId,
+      }),
+    ),
+  );
   const refreshRequestRef = useRef<AbortController | null>(null);
   const mutationRequestRef = useRef<AbortController | null>(null);
 

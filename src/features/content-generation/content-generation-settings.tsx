@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -42,7 +43,43 @@ export function ContentGenerationSettings({
     settingsLoading: loading,
     updateRoute,
     updatingId,
-  } = useContentGenerationStore((state) => state);
+  } = useContentGenerationStore(
+    useShallow(
+      ({
+        applySettingsData,
+        hasCredential,
+        providerEnabled,
+        routes,
+        savingCredential,
+        setHasCredential,
+        setProviderEnabled,
+        setSavingCredential,
+        setSettingsError,
+        setSettingsLoading,
+        setUpdatingId,
+        settingsError,
+        settingsLoading,
+        updateRoute,
+        updatingId,
+      }) => ({
+        applySettingsData,
+        hasCredential,
+        providerEnabled,
+        routes,
+        savingCredential,
+        setHasCredential,
+        setProviderEnabled,
+        setSavingCredential,
+        setSettingsError,
+        setSettingsLoading,
+        setUpdatingId,
+        settingsError,
+        settingsLoading,
+        updateRoute,
+        updatingId,
+      }),
+    ),
+  );
 
   useEffect(() => {
     let disposed = false;

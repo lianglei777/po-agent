@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   discoverModelsConfig,
   loadApiKeyProvider,
@@ -48,7 +49,61 @@ export function useModelProviders(onSaved?: () => void) {
     setSavedOk,
     discovery,
     setDiscovery,
-  } = useModelProvidersStore((state) => state);
+  } = useModelProvidersStore(
+    useShallow(
+      ({
+        config,
+        setConfig,
+        baselineConfig,
+        setBaselineConfig,
+        oauthProviders,
+        setOauthProviders,
+        apiKeyProviders,
+        setApiKeyProviders,
+        selection,
+        setSelection,
+        loading,
+        setLoading,
+        loadError,
+        setLoadError,
+        saving,
+        setSaving,
+        saveError,
+        setSaveError,
+        saveRetryAvailable,
+        setSaveRetryAvailable,
+        savedOk,
+        setSavedOk,
+        discovery,
+        setDiscovery,
+      }) => ({
+        config,
+        setConfig,
+        baselineConfig,
+        setBaselineConfig,
+        oauthProviders,
+        setOauthProviders,
+        apiKeyProviders,
+        setApiKeyProviders,
+        selection,
+        setSelection,
+        loading,
+        setLoading,
+        loadError,
+        setLoadError,
+        saving,
+        setSaving,
+        saveError,
+        setSaveError,
+        saveRetryAvailable,
+        setSaveRetryAvailable,
+        savedOk,
+        setSavedOk,
+        discovery,
+        setDiscovery,
+      }),
+    ),
+  );
   const configRef = useRef(config);
   const onSavedRef = useRef(onSaved);
   const failedToSaveRef = useRef(t.models.failedToSave);

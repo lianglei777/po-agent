@@ -7,6 +7,7 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useI18n } from "@/i18n/use-i18n";
@@ -51,7 +52,35 @@ function SkillsPageContent({ cwd, projectName }: SkillsPageProps) {
     setScreen,
     setView,
     view,
-  } = useSkillsStore((state) => state);
+  } = useSkillsStore(
+    useShallow(
+      ({
+        addingPack,
+        packSuccess,
+        removeSuccess,
+        screen,
+        selectView,
+        setAddingPack,
+        setPackSuccess,
+        setRemoveSuccess,
+        setScreen,
+        setView,
+        view,
+      }) => ({
+        addingPack,
+        packSuccess,
+        removeSuccess,
+        screen,
+        selectView,
+        setAddingPack,
+        setPackSuccess,
+        setRemoveSuccess,
+        setScreen,
+        setView,
+        view,
+      }),
+    ),
+  );
   const skills = useSkills(cwd);
   const packs = useSkillPacks(cwd);
   const { t } = useI18n();

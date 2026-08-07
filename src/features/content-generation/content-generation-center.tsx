@@ -10,6 +10,7 @@ import {
   Square,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type {
   GenerationArtifactDto,
   GenerationRouteDto,
@@ -69,7 +70,45 @@ export function ContentGenerationCenter({
     setSelectedRouteId,
     setSubmitting,
     submitting,
-  } = useContentGenerationStore((state) => state);
+  } = useContentGenerationStore(
+    useShallow(
+      ({
+        applyCenterData,
+        centerError,
+        centerLoading,
+        pendingActionId,
+        replaceRun,
+        resetCenter,
+        routes,
+        runs,
+        selectedRouteId,
+        setCenterError,
+        setCenterLoading,
+        setPendingActionId,
+        setRuns,
+        setSelectedRouteId,
+        setSubmitting,
+        submitting,
+      }) => ({
+        applyCenterData,
+        centerError,
+        centerLoading,
+        pendingActionId,
+        replaceRun,
+        resetCenter,
+        routes,
+        runs,
+        selectedRouteId,
+        setCenterError,
+        setCenterLoading,
+        setPendingActionId,
+        setRuns,
+        setSelectedRouteId,
+        setSubmitting,
+        submitting,
+      }),
+    ),
+  );
   const endOfConversation = useRef<HTMLDivElement>(null);
   const enabledRoutes = useMemo(
     () => routes.filter((item) => item.enabled),

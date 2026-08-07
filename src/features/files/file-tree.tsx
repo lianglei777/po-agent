@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   AtSign,
   ChevronDown,
@@ -48,7 +49,31 @@ export function FileTree({
     setError,
     setExpanded,
     setLoading,
-  } = useFilesStore((state) => state);
+  } = useFilesStore(
+    useShallow(
+      ({
+        entriesByPath,
+        error,
+        expanded,
+        loading,
+        resetTree,
+        setEntriesByPath,
+        setError,
+        setExpanded,
+        setLoading,
+      }) => ({
+        entriesByPath,
+        error,
+        expanded,
+        loading,
+        resetTree,
+        setEntriesByPath,
+        setError,
+        setExpanded,
+        setLoading,
+      }),
+    ),
+  );
   const { t } = useI18n();
 
   const load = useCallback(

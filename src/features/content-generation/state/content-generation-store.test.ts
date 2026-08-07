@@ -81,6 +81,26 @@ describe("content generation store", () => {
     ]);
   });
 
+  it("resets session-scoped runs without clearing workspace settings", () => {
+    const store = createContentGenerationStore({
+      routes: [route("route-a")],
+      runs: [run("run-a", "queued")],
+      selectedRouteId: "route-a",
+      providerEnabled: true,
+      hasCredential: true,
+    });
+    store.getState().resetCenter();
+
+    expect(store.getState()).toMatchObject({
+      routes: [route("route-a")],
+      runs: [],
+      selectedRouteId: "",
+      centerLoading: true,
+      providerEnabled: true,
+      hasCredential: true,
+    });
+  });
+
   it("isolates workspace instances", () => {
     const first = createContentGenerationStore();
     const second = createContentGenerationStore();
