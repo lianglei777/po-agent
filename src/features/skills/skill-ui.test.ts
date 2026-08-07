@@ -30,10 +30,6 @@ const addPackSource = readFileSync(
   fileURLToPath(new URL("./add-skill-pack-dialog.tsx", import.meta.url)),
   "utf8",
 );
-const switchSource = readFileSync(
-  fileURLToPath(new URL("../../components/ui/switch.tsx", import.meta.url)),
-  "utf8",
-);
 const skillListSource = readFileSync(
   fileURLToPath(new URL("./skill-list.tsx", import.meta.url)),
   "utf8",
@@ -47,10 +43,12 @@ describe("skills config UI contract", () => {
   });
 
   it("uses the Ant switch and explains read-only state", () => {
+    expect(detailSource).toContain(
+      'import { Button, Switch, Tooltip } from "antd"',
+    );
     expect(detailSource).toContain("<Switch");
-    expect(switchSource).toContain("Switch as AntSwitch");
-    expect(switchSource).toContain("onCheckedChange?.(checked)");
-    expect(detailSource).toContain("<Tooltip>");
+    expect(detailSource).toContain("onChange={onToggle}");
+    expect(detailSource).toContain("<Tooltip");
     expect(detailSource).toContain("t.skills.readOnlySymlink");
   });
 
@@ -64,7 +62,9 @@ describe("skills config UI contract", () => {
   it("uses Ant Design tags directly for skill metadata", () => {
     expect(skillListSource).toContain('import { Tag } from "antd"');
     expect(skillListSource).toContain('<Tag className="shrink-0" variant="outlined">');
-    expect(packDetailSource).toContain('import { Tag } from "antd"');
+    expect(packDetailSource).toContain(
+      'import { Alert, Button, Radio, Tag } from "antd"',
+    );
     expect(packDetailSource).not.toContain("<Badge");
   });
 
@@ -107,10 +107,15 @@ describe("skills config UI contract", () => {
       fileURLToPath(new URL("./add-skill-panel.tsx", import.meta.url)),
       "utf8",
     );
+    expect(addSource).toContain(
+      'import { Alert, Button, Empty, Input, Radio, Segmented, Tag } from "antd"',
+    );
     expect(addSource).toContain("t.skills.scopeProject");
     expect(addSource).toContain("t.skills.scopeGlobal");
     expect(addSource).toContain("t.skills.scopeGlobalDescription");
     expect(addSource).toContain("projectName");
+    expect(addSource).toContain("<Radio.Group");
+    expect(addSource).toContain('<Segmented<"market" | "local">');
   });
 
   it("labels every diagnostic severity with semantic color", () => {
@@ -138,9 +143,22 @@ describe("skills config UI contract", () => {
   });
 
   it("provides one reviewed manual Package source form", () => {
+    expect(addPackSource).toContain(
+      'import { Alert, Button, Input, Radio } from "antd"',
+    );
     expect(addPackSource).toContain("selectProjectDirectory");
     expect(addPackSource).toContain("installScope");
     expect(addPackSource).toContain("securityWarning");
     expect(addPackSource).toContain("source.trim()");
+    expect(addPackSource).toContain("<Radio.Group");
+    expect(addPackSource).toContain("<Alert");
+  });
+
+  it("keeps deliberate-close dialogs while migrating their standard controls", () => {
+    expect(detailSource).toContain('from "@/components/ui/dialog"');
+    expect(packDetailSource).toContain('from "@/components/ui/dialog"');
+    expect(addPackSource).toContain('from "@/components/ui/dialog"');
+    expect(packDetailSource).not.toContain('from "@/components/ui/button"');
+    expect(addPackSource).not.toContain('from "@/components/ui/input"');
   });
 });

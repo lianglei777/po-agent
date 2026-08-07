@@ -1,20 +1,14 @@
 "use client";
 
-import { Tag } from "antd";
-
 import {
   ArrowLeft,
-  CheckCircle2,
   Download,
   ExternalLink,
   LoaderCircle,
   Search,
 } from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { RadioCard } from "@/components/ui/radio-card";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Alert, Button, Empty, Input, Radio, Segmented, Tag } from "antd";
 import { SectionTitle } from "@/components/ui/settings-form";
 import { useI18n } from "@/i18n/use-i18n";
 import { createLocalSkill, installSkill, searchSkills } from "./api";
@@ -149,12 +143,12 @@ export function AddSkillPanel({
         <header>
           <Button
             className="-ml-2 mb-2"
+            htmlType="button"
+            icon={<ArrowLeft />}
             onClick={onBack}
-            size="sm"
-            type="button"
-            variant="ghost"
+            size="small"
+            type="text"
           >
-            <ArrowLeft />
             {t.skills.backToList}
           </Button>
           <SectionTitle>{t.skills.addSkill}</SectionTitle>
@@ -164,26 +158,22 @@ export function AddSkillPanel({
         </header>
 
         {/* Tab 切换 */}
-        <SegmentedControl
-          ariaLabel={t.skills.addSkill}
-          items={[
+        <Segmented<"market" | "local">
+          aria-label={t.skills.addSkill}
+          onChange={setMode}
+          options={[
             { label: t.skills.market, value: "market" },
             { label: t.skills.createLocal, value: "local" },
           ]}
-          onValueChange={setMode}
+          size="small"
           value={mode}
         />
 
         {error ? (
-          <p className="rounded-floating border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm text-destructive-text">
-            {error}
-          </p>
+          <Alert showIcon title={error} type="error" />
         ) : null}
         {success ? (
-          <p className="flex items-start gap-2 rounded-floating border border-success/30 bg-success/8 px-3 py-2 text-sm text-success-text">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
-            {success}
-          </p>
+          <Alert showIcon title={success} type="success" />
         ) : null}
 
         {mode === "market" ? (
@@ -254,28 +244,25 @@ function MarketTab({
         {t.skills.searchMarketDescription}
       </p>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dim" />
-        <Input
-          aria-label={t.skills.searchSkillsMarket}
-          autoFocus
-          className="pl-9 pr-9"
-          onChange={(event) => {
-            const value = event.target.value;
-            setQuery(value);
-            if (!value.trim()) {
-              setResults([]);
-              setSearching(false);
-              setError(null);
-            }
-          }}
-          placeholder={t.skills.searchSkills}
-          value={query}
-        />
-        {searching ? (
-          <LoaderCircle className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted" />
-        ) : null}
-      </div>
+      <Input
+        aria-label={t.skills.searchSkillsMarket}
+        autoFocus
+        onChange={(event) => {
+          const value = event.target.value;
+          setQuery(value);
+          if (!value.trim()) {
+            setResults([]);
+            setSearching(false);
+            setError(null);
+          }
+        }}
+        placeholder={t.skills.searchSkills}
+        prefix={<Search className="text-dim" />}
+        suffix={
+          searching ? <LoaderCircle className="animate-spin text-muted" /> : null
+        }
+        value={query}
+      />
 
       <ScopeSelector
         projectName={projectName}
@@ -285,9 +272,10 @@ function MarketTab({
 
       <div className="space-y-2">
         {!searching && query.trim() && results.length === 0 && !error ? (
-          <p className="rounded-lg border border-dashed border-line-subtle p-8 text-center text-sm text-muted">
-            {t.skills.noMatchingSkills}
-          </p>
+          <Empty
+            description={t.skills.noMatchingSkills}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         ) : null}
         {results.map((skill) => (
           <article
@@ -342,16 +330,12 @@ function MarketTab({
                 aria-label={`${t.skills.install} ${skill.name}`}
                 className="shrink-0"
                 disabled={installing !== null}
+                htmlType="button"
+                icon={<Download />}
+                loading={installing === skill.id}
                 onClick={() => void onInstall(skill)}
-                size="sm"
-                type="button"
-                variant="outline"
+                size="small"
               >
-                {installing === skill.id ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : (
-                  <Download />
-                )}
                 {t.skills.install}
               </Button>
             </div>
@@ -421,16 +405,14 @@ function CreateLocalTab({
         />
 
         <Button
-          className="w-full"
+          block
           disabled={!canSubmit || creating}
+          htmlType="button"
+          icon={<Download />}
+          loading={creating}
           onClick={() => void onCreate()}
-          type="button"
+          type="primary"
         >
-          {creating ? (
-            <LoaderCircle className="animate-spin" />
-          ) : (
-            <Download />
-          )}
           {creating ? t.skills.creating : t.skills.importSkill}
         </Button>
       </div>
@@ -453,26 +435,32 @@ function ScopeSelector({
       <legend className="mb-2 text-xs font-medium text-primary">
         {t.skills.installationScope}
       </legend>
-      {(["project", "global"] as const).map((value) => (
-        <RadioCard
-          checked={scope === value}
-          key={value}
-          name="skill-installation-scope"
-          onChange={() => setScope(value)}
-          value={value}
-        >
-          <span className="block text-xs font-medium text-primary">
-            {value === "project"
-              ? t.skills.scopeProject.replace("{project}", projectName)
-              : t.skills.scopeGlobal}
-          </span>
-          <span className="mt-0.5 block text-meta leading-4 text-muted">
-            {value === "project"
-              ? t.skills.scopeProjectDescription
-              : t.skills.scopeGlobalDescription}
-          </span>
-        </RadioCard>
-      ))}
+      <Radio.Group
+        className="grid gap-2"
+        name="skill-installation-scope"
+        onChange={(event) =>
+          setScope(event.target.value as "project" | "global")
+        }
+        options={(["project", "global"] as const).map((value) => ({
+          className: "ant-radio-card",
+          label: (
+            <>
+              <span className="block text-xs font-medium text-primary">
+                {value === "project"
+                  ? t.skills.scopeProject.replace("{project}", projectName)
+                  : t.skills.scopeGlobal}
+              </span>
+              <span className="mt-0.5 block text-meta leading-4 text-muted">
+                {value === "project"
+                  ? t.skills.scopeProjectDescription
+                  : t.skills.scopeGlobalDescription}
+              </span>
+            </>
+          ),
+          value,
+        }))}
+        value={scope}
+      />
     </fieldset>
   );
 }

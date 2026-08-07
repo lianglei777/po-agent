@@ -1,8 +1,8 @@
 "use client";
 
-import { Folder, LoaderCircle } from "@/components/icons";
+import { Folder } from "@/components/icons";
 import { useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
+import { Alert, Button, Input, Radio } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { RadioCard } from "@/components/ui/radio-card";
 import { useI18n } from "@/i18n/use-i18n";
 
 export function AddSkillPackDialog({
@@ -90,11 +88,10 @@ export function AddSkillPackDialog({
                 <Button
                   aria-label={t.skills.packs.browse}
                   disabled={busy}
+                  htmlType="button"
+                  icon={<Folder />}
                   onClick={() => void browse()}
-                  type="button"
-                  variant="outline"
                 >
-                  <Folder />
                   {t.skills.packs.browse}
                 </Button>
               ) : null}
@@ -108,43 +105,57 @@ export function AddSkillPackDialog({
             <legend className="mb-2 text-sm font-medium">
               {t.skills.packs.installScope}
             </legend>
-            {(["project", "global"] as const).map((value) => (
-              <RadioCard
-                checked={scope === value}
-                key={value}
-                name="manual-skill-pack-scope"
-                onChange={() => setScope(value)}
-                value={value}
-              >
-                <span className="block text-xs font-medium text-primary">
-                  {value === "project"
-                    ? t.skills.scopeProject.replace("{project}", projectName)
-                    : t.skills.scopeGlobal}
-                </span>
-                <span className="mt-0.5 block text-meta leading-4 text-muted">
-                  {value === "project"
-                    ? t.skills.scopeProjectDescription
-                    : t.skills.scopeGlobalDescription}
-                </span>
-              </RadioCard>
-            ))}
+            <Radio.Group
+              className="grid gap-2"
+              name="manual-skill-pack-scope"
+              onChange={(event) =>
+                setScope(event.target.value as "project" | "global")
+              }
+              options={(["project", "global"] as const).map((value) => ({
+                className: "ant-radio-card",
+                label: (
+                  <>
+                    <span className="block text-xs font-medium text-primary">
+                      {value === "project"
+                        ? t.skills.scopeProject.replace(
+                            "{project}",
+                            projectName,
+                          )
+                        : t.skills.scopeGlobal}
+                    </span>
+                    <span className="mt-0.5 block text-meta leading-4 text-muted">
+                      {value === "project"
+                        ? t.skills.scopeProjectDescription
+                        : t.skills.scopeGlobalDescription}
+                    </span>
+                  </>
+                ),
+                value,
+              }))}
+              value={scope}
+            />
           </fieldset>
 
-          <p className="rounded-lg border border-warning/30 bg-warning/8 p-3 text-sm leading-5 text-warning">
-            {t.skills.packs.securityWarning}
-          </p>
+          <Alert
+            showIcon
+            title={t.skills.packs.securityWarning}
+            type="warning"
+          />
 
           <DialogFooter>
             <Button
               disabled={busy}
+              htmlType="button"
               onClick={() => close()}
-              type="button"
-              variant="outline"
             >
               {t.common.cancel}
             </Button>
-            <Button disabled={busy || !source.trim()} type="submit">
-              {busy ? <LoaderCircle className="animate-spin" /> : null}
+            <Button
+              disabled={busy || !source.trim()}
+              htmlType="submit"
+              loading={busy}
+              type="primary"
+            >
               {t.skills.packs.installAction}
             </Button>
           </DialogFooter>

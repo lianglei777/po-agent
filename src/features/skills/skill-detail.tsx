@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, LoaderCircle, PackageOpen } from "@/components/icons";
+import { ArrowLeft, PackageOpen } from "@/components/icons";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, Switch, Tooltip } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -16,12 +16,6 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/ui/settings-form";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import { isManagedSkill, sourceLabel } from "./skill-state";
 import type { SkillInfo } from "./types";
@@ -61,12 +55,12 @@ export function SkillDetail({
         <header>
           <Button
             className="-ml-2 mb-2"
+            htmlType="button"
+            icon={<ArrowLeft />}
             onClick={onBack}
-            size="sm"
-            type="button"
-            variant="ghost"
+            size="small"
+            type="text"
           >
-            <ArrowLeft />
             {t.skills.backToList}
           </Button>
           <SectionTitle>{t.skills.title}</SectionTitle>
@@ -97,23 +91,23 @@ export function SkillDetail({
               <Button
                 autoFocus
                 disabled={removing}
+                htmlType="button"
                 onClick={() => setConfirmingDelete(false)}
-                type="button"
-                variant="outline"
               >
                 {t.common.cancel}
               </Button>
               <Button
                 aria-busy={removing || undefined}
+                danger
                 disabled={removing}
+                htmlType="button"
+                loading={removing}
                 onClick={() => {
                   setConfirmingDelete(false);
                   onRemove();
                 }}
-                type="button"
-                variant="destructive"
+                type="primary"
               >
-                {removing ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.removeConfirmAction}
               </Button>
             </DialogFooter>
@@ -138,38 +132,37 @@ export function SkillDetail({
                 </p>
                 {onViewPack ? (
                   <Button
+                    htmlType="button"
+                    icon={<PackageOpen />}
                     onClick={onViewPack}
-                    size="sm"
-                    type="button"
-                    variant="outline"
+                    size="small"
                   >
-                    <PackageOpen />
                     {t.skills.packs.viewPack}
                   </Button>
                 ) : null}
               </div>
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex shrink-0">
-                    <Switch
-                      aria-label={t.skills.allowModelInvocation}
-                      checked={enabled}
-                      disabled={saving || !skill.canModify}
-                      loading={saving}
-                      onCheckedChange={onToggle}
-                    />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {saving
+              <Tooltip
+                placement="top"
+                title={
+                  saving
                     ? t.common.saving
                     : skill.canModify
                       ? enabled
                         ? t.skills.modelInvocationAllowed
                         : t.skills.manualInvocationOnly
-                      : t.skills.readOnlySymlink}
-                </TooltipContent>
+                      : t.skills.readOnlySymlink
+                }
+              >
+                <span className="inline-flex shrink-0">
+                  <Switch
+                    aria-label={t.skills.allowModelInvocation}
+                    checked={enabled}
+                    disabled={saving || !skill.canModify}
+                    loading={saving}
+                    onChange={onToggle}
+                  />
+                </span>
               </Tooltip>
             )}
           </SettingsRow>
@@ -214,13 +207,14 @@ export function SkillDetail({
               <div className="flex justify-end">
                 <Button
                   aria-label={t.skills.removeSkill}
+                  danger
                   disabled={removing || saving}
+                  htmlType="button"
+                  loading={removing}
                   onClick={() => setConfirmingDelete(true)}
-                  size="sm"
-                  type="button"
-                  variant="destructive"
+                  size="small"
+                  type="primary"
                 >
-                  {removing ? <LoaderCircle className="animate-spin" /> : null}
                   {t.skills.remove}
                 </Button>
               </div>

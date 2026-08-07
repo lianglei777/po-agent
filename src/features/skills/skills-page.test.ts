@@ -36,7 +36,7 @@ describe("Skills page", () => {
     expect(source).toContain("SkillPackList");
     expect(source).toContain("SkillPackDetail");
     expect(source).toContain("AddSkillPackDialog");
-    expect(source).toContain("<SegmentedControl");
+    expect(source).toContain("<Segmented<SkillsView>");
     expect(source).toContain("SkillsStoreProvider");
     expect(source).toContain("useSkillsStore");
     expect(source).not.toContain('w-[224px]');
@@ -45,6 +45,17 @@ describe("Skills page", () => {
   it("keeps Skill Pack mutations consistent", () => {
     expect(source).toContain("packs.loading || packBusy");
     expect(source).toContain("void skills.refresh()");
+  });
+
+  it("uses Ant Design for standard navigation, actions, and feedback", () => {
+    expect(source).toContain(
+      'import { Alert, Button, Empty, Segmented, Skeleton, Tooltip } from "antd"',
+    );
+    expect(source).toContain("<Alert");
+    expect(source).toContain("<Empty");
+    expect(source).toContain("<Skeleton");
+    expect(source).not.toContain('from "@/components/ui/button"');
+    expect(source).not.toContain('from "@/components/ui/segmented-control"');
   });
 
   it("navigates from a managed Skill to its owning Pack", () => {

@@ -4,12 +4,10 @@ import {
   AlertTriangle,
   ArrowLeft,
   Box,
-  LoaderCircle,
   ShieldAlert,
 } from "@/components/icons";
 import { useState } from "react";
-import { Tag } from "antd";
-import { Button } from "@/components/ui/button";
+import { Alert, Button, Radio, Tag } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +21,6 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/ui/settings-form";
-import { RadioCard } from "@/components/ui/radio-card";
 import { useI18n } from "@/i18n/use-i18n";
 import { packCopy, statusLabel } from "./skill-pack-list";
 import type { SkillPackInfo } from "./types";
@@ -60,12 +57,12 @@ export function SkillPackDetail({
         <header>
           <Button
             className="-ml-2 mb-2"
+            htmlType="button"
+            icon={<ArrowLeft />}
             onClick={onBack}
-            size="sm"
-            type="button"
-            variant="ghost"
+            size="small"
+            type="text"
           >
-            <ArrowLeft />
             {t.skills.backToList}
           </Button>
           <SectionTitle>{t.skills.packs.tabPacks}</SectionTitle>
@@ -92,49 +89,46 @@ export function SkillPackDetail({
             {pack.status === "available" ? (
               <Button
                 disabled={busy}
+                htmlType="button"
                 onClick={() => {
                   setScope("project");
                   setConfirmingInstall(true);
                 }}
-                size="sm"
-                type="button"
-                variant="outline"
+                size="small"
               >
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.packs.installAction}
               </Button>
             ) : null}
             {pack.status === "installed" && pack.canUpdate ? (
               <Button
                 disabled={busy}
+                htmlType="button"
+                loading={busy}
                 onClick={onUpdate}
-                size="sm"
-                type="button"
-                variant="outline"
+                size="small"
               >
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.packs.updateAction}
               </Button>
             ) : null}
             {pack.status === "broken" ? (
               <Button
                 disabled={busy}
+                htmlType="button"
+                loading={busy}
                 onClick={onRepair}
-                size="sm"
-                type="button"
-                variant="outline"
+                size="small"
               >
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.packs.repairAction}
               </Button>
             ) : null}
             {configured ? (
               <Button
+                danger
                 disabled={busy}
+                htmlType="button"
                 onClick={() => setConfirmingRemove(true)}
-                size="sm"
-                type="button"
-                variant="destructive"
+                size="small"
+                type="primary"
               >
                 {t.skills.packs.removeAction}
               </Button>
@@ -162,49 +156,60 @@ export function SkillPackDetail({
               <legend className="mb-2 text-sm font-medium">
                 {t.skills.packs.installScope}
               </legend>
-              {(["project", "global"] as const).map((value) => (
-                <RadioCard
-                  checked={scope === value}
-                  key={value}
-                  name="skill-pack-scope"
-                  onChange={() => setScope(value)}
-                  value={value}
-                >
-                  <span className="block text-xs font-medium text-primary">
-                    {value === "project"
-                      ? t.skills.scopeProject.replace("{project}", projectName)
-                      : t.skills.scopeGlobal}
-                  </span>
-                  <span className="mt-0.5 block text-meta leading-4 text-muted">
-                    {value === "project"
-                      ? t.skills.scopeProjectDescription
-                      : t.skills.scopeGlobalDescription}
-                  </span>
-                </RadioCard>
-              ))}
+              <Radio.Group
+                className="grid gap-2"
+                name="skill-pack-scope"
+                onChange={(event) =>
+                  setScope(event.target.value as "project" | "global")
+                }
+                options={(["project", "global"] as const).map((value) => ({
+                  className: "ant-radio-card",
+                  label: (
+                    <>
+                      <span className="block text-xs font-medium text-primary">
+                        {value === "project"
+                          ? t.skills.scopeProject.replace(
+                              "{project}",
+                              projectName,
+                            )
+                          : t.skills.scopeGlobal}
+                      </span>
+                      <span className="mt-0.5 block text-meta leading-4 text-muted">
+                        {value === "project"
+                          ? t.skills.scopeProjectDescription
+                          : t.skills.scopeGlobalDescription}
+                      </span>
+                    </>
+                  ),
+                  value,
+                }))}
+                value={scope}
+              />
             </fieldset>
-            <p className="rounded-lg border border-warning/30 bg-warning/8 p-3 text-sm leading-5 text-warning">
-              {t.skills.packs.securityWarning}
-            </p>
+            <Alert
+              showIcon
+              title={t.skills.packs.securityWarning}
+              type="warning"
+            />
             <DialogFooter>
               <Button
                 disabled={busy}
+                htmlType="button"
                 onClick={() => setConfirmingInstall(false)}
-                type="button"
-                variant="outline"
               >
                 {t.common.cancel}
               </Button>
               <Button
                 aria-busy={busy || undefined}
                 disabled={busy}
+                htmlType="button"
+                loading={busy}
                 onClick={() => {
                   setConfirmingInstall(false);
                   onInstall(scope);
                 }}
-                type="button"
+                type="primary"
               >
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.packs.installAction}
               </Button>
             </DialogFooter>
@@ -227,29 +232,31 @@ export function SkillPackDetail({
                 {t.skills.packs.removeDescription.replace("{name}", copy.name)}
               </DialogDescription>
             </DialogHeader>
-            <p className="rounded-lg border border-warning/30 bg-warning/8 p-3 text-sm leading-5 text-warning">
-              {t.skills.packs.securityWarning}
-            </p>
+            <Alert
+              showIcon
+              title={t.skills.packs.securityWarning}
+              type="warning"
+            />
             <DialogFooter>
               <Button
                 disabled={busy}
+                htmlType="button"
                 onClick={() => setConfirmingRemove(false)}
-                type="button"
-                variant="outline"
               >
                 {t.common.cancel}
               </Button>
               <Button
                 aria-busy={busy || undefined}
+                danger
                 disabled={busy}
+                htmlType="button"
+                loading={busy}
                 onClick={() => {
                   setConfirmingRemove(false);
                   onRemove();
                 }}
-                type="button"
-                variant="destructive"
+                type="primary"
               >
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
                 {t.skills.packs.removeAction}
               </Button>
             </DialogFooter>
@@ -367,16 +374,12 @@ function Warning({
   strong?: boolean;
 }) {
   return (
-    <div
-      className={`flex gap-3 rounded-lg border p-3 text-sm leading-5 ${
-        strong
-          ? "border-warning/35 bg-warning/8 text-warning"
-          : "border-line-subtle bg-panel text-muted"
-      }`}
-    >
-      <span className="mt-0.5 [&_svg]:size-4">{icon}</span>
-      <p>{text}</p>
-    </div>
+    <Alert
+      icon={icon}
+      showIcon
+      title={text}
+      type={strong ? "warning" : "info"}
+    />
   );
 }
 

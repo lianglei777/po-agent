@@ -2,14 +2,11 @@
 
 import {
   AlertTriangle,
-  CheckCircle2,
-  LoaderCircle,
   Plus,
   RefreshCw,
 } from "@/components/icons";
 import { useShallow } from "zustand/react/shallow";
-import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Alert, Button, Empty, Segmented, Skeleton, Tooltip } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import { AddSkillPanel } from "./add-skill-panel";
 import { AddSkillPackDialog } from "./add-skill-pack-dialog";
@@ -154,89 +151,104 @@ function SkillsPageContent({ cwd, projectName }: SkillsPageProps) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
       <div className="flex items-center gap-2 border-b border-line-subtle p-2">
-        <SegmentedControl
-          ariaLabel={t.skills.title}
-          items={[
+        <Segmented<SkillsView>
+          aria-label={t.skills.title}
+          onChange={selectView}
+          options={[
             { label: t.skills.packs.tabSkills, value: "skills" },
             { label: t.skills.packs.tabPacks, value: "packs" },
           ]}
-          kind="radio"
-          onValueChange={selectView}
+          size="small"
           value={view}
         />
         {screen === "list" ? (
           <div className="ml-auto flex items-center gap-1">
-            <Button
-              aria-label={
+            <Tooltip
+              placement="bottom"
+              title={
                 view === "skills" ? t.skills.addSkill : t.skills.packs.addAction
               }
-              disabled={view === "packs" && packBusy}
-              onClick={() =>
-                view === "skills"
-                  ? setScreen("add-skill")
-                  : setAddingPack(true)
-              }
-              size="icon-sm"
-              type="button"
-              variant="ghost"
             >
-              <Plus />
-            </Button>
-            <Button
-              aria-label={
+              <span className="inline-flex">
+                <Button
+                  aria-label={
+                    view === "skills"
+                      ? t.skills.addSkill
+                      : t.skills.packs.addAction
+                  }
+                  disabled={view === "packs" && packBusy}
+                  htmlType="button"
+                  icon={<Plus />}
+                  onClick={() =>
+                    view === "skills"
+                      ? setScreen("add-skill")
+                      : setAddingPack(true)
+                  }
+                  size="small"
+                  type="text"
+                />
+              </span>
+            </Tooltip>
+            <Tooltip
+              placement="bottom"
+              title={
                 view === "skills"
                   ? t.skills.refreshSkills
                   : t.skills.packs.refresh
               }
-              disabled={
-                view === "skills"
-                  ? skills.loading || skills.busy
-                  : packs.loading || packBusy
-              }
-              onClick={() =>
-                void (view === "skills" ? skills.refresh() : packs.refresh())
-              }
-              size="icon-sm"
-              type="button"
-              variant="ghost"
             >
-              <RefreshCw
-                className={
-                  (view === "skills" ? skills.loading : packs.loading)
-                    ? "animate-spin"
-                    : ""
-                }
-              />
-            </Button>
+              <span className="inline-flex">
+                <Button
+                  aria-label={
+                    view === "skills"
+                      ? t.skills.refreshSkills
+                      : t.skills.packs.refresh
+                  }
+                  disabled={
+                    view === "skills"
+                      ? skills.loading || skills.busy
+                      : packs.loading || packBusy
+                  }
+                  htmlType="button"
+                  icon={<RefreshCw />}
+                  loading={view === "skills" ? skills.loading : packs.loading}
+                  onClick={() =>
+                    void (view === "skills" ? skills.refresh() : packs.refresh())
+                  }
+                  size="small"
+                  type="text"
+                />
+              </span>
+            </Tooltip>
           </div>
         ) : null}
       </div>
 
       {activeError ? (
-        <div
-          aria-live="polite"
-          className="flex items-center justify-between gap-3 border-b border-destructive/25 bg-destructive/8 px-3 py-2 text-xs text-destructive-text"
-          role="alert"
-        >
-          <span>{activeError}</span>
-          <Button
-            onClick={() =>
-              void (view === "skills" ? skills.refresh() : packs.refresh())
-            }
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            {t.common.retry}
-          </Button>
-        </div>
+        <Alert
+          action={
+            <Button
+              htmlType="button"
+              onClick={() =>
+                void (view === "skills" ? skills.refresh() : packs.refresh())
+              }
+              size="small"
+            >
+              {t.common.retry}
+            </Button>
+          }
+          banner
+          showIcon
+          title={activeError}
+          type="error"
+        />
       ) : null}
 
       {removeSuccess && !removing ? (
-        <SuccessBanner>{removeSuccess}</SuccessBanner>
+        <Alert banner showIcon title={removeSuccess} type="success" />
       ) : null}
       {packSuccess && view === "packs" && !packBusy ? (
-        <SuccessBanner>{packSuccess}</SuccessBanner>
+        <Alert banner showIcon title={packSuccess} type="success" />
       ) : null}
 
       {screen === "add-skill" ? (
@@ -377,30 +389,37 @@ function SkillsListView({
 
   if (loading && empty) {
     return (
-      <div className="flex flex-1 items-center justify-center text-muted">
-        <LoaderCircle className="size-5 animate-spin" />
-        <span className="sr-only">
-          {view === "skills"
-            ? t.skills.loadingSkills
-            : t.skills.packs.loading}
-        </span>
+      <div
+        aria-label={
+          view === "skills" ? t.skills.loadingSkills : t.skills.packs.loading
+        }
+        className="flex-1 p-3"
+      >
+        <Skeleton active paragraph={{ rows: 6 }} title={false} />
       </div>
     );
   }
 
   if (empty) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-        <p className="text-sm font-medium">
-          {view === "skills"
-            ? t.skills.noSkillsFound
-            : t.skills.packs.empty}
-        </p>
-        {view === "skills" ? (
-          <p className="mt-1 text-xs leading-5 text-muted">
-            {t.skills.noSkillsFoundDescription}
-          </p>
-        ) : null}
+      <div className="grid flex-1 place-items-center p-6">
+        <Empty
+          description={
+            <div>
+              <p className="text-sm font-medium text-primary">
+                {view === "skills"
+                  ? t.skills.noSkillsFound
+                  : t.skills.packs.empty}
+              </p>
+              {view === "skills" ? (
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  {t.skills.noSkillsFoundDescription}
+                </p>
+              ) : null}
+            </div>
+          }
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       </div>
     );
   }
@@ -418,17 +437,5 @@ function SkillsListView({
       packs={packs}
       selectedPackId={selectedPackId}
     />
-  );
-}
-
-function SuccessBanner({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      aria-live="polite"
-      className="flex items-start gap-2 border-b border-success/30 bg-success/8 px-3 py-2 text-xs leading-4 text-success-text"
-    >
-      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
-      {children}
-    </div>
   );
 }
