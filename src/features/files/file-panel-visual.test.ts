@@ -9,6 +9,9 @@ const source = readFileSync(
 
 describe("file panel visual contract", () => {
   it("uses the panel hierarchy without inventing context content", () => {
+    expect(source).toContain(
+      'import { Alert, Breadcrumb, Button, Empty, Skeleton, Tooltip } from "antd"',
+    );
     expect(source).toContain("bg-canvas");
     expect(source).not.toContain("bg-panel");
     expect(source).toContain("border-line-subtle");
@@ -43,7 +46,16 @@ describe("file panel visual contract", () => {
   it("shows the current project-relative file hierarchy without a shortcut action", () => {
     expect(source).toContain("relativePath(cwd, currentPath)");
     expect(source).toContain("t.files.currentFilePath");
+    expect(source).toContain("<Breadcrumb");
+    expect(source).toContain("items={pathSegments.map");
     expect(source).toContain("<ChevronRight");
     expect(source).not.toContain("headerAction");
+  });
+
+  it("uses Ant Design feedback for empty, loading, and error states", () => {
+    expect(source).toContain("<Empty");
+    expect(source).toContain("<Skeleton");
+    expect(source).toContain("<Alert");
+    expect(source).toContain("type=\"error\"");
   });
 });

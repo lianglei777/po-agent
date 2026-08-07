@@ -2,12 +2,7 @@
 
 import { FileText, PanelRightClose, Settings2, Sparkles } from "@/components/icons";
 import type { KeyboardEvent, ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Tooltip } from "antd";
 import { FilePanel, type OpenFile } from "@/features/files/file-panel";
 import { SkillsPage } from "@/features/skills/skills-page";
 import { useI18n } from "@/i18n/use-i18n";
@@ -61,35 +56,33 @@ export function ProjectPanelDock({
           const selected = open && activeTab === tab;
           const label = getTabLabel(tab, t);
           return (
-            <Tooltip key={tab}>
-              <TooltipTrigger asChild>
+            <Tooltip key={tab} placement="left" title={label}>
+              <span className="inline-flex">
                 <Button
                   aria-controls="project-panel-content"
                   aria-label={label}
                   aria-selected={selected}
+                  color={selected ? "primary" : "default"}
                   className="relative size-8"
+                  htmlType="button"
                   id={`project-panel-${tab}-tab`}
+                  icon={
+                    tab === "files" ? (
+                      <FileText />
+                    ) : tab === "skills" ? (
+                      <Sparkles />
+                    ) : (
+                      <Settings2 />
+                    )
+                  }
                   onClick={() => onSelect(tab)}
                   onKeyDown={(event) => handleTabKeyDown(event, tab)}
                   role="tab"
-                  size="icon-sm"
+                  size="small"
                   tabIndex={selected ? 0 : -1}
-                  type="button"
-                  variant={selected ? "secondary" : "ghost"}
-                >
-                  {tab === "files" ? (
-                    <FileText />
-                  ) : tab === "skills" ? (
-                    <Sparkles />
-                  ) : (
-                    <Settings2 />
-                  )}
-                  {selected ? (
-                    <span className="absolute top-1/2 -left-1.5 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary" />
-                  ) : null}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">{label}</TooltipContent>
+                  variant={selected ? "filled" : "text"}
+                />
+              </span>
             </Tooltip>
           );
         })}
@@ -131,21 +124,17 @@ export function ProjectPanel({
           </h2>
           <p className="truncate text-caption text-dim">{projectName}</p>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <Tooltip placement="bottom" title={t.workspace.hideProjectPanel}>
+          <span className="inline-flex">
             <Button
               aria-label={t.workspace.hideProjectPanel}
+              htmlType="button"
+              icon={<PanelRightClose />}
               onClick={onClose}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <PanelRightClose />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {t.workspace.hideProjectPanel}
-          </TooltipContent>
+              size="small"
+              type="text"
+            />
+          </span>
         </Tooltip>
       </header>
 

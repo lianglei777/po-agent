@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Alert, Button, Skeleton, Tooltip } from "antd";
 import {
   AtSign,
   ChevronDown,
@@ -12,7 +13,6 @@ import {
   PanelLeftClose,
   RefreshCw,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";
 import { loadDirectory } from "./api";
@@ -168,42 +168,58 @@ export function FileTree({
       <div className="flex h-9 flex-none items-center border-b border-line-subtle px-2 text-meta font-medium text-muted">
         <span className="flex-1">{t.files.explorer}</span>
         {onCollapse ? (
-          <Button
-            aria-label={t.files.hideExplorer}
-            className="size-7"
-            onClick={onCollapse}
-            size="icon-sm"
-            title={t.files.hideExplorer}
-            type="button"
-            variant="ghost"
-          >
-            <PanelLeftClose className="size-3.5" />
-          </Button>
+          <Tooltip placement="bottom" title={t.files.hideExplorer}>
+            <span className="inline-flex">
+              <Button
+                aria-label={t.files.hideExplorer}
+                className="size-7"
+                htmlType="button"
+                icon={<PanelLeftClose className="size-3.5" />}
+                onClick={onCollapse}
+                size="small"
+                type="text"
+              />
+            </span>
+          </Tooltip>
         ) : null}
-        <Button
-          aria-label={t.files.refreshFiles}
-          className="size-7"
-          onClick={() => void load(cwd)}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <RefreshCw className="size-3.5" />
-        </Button>
+        <Tooltip placement="bottom" title={t.files.refreshFiles}>
+          <span className="inline-flex">
+            <Button
+              aria-label={t.files.refreshFiles}
+              className="size-7"
+              htmlType="button"
+              icon={<RefreshCw className="size-3.5" />}
+              onClick={() => void load(cwd)}
+              size="small"
+              type="text"
+            />
+          </span>
+        </Tooltip>
       </div>
       <ScrollArea className="min-h-0 min-w-0 flex-1">
         {error ? (
-          <div className="p-3 text-meta text-destructive-text">
-            <p>{error}</p>
-            <Button
-              className="mt-2"
-              onClick={() => void load(cwd)}
-              size="sm"
-              variant="outline"
-            >
-              {t.common.retry}
-            </Button>
-          </div>
+          <Alert
+            action={
+              <Button
+                htmlType="button"
+                onClick={() => void load(cwd)}
+                size="small"
+              >
+                {t.common.retry}
+              </Button>
+            }
+            className="m-2"
+            showIcon
+            title={error}
+            type="error"
+          />
+        ) : loading.has(cwd) && !entriesByPath[cwd] ? (
+          <Skeleton
+            active
+            className="p-3"
+            paragraph={{ rows: 6 }}
+            title={false}
+          />
         ) : (
           <FileNodes
             cwd={cwd}
@@ -276,56 +292,57 @@ function FileNodes({
     return (
       <div key={path}>
         <div
-          aria-label={entry.name}
           className="group flex h-6 cursor-pointer items-center rounded-sm px-1 text-meta hover:bg-hover focus-within:bg-selected focus-within:text-primary"
-          onClick={() =>
-            entry.isDir ? void onToggle(path) : onOpenFile(path, entry.name, entry.contentType)
-          }
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              if (entry.isDir) {
-                void onToggle(path);
-              } else {
-                onOpenFile(path, entry.name, entry.contentType);
-              }
-            }
-          }}
-          role="button"
           style={{ paddingLeft: `${6 + depth * 14}px` }}
-          tabIndex={0}
-          title={path}
         >
-          {entry.isDir ? (
-            <ChevronDown
-              className={`mr-1 size-3 flex-none transition-transform duration-[var(--motion-standard)] ${
-                isExpanded ? "" : "-rotate-90"
-              }`}
-            />
-          ) : (
-            <span className="mr-1 w-3" />
-          )}
-          <Icon className="mr-1.5 size-3.5 flex-none text-muted" />
-          <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-          {runName ? (
-            <span className="ml-2 max-w-16 flex-none truncate font-ui-mono text-caption text-dim">
-              {runName.slice(0, 8)}
-            </span>
-          ) : null}
+          <button
+            aria-label={entry.name}
+            className="flex h-full min-w-0 flex-1 cursor-pointer items-center border-0 bg-transparent p-0 text-left text-inherit"
+            onClick={() =>
+              entry.isDir
+                ? void onToggle(path)
+                : onOpenFile(path, entry.name, entry.contentType)
+            }
+            title={path}
+            type="button"
+          >
+            {entry.isDir ? (
+              <ChevronDown
+                className={`mr-1 size-3 flex-none transition-transform duration-[var(--motion-standard)] ${
+                  isExpanded ? "" : "-rotate-90"
+                }`}
+              />
+            ) : (
+              <span className="mr-1 w-3" />
+            )}
+            <Icon className="mr-1.5 size-3.5 flex-none text-muted" />
+            <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+            {runName ? (
+              <span className="ml-2 max-w-16 flex-none truncate font-ui-mono text-caption text-dim">
+                {runName.slice(0, 8)}
+              </span>
+            ) : null}
+          </button>
           {onAtMention ? (
-            <Button
-              aria-label={`${text.mention} ${entry.name}`}
-              className="hidden size-6 group-hover:inline-flex group-focus-within:inline-flex"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAtMention(relativePath(cwd, path));
-              }}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
+            <Tooltip
+              placement="left"
+              title={`${text.mention} ${entry.name}`}
             >
-              <AtSign className="size-3" />
-            </Button>
+              <span className="hidden group-hover:inline-flex group-focus-within:inline-flex">
+                <Button
+                  aria-label={`${text.mention} ${entry.name}`}
+                  className="size-6"
+                  htmlType="button"
+                  icon={<AtSign className="size-3" />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAtMention(relativePath(cwd, path));
+                  }}
+                  size="small"
+                  type="text"
+                />
+              </span>
+            </Tooltip>
           ) : null}
         </div>
         {entry.isDir && isExpanded ? (

@@ -9,6 +9,7 @@ const source = readFileSync(
 
 describe("project panel", () => {
   it("uses an always-available vertical dock with complete tab semantics", () => {
+    expect(source).toContain('import { Button, Tooltip } from "antd"');
     expect(source).toContain('"files",');
     expect(source).toContain('"skills",');
     expect(source).toContain('"settings"');
@@ -20,6 +21,7 @@ describe("project panel", () => {
     expect(source).toContain("aria-selected");
     expect(source).toContain('event.key === "ArrowUp"');
     expect(source).toContain('event.key === "ArrowDown"');
+    expect(source).toContain('variant={selected ? "filled" : "text"}');
   });
 
   it("passes the selected project context to Files, Skills, and settings", () => {

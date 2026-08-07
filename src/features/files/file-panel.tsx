@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Alert, Breadcrumb, Button, Empty, Skeleton, Tooltip } from "antd";
 import { ChevronRight, FileText, PanelLeftOpen } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/use-i18n";
 import { MediaPreview } from "@/components/ui/media-preview";
 import { loadFile, rawFileUrl } from "./api";
@@ -58,34 +58,43 @@ function FilePanelContent({
     <div className="flex h-full w-full min-w-0 flex-col bg-canvas">
       {currentPath ? (
         <div className="flex h-9 flex-none items-stretch border-b border-line-subtle bg-canvas text-meta text-muted">
-          <nav
-            aria-label={t.files.currentFilePath}
-            className="flex min-w-0 flex-1 items-center overflow-hidden px-3"
-            title={currentPath}
-          >
-            <ol className="flex min-w-0 items-center font-ui-mono">
-              {pathSegments.map((segment, index) => (
-                <li className="flex min-w-0 items-center" key={`${segment}-${index}`}>
-                  {index > 0 ? <ChevronRight className="mx-1 size-3 shrink-0 text-dim" /> : null}
-                  <span className={index === pathSegments.length - 1 ? "truncate text-primary" : "truncate text-muted"}>
-                    {segment}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </nav>
+          <Tooltip placement="bottomLeft" title={currentPath}>
+            <span className="flex min-w-0 flex-1 items-center overflow-hidden px-3">
+              <Breadcrumb
+                aria-label={t.files.currentFilePath}
+                className="min-w-0 overflow-hidden font-ui-mono text-meta"
+                items={pathSegments.map((segment, index) => ({
+                  title: (
+                    <span
+                      className={
+                        index === pathSegments.length - 1
+                          ? "text-primary"
+                          : "text-muted"
+                      }
+                    >
+                      {segment}
+                    </span>
+                  ),
+                }))}
+                separator={
+                  <ChevronRight className="size-3 shrink-0 text-dim" />
+                }
+              />
+            </span>
+          </Tooltip>
           {!explorerVisible ? (
-            <Button
-              aria-label={t.files.showExplorer}
-              className="mr-1.5 self-center"
-              onClick={() => setExplorerVisible(true)}
-              size="icon-sm"
-              title={t.files.showExplorer}
-              type="button"
-              variant="ghost"
-            >
-              <PanelLeftOpen className="size-3.5" />
-            </Button>
+            <Tooltip placement="bottom" title={t.files.showExplorer}>
+              <span className="mr-1.5 inline-flex self-center">
+                <Button
+                  aria-label={t.files.showExplorer}
+                  htmlType="button"
+                  icon={<PanelLeftOpen className="size-3.5" />}
+                  onClick={() => setExplorerVisible(true)}
+                  size="small"
+                  type="text"
+                />
+              </span>
+            </Tooltip>
           ) : null}
         </div>
       ) : null}
@@ -123,12 +132,11 @@ function EmptyFile() {
   const { t } = useI18n();
   return (
     <div className="grid flex-1 place-items-center p-6">
-      <div className="text-center text-muted">
-        <div className="mx-auto mb-3 grid size-9 place-items-center rounded-md border border-line-subtle bg-elevated">
-          <FileText className="size-4" />
-        </div>
-        <p className="m-0 text-xs">{t.files.noFileOpen}</p>
-      </div>
+      <Empty
+        className="m-0 text-muted"
+        description={t.files.noFileOpen}
+        image={<FileText className="mx-auto size-8 text-dim" />}
+      />
     </div>
   );
 }
@@ -170,10 +178,25 @@ function LoadedTextFile({ file }: { file: OpenFile }) {
   }, [file, t.files.unableToOpenFile]);
 
   if (!result) {
-    return <div className="p-4 text-xs text-dim">{t.files.loading}</div>;
+    return (
+      <Skeleton
+        active
+        aria-label={t.files.loading}
+        className="p-4"
+        paragraph={{ rows: 8 }}
+        title={false}
+      />
+    );
   }
   if (result.error) {
-    return <div className="p-4 text-xs text-destructive-text">{result.error}</div>;
+    return (
+      <Alert
+        className="m-3"
+        showIcon
+        title={result.error}
+        type="error"
+      />
+    );
   }
   return (
     <pre className="m-0 min-h-0 flex-1 overflow-auto p-4 font-ui-mono text-xs leading-5 whitespace-pre-wrap text-primary">

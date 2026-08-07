@@ -9,6 +9,9 @@ const source = readFileSync(
 
 describe("file tree", () => {
   it("keeps existing file operations without adding search", () => {
+    expect(source).toContain(
+      'import { Alert, Button, Skeleton, Tooltip } from "antd"',
+    );
     expect(source).toContain("loadDirectory");
     expect(source).toContain("onOpenFile");
     expect(source).toContain("onAtMention");
@@ -17,6 +20,7 @@ describe("file tree", () => {
     expect(source).not.toContain("placeholder=");
     expect(source).toContain("compactGeneratedEntries");
     expect(source).toContain("isGeneratedArtifactsPath");
+    expect(source).toContain("<FileNodes");
   });
 
   it("uses the white canvas background", () => {
@@ -29,5 +33,20 @@ describe("file tree", () => {
     expect(source).toContain("treeRequestRef.current.abort()");
     expect(source).toContain("loadDirectory(path, signal)");
     expect(source).toContain("if (signal.aborted) return null");
+  });
+
+  it("uses standard loading and error feedback without replacing the domain tree", () => {
+    expect(source).toContain("<Skeleton");
+    expect(source).toContain("<Alert");
+    expect(source).toContain("loading.has(cwd)");
+    expect(source).toContain("<Tooltip");
+    expect(source).not.toContain("<Tree");
+  });
+
+  it("keeps file opening and mention actions as sibling controls", () => {
+    expect(source).toContain('aria-label={entry.name}');
+    expect(source).toContain('type="button"');
+    expect(source).not.toContain('role="button"');
+    expect(source).not.toContain('tabIndex={0}');
   });
 });
