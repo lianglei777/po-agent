@@ -2,7 +2,6 @@
 
 import { Eye, EyeOff, KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { GenerationRouteDto } from "@/contracts/generation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +15,7 @@ import {
   updateGenerationRoute,
   updateRunningHubGenerationSettings,
 } from "./api";
+import { useContentGenerationStore } from "./state/content-generation-store-provider";
 
 export function ContentGenerationSettings({
   onDirtyChange,
@@ -24,15 +24,25 @@ export function ContentGenerationSettings({
 }) {
   const { t } = useI18n();
   const labels = t.contentGeneration;
-  const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [apiKey, setApiKey] = useState("");
-  const [hasCredential, setHasCredential] = useState(false);
-  const [providerEnabled, setProviderEnabled] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const {
+    applySettingsData,
+    hasCredential,
+    providerEnabled,
+    routes,
+    savingCredential: saving,
+    setHasCredential,
+    setProviderEnabled,
+    setSavingCredential,
+    setSettingsError,
+    setSettingsLoading,
+    setUpdatingId,
+    settingsError: error,
+    settingsLoading: loading,
+    updateRoute,
+    updatingId,
+  } = useContentGenerationStore((state) => state);
 
   useEffect(() => {
     let disposed = false;
@@ -43,16 +53,18 @@ export function ContentGenerationSettings({
     ])
       .then(([credential, nextRoutes, provider]) => {
         if (disposed) return;
-        setHasCredential(credential.hasCredential);
-        setRoutes(nextRoutes);
-        setProviderEnabled(provider.enabled);
+        applySettingsData(
+          nextRoutes,
+          credential.hasCredential,
+          provider.enabled,
+        );
       })
-      .catch((cause) => !disposed && setError(messageOf(cause)))
-      .finally(() => !disposed && setLoading(false));
+      .catch((cause) => !disposed && setSettingsError(messageOf(cause)))
+      .finally(() => !disposed && setSettingsLoading(false));
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [applySettingsData, setSettingsError, setSettingsLoading]);
 
   useEffect(() => {
     onDirtyChange?.(apiKey.length > 0);
@@ -63,41 +75,41 @@ export function ContentGenerationSettings({
   async function saveCredential() {
     const value = apiKey.trim();
     if (!value || saving) return;
-    setSaving(true);
-    setError("");
+    setSavingCredential(true);
+    setSettingsError("");
     try {
       const status = await saveRunningHubGenerationCredential(value);
       setHasCredential(status.hasCredential);
       setApiKey("");
     } catch (cause) {
-      setError(messageOf(cause));
+      setSettingsError(messageOf(cause));
     } finally {
-      setSaving(false);
+      setSavingCredential(false);
     }
   }
 
   async function removeCredential() {
     if (saving || !window.confirm(labels.removeCredentialConfirm)) return;
-    setSaving(true);
-    setError("");
+    setSavingCredential(true);
+    setSettingsError("");
     try {
       const status = await deleteRunningHubGenerationCredential();
       setHasCredential(status.hasCredential);
       setApiKey("");
     } catch (cause) {
-      setError(messageOf(cause));
+      setSettingsError(messageOf(cause));
     } finally {
-      setSaving(false);
+      setSavingCredential(false);
     }
   }
 
   async function toggleProvider(enabled: boolean) {
     setUpdatingId("runninghub");
-    setError("");
+    setSettingsError("");
     try {
       setProviderEnabled((await updateRunningHubGenerationSettings(enabled)).enabled);
     } catch (cause) {
-      setError(messageOf(cause));
+      setSettingsError(messageOf(cause));
     } finally {
       setUpdatingId(null);
     }
@@ -105,12 +117,12 @@ export function ContentGenerationSettings({
 
   async function toggleRoute(routeId: string, enabled: boolean) {
     setUpdatingId(routeId);
-    setError("");
+    setSettingsError("");
     try {
       const updated = await updateGenerationRoute(routeId, enabled);
-      setRoutes((current) => current.map((route) => route.id === routeId ? updated : route));
+      updateRoute(updated);
     } catch (cause) {
-      setError(messageOf(cause));
+      setSettingsError(messageOf(cause));
     } finally {
       setUpdatingId(null);
     }

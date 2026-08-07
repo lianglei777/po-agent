@@ -7,21 +7,32 @@ import ModelDetail from "./details/model-detail";
 import OAuthDetail from "./details/oauth-detail";
 import ProviderDetail from "./details/provider-detail";
 import { ModelProviderSidebar } from "./sidebar/model-provider-sidebar";
+import { ModelProvidersStoreProvider } from "./state/model-providers-store-provider";
 import { useModelProviders } from "./use-model-providers";
 
 export type ModelProviderSaveStatus =
   | { phase: "idle" | "pending" | "saving" | "saved" }
   | { phase: "error"; message: string; onRetry?: () => void };
 
-export function ModelProviderPage({
-  onDirtyChange,
-  onSaved,
-  onSaveStatusChange,
-}: {
+type ModelProviderPageProps = {
   onDirtyChange: (dirty: boolean) => void;
   onSaved?: () => void;
   onSaveStatusChange?: (status: ModelProviderSaveStatus) => void;
-}) {
+};
+
+export function ModelProviderPage(props: ModelProviderPageProps) {
+  return (
+    <ModelProvidersStoreProvider>
+      <ModelProviderPageContent {...props} />
+    </ModelProvidersStoreProvider>
+  );
+}
+
+function ModelProviderPageContent({
+  onDirtyChange,
+  onSaved,
+  onSaveStatusChange,
+}: ModelProviderPageProps) {
   const modelConfig = useModelProviders(onSaved);
   const { t } = useI18n();
 

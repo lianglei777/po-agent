@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import {
   ChevronRight,
   ExternalLink,
@@ -34,6 +34,10 @@ import {
   saveSystemInstructions,
 } from "./api";
 import { InstructionApiError } from "./types";
+import {
+  InstructionsStoreProvider,
+  useInstructionsStore,
+} from "./state/instructions-store-provider";
 
 export interface SystemPromptWorkbenchProps {
   agentId?: string;
@@ -48,32 +52,21 @@ export interface SystemPromptWorkbenchProps {
   onSystemPromptChange?: (prompt: string) => void;
 }
 
-interface EditorState {
-  doc: InstructionDocument | null;
-  draft: string;
-  loading: boolean;
-  saving: boolean;
-  deleting: boolean;
-  error: string;
-  conflict: boolean;
-}
-
-type ActiveView = "effective" | "global" | "project";
-const initialEditorState: EditorState = {
-  doc: null,
-  draft: "",
-  loading: false,
-  saving: false,
-  deleting: false,
-  error: "",
-  conflict: false,
-};
-
 function formatBytes(content: string): number {
   return new Blob([content]).size;
 }
 
 export function SystemPromptWorkbench({
+  ...props
+}: SystemPromptWorkbenchProps) {
+  return (
+    <InstructionsStoreProvider>
+      <SystemPromptWorkbenchContent {...props} />
+    </InstructionsStoreProvider>
+  );
+}
+
+function SystemPromptWorkbenchContent({
   agentId,
   cwd,
   currentSystemPrompt,
@@ -86,17 +79,24 @@ export function SystemPromptWorkbench({
   onSystemPromptChange,
 }: SystemPromptWorkbenchProps) {
   const { t } = useI18n();
-  const [globalState, setGlobalState] =
-    useState<EditorState>(initialEditorState);
-  const [projectDoc, setProjectDoc] = useState<InstructionDocument | null>(
-    null,
-  );
-  const [projectLoading, setProjectLoading] = useState(false);
-  const [reloadBusy, setReloadBusy] = useState(false);
-  const [reloadError, setReloadError] = useState("");
-  const [reloadSuccess, setReloadSuccess] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [activeView, setActiveView] = useState<ActiveView>("effective");
+  const {
+    activeView,
+    confirmGlobalDelete: showDeleteConfirm,
+    globalEditor: globalState,
+    reloadBusy,
+    reloadError,
+    reloadSuccess,
+    setActiveView,
+    setConfirmGlobalDelete: setShowDeleteConfirm,
+    setGlobalEditor: setGlobalState,
+    setReloadBusy,
+    setReloadError,
+    setReloadSuccess,
+    setWorkbenchProjectDoc: setProjectDoc,
+    setWorkbenchProjectLoading: setProjectLoading,
+    workbenchProjectDoc: projectDoc,
+    workbenchProjectLoading: projectLoading,
+  } = useInstructionsStore((state) => state);
 
   const loadGlobal = useCallback(async () => {
     setGlobalState((state) => ({ ...state, loading: true, error: "" }));
@@ -119,7 +119,7 @@ export function SystemPromptWorkbench({
           cause instanceof Error ? cause.message : t.instructions.errorLoad,
       }));
     }
-  }, [t.instructions.errorLoad]);
+  }, [setGlobalState, t.instructions.errorLoad]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +147,15 @@ export function SystemPromptWorkbench({
     return () => {
       cancelled = true;
     };
-  }, [cwd, loadGlobal]);
+  }, [
+    cwd,
+    loadGlobal,
+    setActiveView,
+    setProjectDoc,
+    setProjectLoading,
+    setReloadError,
+    setReloadSuccess,
+  ]);
 
   const globalDirty = Boolean(
     globalState.doc && globalState.draft !== globalState.doc.content,
@@ -203,6 +211,8 @@ export function SystemPromptWorkbench({
       globalState.doc,
       globalState.draft,
       onInstructionsChanged,
+      setGlobalState,
+      setReloadSuccess,
       t.instructions.errorSave,
     ],
   );
@@ -240,7 +250,14 @@ export function SystemPromptWorkbench({
         conflict: error?.code === "INSTRUCTION_CONFLICT",
       }));
     }
-  }, [globalState.doc, onInstructionsChanged, t.instructions.errorDelete]);
+  }, [
+    globalState.doc,
+    onInstructionsChanged,
+    setGlobalState,
+    setReloadSuccess,
+    setShowDeleteConfirm,
+    t.instructions.errorDelete,
+  ]);
 
   const handleReload = useCallback(async () => {
     if (!agentId || isRunning) return;
@@ -266,6 +283,9 @@ export function SystemPromptWorkbench({
     isRunning,
     onApplied,
     onSystemPromptChange,
+    setReloadBusy,
+    setReloadError,
+    setReloadSuccess,
     t.instructions.errorReload,
   ]);
 

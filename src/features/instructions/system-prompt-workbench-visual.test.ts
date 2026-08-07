@@ -11,9 +11,8 @@ describe("system prompt settings workbench visual contract", () => {
   it("uses a source navigator and one focused content pane", () => {
     expect(source).toContain("grid-cols-[14rem_minmax(0,1fr)]");
     expect(source).toContain("<aside");
-    expect(source).toContain(
-      'type ActiveView = "effective" | "global" | "project"',
-    );
+    expect(source).toContain("InstructionsStoreProvider");
+    expect(source).toContain("useInstructionsStore");
     expect(source).toContain('activeView === "effective"');
     expect(source).toContain("<EffectivePromptView");
     expect(source).toContain("<GlobalPromptEditor");

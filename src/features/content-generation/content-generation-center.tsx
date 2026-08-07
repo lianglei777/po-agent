@@ -35,6 +35,7 @@ import {
   ContentGenerationComposer,
   type SelectedGenerationAsset,
 } from "./content-generation-composer";
+import { useContentGenerationStore } from "./state/content-generation-store-provider";
 
 const ACTIVE_STATUSES = new Set<GenerationRunStatus>([
   "queued",
@@ -51,15 +52,30 @@ export function ContentGenerationCenter({
   onChanged?: () => void;
 }) {
   const { t } = useI18n();
-  const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
-  const [runs, setRuns] = useState<GenerationRunViewDto[]>([]);
-  const [selectedRouteId, setSelectedRouteId] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const {
+    applyCenterData,
+    centerError,
+    centerLoading,
+    pendingActionId,
+    replaceRun,
+    resetCenter,
+    routes,
+    runs,
+    selectedRouteId,
+    setCenterError,
+    setCenterLoading,
+    setPendingActionId,
+    setRuns,
+    setSelectedRouteId,
+    setSubmitting,
+    submitting,
+  } = useContentGenerationStore((state) => state);
   const endOfConversation = useRef<HTMLDivElement>(null);
-  const route = routes.find((item) => item.id === selectedRouteId);
+  const enabledRoutes = useMemo(
+    () => routes.filter((item) => item.enabled),
+    [routes],
+  );
+  const route = enabledRoutes.find((item) => item.id === selectedRouteId);
   const activeRun = useMemo(
     () => runs.find((view) => ACTIVE_STATUSES.has(view.run.status)),
     [runs],
@@ -71,25 +87,25 @@ export function ContentGenerationCenter({
 
   useEffect(() => {
     let disposed = false;
+    resetCenter();
     void Promise.all([
       loadGenerationRoutes(),
       loadGenerationRuns(session.id),
     ])
       .then(([nextRoutes, nextRuns]) => {
         if (disposed) return;
-        const enabledRoutes = nextRoutes.filter((item) => item.enabled);
-        setRoutes(enabledRoutes);
-        setSelectedRouteId((current) => {
-          if (enabledRoutes.some((item) => item.id === current)) return current;
-          return enabledRoutes[0]?.id ?? "";
-        });
-        setRuns(nextRuns);
-        setError("");
+        applyCenterData(nextRoutes, nextRuns);
       })
-      .catch((cause) => !disposed && setError(messageOf(cause)))
-      .finally(() => !disposed && setLoading(false));
+      .catch((cause) => !disposed && setCenterError(messageOf(cause)))
+      .finally(() => !disposed && setCenterLoading(false));
     return () => { disposed = true; };
-  }, [session.id]);
+  }, [
+    applyCenterData,
+    resetCenter,
+    session.id,
+    setCenterError,
+    setCenterLoading,
+  ]);
 
   useEffect(() => {
     if (!activeRun) return;
@@ -101,10 +117,10 @@ export function ContentGenerationCenter({
             onChanged?.();
           }
         })
-        .catch((cause) => setError(messageOf(cause)));
+        .catch((cause) => setCenterError(messageOf(cause)));
     }, REFRESH_INTERVAL_MS);
     return () => window.clearTimeout(timer);
-  }, [activeRun, onChanged, session.id]);
+  }, [activeRun, onChanged, session.id, setCenterError, setRuns]);
 
   useEffect(() => {
     endOfConversation.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -118,7 +134,7 @@ export function ContentGenerationCenter({
     if (!route || activeRun || submitting) return false;
     if (!window.confirm(t.contentGeneration.paidGenerationConfirm)) return false;
     setSubmitting(true);
-    setError("");
+    setCenterError("");
     try {
       const assets = await Promise.all(input.assets.map(async (asset) => ({
         slot: asset.slot,
@@ -139,7 +155,7 @@ export function ContentGenerationCenter({
       onChanged?.();
       return true;
     } catch (cause) {
-      setError(messageOf(cause));
+      setCenterError(messageOf(cause));
       return false;
     } finally {
       setSubmitting(false);
@@ -148,12 +164,12 @@ export function ContentGenerationCenter({
 
   async function cancel(runId: string) {
     setPendingActionId(runId);
-    setError("");
+    setCenterError("");
     try {
       replaceRun(await cancelGenerationRun(runId));
       onChanged?.();
     } catch (cause) {
-      setError(messageOf(cause));
+      setCenterError(messageOf(cause));
     } finally {
       setPendingActionId(null);
     }
@@ -162,23 +178,19 @@ export function ContentGenerationCenter({
   async function retry(runId: string) {
     if (!window.confirm(t.contentGeneration.paidGenerationRetryConfirm)) return;
     setPendingActionId(runId);
-    setError("");
+    setCenterError("");
     try {
       const created = await retryGenerationRun(runId, crypto.randomUUID());
       replaceRun(created);
       onChanged?.();
     } catch (cause) {
-      setError(messageOf(cause));
+      setCenterError(messageOf(cause));
     } finally {
       setPendingActionId(null);
     }
   }
 
-  function replaceRun(next: GenerationRunViewDto) {
-    setRuns((current) => current.map((view) => view.run.id === next.run.id ? next : view));
-  }
-
-  if (loading) {
+  if (centerLoading) {
     return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
   }
   if (!route) {
@@ -219,12 +231,12 @@ export function ContentGenerationCenter({
       <div className="flex-none px-4 pb-4">
         <ContentGenerationComposer
           busy={Boolean(activeRun) || submitting}
-          error={error}
+          error={centerError}
           key={selectedRoute.id}
           onRouteChange={setSelectedRouteId}
           onSubmit={submit}
           route={selectedRoute}
-          routes={routes}
+          routes={enabledRoutes}
         />
       </div>
     </main>

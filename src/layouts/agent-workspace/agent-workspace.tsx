@@ -20,6 +20,7 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatCenter } from "@/features/chat/chat-center";
 import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
+import { ContentGenerationStoreProvider } from "@/features/content-generation/state/content-generation-store-provider";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
 import { loadSessions } from "@/features/sessions/api";
@@ -63,7 +64,9 @@ export function AgentWorkspace() {
   return (
     <WorkspaceStoreProvider>
       <SessionNavigationStoreProvider>
-        <AgentWorkspaceContent />
+        <ContentGenerationStoreProvider>
+          <AgentWorkspaceContent />
+        </ContentGenerationStoreProvider>
       </SessionNavigationStoreProvider>
     </WorkspaceStoreProvider>
   );

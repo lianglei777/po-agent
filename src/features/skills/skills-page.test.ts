@@ -37,7 +37,8 @@ describe("Skills page", () => {
     expect(source).toContain("SkillPackDetail");
     expect(source).toContain("AddSkillPackDialog");
     expect(source).toContain("<SegmentedControl");
-    expect(source).toContain('type SkillsScreen = "list"');
+    expect(source).toContain("SkillsStoreProvider");
+    expect(source).toContain("useSkillsStore");
     expect(source).not.toContain('w-[224px]');
   });
 

@@ -31,23 +31,10 @@ import type {
   SessionStats,
 } from "./agent-types";
 import type { BranchState } from "./branch-state";
+import { ChatStoreProvider } from "./state/chat-store-provider";
 import { type ChatSession, useChatController } from "./use-chat-controller";
 
-export function ChatCenter({
-  session,
-  newSessionCwd,
-  modelsRevision,
-  onAgentEnd,
-  onSessionCreated,
-  onSessionForked,
-  onSystemPromptChange,
-  onSessionStatsChange,
-  onContextUsageChange,
-  onBranchState,
-  onOpenModelProvider,
-  onOpenSkills,
-  projectName,
-}: {
+type ChatCenterProps = {
   session: ChatSession | null;
   newSessionCwd: string | null;
   modelsRevision: number;
@@ -61,7 +48,31 @@ export function ChatCenter({
   onOpenModelProvider: () => void;
   onOpenSkills: () => void;
   projectName: string | null;
-}) {
+};
+
+export function ChatCenter(props: ChatCenterProps) {
+  return (
+    <ChatStoreProvider initialLoading={Boolean(props.session)}>
+      <ChatCenterContent {...props} />
+    </ChatStoreProvider>
+  );
+}
+
+function ChatCenterContent({
+  session,
+  newSessionCwd,
+  modelsRevision,
+  onAgentEnd,
+  onSessionCreated,
+  onSessionForked,
+  onSystemPromptChange,
+  onSessionStatsChange,
+  onContextUsageChange,
+  onBranchState,
+  onOpenModelProvider,
+  onOpenSkills,
+  projectName,
+}: ChatCenterProps) {
   const controller = useChatController({
     session,
     newSessionCwd,

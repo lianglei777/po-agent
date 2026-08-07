@@ -6,9 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
-  useState,
 } from "react";
 import {
   ApiRequestError,
@@ -33,22 +31,18 @@ import {
   phaseLabel,
   createUserContent,
   sessionStats,
-  streamReducer,
 } from "./chat-logic";
 import { useI18n } from "@/i18n/use-i18n";
 import type {
   AgentEvent,
-  AgentMessage,
   AttachedImage,
   ContextUsage,
   ImageInput,
-  ModelInfo,
   SessionStats,
-  SessionTreeNode,
   ThinkingLevel,
-  ToolResultMessage,
   UserMessage,
 } from "./agent-types";
+import { useChatStore } from "./state/chat-store-provider";
 
 export type ChatSession = { id: string; cwd: string };
 
@@ -76,45 +70,58 @@ export function useChatController(options: ChatControllerOptions) {
     onSessionStatsChange,
     onContextUsageChange,
   } = options;
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [entryIds, setEntryIds] = useState<string[]>([]);
-  const [tree, setTree] = useState<SessionTreeNode[]>([]);
-  const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(Boolean(session));
-  const [error, setError] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [draft, setDraft] = useState("");
-  const [images, setImages] = useState<AttachedImage[]>([]);
-  const [running, setRunning] = useState(false);
-  const [stopping, setStopping] = useState(false);
-  const [runningTools, setRunningTools] = useState<
-    Array<{ toolCallId: string; toolName: string }>
-  >([]);
-  const [partialToolResults, setPartialToolResults] = useState<
-    Map<string, ToolResultMessage>
-  >(new Map());
-  const [retryInfo, setRetryInfo] = useState<{
-    attempt: number;
-    maxAttempts: number;
-    errorMessage?: string;
-  } | null>(null);
-  const [isCompacting, setIsCompacting] = useState(false);
-  const [compactionAvailability, setCompactionAvailability] = useState<{
-    sessionId: string;
-    available: boolean;
-  } | null>(null);
-  const [compactError, setCompactError] = useState("");
-  const [compactResult, setCompactResult] = useState(false);
-  const [compactNotice, setCompactNotice] = useState("");
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelKey, setModelKey] = useState("");
-  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("auto");
-  const [forkingEntryId, setForkingEntryId] = useState<string | null>(null);
-  const [undoable, setUndoable] = useState<{ leafId: string } | null>(null);
-  const [stream, dispatchStream] = useReducer(streamReducer, {
-    isStreaming: false,
-    streamingMessage: null,
-  });
+  const {
+    messages,
+    setMessages,
+    entryIds,
+    setEntryIds,
+    tree,
+    setTree,
+    activeLeafId,
+    setActiveLeafId,
+    loading,
+    setLoading,
+    error,
+    setError,
+    actionError,
+    setActionError,
+    draft,
+    setDraft,
+    images,
+    setImages,
+    running,
+    setRunning,
+    stopping,
+    setStopping,
+    runningTools,
+    setRunningTools,
+    partialToolResults,
+    setPartialToolResults,
+    retryInfo,
+    setRetryInfo,
+    isCompacting,
+    setIsCompacting,
+    compactionAvailability,
+    setCompactionAvailability,
+    compactError,
+    setCompactError,
+    compactResult,
+    setCompactResult,
+    compactNotice,
+    setCompactNotice,
+    models,
+    setModels,
+    modelKey,
+    setModelKey,
+    thinkingLevel,
+    setThinkingLevel,
+    forkingEntryId,
+    setForkingEntryId,
+    undoable,
+    setUndoable,
+    stream,
+    dispatchStream,
+  } = useChatStore((state) => state);
   const { t } = useI18n();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -177,7 +184,14 @@ export function useChatController(options: ChatControllerOptions) {
       if (state.thinkingLevel) setThinkingLevel(state.thinkingLevel);
       if (state.model) setModelKey(`${state.model.provider}:${state.model.id}`);
     },
-    [onContextUsageChange, onSystemPromptChange],
+    [
+      onContextUsageChange,
+      onSystemPromptChange,
+      setCompactionAvailability,
+      setIsCompacting,
+      setModelKey,
+      setThinkingLevel,
+    ],
   );
 
   const applyDetail = useCallback(
@@ -194,7 +208,15 @@ export function useChatController(options: ChatControllerOptions) {
       }
       syncRuntimeState(detail.agentState?.state);
     },
-    [syncRuntimeState],
+    [
+      setActiveLeafId,
+      setEntryIds,
+      setMessages,
+      setModelKey,
+      setThinkingLevel,
+      setTree,
+      syncRuntimeState,
+    ],
   );
 
   const reloadHistory = useCallback(async () => {
@@ -236,8 +258,14 @@ export function useChatController(options: ChatControllerOptions) {
     onAgentEnd?.();
   }, [
     closeSource,
+    dispatchStream,
     onAgentEnd,
     reloadHistory,
+    setActionError,
+    setRetryInfo,
+    setRunning,
+    setRunningTools,
+    setStopping,
     syncRuntimeState,
   ]);
 
@@ -321,7 +349,20 @@ export function useChatController(options: ChatControllerOptions) {
           break;
       }
     },
-    [closeSource, handleAgentEnd, reloadHistory],
+    [
+      closeSource,
+      dispatchStream,
+      handleAgentEnd,
+      reloadHistory,
+      setCompactError,
+      setIsCompacting,
+      setMessages,
+      setPartialToolResults,
+      setRetryInfo,
+      setRunning,
+      setRunningTools,
+      setStopping,
+    ],
   );
 
   const connectSse = useCallback(
@@ -396,7 +437,7 @@ export function useChatController(options: ChatControllerOptions) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [modelsRevision]);
+  }, [modelsRevision, setActionError, setModelKey, setModels]);
 
   useEffect(() => {
     if (!session) return;
@@ -427,7 +468,17 @@ export function useChatController(options: ChatControllerOptions) {
       }
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [applyDetail, connectSse, session, syncRuntimeState]);
+  }, [
+    applyDetail,
+    connectSse,
+    dispatchStream,
+    session,
+    setError,
+    setLoading,
+    setPartialToolResults,
+    setRunning,
+    syncRuntimeState,
+  ]);
 
   useEffect(() => {
     runningRef.current = running;
@@ -446,21 +497,21 @@ export function useChatController(options: ChatControllerOptions) {
     if (!compactResult) return;
     const timer = window.setTimeout(() => setCompactResult(false), 6000);
     return () => window.clearTimeout(timer);
-  }, [compactResult]);
+  }, [compactResult, setCompactResult]);
 
   // compact info 提示自动消失
   useEffect(() => {
     if (!compactNotice) return;
     const timer = window.setTimeout(() => setCompactNotice(""), 6000);
     return () => window.clearTimeout(timer);
-  }, [compactNotice]);
+  }, [compactNotice, setCompactNotice]);
 
   // 编辑撤销提示自动消失(对齐 compact 反馈的超时)
   useEffect(() => {
     if (!undoable || running) return;
     const timer = window.setTimeout(() => setUndoable(null), 8000);
     return () => window.clearTimeout(timer);
-  }, [running, undoable]);
+  }, [running, setUndoable, undoable]);
 
   const changeLeaf = useCallback(
     async (leafId: string) => {
@@ -492,7 +543,15 @@ export function useChatController(options: ChatControllerOptions) {
         return false;
       }
     },
-    [activeLeafId, running, syncRuntimeState],
+    [
+      activeLeafId,
+      running,
+      setActionError,
+      setActiveLeafId,
+      setEntryIds,
+      setMessages,
+      syncRuntimeState,
+    ],
   );
 
   useEffect(() => {

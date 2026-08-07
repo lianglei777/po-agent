@@ -76,7 +76,7 @@ describe("skills config UI contract", () => {
     const toggleStart = hookSource.indexOf("const toggleModelInvocation");
     const toggleEnd = hookSource.indexOf("return {", toggleStart);
     expect(hookSource.slice(toggleStart, toggleEnd)).toContain(
-      "setLoading(false)",
+      "setSkillsLoading(false)",
     );
   });
 

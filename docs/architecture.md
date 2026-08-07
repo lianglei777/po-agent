@@ -150,7 +150,9 @@ src/lib          浏览器与共享 UI 工具
 ```text
 src/components/ui
 src/features/chat
+src/features/content-generation
 src/features/files
+src/features/instructions
 src/features/model-providers
 src/features/sessions
 src/features/skills
@@ -172,6 +174,10 @@ Zustand Store 按拥有状态的业务边界就近放置，不建立承载所有
   React 本地状态，不为消除 `useState` 而迁入 Zustand。
 - Next.js 中禁止使用模块级单例 Store 承载请求相关状态。Provider 应尽可能靠近实际
   消费边界，避免 SSR 请求、测试或多个 Workspace 实例之间共享状态。
+
+当前 Chat、Content Generation、Files、Instructions、Model Providers、Sessions 与
+Skills 均在各自业务边界内维护 Zustand Store；跨模块的工作区协调状态仍由 Workspace
+Store 负责。组件私有草稿、短暂视觉反馈及副作用句柄不属于迁移目标。
 
 ## 横切规则
 

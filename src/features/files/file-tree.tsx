@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import {
   AtSign,
   ChevronDown,
@@ -20,6 +20,7 @@ import {
   isGeneratedArtifactsPath,
 } from "./file-tree-model";
 import { joinPath, relativePath } from "./path";
+import { useFilesStore } from "./state/files-store-provider";
 import type { FileEntry } from "./types";
 
 export type FileTreeProps = {
@@ -37,12 +38,17 @@ export function FileTree({
   onOpenFile,
   refreshKey = 0,
 }: FileTreeProps) {
-  const [entriesByPath, setEntriesByPath] = useState<Record<string, FileEntry[]>>(
-    {},
-  );
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState<Set<string>>(new Set());
-  const [error, setError] = useState("");
+  const {
+    entriesByPath,
+    error,
+    expanded,
+    loading,
+    resetTree,
+    setEntriesByPath,
+    setError,
+    setExpanded,
+    setLoading,
+  } = useFilesStore((state) => state);
   const { t } = useI18n();
 
   const load = useCallback(
@@ -66,13 +72,14 @@ export function FileTree({
       }
       return null;
     },
-    [t.files.unableToLoadFiles],
+    [setEntriesByPath, setError, setLoading, t.files.unableToLoadFiles],
   );
 
   useEffect(() => {
+    resetTree();
     const timer = window.setTimeout(() => void load(cwd), 0);
     return () => window.clearTimeout(timer);
-  }, [cwd, load]);
+  }, [cwd, load, resetTree]);
 
   const refreshDirectory = useCallback(
     async (path: string) => {

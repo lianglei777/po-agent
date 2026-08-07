@@ -45,7 +45,7 @@ describe("Skill Pack selection", () => {
   });
 
   it("uses one shared mutation runner for every package operation", () => {
-    expect(hookSource).toContain("type PackMutation");
+    expect(hookSource).toContain('import type { PackMutation } from "./state/skills-store"');
     expect(hookSource).toContain("const runMutation");
     for (const operation of [
       '"install"',

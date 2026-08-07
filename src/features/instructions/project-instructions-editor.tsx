@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 import { LoaderCircle, RotateCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   ABSENT_REVISION,
   AGENTS_MD_TEMPLATE,
-  type InstructionDocument,
 } from "@/contracts/instructions";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -26,17 +25,12 @@ import {
   saveProjectInstructions,
 } from "./api";
 import { InstructionApiError } from "./types";
+import {
+  InstructionsStoreProvider,
+  useInstructionsStore,
+} from "./state/instructions-store-provider";
 
-export function ProjectInstructionsEditor({
-  cwd,
-  agentId,
-  isRunning,
-  needsApply,
-  onChanged,
-  onApplied,
-  onDirtyChange,
-  onSystemPromptChange,
-}: {
+type ProjectInstructionsEditorProps = {
   cwd: string;
   agentId?: string;
   isRunning?: boolean;
@@ -45,38 +39,63 @@ export function ProjectInstructionsEditor({
   onApplied?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   onSystemPromptChange?: (prompt: string) => void;
-}) {
+};
+
+export function ProjectInstructionsEditor({
+  ...props
+}: ProjectInstructionsEditorProps) {
+  return (
+    <InstructionsStoreProvider>
+      <ProjectInstructionsEditorContent {...props} />
+    </InstructionsStoreProvider>
+  );
+}
+
+function ProjectInstructionsEditorContent({
+  cwd,
+  agentId,
+  isRunning,
+  needsApply,
+  onChanged,
+  onApplied,
+  onDirtyChange,
+  onSystemPromptChange,
+}: ProjectInstructionsEditorProps) {
   const { t } = useI18n();
-  const [doc, setDoc] = useState<InstructionDocument | null>(null);
-  const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [applyError, setApplyError] = useState("");
-  const [applySuccess, setApplySuccess] = useState(false);
+  const {
+    applyingProject: applying,
+    confirmProjectDelete: confirmDelete,
+    projectApplyError: applyError,
+    projectApplySuccess: applySuccess,
+    projectEditor: { conflict, deleting, doc, draft, error, loading, saving },
+    setApplyingProject: setApplying,
+    setConfirmProjectDelete: setConfirmDelete,
+    setProjectApplyError: setApplyError,
+    setProjectApplySuccess: setApplySuccess,
+    setProjectEditorField,
+  } = useInstructionsStore((state) => state);
   const dirty = Boolean(doc && draft !== doc.content);
 
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setProjectEditorField("loading", true);
+    setProjectEditorField("error", "");
     try {
       const result = await getProjectInstructions(cwd);
-      setDoc(result.project);
-      setDraft(result.project.content);
-      setConflict(false);
+      setProjectEditorField("doc", result.project);
+      setProjectEditorField("draft", result.project.content);
+      setProjectEditorField("conflict", false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t.instructions.errorLoad);
+      setProjectEditorField(
+        "error",
+        cause instanceof Error ? cause.message : t.instructions.errorLoad,
+      );
     } finally {
-      setLoading(false);
+      setProjectEditorField("loading", false);
     }
-  }, [cwd, t.instructions.errorLoad]);
+  }, [cwd, setProjectEditorField, t.instructions.errorLoad]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -84,9 +103,9 @@ export function ProjectInstructionsEditor({
   }, [load]);
 
   async function save(force = false) {
-    setSaving(true);
-    setError("");
-    setConflict(false);
+    setProjectEditorField("saving", true);
+    setProjectEditorField("error", "");
+    setProjectEditorField("conflict", false);
     setApplyError("");
     setApplySuccess(false);
     try {
@@ -96,22 +115,28 @@ export function ProjectInstructionsEditor({
         expectedRevision: doc?.revision ?? ABSENT_REVISION,
         force,
       });
-      setDoc(result.project);
-      setDraft(result.project.content);
+      setProjectEditorField("doc", result.project);
+      setProjectEditorField("draft", result.project.content);
       setApplySuccess(false);
       onChanged?.();
     } catch (cause) {
       const requestError = cause instanceof InstructionApiError ? cause : null;
-      setError(requestError?.message ?? t.instructions.errorSave);
-      setConflict(requestError?.code === "INSTRUCTION_CONFLICT");
+      setProjectEditorField(
+        "error",
+        requestError?.message ?? t.instructions.errorSave,
+      );
+      setProjectEditorField(
+        "conflict",
+        requestError?.code === "INSTRUCTION_CONFLICT",
+      );
     } finally {
-      setSaving(false);
+      setProjectEditorField("saving", false);
     }
   }
 
   async function remove() {
-    setDeleting(true);
-    setError("");
+    setProjectEditorField("deleting", true);
+    setProjectEditorField("error", "");
     setApplyError("");
     setApplySuccess(false);
     try {
@@ -119,18 +144,24 @@ export function ProjectInstructionsEditor({
         cwd,
         expectedRevision: doc?.revision ?? ABSENT_REVISION,
       });
-      setDoc({ content: "", exists: false, filePath: doc?.filePath ?? `${cwd}/AGENTS.md`, revision: ABSENT_REVISION });
-      setDraft("");
+      setProjectEditorField("doc", { content: "", exists: false, filePath: doc?.filePath ?? `${cwd}/AGENTS.md`, revision: ABSENT_REVISION });
+      setProjectEditorField("draft", "");
       setConfirmDelete(false);
       setApplySuccess(false);
       onChanged?.();
     } catch (cause) {
       const requestError = cause instanceof InstructionApiError ? cause : null;
-      setError(requestError?.message ?? t.instructions.errorDelete);
-      setConflict(requestError?.code === "INSTRUCTION_CONFLICT");
+      setProjectEditorField(
+        "error",
+        requestError?.message ?? t.instructions.errorDelete,
+      );
+      setProjectEditorField(
+        "conflict",
+        requestError?.code === "INSTRUCTION_CONFLICT",
+      );
       setConfirmDelete(false);
     } finally {
-      setDeleting(false);
+      setProjectEditorField("deleting", false);
     }
   }
 
@@ -169,7 +200,7 @@ export function ProjectInstructionsEditor({
           </div>
           <div className="flex shrink-0 gap-2">
             {!doc?.exists && !draft ? (
-              <Button onClick={() => setDraft(AGENTS_MD_TEMPLATE)} size="sm" variant="outline">{t.instructions.createTemplate}</Button>
+              <Button onClick={() => setProjectEditorField("draft", AGENTS_MD_TEMPLATE)} size="sm" variant="outline">{t.instructions.createTemplate}</Button>
             ) : null}
             <Button disabled={!dirty || saving || loading} onClick={() => void save()} size="sm">
               {saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? t.instructions.saving : t.instructions.save}
@@ -231,7 +262,7 @@ export function ProjectInstructionsEditor({
           <div className="grid flex-1 place-items-center text-sm text-muted"><span className="flex items-center gap-2"><LoaderCircle className="animate-spin" />{t.common.loading}</span></div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-4">
-            <Textarea className="min-h-0 flex-1 resize-none font-ui-mono text-xs" onChange={(event) => { setDraft(event.target.value); setError(""); setConflict(false); }} placeholder={t.instructions.contentPlaceholder} value={draft} />
+            <Textarea className="min-h-0 flex-1 resize-none font-ui-mono text-xs" onChange={(event) => { setProjectEditorField("draft", event.target.value); setProjectEditorField("error", ""); setProjectEditorField("conflict", false); }} placeholder={t.instructions.contentPlaceholder} value={draft} />
             <p className="text-caption text-dim">{t.instructions.bytes.replace("{count}", String(new Blob([draft]).size))}</p>
             {error ? (
               <div className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/8 p-3">

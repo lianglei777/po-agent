@@ -1,50 +1,52 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { loadSkills, removeSkill as removeSkillApi, setSkillModelInvocation } from "./api";
 import { useI18n } from "@/i18n/use-i18n";
-import { reconcileSelectedSkill } from "./skill-state";
-import type { SkillLoadResult } from "./types";
-
-const EMPTY_RESULT: SkillLoadResult = {
-  skills: [],
-  diagnostics: [],
-};
+import { useSkillsStore } from "./state/skills-store-provider";
 
 export function useSkills(cwd: string) {
   const { t } = useI18n();
-  const [result, setResult] = useState(EMPTY_RESULT);
-  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
-  const [removingSkillId, setRemovingSkillId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    applySkillsResult,
+    removingSkillId,
+    savingSkillId,
+    selectedSkillId,
+    setRemovingSkillId,
+    setSavingSkillId,
+    setSelectedSkillId,
+    setSkillsError,
+    setSkillsLoading,
+    skillsError,
+    skillsLoading,
+    skillsResult,
+  } = useSkillsStore((state) => state);
   const requestRef = useRef<AbortController | null>(null);
-
-  const applyResult = useCallback((next: SkillLoadResult) => {
-    setResult(next);
-    setSelectedSkillId((current) =>
-      reconcileSelectedSkill(next.skills, current),
-    );
-  }, []);
 
   const refresh = useCallback(async () => {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     setSavingSkillId(null);
-    setLoading(true);
-    setError(null);
+    setSkillsLoading(true);
+    setSkillsError(null);
     try {
-      applyResult(await loadSkills(cwd, controller.signal));
+      applySkillsResult(await loadSkills(cwd, controller.signal));
     } catch (nextError) {
       if (!controller.signal.aborted) {
-        setError(errorMessage(nextError, t.skills.somethingWentWrong));
+        setSkillsError(errorMessage(nextError, t.skills.somethingWentWrong));
       }
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (!controller.signal.aborted) setSkillsLoading(false);
     }
-  }, [applyResult, cwd, t.skills.somethingWentWrong]);
+  }, [
+    applySkillsResult,
+    cwd,
+    setSavingSkillId,
+    setSkillsError,
+    setSkillsLoading,
+    t.skills.somethingWentWrong,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);
@@ -56,9 +58,9 @@ export function useSkills(cwd: string) {
 
   const selectedSkill = useMemo(
     () =>
-      result.skills.find((skill) => skill.skillId === selectedSkillId) ??
+      skillsResult.skills.find((skill) => skill.skillId === selectedSkillId) ??
       null,
-    [result.skills, selectedSkillId],
+    [skillsResult.skills, selectedSkillId],
   );
 
   const toggleModelInvocation = useCallback(async () => {
@@ -66,11 +68,11 @@ export function useSkills(cwd: string) {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    setLoading(false);
+    setSkillsLoading(false);
     setSavingSkillId(selectedSkill.skillId);
-    setError(null);
+    setSkillsError(null);
     try {
-      applyResult(
+      applySkillsResult(
         await setSkillModelInvocation(
           {
             cwd,
@@ -83,23 +85,31 @@ export function useSkills(cwd: string) {
       );
     } catch (nextError) {
       if (!controller.signal.aborted) {
-        setError(errorMessage(nextError, t.skills.somethingWentWrong));
+        setSkillsError(errorMessage(nextError, t.skills.somethingWentWrong));
       }
     } finally {
       if (!controller.signal.aborted) setSavingSkillId(null);
     }
-  }, [applyResult, cwd, selectedSkill, t.skills.somethingWentWrong]);
+  }, [
+    applySkillsResult,
+    cwd,
+    selectedSkill,
+    setSavingSkillId,
+    setSkillsError,
+    setSkillsLoading,
+    t.skills.somethingWentWrong,
+  ]);
 
   const removeSkill = useCallback(async (): Promise<boolean> => {
     if (!selectedSkill) return false;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    setLoading(false);
+    setSkillsLoading(false);
     setRemovingSkillId(selectedSkill.skillId);
-    setError(null);
+    setSkillsError(null);
     try {
-      applyResult(
+      applySkillsResult(
         await removeSkillApi(
           { skillId: selectedSkill.skillId, cwd },
           controller.signal,
@@ -108,18 +118,26 @@ export function useSkills(cwd: string) {
       return true;
     } catch (nextError) {
       if (!controller.signal.aborted) {
-        setError(errorMessage(nextError, t.skills.somethingWentWrong));
+        setSkillsError(errorMessage(nextError, t.skills.somethingWentWrong));
       }
       return false;
     } finally {
       if (!controller.signal.aborted) setRemovingSkillId(null);
     }
-  }, [applyResult, cwd, selectedSkill, t.skills.somethingWentWrong]);
+  }, [
+    applySkillsResult,
+    cwd,
+    selectedSkill,
+    setRemovingSkillId,
+    setSkillsError,
+    setSkillsLoading,
+    t.skills.somethingWentWrong,
+  ]);
 
   return {
-    ...result,
-    error,
-    loading,
+    ...skillsResult,
+    error: skillsError,
+    loading: skillsLoading,
     refresh,
     removingSkillId,
     savingSkillId,

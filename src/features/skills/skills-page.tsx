@@ -7,7 +7,6 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useI18n } from "@/i18n/use-i18n";
@@ -18,32 +17,44 @@ import { SkillList } from "./skill-list";
 import { SkillPackDetail } from "./skill-pack-detail";
 import { SkillPackList } from "./skill-pack-list";
 import { findOwningSkillPack } from "./skill-state";
+import type { SkillsView } from "./state/skills-store";
+import {
+  SkillsStoreProvider,
+  useSkillsStore,
+} from "./state/skills-store-provider";
 import { useSkillPacks } from "./use-skill-packs";
 import { useSkills } from "./use-skills";
 
-type SkillsView = "skills" | "packs";
-type SkillsScreen = "list" | "add-skill" | "skill-detail" | "pack-detail";
-
-export function SkillsPage({
-  cwd,
-  projectName,
-}: {
+type SkillsPageProps = {
   cwd: string;
   projectName: string;
-}) {
-  const [addingPack, setAddingPack] = useState(false);
-  const [view, setView] = useState<SkillsView>("skills");
-  const [screen, setScreen] = useState<SkillsScreen>("list");
-  const [removeSuccess, setRemoveSuccess] = useState<string | null>(null);
-  const [packSuccess, setPackSuccess] = useState<string | null>(null);
+};
+
+export function SkillsPage(props: SkillsPageProps) {
+  return (
+    <SkillsStoreProvider>
+      <SkillsPageContent {...props} />
+    </SkillsStoreProvider>
+  );
+}
+
+function SkillsPageContent({ cwd, projectName }: SkillsPageProps) {
+  const {
+    addingPack,
+    packSuccess,
+    removeSuccess,
+    screen,
+    selectView,
+    setAddingPack,
+    setPackSuccess,
+    setRemoveSuccess,
+    setScreen,
+    setView,
+    view,
+  } = useSkillsStore((state) => state);
   const skills = useSkills(cwd);
   const packs = useSkillPacks(cwd);
   const { t } = useI18n();
-
-  function selectView(next: SkillsView) {
-    setView(next);
-    setScreen("list");
-  }
 
   async function handleRemove() {
     if (!skills.selectedSkill) return;

@@ -8,25 +8,43 @@ import { MediaPreview } from "@/components/ui/media-preview";
 import { loadFile, rawFileUrl } from "./api";
 import { FileTree } from "./file-tree";
 import { relativePath } from "./path";
+import {
+  FilesStoreProvider,
+  useFilesStore,
+} from "./state/files-store-provider";
 import type { OpenFile } from "./types";
 
 export type { OpenFile } from "./types";
 
 export function FilePanel({
-  cwd,
-  file,
-  onAtMention,
-  onOpenFile,
-  refreshKey = 0,
-}: {
+  ...props
+}: FilePanelProps) {
+  return (
+    <FilesStoreProvider>
+      <FilePanelContent {...props} />
+    </FilesStoreProvider>
+  );
+}
+
+type FilePanelProps = {
   cwd?: string | null;
   file: OpenFile | null;
   onAtMention?: (path: string) => void;
   onOpenFile?: (path: string, name: string, contentType?: string) => void;
   refreshKey?: number;
-}) {
+};
+
+function FilePanelContent({
+  cwd,
+  file,
+  onAtMention,
+  onOpenFile,
+  refreshKey = 0,
+}: FilePanelProps) {
   const { t } = useI18n();
-  const [explorerVisible, setExplorerVisible] = useState(true);
+  const { explorerVisible, setExplorerVisible } = useFilesStore(
+    (state) => state,
+  );
   const currentPath = file?.path ?? null;
   const pathSegments = currentPath && cwd
     ? relativePath(cwd, currentPath).split("/").filter(Boolean)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   discoverModelsConfig,
   loadApiKeyProvider,
@@ -12,38 +12,43 @@ import { mergeDiscoveredModels } from "./model-discovery-merge";
 import { isDialogDirty } from "./dialog-safety";
 import { createDebouncedSaveQueue } from "./latest-save-queue";
 import type {
-  ApiKeyProvider,
-  ModelDiscoveryResult,
   ModelDiscoverySuggestion,
   ModelEntry,
   ModelsJson,
-  OAuthProvider,
   ProviderEntry,
-  Selection,
 } from "./types";
+import { useModelProvidersStore } from "./state/model-providers-store-provider";
 
-const EMPTY_CONFIG: ModelsJson = { providers: {} };
 const AUTO_SAVE_DELAY_MS = 600;
-type DiscoveryState =
-  | { phase: "idle" }
-  | { phase: "discovering"; providerName: string }
-  | (ModelDiscoveryResult & { phase: "result"; providerName: string })
-  | { phase: "error"; providerName: string; message: string };
 
 export function useModelProviders(onSaved?: () => void) {
   const { t } = useI18n();
-  const [config, setConfig] = useState<ModelsJson>(EMPTY_CONFIG);
-  const [baselineConfig, setBaselineConfig] = useState<ModelsJson | null>(null);
-  const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
-  const [apiKeyProviders, setApiKeyProviders] = useState<ApiKeyProvider[]>([]);
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveRetryAvailable, setSaveRetryAvailable] = useState(false);
-  const [savedOk, setSavedOk] = useState(false);
-  const [discovery, setDiscovery] = useState<DiscoveryState>({ phase: "idle" });
+  const {
+    config,
+    setConfig,
+    baselineConfig,
+    setBaselineConfig,
+    oauthProviders,
+    setOauthProviders,
+    apiKeyProviders,
+    setApiKeyProviders,
+    selection,
+    setSelection,
+    loading,
+    setLoading,
+    loadError,
+    setLoadError,
+    saving,
+    setSaving,
+    saveError,
+    setSaveError,
+    saveRetryAvailable,
+    setSaveRetryAvailable,
+    savedOk,
+    setSavedOk,
+    discovery,
+    setDiscovery,
+  } = useModelProvidersStore((state) => state);
   const configRef = useRef(config);
   const onSavedRef = useRef(onSaved);
   const failedToSaveRef = useRef(t.models.failedToSave);
@@ -97,7 +102,13 @@ export function useModelProviders(onSaved?: () => void) {
         window.clearTimeout(savedTimerRef.current);
       }
     };
-  }, []);
+  }, [
+    setBaselineConfig,
+    setSaveError,
+    setSaveRetryAvailable,
+    setSavedOk,
+    setSaving,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -123,7 +134,16 @@ export function useModelProviders(onSaved?: () => void) {
     return () => {
       active = false;
     };
-  }, [t.models.failedToLoadConfig]);
+  }, [
+    setApiKeyProviders,
+    setBaselineConfig,
+    setConfig,
+    setLoadError,
+    setLoading,
+    setOauthProviders,
+    setSelection,
+    t.models.failedToLoadConfig,
+  ]);
 
   const addCustomProvider = useCallback(() => {
     const name = getUniqueProviderName(config.providers ?? {});
@@ -136,7 +156,7 @@ export function useModelProviders(onSaved?: () => void) {
     }));
     setSelection({ type: "provider", name });
     setDiscovery({ phase: "idle" });
-  }, [config.providers]);
+  }, [config.providers, setConfig, setDiscovery, setSelection]);
 
   const renameProvider = useCallback(
     (oldName: string, requestedName: string) => {
@@ -168,7 +188,14 @@ export function useModelProviders(onSaved?: () => void) {
         return current;
       });
     },
-    [config.providers, t.models.providerExists],
+    [
+      config.providers,
+      setConfig,
+      setSaveError,
+      setSaveRetryAvailable,
+      setSelection,
+      t.models.providerExists,
+    ],
   );
 
   const deleteProvider = useCallback(
@@ -181,7 +208,7 @@ export function useModelProviders(onSaved?: () => void) {
         firstProvider ? { type: "provider", name: firstProvider } : null,
       );
     },
-    [config.providers],
+    [config.providers, setConfig, setSelection],
   );
 
   const updateProvider = useCallback(
@@ -191,7 +218,7 @@ export function useModelProviders(onSaved?: () => void) {
         providers: { ...(current.providers ?? {}), [name]: provider },
       }));
     },
-    [],
+    [setConfig],
   );
 
   const discoverProviderModels = useCallback(
@@ -210,7 +237,7 @@ export function useModelProviders(onSaved?: () => void) {
         });
       }
     },
-    [config.providers, t.models.failedToDiscoverModels],
+    [config.providers, setDiscovery, t.models.failedToDiscoverModels],
   );
 
   const acceptDiscoveredModels = useCallback(
@@ -233,7 +260,7 @@ export function useModelProviders(onSaved?: () => void) {
         models: discovery.models,
       });
     },
-    [config, discovery],
+    [config, discovery, setConfig, setDiscovery, setSelection],
   );
 
   const updateModel = useCallback(
@@ -252,7 +279,7 @@ export function useModelProviders(onSaved?: () => void) {
         };
       });
     },
-    [],
+    [setConfig],
   );
 
   const removeModel = useCallback((providerName: string, index: number) => {
@@ -273,7 +300,7 @@ export function useModelProviders(onSaved?: () => void) {
       };
     });
     setSelection({ type: "provider", name: providerName });
-  }, []);
+  }, [setConfig, setSelection]);
 
   const dirty = baselineConfig
     ? isDialogDirty(baselineConfig, config)
@@ -290,7 +317,7 @@ export function useModelProviders(onSaved?: () => void) {
     setSaveError(null);
     setSaveRetryAvailable(false);
     saveQueueRef.current?.saveNow(config);
-  }, [config]);
+  }, [config, setSaveError, setSaveRetryAvailable]);
 
   const refreshApiKeyProvider = useCallback(
     async (providerId: string) => {
@@ -305,7 +332,7 @@ export function useModelProviders(onSaved?: () => void) {
         ),
       );
     },
-    [apiKeyProviders],
+    [apiKeyProviders, setApiKeyProviders],
   );
 
   return {
