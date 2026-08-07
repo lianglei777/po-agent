@@ -9,7 +9,8 @@ const branchHistorySource = readFileSync(
 
 describe("branch history dropdown", () => {
   test("preserves the shared viewport width constraint", () => {
-    expect(branchHistorySource).toContain("<DropdownMenuContent");
+    expect(branchHistorySource).toContain("<Dropdown");
+    expect(branchHistorySource).toContain('placement="bottomRight"');
     expect(branchHistorySource).not.toContain('className="max-w-80"');
   });
 });

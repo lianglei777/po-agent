@@ -13,14 +13,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import dynamic from "next/dynamic";
 import remarkGfm from "remark-gfm";
-import { Button } from "@/components/ui/button";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
+import { Button, Collapse, Tag } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -264,7 +257,9 @@ function UserMessageView({
 
       <div className="mt-1 flex min-h-7 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
         {message.status === "failed" ? (
-          <Badge variant="destructive">{t.chat.message.failed}</Badge>
+          <Tag color="error" variant="filled">
+            {t.chat.message.failed}
+          </Tag>
         ) : null}
 
         <div className="flex items-center gap-1">
@@ -413,14 +408,14 @@ function AssistantTurnView({
                   </pre>
                   <Button
                     className="mt-2 h-7 px-2 text-caption"
+                    htmlType="button"
                     onClick={() =>
                       void copyText(error.technicalMessage ?? "").then(() => {
                         setErrorCopied(true);
                         window.setTimeout(() => setErrorCopied(false), 1500);
                       })
                     }
-                    size="sm"
-                    variant="outline"
+                    size="small"
                   >
                     {errorCopied
                       ? t.chat.error.copied
@@ -499,42 +494,52 @@ function ExecutionProcess({
   }, [active]);
 
   return (
-    <Accordion
+    <Collapse
+      accordion
+      activeKey={value || undefined}
       className="my-1.5"
-      collapsible
-      onValueChange={(nextValue) => {
+      items={[
+        {
+          children: (
+            <div className="max-h-[min(52vh,520px)] overflow-auto p-0 font-sans whitespace-normal">
+              <div className={styles.stepList}>
+                {process.map((step, index) => (
+                  <ExecutionStep
+                    cwd={cwd}
+                    key={executionStepKey(step, index)}
+                    result={
+                      step.block.type === "toolCall"
+                        ? results.get(step.block.toolCallId)
+                        : undefined
+                    }
+                    step={step}
+                  />
+                ))}
+              </div>
+            </div>
+          ),
+          key: "execution-process",
+          label: (
+            <>
+              <GitBranch className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                {t.chat.message.executionProcess} · {status.stepCount}{" "}
+                {t.chat.message.executionSteps}
+              </span>
+            </>
+          ),
+        },
+      ]}
+      onChange={(nextKey) => {
         userControlled.current = true;
-        setValue(nextValue);
+        setValue(
+          Array.isArray(nextKey)
+            ? String(nextKey[0] ?? "")
+            : String(nextKey ?? ""),
+        );
       }}
-      type="single"
-      value={value}
-    >
-      <AccordionItem value="execution-process">
-        <AccordionTrigger>
-          <GitBranch className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
-            {t.chat.message.executionProcess} · {status.stepCount}{" "}
-            {t.chat.message.executionSteps}
-          </span>
-        </AccordionTrigger>
-        <AccordionContent className="max-h-[min(52vh,520px)] overflow-auto p-0 font-sans whitespace-normal">
-          <div className={styles.stepList}>
-            {process.map((step, index) => (
-              <ExecutionStep
-                cwd={cwd}
-                key={executionStepKey(step, index)}
-                result={
-                  step.block.type === "toolCall"
-                    ? results.get(step.block.toolCallId)
-                    : undefined
-                }
-                step={step}
-              />
-            ))}
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+      size="small"
+    />
   );
 }
 
@@ -582,18 +587,17 @@ function ExecutionStep({
             {summary ? ` ${summary}` : ""}
             {step.repeatCount && step.repeatCount > 1 ? ` × ${step.repeatCount}` : ""}
           </span>
-          <Badge
+          <Tag
             className={styles.stepStatus}
+            color={
+              toolFailed ? "error" : generationFinished ? "success" : undefined
+            }
             variant={
-              toolFailed
-                ? "destructive"
-                : generationFinished
-                  ? "success"
-                  : "outline"
+              toolFailed || generationFinished ? "filled" : "outlined"
             }
           >
             {statusLabel}
-          </Badge>
+          </Tag>
           <ChevronRight className={styles.stepChevron} />
         </summary>
         {generation ? (
@@ -652,17 +656,22 @@ function GenerationToolResult({
         <span className="font-ui-mono text-muted" title={details.runId}>
           {t.chat.message.generationRunId} {details.runId.slice(0, 8)}
         </span>
-        <Badge
-          variant={
+        <Tag
+          color={
             details.error
-              ? "destructive"
+              ? "error"
               : details.status === "succeeded"
                 ? "success"
-                : "outline"
+                : undefined
+          }
+          variant={
+            details.error || details.status === "succeeded"
+              ? "filled"
+              : "outlined"
           }
         >
           {t.contentGeneration.toolPhases[details.phase]}
-        </Badge>
+        </Tag>
       </div>
       {details.providerTaskId ? (
         <div className="flex min-w-0 items-center gap-2 text-caption text-muted">
@@ -897,15 +906,15 @@ function SmallAction({
   return (
     <Button
       aria-label={label}
-      className="h-7 gap-1 px-2 text-caption"
+      className="h-7 px-2 text-caption"
       disabled={disabled}
+      htmlType="button"
+      icon={children}
       onClick={onClick}
-      size="sm"
+      size="small"
       title={label}
-      type="button"
-      variant="ghost"
+      type="text"
     >
-      {children}
       <span>{label}</span>
     </Button>
   );

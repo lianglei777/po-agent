@@ -6,7 +6,7 @@ import {
   vscDarkPlus,
   vs,
 } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Button } from "@/components/ui/button";
+import { Button } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 
 export function CodeBlock({ code, language }: { code: string; language: string }) {
@@ -21,12 +21,13 @@ export function CodeBlock({ code, language }: { code: string; language: string }
         <span>{language}</span>
         <Button
           className="ml-auto h-6 px-2 text-caption"
+          htmlType="button"
           onClick={() => void copyText(code).then(() => {
             setCopied(true);
             window.setTimeout(() => setCopied(false), 1500);
           })}
-          size="sm"
-          variant="ghost"
+          size="small"
+          type="text"
         >
           {copied ? t.chat.message.copied : t.chat.message.copy}
         </Button>

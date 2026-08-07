@@ -22,7 +22,8 @@ describe("chat execution process visual contract", () => {
   it("uses one execution process disclosure with linear internal steps", () => {
     expect(source).toContain("function ExecutionProcess");
     expect(source).toContain("t.chat.message.executionProcess");
-    expect(source).toContain('value="execution-process"');
+    expect(source).toContain('key: "execution-process"');
+    expect(source).toContain("<Collapse");
     expect(source).toContain("styles.stepList");
     expect(source).toContain("wasActive");
     expect(source).not.toContain("const automaticValue = streaming");

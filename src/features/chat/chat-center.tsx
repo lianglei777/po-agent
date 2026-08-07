@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button, Tooltip } from "antd";
 import {
   ImagePlus,
   MessageSquarePlus,
@@ -15,11 +16,6 @@ import {
   ServerCog,
   type AppIcon,
 } from "@/components/icons";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import { ChatInput } from "./chat-input";
 import { createConversationNavigatorEntries } from "./conversation-navigator/conversation-navigator-adapter";
@@ -351,11 +347,11 @@ function WelcomeAction({
   status: string;
 }) {
   const action = (
-    <button
-      aria-disabled={disabledReason ? true : undefined}
+    <Button
       className={`${styles.actionButton} ${emphasized ? styles.emphasized : ""}`}
-      onClick={disabledReason ? undefined : onClick}
-      type="button"
+      disabled={Boolean(disabledReason)}
+      htmlType="button"
+      onClick={onClick}
     >
       <span className={styles.actionIcon}>
         <Icon aria-hidden="true" />
@@ -365,13 +361,12 @@ function WelcomeAction({
         <span aria-hidden="true" className={styles.statusDot} />
         {status}
       </span>
-    </button>
+    </Button>
   );
 
   return disabledReason ? (
-    <Tooltip>
-      <TooltipTrigger asChild>{action}</TooltipTrigger>
-      <TooltipContent>{disabledReason}</TooltipContent>
+    <Tooltip mouseEnterDelay={0.35} title={disabledReason}>
+      <span className="inline-flex">{action}</span>
     </Tooltip>
   ) : (
     action

@@ -44,8 +44,8 @@ describe("chat input visual contract", () => {
   });
 
   it("explains why the disabled compact action is unavailable", () => {
-    expect(source).toContain("<Tooltip>");
-    expect(source).toContain("<TooltipTrigger asChild>");
+    expect(source).toContain("<Tooltip");
+    expect(source).toContain("title={compactTooltip}");
     expect(source).toContain('className="inline-flex"');
     expect(source).toContain("t.chat.input.alreadyCompacted");
     expect(source).toContain("t.chat.input.compactUnavailableWhileRunning");
@@ -53,7 +53,16 @@ describe("chat input visual contract", () => {
 
   it("uses a compact round idle send button", () => {
     expect(source).toContain('className="size-9 rounded-full"');
-    expect(source).toContain('size="icon"');
+    expect(source).toContain('shape="circle"');
+    expect(source).toContain('icon={<Send />}');
+    expect(source).toContain('type="primary"');
     expect(source).toContain("aria-label={t.chat.input.sendMessage}");
+  });
+
+  it("uses Ant controls while preserving the native textarea bridge", () => {
+    expect(source).toContain('import { Button, Select, Tooltip } from "antd"');
+    expect(source).toContain('import { Textarea } from "@/components/ui/textarea"');
+    expect(source).toContain('ref={textareaRef}');
+    expect(source).toContain('autoSize={{ minRows: 3, maxRows: 8 }}');
   });
 });

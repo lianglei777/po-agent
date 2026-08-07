@@ -7,6 +7,7 @@ import type {
   Ref,
   RefObject,
 } from "react";
+import { Button, Select, Tooltip } from "antd";
 import {
   Brain,
   Clock3,
@@ -17,19 +18,7 @@ import {
   Square,
   X,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import type { AttachedImage, ModelInfo } from "./agent-types";
 import {
@@ -64,7 +53,6 @@ export function ChatInput({
   textareaRef,
   fileInputRef,
   setDraft,
-  resizeTextarea,
   addFiles,
   removeImage,
   submit,
@@ -107,7 +95,6 @@ export function ChatInput({
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   fileInputRef: RefObject<HTMLInputElement | null>;
   setDraft: (value: string) => void;
-  resizeTextarea: () => void;
   addFiles: (files: File[]) => Promise<void>;
   removeImage: (id: string) => void;
   submit: (mode?: "prompt" | "steer" | "follow_up") => Promise<void>;
@@ -216,13 +203,12 @@ export function ChatInput({
             <Button
               aria-label={t.chat.input.dismissError}
               className="size-6"
+              htmlType="button"
+              icon={<X className="size-3.5" />}
               onClick={() => setActionError("")}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <X className="size-3.5" />
-            </Button>
+              size="small"
+              type="text"
+            />
           </div>
         ) : null}
 
@@ -260,13 +246,12 @@ export function ChatInput({
                   <Button
                     aria-label={`${t.chat.input.removeImage} ${image.name}`}
                     className="absolute top-1 right-1 size-5 rounded-full bg-[var(--text)]/70 p-0 text-[var(--bg-panel)] hover:bg-[var(--text)]/85"
+                    htmlType="button"
+                    icon={<X className="size-3" />}
                     onClick={() => removeImage(image.id)}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <X className="size-3" />
-                  </Button>
+                    size="small"
+                    type="text"
+                  />
                 </div>
               ))}
             </div>
@@ -275,11 +260,9 @@ export function ChatInput({
           {/* 文字输入 textarea */}
           <Textarea
             aria-label={t.chat.input.messageLabel}
+            autoSize={{ minRows: 3, maxRows: 8 }}
             className="min-h-[72px] max-h-[220px] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-5 pt-4 pb-2 text-prose leading-[1.6] shadow-none placeholder:text-dim focus-visible:border-0 focus-visible:ring-0"
-            onChange={(event) => {
-              setDraft(event.target.value);
-              resizeTextarea();
-            }}
+            onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={
@@ -288,7 +271,6 @@ export function ChatInput({
                 : t.chat.input.placeholderIdle
             }
             ref={textareaRef}
-            rows={1}
             value={draft}
           />
 
@@ -319,30 +301,23 @@ export function ChatInput({
 
             {/*  models select */}
             <Select
+              aria-label={t.chat.input.model}
+              className="max-w-52"
               disabled={running}
-              onValueChange={(value) => void changeModel(value)}
+              labelRender={() =>
+                currentModel?.name ?? t.chat.input.chooseModel
+              }
+              onChange={(value) => void changeModel(value)}
+              options={models.map((model) => ({
+                label: `${model.name} · ${model.provider}`,
+                value: `${model.provider}:${model.id}`,
+              }))}
+              placement="topLeft"
+              prefix={<Cpu className="size-3.5 opacity-60" />}
+              size="small"
               value={modelKey}
-            >
-              <SelectTrigger
-                aria-label={t.chat.input.model}
-                className="h-9 max-w-52 border-0 bg-transparent px-2 shadow-none hover:bg-hover"
-              >
-                <Cpu className="size-3.5 opacity-60" />
-                <span className="truncate">
-                  {currentModel?.name ?? t.chat.input.chooseModel}
-                </span>
-              </SelectTrigger>
-              <SelectContent side="top">
-                {models.map((model) => (
-                  <SelectItem
-                    key={`${model.provider}:${model.id}`}
-                    value={`${model.provider}:${model.id}`}
-                  >
-                    {model.name} · {model.provider}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              variant="borderless"
+            />
 
             {/* thinking */}
             <CompactSelect
@@ -356,25 +331,26 @@ export function ChatInput({
             />
 
             {/* compact */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <Button
-                    className="h-9 gap-1.5 px-2 text-xs"
-                    disabled={compactDisabled}
-                    onClick={() => void compact()}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    <Minimize2 className="size-3.5" />
-                    {isCompacting
-                      ? t.chat.input.abortCompact
-                      : t.chat.input.compact}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">{compactTooltip}</TooltipContent>
+            <Tooltip
+              mouseEnterDelay={0.35}
+              placement="top"
+              title={compactTooltip}
+            >
+              <span className="inline-flex">
+                <Button
+                  className="h-9 px-2 text-xs"
+                  disabled={compactDisabled}
+                  htmlType="button"
+                  icon={<Minimize2 className="size-3.5" />}
+                  onClick={() => void compact()}
+                  size="small"
+                  type="text"
+                >
+                  {isCompacting
+                    ? t.chat.input.abortCompact
+                    : t.chat.input.compact}
+                </Button>
+              </span>
             </Tooltip>
 
             <div className="flex-1" />
@@ -385,13 +361,12 @@ export function ChatInput({
                 <Button
                   className="h-9 px-2.5 text-xs"
                   disabled={!canSubmit}
+                  htmlType="button"
+                  icon={<Clock3 />}
                   onClick={() => void submit("follow_up")}
-                  size="sm"
+                  size="small"
                   title={t.chat.input.queueTitle}
-                  type="button"
-                  variant="outline"
                 >
-                  <Clock3 />
                   <span>{t.chat.input.queue}</span>
                 </Button>
 
@@ -399,12 +374,13 @@ export function ChatInput({
                 <Button
                   className="h-9 px-3 text-xs"
                   disabled={!canSubmit}
+                  htmlType="button"
+                  icon={<Send />}
                   onClick={() => void submit("steer")}
-                  size="sm"
+                  size="small"
                   title={t.chat.input.steerTitle}
-                  type="button"
+                  type="primary"
                 >
-                  <Send />
                   <span>{t.chat.input.steer}</span>
                 </Button>
                 {/* stop send */}
@@ -415,15 +391,14 @@ export function ChatInput({
                       : t.chat.input.stopAgent
                   }
                   className="size-9 border-destructive/30 text-destructive-text hover:bg-destructive/10 hover:text-destructive-text"
+                  danger
                   disabled={stopping}
+                  htmlType="button"
+                  icon={<Square className="size-3.5 fill-current" />}
+                  loading={stopping}
                   onClick={() => void stop()}
-                  size="icon"
                   title={stopping ? t.chat.input.stopping : t.chat.input.stop}
-                  type="button"
-                  variant="outline"
-                >
-                  <Square className="size-3.5 fill-current" />
-                </Button>
+                />
               </>
             ) : (
               // send button
@@ -431,12 +406,12 @@ export function ChatInput({
                 aria-label={t.chat.input.sendMessage}
                 className="size-9 rounded-full"
                 disabled={!canSubmit}
+                htmlType="button"
+                icon={<Send />}
                 onClick={() => void submit()}
-                size="icon"
-                type="button"
-              >
-                <Send />
-              </Button>
+                shape="circle"
+                type="primary"
+              />
             )}
           </div>
         </div>
@@ -473,10 +448,10 @@ function InlineStatus({
     <Button
       className="h-6 shrink-0 text-xs"
       disabled={action.disabled}
+      htmlType="button"
       onClick={action.onClick}
-      size="sm"
-      type="button"
-      variant="ghost"
+      size="small"
+      type="text"
     >
       {action.label}
     </Button>
@@ -488,13 +463,14 @@ function InlineStatus({
     >
       <span className="min-w-0 flex-1">{children}</span>
       {action?.disabledReason ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex" title={action.disabledReason}>
-              {actionButton}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{action.disabledReason}</TooltipContent>
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement="top"
+          title={action.disabledReason}
+        >
+          <span className="inline-flex" title={action.disabledReason}>
+            {actionButton}
+          </span>
         </Tooltip>
       ) : (
         actionButton
@@ -503,13 +479,12 @@ function InlineStatus({
         <Button
           aria-label={dismissLabel}
           className="size-6 shrink-0"
+          htmlType="button"
+          icon={<X className="size-3.5" />}
           onClick={onDismiss}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          <X className="size-3.5" />
-        </Button>
+          size="small"
+          type="text"
+        />
       ) : null}
     </div>
   );
@@ -532,24 +507,21 @@ function CompactSelect({
     options.find((option) => option.value === value)?.label ?? value;
 
   return (
-    <Select onValueChange={onValueChange} value={value}>
-      <SelectTrigger
-        aria-label={label}
-        className="h-9 max-w-36 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-hover"
-      >
-        {icon}
-        <span className="truncate">
-          {label}: {selectedLabel}
-        </span>
-      </SelectTrigger>
-      <SelectContent side="top">
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {label}: {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Select
+      aria-label={label}
+      className="max-w-36 text-xs"
+      labelRender={() => `${label}: ${selectedLabel}`}
+      onChange={onValueChange}
+      options={options.map((option) => ({
+        label: `${label}: ${option.label}`,
+        value: option.value,
+      }))}
+      placement="topLeft"
+      prefix={icon}
+      size="small"
+      value={value}
+      variant="borderless"
+    />
   );
 }
 
@@ -569,24 +541,20 @@ function IconButton({
   className?: string;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">
-          <Button
-            aria-label={label}
-            aria-pressed={pressed}
-            className={className}
-            disabled={disabled}
-            onClick={onClick}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            {children}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top">{label}</TooltipContent>
+    <Tooltip mouseEnterDelay={0.35} placement="top" title={label}>
+      <span className="inline-flex">
+        <Button
+          aria-label={label}
+          aria-pressed={pressed}
+          className={className}
+          disabled={disabled}
+          htmlType="button"
+          icon={children}
+          onClick={onClick}
+          size="small"
+          type="text"
+        />
+      </span>
     </Tooltip>
   );
 }

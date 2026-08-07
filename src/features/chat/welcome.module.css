@@ -62,7 +62,7 @@
     border-color var(--motion-fast);
 }
 
-.actionButton:not([aria-disabled="true"]):hover {
+.actionButton:not(:disabled):hover {
   background: var(--bg-hover);
   border-color: var(--border-strong);
 }
@@ -72,13 +72,13 @@
   outline-offset: 2px;
 }
 
-.actionButton[aria-disabled="true"] {
+.actionButton:disabled {
   color: var(--disabled-text);
   cursor: not-allowed;
   background: var(--disabled-surface);
 }
 
-.actionButton[aria-disabled="true"] .statusDot {
+.actionButton:disabled .statusDot {
   background: var(--disabled-text);
 }
 

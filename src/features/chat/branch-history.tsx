@@ -1,18 +1,7 @@
 "use client";
 
 import { Check, GitBranch } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Dropdown, Tooltip } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import { collectLeaves, leafSummary } from "./branch-leaves";
 import type { SessionTreeNode } from "./agent-types";
@@ -35,48 +24,47 @@ export function BranchHistory({
   if (leaves.length <= 1) return null;
 
   const menu = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          className="h-7 gap-1.5 px-2 text-meta"
-          size="sm"
-          type="button"
-          variant="outline"
-          disabled={running}
-        >
-          <GitBranch className="size-3.5" />
-          {t.chat.message.branchHistory}
-          <span className="text-dim">{leaves.length}</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="bottom">
-        {leaves.map((node) => {
+    <Dropdown
+      disabled={running}
+      menu={{
+        items: leaves.map((node) => {
           const active = node.entry.id === activeLeafId;
-          return (
-            <DropdownMenuItem
-              key={node.entry.id}
-              disabled={active}
-              onSelect={() => onChangeLeaf(node.entry.id)}
-            >
-              <Check className={active ? "size-3.5" : "size-3.5 opacity-0"} />
-              <span className="min-w-0 truncate">
-                {leafSummary(node)}
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          return {
+            disabled: active,
+            icon: (
+              <Check
+                className={active ? "size-3.5" : "size-3.5 opacity-0"}
+              />
+            ),
+            key: node.entry.id,
+            label: <span className="min-w-0 truncate">{leafSummary(node)}</span>,
+            onClick: () => onChangeLeaf(node.entry.id),
+          };
+        }),
+      }}
+      placement="bottomRight"
+      trigger={["click"]}
+    >
+      <Button
+        className="h-7 px-2 text-meta"
+        disabled={running}
+        htmlType="button"
+        icon={<GitBranch className="size-3.5" />}
+        size="small"
+      >
+        {t.chat.message.branchHistory}
+        <span className="text-dim">{leaves.length}</span>
+      </Button>
+    </Dropdown>
   );
 
   const content = running ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex">{menu}</span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {t.chat.message.branchNavigationUnavailableWhileRunning}
-      </TooltipContent>
+    <Tooltip
+      mouseEnterDelay={0.35}
+      placement="bottom"
+      title={t.chat.message.branchNavigationUnavailableWhileRunning}
+    >
+      <span className="inline-flex">{menu}</span>
     </Tooltip>
   ) : (
     menu
