@@ -5,7 +5,7 @@ import {
   PanelLeftOpen,
   PanelRight,
   Search,
-} from "lucide-react";
+} from "@/components/icons";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -11,7 +11,7 @@ import {
   FolderOpen,
   PanelLeftClose,
   RefreshCw,
-} from "lucide-react";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/i18n/use-i18n";

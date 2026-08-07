@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Button, Input } from "antd";
 import { removeApiKey, saveApiKey } from "../api";
 import {
   type ApiKeyProvider,
 } from "../types";
 import { useI18n } from "@/i18n/use-i18n";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -118,11 +117,10 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
           style={{ flex: 1 }}
         />
         <Button
-          variant="outline"
-          size="sm"
+          size="small"
           onClick={handleSave}
           disabled={saving || !apiKey.trim() || savedOk}
-          type="button"
+          htmlType="button"
           style={
             savedOk
               ? {
@@ -147,12 +145,13 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
       {/* Disconnect button */}
       {provider.configured && (
         <Button
+          danger
+          htmlType="button"
           onClick={() => setConfirmingRemove(true)}
           disabled={removing}
           className="self-start"
-          size="sm"
-          type="button"
-          variant="destructive"
+          size="small"
+          type="primary"
         >
           {removing ? t.models.removing : t.models.disconnect}
         </Button>
@@ -185,17 +184,17 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
             <Button
               autoFocus
               disabled={removing}
+              htmlType="button"
               onClick={() => setConfirmingRemove(false)}
-              type="button"
-              variant="outline"
             >
               {t.common.cancel}
             </Button>
             <Button
+              danger
               disabled={removing}
+              htmlType="button"
               onClick={() => void handleRemove()}
-              type="button"
-              variant="destructive"
+              type="primary"
             >
               {removing ? t.models.removing : t.models.removeApiKeyAction}
             </Button>
@@ -229,7 +228,7 @@ function SecretTextInput({
     <div className="relative" style={style}>
       <Input
         aria-label={label}
-        density="compact"
+        size="small"
         type={visible ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -242,10 +241,10 @@ function SecretTextInput({
       <Button
         aria-label={visible ? t.models.hideApiKey : t.models.showApiKey}
         className="absolute top-1/2 right-[5px] size-6 -translate-y-1/2 text-dim"
+        htmlType="button"
         onClick={() => setUserVisible((v) => !v)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
+        size="small"
+        type="text"
       >
         {visible ? <EyeOffIcon /> : <EyeIcon />}
       </Button>

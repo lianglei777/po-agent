@@ -1,5 +1,5 @@
-import { Bot, Terminal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Bot, Terminal } from "@/components/icons";
+import { Tag } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import { groupSkills, packageSourceLabel } from "./skill-state";
 import type { SkillInfo } from "./types";
@@ -74,9 +74,9 @@ export function SkillList({
                     {skill.name}
                   </span>
                   {group.origin === "package" ? (
-                    <Badge className="shrink-0" variant="outline">
+                    <Tag className="shrink-0" variant="outlined">
                       {scopeLabel(skill.sourceInfo.scope, t)}
-                    </Badge>
+                    </Tag>
                   ) : null}
                 </span>
               </button>

@@ -6,9 +6,9 @@ import {
   Box,
   LoaderCircle,
   ShieldAlert,
-} from "lucide-react";
+} from "@/components/icons";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { Tag } from "antd";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -74,11 +74,14 @@ export function SkillPackDetail({
             <h1 className="truncate text-lg font-semibold text-primary">
               {copy.name}
             </h1>
-            <Badge variant={pack.status === "installed" ? "success" : "outline"}>
+            <Tag
+              color={pack.status === "installed" ? "success" : undefined}
+              variant={pack.status === "installed" ? "filled" : "outlined"}
+            >
               {statusLabel(pack.status, t.skills.packs)}
-            </Badge>
+            </Tag>
             {pack.updateAvailable ? (
-              <Badge variant="outline">{t.skills.packs.updateAvailable}</Badge>
+              <Tag variant="outlined">{t.skills.packs.updateAvailable}</Tag>
             ) : null}
           </div>
           <p className="mt-2 text-body-sm leading-5 text-muted">

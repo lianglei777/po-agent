@@ -1,27 +1,31 @@
-import * as React from "react";
-import { mergeClasses } from "@/lib/utils";
+"use client";
 
-function Textarea({
-  className,
-  density = "default",
-  ...props
-}: React.ComponentProps<"textarea"> & {
+import { Input } from "antd";
+import type { TextAreaProps, TextAreaRef } from "antd/es/input/TextArea";
+import { forwardRef } from "react";
+
+type TextareaProps = TextAreaProps & {
   density?: "default" | "compact";
-}) {
+};
+
+const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
+  { density = "default", size, ...props },
+  ref,
+) {
   return (
-    <textarea
-      className={mergeClasses(
-        "flex w-full rounded-control border border-line-strong bg-elevated outline-none transition-[color,background-color,border-color,box-shadow] duration-[var(--motion-fast)] placeholder:text-dim hover:bg-subtle disabled:cursor-not-allowed disabled:bg-[var(--disabled-surface)] disabled:text-[var(--disabled-text)] focus-visible:border-ring focus-visible:bg-elevated focus-visible:ring-2 focus-visible:ring-ring",
-        density === "compact"
-          ? "min-h-20 px-2.5 py-2 text-xs"
-          : "min-h-16 px-3 py-2 text-sm",
-        "aria-invalid:border-destructive aria-invalid:ring-destructive/20",
-        className,
-      )}
+    <Input.TextArea
       data-slot="textarea"
+      ref={(instance: TextAreaRef | null) => {
+        // Chat Composer 依赖原生 textarea 的高度、选区和焦点能力。
+        const element = instance?.resizableTextArea?.textArea ?? null;
+        if (typeof ref === "function") ref(element);
+        else if (ref) ref.current = element;
+      }}
+      size={size ?? (density === "compact" ? "small" : "middle")}
       {...props}
     />
   );
-}
+});
 
 export { Textarea };
+export type { TextareaProps };

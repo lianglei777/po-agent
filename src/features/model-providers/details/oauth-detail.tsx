@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button, Input } from "antd";
 import { logoutOAuth, submitOAuthInput } from "../api";
 import { useI18n } from "@/i18n/use-i18n";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -152,9 +151,9 @@ export default function OAuthDetail({
       <div className="flex gap-2">
         {working ? (
           <Button
-            type="button"
-            variant="ghost"
-            size="sm"
+            htmlType="button"
+            type="text"
+            size="small"
             onClick={() => {
               sourceRef.current?.close();
               setState({ phase: "idle" });
@@ -165,18 +164,18 @@ export default function OAuthDetail({
         ) : (
           <>
             <Button
-              type="button"
-              variant="outline"
-              size="sm"
+              htmlType="button"
+              size="small"
               onClick={startLogin}
             >
               {t.models.login}
             </Button>
             <Button
-              type="button"
+              danger
+              htmlType="button"
               onClick={() => setConfirmingDisconnect(true)}
-              size="sm"
-              variant="destructive"
+              size="small"
+              type="primary"
             >
               {t.models.disconnect}
             </Button>
@@ -211,17 +210,17 @@ export default function OAuthDetail({
             <Button
               autoFocus
               disabled={disconnecting}
+              htmlType="button"
               onClick={() => setConfirmingDisconnect(false)}
-              type="button"
-              variant="outline"
             >
               {t.common.cancel}
             </Button>
             <Button
+              danger
               disabled={disconnecting}
+              htmlType="button"
               onClick={() => void disconnect()}
-              type="button"
-              variant="destructive"
+              type="primary"
             >
               {disconnecting
                 ? t.models.removing
@@ -284,16 +283,15 @@ function OAuthState({
         <div className="flex gap-1.5">
           <Input
             autoFocus
-            density="compact"
+            size="small"
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder={state.placeholder}
             className="flex-1"
           />
           <Button
-            type="button"
-            variant="outline"
-            size="sm"
+            htmlType="button"
+            size="small"
             disabled={!canSubmit}
             onClick={() => submit(state.token, input)}
           >
@@ -310,10 +308,9 @@ function OAuthState({
         {state.options.map((option) => (
           <Button
             key={option.id}
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-full justify-start"
+            htmlType="button"
+            size="small"
+            className="w-full justify-start!"
             onClick={() => submit(state.token, option.id)}
           >
             {option.label}

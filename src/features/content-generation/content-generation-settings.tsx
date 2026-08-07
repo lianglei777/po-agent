@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, KeyRound, Trash2 } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Trash2 } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";

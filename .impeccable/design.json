@@ -12,57 +12,57 @@
       },
       "panel": {
         "role": "neutral",
-        "displayName": "White Work Surface",
-        "canonical": "#ffffff",
+        "displayName": "Ant Neutral Workspace",
+        "canonical": "#f5f5f5",
         "tonalRamp": ["#1f201e", "#686b68", "#969995", "#b2b4b0", "#d9d9d4", "#ecece8", "#f5f5f3", "#ffffff"]
       },
       "hover": {
         "role": "neutral",
-        "displayName": "Neutral Hover",
-        "canonical": "#ecece9",
+        "displayName": "Ant Neutral Hover",
+        "canonical": "#f5f5f5",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "selected": {
         "role": "neutral",
-        "displayName": "Neutral Selected",
-        "canonical": "#e7e7e3",
+        "displayName": "Ant Primary Selected",
+        "canonical": "#e6f4ff",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "border": {
         "role": "neutral",
-        "displayName": "Neutral Line",
-        "canonical": "#ecece8",
+        "displayName": "Ant Neutral Line",
+        "canonical": "#f0f0f0",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#ededed", "#ffffff"]
       },
       "ink": {
         "role": "neutral",
-        "displayName": "High Contrast Ink",
-        "canonical": "#1f201e",
+        "displayName": "Ant Primary Text",
+        "canonical": "#1f1f1f",
         "tonalRamp": ["#1a1c1f", "#62666d", "#8b9098", "#a6abb2", "#d7d7d7", "#e8e8e8", "#f5f5f5", "#ffffff"]
       },
       "muted": {
         "role": "neutral",
-        "displayName": "Codex Muted",
-        "canonical": "#686b68",
+        "displayName": "Ant Secondary Text",
+        "canonical": "#595959",
         "tonalRamp": ["#1a1c1f", "#34373b", "#62666d", "#737880", "#8b9098", "#a6abb2", "#d7d7d7", "#f5f5f5"]
       },
       "accent": {
         "role": "primary",
-        "displayName": "Codex Blue",
-        "canonical": "#339cff",
-        "tonalRamp": ["#075eaa", "#0670d3", "#1689f5", "#339cff", "#79bdff", "#bdddff", "#eaf4ff", "#f7f7f7"]
+        "displayName": "Ant Design Blue",
+        "canonical": "#1677ff",
+        "tonalRamp": ["#003eb3", "#0958d9", "#1677ff", "#4096ff", "#69b1ff", "#91caff", "#bae0ff", "#e6f4ff"]
       },
       "accent-deep": {
         "role": "primary",
-        "displayName": "Deep Codex Blue",
-        "canonical": "#0670d3",
-        "tonalRamp": ["#075eaa", "#0670d3", "#1689f5", "#339cff", "#79bdff", "#bdddff", "#eaf4ff", "#ffffff"]
+        "displayName": "Ant Design Blue Hover",
+        "canonical": "#0958d9",
+        "tonalRamp": ["#002c8c", "#003eb3", "#0958d9", "#1677ff", "#4096ff", "#69b1ff", "#91caff", "#bae0ff"]
       },
       "accent-soft": {
         "role": "primary",
-        "displayName": "Soft Codex Blue",
-        "canonical": "#eaf4ff",
-        "tonalRamp": ["#0670d3", "#1689f5", "#339cff", "#79bdff", "#bdddff", "#eaf4ff", "#f7f7f7", "#ffffff"]
+        "displayName": "Ant Design Blue Background",
+        "canonical": "#e6f4ff",
+        "tonalRamp": ["#0958d9", "#1677ff", "#4096ff", "#69b1ff", "#91caff", "#bae0ff", "#e6f4ff", "#ffffff"]
       }
     },
     "typographyMeta": {
@@ -150,12 +150,12 @@
     }
   ],
   "narrative": {
-    "northStar": "The Coze Workbench",
-    "overview": "Po Agent is a focused desk for working with an AI coding agent. The Coze-inspired neutral light theme provides a soft gray application rail, continuous white work surfaces, compact controls, neutral selection, restrained blue state accents, and dark primary actions. Hierarchy comes from tone, spacing, and selective boundaries rather than framed cards.",
+    "northStar": "Ant Design Developer Workbench",
+    "overview": "Po Agent adopts Ant Design 6 components, icons, tokens, typography, and interaction patterns while preserving its dense, developer-controlled agent workflows and domain-specific workspace composition.",
     "keyCharacteristics": [
-      "Single Coze-inspired neutral light theme with a gray application rail and white work surfaces.",
-      "Codex blue reserved for focus, links, switches, live agent indicators, and explicit status.",
-      "Black primary actions for high-contrast CTA clarity.",
+      "Ant Design 6 is the source for standard components, icons, tokens, and interaction patterns.",
+      "Ant Design blue is used for primary actions, focus, links, switches, and explicit status.",
+      "Domain-specific workspace structures remain custom when no Ant equivalent exists.",
       "Flat resting surfaces; floating composer, dialogs, and menus use restrained shadows.",
       "Rounded controls and larger composer radii without playful decoration.",
       "Short state-driven motion with reduced-motion support."
@@ -174,9 +174,9 @@
     ],
     "dos": [
       "Do keep the primary application rail soft gray and work surfaces white.",
-      "Do use Codex blue for focus, links, switches, status, and live indicators only.",
-      "Do use black for primary action buttons.",
-      "Do use neutral gray for selected navigation and passive highlights.",
+      "Do use Ant Design components, icons, tokens, and patterns for standard UI.",
+      "Do use Ant Design blue for primary actions, focus, links, switches, status, and live indicators.",
+      "Do keep product safety invariants when an Ant default differs.",
       "Do rely on tone, border, and spacing for hierarchy.",
       "Do keep keyboard focus visible and support reduced motion."
     ],

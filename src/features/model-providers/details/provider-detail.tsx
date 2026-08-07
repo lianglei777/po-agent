@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
+import { Button, Checkbox, Input, Select } from "antd";
 import {
   API_OPTIONS,
   type ModelDiscoverySuggestion,
   type ProviderEntry,
 } from "../types";
 import { useI18n } from "@/i18n/use-i18n";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
 import {
   Dialog,
   DialogContent,
@@ -95,19 +93,19 @@ export default function ProviderDetail({
           <DialogFooter>
             <Button
               autoFocus
+              htmlType="button"
               onClick={() => setConfirmingDelete(false)}
-              type="button"
-              variant="outline"
             >
               {t.common.cancel}
             </Button>
             <Button
+              danger
+              htmlType="button"
               onClick={() => {
                 setConfirmingDelete(false);
                 onDelete(name);
               }}
-              type="button"
-              variant="destructive"
+              type="primary"
             >
               {t.models.deleteProviderAction}
             </Button>
@@ -119,7 +117,7 @@ export default function ProviderDetail({
         <SettingsRow label={t.models.providerName} labelFor="provider-name">
           <div className="flex items-center gap-2">
             <Input
-              density="compact"
+              size="small"
               id="provider-name"
               value={editingName}
               onChange={(e) => setEditingName(e.target.value)}
@@ -128,10 +126,9 @@ export default function ProviderDetail({
             {canRename && (
               <Button
                 className="shrink-0"
+                htmlType="button"
                 onClick={() => onRename(name, editingName.trim())}
-                size="sm"
-                type="button"
-                variant="outline"
+                size="small"
               >
                 {t.models.rename}
               </Button>
@@ -145,7 +142,7 @@ export default function ProviderDetail({
           contentMaxWidth={400}
         >
           <Input
-            density="compact"
+            size="small"
             id="provider-base-url"
             value={provider.baseUrl ?? ""}
             onChange={(e) => onChange({ ...provider, baseUrl: e.target.value })}
@@ -169,19 +166,13 @@ export default function ProviderDetail({
         </SettingsRow>
 
         <SettingsRow label={t.models.apiProtocol} labelFor="provider-api-protocol">
-          <NativeSelect
-            id="provider-api-protocol"
-            value={provider.api ?? ""}
-            onChange={(e) => onChange(changeEntryApi(provider, e.target.value))}
-            required
+          <Select
             className={provider.api ? "text-primary" : "text-dim"}
-          >
-            {API_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </NativeSelect>
+            id="provider-api-protocol"
+            onChange={(value) => onChange(changeEntryApi(provider, value))}
+            options={API_OPTIONS.map((option) => ({ label: option, value: option }))}
+            value={provider.api ?? ""}
+          />
         </SettingsRow>
       </SettingsSection>
 
@@ -206,10 +197,11 @@ export default function ProviderDetail({
         >
           <div className="flex justify-end">
             <Button
+              danger
+              htmlType="button"
               onClick={() => setConfirmingDelete(true)}
-              size="sm"
-              type="button"
-              variant="destructive"
+              size="small"
+              type="primary"
             >
               {t.common.delete}
             </Button>
@@ -303,10 +295,9 @@ function ModelDiscoveryPanel({
         <Button
           className="shrink-0"
           disabled={discovering}
+          htmlType="button"
           onClick={() => onDiscoverModels(providerName)}
-          size="sm"
-          type="button"
-          variant="outline"
+          size="small"
         >
           {discovering ? t.models.discoveringModels : t.models.fetchModelList}
         </Button>
@@ -339,10 +330,10 @@ function ModelDiscoveryPanel({
                   {newSuggestions.length}
                 </span>
                 <Button
+                  htmlType="button"
                   onClick={toggleAll}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
+                  size="small"
+                  type="text"
                 >
                   {allSelected
                     ? t.models.clearSelection
@@ -359,7 +350,7 @@ function ModelDiscoveryPanel({
                     >
                       <Checkbox
                         checked={checked}
-                        onCheckedChange={() => toggleModel(suggestion.model.id)}
+                        onChange={() => toggleModel(suggestion.model.id)}
                       />
                       <span className="min-w-0 flex-1 truncate font-ui-mono text-meta text-primary">
                         {suggestion.model.id}
@@ -375,14 +366,13 @@ function ModelDiscoveryPanel({
                   </span>
                 )}
                 <Button
+                  htmlType="button"
                   disabled={selectedSuggestions.length === 0}
                   onClick={() => {
                     onAcceptDiscoveredModels(providerName, selectedSuggestions);
                     setSelectedIds(new Set());
                   }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
+                  size="small"
                 >
                   {t.models.addSelected} ({selectedSuggestions.length})
                 </Button>
@@ -413,66 +403,26 @@ function SecretTextInput({
   const { t } = useI18n();
 
   return (
-    <div className="relative w-full">
-      <Input
-        density="compact"
-        id={id}
-        type={visible ? "text" : "password"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        className={mono ? "pr-9 font-ui-mono" : "pr-9"}
-      />
-      <Button
-        aria-label={visible ? t.models.hideApiKey : t.models.showApiKey}
-        className="absolute top-1/2 right-[5px] size-6 -translate-y-1/2 text-dim"
-        onClick={() => setUserVisible((v) => !v)}
-        size="icon-sm"
-        type="button"
-        variant="ghost"
-      >
-        {visible ? <EyeOffIcon /> : <EyeIcon />}
-      </Button>
-    </div>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.89 1 12a18.45 18.45 0 0 1 5.06-6.94" />
-      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c5 0 9.27 3.11 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88" />
-      <path d="M1 1l22 22" />
-    </svg>
+    <Input.Password
+      autoComplete="off"
+      className={mono ? "font-ui-mono" : undefined}
+      iconRender={(isVisible) =>
+        isVisible ? (
+          <EyeInvisibleOutlined aria-label={t.models.hideApiKey} />
+        ) : (
+          <EyeOutlined aria-label={t.models.showApiKey} />
+        )
+      }
+      id={id}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      size="small"
+      spellCheck={false}
+      value={value}
+      visibilityToggle={{
+        visible,
+        onVisibleChange: setUserVisible,
+      }}
+    />
   );
 }

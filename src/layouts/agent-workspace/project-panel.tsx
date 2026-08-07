@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, PanelRightClose, Settings2, Sparkles } from "lucide-react";
+import { FileText, PanelRightClose, Settings2, Sparkles } from "@/components/icons";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +28,7 @@ export function ProjectPanelDock({
   const { t } = useI18n();
 
   function handleTabKeyDown(
-    event: KeyboardEvent<HTMLButtonElement>,
+    event: KeyboardEvent<HTMLElement>,
     tab: ProjectPanelTab,
   ) {
     const current = PROJECT_PANEL_TABS.indexOf(tab);

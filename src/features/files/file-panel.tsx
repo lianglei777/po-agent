@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { ChevronRight, FileText, PanelLeftOpen } from "lucide-react";
+import { ChevronRight, FileText, PanelLeftOpen } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/use-i18n";
 import { MediaPreview } from "@/components/ui/media-preview";

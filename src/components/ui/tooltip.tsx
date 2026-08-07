@@ -1,54 +1,64 @@
 "use client";
 
-import * as React from "react";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { mergeClasses } from "@/lib/utils";
+import { Tooltip as AntTooltip, type TooltipProps as AntTooltipProps } from "antd";
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
-function TooltipProvider({
-  delayDuration = 350,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+type TooltipTriggerProps = {
+  asChild?: boolean;
+  children: ReactNode;
+};
+
+type TooltipContentProps = {
+  children: ReactNode;
+  className?: string;
+  side?: "top" | "right" | "bottom" | "left";
+  sideOffset?: number;
+};
+
+function TooltipProvider({ children }: { children: ReactNode }) {
+  return <Fragment>{children}</Fragment>;
+}
+
+function Tooltip({ children }: { children: ReactNode }) {
+  let trigger: ReactNode = null;
+  let content: ReactElement<TooltipContentProps> | null = null;
+
+  for (const child of Children.toArray(children)) {
+    if (!isValidElement(child)) continue;
+    if (child.type === TooltipTrigger) {
+      trigger = (child as ReactElement<TooltipTriggerProps>).props.children;
+    }
+    if (child.type === TooltipContent) {
+      content = child as ReactElement<TooltipContentProps>;
+    }
+  }
+
+  const placement = content?.props.side ?? "top";
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <AntTooltip
+      classNames={{ root: content?.props.className ?? "" }}
+      mouseEnterDelay={0.35}
+      placement={placement as AntTooltipProps["placement"]}
+      title={content?.props.children}
+    >
+      {trigger}
+    </AntTooltip>
   );
 }
 
-function Tooltip(props: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
+function TooltipTrigger({ children }: TooltipTriggerProps) {
+  return <Fragment>{children}</Fragment>;
 }
 
-function TooltipTrigger(
-  props: React.ComponentProps<typeof TooltipPrimitive.Trigger>,
-) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
-}
-
-function TooltipContent({
-  className,
-  sideOffset = 6,
-  children,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
-  return (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content
-        className={mergeClasses(
-          "z-[1000] max-w-72 rounded-floating border border-line-subtle bg-popover px-2.5 py-1.5 text-xs leading-4 text-popover-foreground shadow-[var(--shadow-floating)]",
-          className,
-        )}
-        data-slot="tooltip-content"
-        sideOffset={sideOffset}
-        {...props}
-      >
-        {children}
-        <TooltipPrimitive.Arrow className="fill-popover" />
-      </TooltipPrimitive.Content>
-    </TooltipPrimitive.Portal>
-  );
+function TooltipContent(_props: TooltipContentProps) {
+  void _props;
+  return null;
 }
 
 export {

@@ -1,75 +1,86 @@
 "use client";
 
-import * as React from "react";
-import * as AccordionPrimitive from "@radix-ui/react-accordion";
-import { ChevronDown } from "lucide-react";
-import { mergeClasses } from "@/lib/utils";
+import { Collapse } from "antd";
+import {
+  Children,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
-function Accordion(
-  props: React.ComponentProps<typeof AccordionPrimitive.Root>,
-) {
-  return <AccordionPrimitive.Root data-slot="accordion" {...props} />;
-}
+type AccordionProps = {
+  children: ReactNode;
+  className?: string;
+  collapsible?: boolean;
+  onValueChange?: (value: string) => void;
+  type?: "single";
+  value?: string;
+};
 
-function AccordionItem({
-  className,
-  ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Item>) {
+type AccordionItemProps = {
+  children: ReactNode;
+  className?: string;
+  value: string;
+};
+
+type AccordionPartProps = {
+  children: ReactNode;
+  className?: string;
+};
+
+function Accordion({ children, className, onValueChange, value }: AccordionProps) {
+  const items = Children.toArray(children)
+    .filter(
+      (child): child is ReactElement<AccordionItemProps> =>
+        isValidElement(child) && child.type === AccordionItem,
+    )
+    .map((item) => {
+      let label: ReactNode = null;
+      let content: ReactElement<AccordionPartProps> | null = null;
+      for (const part of Children.toArray(item.props.children)) {
+        if (!isValidElement(part)) continue;
+        if (part.type === AccordionTrigger) {
+          label = (part as ReactElement<AccordionPartProps>).props.children;
+        }
+        if (part.type === AccordionContent) {
+          content = part as ReactElement<AccordionPartProps>;
+        }
+      }
+      return {
+        children: (
+          <div className={content?.props.className}>{content?.props.children}</div>
+        ),
+        className: item.props.className,
+        key: item.props.value,
+        label,
+      };
+    });
+
   return (
-    <AccordionPrimitive.Item
-      className={mergeClasses(
-        "overflow-hidden rounded-2xl border border-line-subtle bg-[var(--tool-bg)]",
-        className,
-      )}
-      data-slot="accordion-item"
-      {...props}
+    <Collapse
+      accordion
+      activeKey={value || undefined}
+      className={className}
+      items={items}
+      onChange={(key) => onValueChange?.(Array.isArray(key) ? (key[0] ?? "") : key)}
+      size="small"
     />
   );
 }
 
-function AccordionTrigger({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
-  return (
-    <AccordionPrimitive.Header className="flex">
-      <AccordionPrimitive.Trigger
-        className={mergeClasses(
-          "flex min-h-9 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left font-ui-mono text-meta text-muted-foreground outline-none transition-colors duration-[var(--motion-fast)] hover:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180",
-          className,
-        )}
-        data-slot="accordion-trigger"
-        {...props}
-      >
-        {children}
-        <ChevronDown className="ml-auto size-3.5 shrink-0 transition-transform duration-[var(--motion-standard)]" />
-      </AccordionPrimitive.Trigger>
-    </AccordionPrimitive.Header>
-  );
+function AccordionItem(_props: AccordionItemProps) {
+  void _props;
+  return null;
 }
 
-function AccordionContent({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
-  return (
-    <AccordionPrimitive.Content
-      className="overflow-hidden text-sm data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
-      data-slot="accordion-content"
-      {...props}
-    >
-      <div
-        className={mergeClasses(
-          "border-t border-line-subtle px-3 py-2.5 font-ui-mono text-meta leading-[1.65] whitespace-pre-wrap text-muted-foreground",
-          className,
-        )}
-      >
-        {children}
-      </div>
-    </AccordionPrimitive.Content>
-  );
+function AccordionTrigger(_props: AccordionPartProps) {
+  void _props;
+  return null;
+}
+
+function AccordionContent(_props: AccordionPartProps) {
+  void _props;
+  return null;
 }
 
 export {

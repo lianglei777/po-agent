@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { Tag } from "antd";
 import { useShallow } from "zustand/react/shallow";
-import { LoaderCircle, RotateCw, Trash2 } from "lucide-react";
+import { LoaderCircle, RotateCw, Trash2 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   ABSENT_REVISION,
   AGENTS_MD_TEMPLATE,
@@ -227,8 +227,8 @@ function ProjectInstructionsEditorContent({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">AGENTS.md</h2>
-              {doc?.exists ? <Badge variant="success">{t.instructions.saved}</Badge> : <Badge variant="outline">{t.instructions.notConfigured}</Badge>}
-              {dirty ? <Badge variant="secondary">{t.instructions.dirtyWarning}</Badge> : null}
+              {doc?.exists ? <Tag color="success" variant="filled">{t.instructions.saved}</Tag> : <Tag variant="outlined">{t.instructions.notConfigured}</Tag>}
+              {dirty ? <Tag variant="filled">{t.instructions.dirtyWarning}</Tag> : null}
             </div>
             <p className="mt-1 text-xs text-muted">{t.instructions.projectInstructionsDescription}</p>
             <p className="mt-1 truncate font-ui-mono text-caption text-dim" title={doc?.filePath}>{doc?.filePath ?? `${cwd}/AGENTS.md`}</p>

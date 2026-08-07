@@ -1,5 +1,7 @@
 "use client";
 
+import { Tag } from "antd";
+
 import {
   ArrowLeft,
   CheckCircle2,
@@ -7,9 +9,8 @@ import {
   ExternalLink,
   LoaderCircle,
   Search,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RadioCard } from "@/components/ui/radio-card";
@@ -309,12 +310,12 @@ function MarketTab({
                   </a>
                 ) : null}
               </div>
-              <Badge
+              <Tag
                 className="shrink-0 font-ui-mono text-dim"
-                variant="outline"
+                variant="outlined"
               >
                 {skill.source}
-              </Badge>
+              </Tag>
             </div>
             {/* 描述行：两行截断，空描述时回退到占位文案 */}
             <p

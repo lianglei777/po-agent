@@ -1,39 +1,37 @@
-import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { mergeClasses } from "@/lib/utils";
+"use client";
 
-const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-caption font-medium whitespace-nowrap",
-  {
-    variants: {
-      variant: {
-        default: "border-line-subtle bg-secondary text-secondary-foreground",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground",
-        outline: "border-border text-muted-foreground",
-        success: "border-success/25 bg-success/10 text-success-text",
-        destructive:
-          "border-destructive/25 bg-destructive/10 text-destructive-text",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  },
-);
+import { Tag, type TagProps } from "antd";
 
-function Badge({
-  className,
-  variant,
-  ...props
-}: React.ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "outline"
+  | "success"
+  | "destructive";
+
+type BadgeProps = Omit<TagProps, "variant"> & {
+  variant?: BadgeVariant;
+};
+
+function Badge({ children, variant = "default", ...props }: BadgeProps) {
+  const color =
+    variant === "success"
+      ? "success"
+      : variant === "destructive"
+        ? "error"
+        : undefined;
+
   return (
-    <span
-      className={mergeClasses(badgeVariants({ variant }), className)}
+    <Tag
+      color={color}
       data-slot="badge"
+      variant={variant === "outline" ? "outlined" : "filled"}
       {...props}
-    />
+    >
+      {children}
+    </Tag>
   );
 }
 
-export { Badge, badgeVariants };
+export { Badge };
+export type { BadgeProps, BadgeVariant };

@@ -8,7 +8,7 @@ import {
   LoaderCircle,
   RotateCcw,
   Square,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type {

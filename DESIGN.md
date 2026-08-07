@@ -1,36 +1,36 @@
 ---
 name: Po Agent
-description: A precise Coze-inspired desktop workspace with a soft gray application rail, continuous white work surfaces, compact controls, and restrained blue state accents.
+description: An Ant Design 6 desktop workspace that preserves Po Agent's precise, dense, developer-controlled workflows.
 colors:
   light:
-    workspace: "#f5f5f3"
+    workspace: "#f5f5f5"
     canvas: "#ffffff"
     panel: "#ffffff"
     elevated: "#ffffff"
-    subtle: "#f7f7f5"
-    hover: "#ecece9"
-    selected: "#e7e7e3"
-    text: "#1f201e"
-    muted: "#686b68"
-    dim: "#969995"
-    borderSubtle: "#ecece8"
-    borderStrong: "#d9d9d4"
-    borderEmphasis: "#339cff"
-    accent: "#339cff"
-    accentHover: "#1689f5"
-    accentDeep: "#0670d3"
-    accentSoft: "#eaf4ff"
-    accentForeground: "#1a1c1f"
-    destructive: "#d92d20"
-    success: "#12b76a"
-    warning: "#b54708"
+    subtle: "#fafafa"
+    hover: "#f5f5f5"
+    selected: "#e6f4ff"
+    text: "#1f1f1f"
+    muted: "#595959"
+    dim: "#8c8c8c"
+    borderSubtle: "#f0f0f0"
+    borderStrong: "#d9d9d9"
+    borderEmphasis: "#1677ff"
+    accent: "#1677ff"
+    accentHover: "#4096ff"
+    accentDeep: "#0958d9"
+    accentSoft: "#e6f4ff"
+    accentForeground: "#ffffff"
+    destructive: "#ff4d4f"
+    success: "#52c41a"
+    warning: "#faad14"
 typography:
   ui: "-apple-system, BlinkMacSystemFont, Segoe UI, Inter, PingFang SC, Microsoft YaHei, sans-serif"
   mono: "Noto Sans Mono, JetBrains Mono, Fira Code, Consolas, monospace"
 radius:
   small: "6px"
-  control: "8px"
-  floating: "12px"
+  control: "6px"
+  floating: "8px"
   composer: "22px"
 motion:
   fast: "150ms"
@@ -42,7 +42,15 @@ motion:
 
 ## Direction
 
-Po Agent is a focused desktop developer tool, not a marketing or entertainment surface. Its visual north star is the Coze desktop workspace: a soft gray application rail, continuous white work surfaces, compact information density, system typography, restrained blue state accents, and dark primary actions. The implementation borrows interaction and presentation principles without adding features that the product does not actually support.
+Po Agent fully adopts Ant Design 6 as its standard component library and design language. Ant Design supplies standard controls, icons, typography, spacing, color semantics, interaction patterns, accessibility behavior, and design guidance. Po Agent keeps its domain-specific workspace composition and safety rules: adopting a design system must not change sessions, chat, files, models, Skills, review flows, persistence, or destructive-action semantics.
+
+## Sources of truth
+
+- Use the installed `antd` package, its TypeScript types, the official component documentation, and `https://ant.design/llms-full.txt` before relying on remembered APIs.
+- Use Ant Design MCP when available to inspect component APIs, tokens, examples, and migration guidance.
+- `ConfigProvider` owns locale, global component size, and theme tokens; `App` owns contextual feedback APIs; `AntdRegistry` supplies Next.js App Router SSR styles.
+- Prefer Ant Design components and `@ant-design/icons` for standard UI. Keep custom primitives only for Po Agent-specific behavior with no suitable Ant equivalent, such as workspace split handles, chat execution rendering, and the project file tree.
+- Compatibility wrappers in `src/components/ui` preserve existing call sites during migration. New standard UI should use Ant Design APIs directly unless a wrapper enforces a real product invariant.
 
 ## Workspace architecture
 
@@ -72,7 +80,7 @@ The dependency direction is:
 
 `base values → semantic tokens → shared UI components → feature surfaces`
 
-Feature components consume semantic tokens or shared primitives. Do not introduce one-off colors, radii, shadows, or transition durations.
+Ant Design seed and alias tokens are the upstream source. `ConfigProvider` applies them to Ant components; project semantic tokens bridge domain-specific surfaces and Tailwind layout utilities. Do not override Ant internals with brittle selector-based CSS or introduce one-off colors, radii, shadows, or transition durations.
 
 ## Typography
 
@@ -112,15 +120,15 @@ Use three boundary roles:
 Every interactive component accounts for default, hover, focus-visible, active, selected, disabled, loading, and error states.
 
 - Hover changes tone, not geometry.
-- Focus-visible uses a clear 2px `#0670d3` semantic ring; the brighter `#339cff` remains the product accent.
-- Selected navigation uses neutral gray plus text weight; blue is not a blanket selection fill.
+- Focus-visible follows Ant Design's accessible primary outline and remains clearly visible.
+- Selected navigation follows the appropriate Ant navigation pattern; domain-specific navigation may use the Ant selected blue surface when it improves scanability.
 - Disabled controls block interaction and explain the specific reason through visible copy or a tooltip.
 - Loading states prevent duplicate actions while keeping labels understandable.
 - Error, success, and warning states combine color with text, icon, border, or shape.
 
 ## Color usage
 
-Codex blue (`#339cff`) is reserved for active state fills, switches, live state, and explicit status. Selected navigation and passive highlights remain neutral gray. Primary actions use near-black (`#1a1c1f`) with white text. Use the deeper accessible blue (`#0670d3`) for focus rings, links, and small blue text.
+Ant Design blue (`#1677ff`) is the primary action, selection, link, focus, switch, and active-state color. Use Ant semantic colors for success (`#52c41a`), warning (`#faad14`), and error (`#ff4d4f`); never communicate status by color alone.
 
 ## Chat
 

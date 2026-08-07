@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
 @theme inline {
   --color-canvas: var(--bg);
@@ -40,11 +39,11 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-small-control: 6px;
-  --radius-control: 8px;
-  --radius-floating: 12px;
+  --radius-control: 6px;
+  --radius-floating: 8px;
   --radius-composer: 22px;
   --font-ui-mono:
     var(--font-noto-mono), "JetBrains Mono", "Fira Code", Consolas,
@@ -58,7 +57,7 @@
   --text-body-sm--line-height: 1.4;
   --text-prose: var(--fs-prose);
   --text-prose--line-height: 1.5;
-  /* Coze 风格的紧凑桌面字号刻度 */
+  /* 在 Ant Design 默认字号上补充开发工具需要的紧凑刻度。 */
   --text-xs: 12px;
   --text-xs--line-height: 1rem;
   --text-sm: 14px;
@@ -71,31 +70,31 @@
 
 :root {
   --bg: #ffffff;
-  --workspace-bg: #f5f5f3;
+  --workspace-bg: #f5f5f5;
   --bg-panel: #ffffff;
-  --sidebar-bg: #f5f5f3;
+  --sidebar-bg: #f5f5f5;
   --conversation-bg: #ffffff;
   --dock-bg: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-subtle: #f7f7f5;
-  --bg-hover: #ecece9;
-  --bg-selected: #e7e7e3;
-  --border-subtle: #ecece8;
-  --border-strong: #d9d9d4;
-  --border-emphasis: #339cff;
+  --bg-subtle: #fafafa;
+  --bg-hover: #f5f5f5;
+  --bg-selected: #e6f4ff;
+  --border-subtle: #f0f0f0;
+  --border-strong: #d9d9d9;
+  --border-emphasis: #1677ff;
   --border: var(--border-subtle);
-  --text: #1f201e;
-  --text-muted: #686b68;
-  --text-dim: #969995;
+  --text: #1f1f1f;
+  --text-muted: #595959;
+  --text-dim: #8c8c8c;
   /* 字号 token — 扩展 Tailwind 默认刻度，补充项目所需的中间值 */
   --fs-caption: 11px;
   --fs-meta: 12px;
   --fs-body-sm: 13px;
   --fs-prose: 15px;
-  --accent: #339cff;
-  --accent-hover: #1689f5;
-  --accent-deep: #0670d3;
-  --accent-soft: #eaf4ff;
+  --accent: #1677ff;
+  --accent-hover: #4096ff;
+  --accent-deep: #0958d9;
+  --accent-soft: #e6f4ff;
   --background: var(--bg);
   --foreground: var(--text);
   --card: var(--bg-panel);
@@ -107,16 +106,16 @@
   --secondary-foreground: #1a1c1f;
   --muted-foreground: var(--text-muted);
   --accent-foreground: #1a1c1f;
-  --destructive: #d92d20;
-  --destructive-text: #b42318;
+  --destructive: #ff4d4f;
+  --destructive-text: #cf1322;
   --destructive-foreground: #ffffff;
-  --success: #12b76a;
-  --success-text: #067647;
-  --warning: #b54708;
-  --disabled-surface: #f1f1f1;
-  --disabled-text: #a6abb2;
+  --success: #52c41a;
+  --success-text: #389e0d;
+  --warning: #faad14;
+  --disabled-surface: #f5f5f5;
+  --disabled-text: #bfbfbf;
   --input: var(--border);
-  --ring: #0670d3;
+  --ring: #1677ff;
   --radius: 1rem;
   --user-bg: #f1f1f1;
   --assistant-bg: #ffffff;
@@ -124,9 +123,11 @@
   --motion-fast: 150ms;
   --motion-standard: 200ms;
   --motion-slow: 220ms;
-  --shadow-floating: 0 12px 32px rgba(18, 22, 28, 0.12);
-  --shadow-soft: 0 1px 6px rgba(18, 22, 28, 0.06);
-  --shadow-composer: 0 6px 24px rgba(32, 32, 28, 0.08);
+  --shadow-floating:
+    0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%),
+    0 9px 28px 8px rgb(0 0 0 / 5%);
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 3%);
+  --shadow-composer: 0 6px 16px rgb(0 0 0 / 8%);
   --shadow-card: none;
   color-scheme: light;
 }
@@ -141,6 +142,22 @@ body {
   min-width: 1024px;
   height: 100%;
   margin: 0;
+}
+
+.ant-app {
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.anticon {
+  line-height: 0;
+}
+
+.anticon > svg {
+  width: 1em;
+  height: 1em;
 }
 
 html {

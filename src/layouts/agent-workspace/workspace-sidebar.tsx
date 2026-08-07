@@ -3,7 +3,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
-} from "lucide-react";
+} from "@/components/icons";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,7 +88,7 @@ export function WorkspaceSidebar({
         <SidebarIconAction
           active={activeView === "model-provider"}
           compact={compact}
-          icon={<Settings />}
+          icon={<Settings className="size-4" />}
           label={t.workspace.settings}
           onClick={onOpenSettings}
         />
@@ -100,12 +100,16 @@ export function WorkspaceSidebar({
                   ? t.common.switchToChinese
                   : t.common.switchToEnglish
               }
-              className={compact ? "size-5 px-0" : "size-8 px-0"}
+              className={
+                compact
+                  ? "size-5! shrink-0! p-0!"
+                  : "size-8! shrink-0! p-0!"
+              }
               onClick={() => setLocale(nextLocale)}
               type="button"
               variant="ghost"
             >
-              <Languages />
+              <Languages className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side={compact ? "right" : "top"}>
@@ -138,7 +142,11 @@ function SidebarIconAction({
         <Button
           aria-current={active ? "page" : undefined}
           aria-label={label}
-          className={compact ? "size-5 px-0" : "size-8 px-0"}
+          className={
+            compact
+              ? "size-5! shrink-0! p-0!"
+              : "size-8! shrink-0! p-0!"
+          }
           onClick={onClick}
           type="button"
           variant={active ? "secondary" : "ghost"}

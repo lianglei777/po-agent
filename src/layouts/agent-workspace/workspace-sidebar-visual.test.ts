@@ -53,7 +53,18 @@ describe("workspace primary navigation", () => {
     expect(source).toContain("flex items-center");
     expect(source).not.toContain("onOpenSystemPrompt");
     expect(source).toContain("<TooltipContent");
+    expect(source).toContain('"size-5! shrink-0! p-0!"');
+    expect(source).toContain('"size-8! shrink-0! p-0!"');
+    expect(source).toContain('<Settings className="size-4" />');
+    expect(source).toContain('<Languages className="size-4" />');
     expect(topBarSource).not.toContain("onOpenSystemPrompt");
+  });
+
+  it("keeps project titles stable when the more action appears", () => {
+    expect(projectSource).toContain("justify-start!");
+    expect(projectSource).toContain("w-8 shrink-0 opacity-0");
+    expect(projectSource).toContain("group-hover:opacity-100");
+    expect(projectSource).not.toContain("hidden group-hover:flex");
   });
 
   it("supports compact, expanded, and fully hidden navigation without glass effects", () => {

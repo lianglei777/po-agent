@@ -1,32 +1,23 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { CheckIcon } from "lucide-react"
-import { Checkbox as CheckboxPrimitive } from "radix-ui"
+import {
+  Checkbox as AntCheckbox,
+  type CheckboxProps as AntCheckboxProps,
+} from "antd";
 
-import { cn } from "@/lib/utils"
+type CheckboxProps = Omit<AntCheckboxProps, "onChange"> & {
+  onCheckedChange?: (checked: boolean) => void;
+};
 
-function Checkbox({
-  className,
-  ...props
-}: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
+function Checkbox({ onCheckedChange, ...props }: CheckboxProps) {
   return (
-    <CheckboxPrimitive.Root
+    <AntCheckbox
       data-slot="checkbox"
-      className={cn(
-        "peer size-4 shrink-0 rounded-sm border border-line-subtle outline-none transition-[color,background-color,border-color,box-shadow] duration-[var(--motion-fast)] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-[var(--disabled-surface)] disabled:text-[var(--disabled-text)] aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-        className
-      )}
+      onChange={(event) => onCheckedChange?.(event.target.checked)}
       {...props}
-    >
-      <CheckboxPrimitive.Indicator
-        data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none"
-      >
-        <CheckIcon className="size-3.5" />
-      </CheckboxPrimitive.Indicator>
-    </CheckboxPrimitive.Root>
-  )
+    />
+  );
 }
 
-export { Checkbox }
+export { Checkbox };
+export type { CheckboxProps };

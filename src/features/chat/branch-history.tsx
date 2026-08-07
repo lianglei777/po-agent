@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, GitBranch } from "lucide-react";
+import { Check, GitBranch } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

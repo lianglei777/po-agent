@@ -1,4 +1,4 @@
-import { Images, MessageSquare, PanelLeft, PanelLeftOpen } from "lucide-react";
+import { Images, MessageSquare, PanelLeft, PanelLeftOpen } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,

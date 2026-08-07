@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, LoaderCircle, PackageOpen } from "lucide-react";
+import { ArrowLeft, LoaderCircle, PackageOpen } from "@/components/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {

@@ -6,7 +6,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
-} from "lucide-react";
+} from "@/components/icons";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";

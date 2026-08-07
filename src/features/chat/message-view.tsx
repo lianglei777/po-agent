@@ -9,7 +9,7 @@ import {
   GitBranch,
   GitFork,
   PencilLine,
-} from "lucide-react";
+} from "@/components/icons";
 import ReactMarkdown from "react-markdown";
 import dynamic from "next/dynamic";
 import remarkGfm from "remark-gfm";

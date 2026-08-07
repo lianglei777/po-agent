@@ -20,7 +20,7 @@ Voice is quiet and confident. The UI gets out of the way so the user can focus o
 
 ## References
 
-Focused productivity tools: Linear, Vercel dashboard, Notion. The relevant quality is density without clutter — clear hierarchy, fast scanning, and a sense that the interface was built by people who use it themselves.
+Ant Design 6 and its enterprise product patterns are the primary reference. Focused productivity tools such as Linear, Vercel, and Notion remain secondary references for density without clutter.
 
 ## Anti-references
 
@@ -34,7 +34,7 @@ Focused productivity tools: Linear, Vercel dashboard, Notion. The relevant quali
 2. **Quiet surfaces, active states.** At rest the UI is neutral and breathable; blue appears only for focus, links, switches, live state, and explicit status.
 3. **The agent is a tool, not a character.** No personality avatars, no confetti, no cheerleading copy.
 4. **Respect system conventions.** Support reduced motion and keep keyboard paths obvious.
-5. **Codex blue for state.** The `#339cff` accent is used sparingly for focus, links, switches, and live agent state. Near-black is used for primary actions, while passive selection remains neutral gray. The palette should feel like a well-tuned code editor, not a brand campaign.
+5. **Ant Design by default.** Use Ant components, icons, tokens, typography, feedback, and interaction patterns for standard UI. The primary `#1677ff` communicates actions and state; custom UI is reserved for real Po Agent domain behavior.
 6. **Stable workflows over novelty.** Preserve Chat state and established operation paths while central workspace views change; configuration navigation must not interrupt a running conversation.
 7. **Explicit destructive actions.** Important deletion, credential removal, and disconnect operations require confirmation with concrete action language.
 8. **Dialogs close deliberately.** Dialogs remain open on backdrop clicks and Escape; users leave through visible close, cancel, save, or confirmation actions.

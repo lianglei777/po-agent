@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { useI18n } from "@/i18n/use-i18n";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Plus, Server } from "lucide-react";
+import { ChevronRight, Plus, Server } from "@/components/icons";
 import {
   getSelectionKey,
   isProviderCollapsed,

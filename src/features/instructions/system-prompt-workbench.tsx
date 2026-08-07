@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { Tag } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import {
   ChevronRight,
@@ -8,8 +9,7 @@ import {
   LoaderCircle,
   RotateCw,
   Trash2,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+} from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -611,11 +611,14 @@ function ProjectInstructionsView({
             {t.instructions.projectInstructions}
           </h3>
           {!loading ? (
-            <Badge variant={doc?.exists ? "success" : "outline"}>
+            <Tag
+              color={doc?.exists ? "success" : undefined}
+              variant={doc?.exists ? "filled" : "outlined"}
+            >
               {doc?.exists
                 ? t.instructions.active
                 : t.instructions.notConfigured}
-            </Badge>
+            </Tag>
           ) : null}
         </div>
         <p className="mt-1 max-w-[65ch] text-xs text-muted">
@@ -688,7 +691,7 @@ function GlobalPromptEditor({
             {t.instructions.globalAppend}
           </h3>
           {dirty ? (
-            <Badge variant="secondary">{t.instructions.unsaved}</Badge>
+            <Tag variant="filled">{t.instructions.unsaved}</Tag>
           ) : null}
         </div>
         <p className="mt-1 max-w-[65ch] text-xs text-muted">

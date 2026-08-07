@@ -1,5 +1,5 @@
-import { AlertTriangle, Package } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Package } from "@/components/icons";
+import { Tag } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import type { SkillPackInfo } from "./types";
 
@@ -44,9 +44,18 @@ export function SkillPackList({
                   {copy.name}
                 </span>
                 <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <Badge variant={statusVariant(pack.status)}>
+                  <Tag
+                    color={
+                      pack.status === "installed"
+                        ? "success"
+                        : pack.status === "broken"
+                          ? "error"
+                          : undefined
+                    }
+                    variant={pack.status === "available" ? "outlined" : "filled"}
+                  >
                     {statusLabel(pack.status, t.skills.packs)}
-                  </Badge>
+                  </Tag>
                   <span className="text-meta text-muted">
                     {t.skills.packs.skillCount.replace(
                       "{count}",
@@ -74,10 +83,4 @@ export function statusLabel(
   if (status === "installed") return t.statusInstalled;
   if (status === "broken") return t.statusBroken;
   return t.statusAvailable;
-}
-
-function statusVariant(status: SkillPackInfo["status"]) {
-  if (status === "installed") return "success" as const;
-  if (status === "broken") return "destructive" as const;
-  return "outline" as const;
 }

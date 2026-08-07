@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Input, Select } from "antd";
 import {
   getCompatFields,
   type CompatFieldDefinition,
 } from "@/contracts/model-compat";
 import { useI18n } from "@/i18n/use-i18n";
-import { NativeSelect } from "@/components/ui/native-select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   SettingsRow,
   SettingsSection,
@@ -122,15 +121,16 @@ function CompatField({
         labelFor={`compat-${field.key}`}
         description={description}
       >
-        <NativeSelect
+        <Select
           aria-label={field.key}
           id={`compat-${field.key}`}
+          onChange={(value) => onChange(value === "true")}
+          options={[
+            { label: t.models.enabled, value: "true" },
+            { label: t.models.disabled, value: "false" },
+          ]}
           value={String(resolved)}
-          onChange={(event) => onChange(event.target.value === "true")}
-        >
-          <option value="true">{t.models.enabled}</option>
-          <option value="false">{t.models.disabled}</option>
-        </NativeSelect>
+        />
       </SettingsRow>
     );
   }
@@ -141,31 +141,25 @@ function CompatField({
       labelFor={`compat-${field.key}`}
       description={description}
     >
-      <NativeSelect
+      <Select
         aria-label={field.key}
         id={`compat-${field.key}`}
-        value={value === undefined ? "" : String(value)}
-        onChange={(event) => {
-          const next = event.target.value;
+        onChange={(next) => {
           if (!next) onChange(undefined);
           else if (field.kind === "boolean") onChange(next === "true");
           else onChange(next);
         }}
-      >
-        <option value="">{inheritedLabel}</option>
-        {field.kind === "boolean" ? (
-          <>
-            <option value="true">{t.models.enabled}</option>
-            <option value="false">{t.models.disabled}</option>
-          </>
-        ) : (
-          field.values.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))
-        )}
-      </NativeSelect>
+        options={[
+          { label: inheritedLabel, value: "" },
+          ...(field.kind === "boolean"
+            ? [
+                { label: t.models.enabled, value: "true" },
+                { label: t.models.disabled, value: "false" },
+              ]
+            : field.values.map((option) => ({ label: option, value: option }))),
+        ]}
+        value={value === undefined ? "" : String(value)}
+      />
     </SettingsRow>
   );
 }
@@ -189,11 +183,12 @@ function JsonCompatTextarea({
 
   return (
     <div className="flex flex-col gap-1">
-      <Textarea
+      <Input.TextArea
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         className="min-h-22 resize-y font-ui-mono"
-        density="compact"
+        size="small"
+        status={invalid ? "error" : undefined}
         id={id}
         rows={4}
         value={text}

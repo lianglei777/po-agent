@@ -1,18 +1,18 @@
-import { mergeClasses } from "@/lib/utils";
+"use client";
 
-function Skeleton({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+import { Skeleton as AntSkeleton } from "antd";
+import type { ComponentProps } from "react";
+
+function Skeleton({ className, ...props }: ComponentProps<"div">) {
   return (
-    <div
-      className={mergeClasses(
-        "rounded-md bg-hover motion-safe:animate-pulse",
-        className,
-      )}
+    <AntSkeleton.Node
+      active
+      className={className}
       data-slot="skeleton"
       {...props}
-    />
+    >
+      <span />
+    </AntSkeleton.Node>
   );
 }
 

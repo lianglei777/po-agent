@@ -34,6 +34,10 @@ const switchSource = readFileSync(
   fileURLToPath(new URL("../../components/ui/switch.tsx", import.meta.url)),
   "utf8",
 );
+const skillListSource = readFileSync(
+  fileURLToPath(new URL("./skill-list.tsx", import.meta.url)),
+  "utf8",
+);
 
 describe("skills config UI contract", () => {
   it("describes model invocation instead of whole-skill enablement", () => {
@@ -42,9 +46,10 @@ describe("skills config UI contract", () => {
     expect(listSource).not.toContain("CircleSlash2");
   });
 
-  it("keeps the switch thumb positioned and explains read-only state", () => {
+  it("uses the Ant switch and explains read-only state", () => {
     expect(detailSource).toContain("<Switch");
-    expect(switchSource).toContain("left-0.5");
+    expect(switchSource).toContain("Switch as AntSwitch");
+    expect(switchSource).toContain("onCheckedChange?.(checked)");
     expect(detailSource).toContain("<Tooltip>");
     expect(detailSource).toContain("t.skills.readOnlySymlink");
   });
@@ -54,6 +59,13 @@ describe("skills config UI contract", () => {
     expect(listSource).not.toContain(
       "sourceLabel(group.detail, group.origin, t.skills)",
     );
+  });
+
+  it("uses Ant Design tags directly for skill metadata", () => {
+    expect(skillListSource).toContain('import { Tag } from "antd"');
+    expect(skillListSource).toContain('<Tag className="shrink-0" variant="outlined">');
+    expect(packDetailSource).toContain('import { Tag } from "antd"');
+    expect(packDetailSource).not.toContain("<Badge");
   });
 
   it("does not offer standalone mutations for package-owned skills", () => {

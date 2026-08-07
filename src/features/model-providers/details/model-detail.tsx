@@ -1,12 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { Button, Input, Select, Switch } from "antd";
 import { testModelConfig } from "../api";
 import { getEffectiveApi } from "@/contracts/model-compat";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -222,15 +219,15 @@ export default function ModelDetail({
           <DialogFooter>
             <Button
               autoFocus
-              type="button"
-              variant="outline"
+              htmlType="button"
               onClick={() => setConfirmingDelete(false)}
             >
               {t.common.cancel}
             </Button>
             <Button
-              type="button"
-              variant="destructive"
+              danger
+              htmlType="button"
+              type="primary"
               onClick={() => {
                 setConfirmingDelete(false);
                 onDelete();
@@ -264,11 +261,11 @@ export default function ModelDetail({
               {model.id}
             </span>
             <Button
-              variant="ghost"
-              size="sm"
+              type="text"
+              size="small"
               disabled={!model.id}
               onClick={() => void copyModelId()}
-              type="button"
+              htmlType="button"
             >
               {copied ? t.models.copied : t.models.copyId}
             </Button>
@@ -276,7 +273,7 @@ export default function ModelDetail({
         </SettingsRow>
         <SettingsRow label={t.models.name} labelFor="model-name">
           <Input
-            density="compact"
+            size="small"
             id="model-name"
             value={model.name ?? ""}
             onChange={(e) =>
@@ -307,12 +304,11 @@ export default function ModelDetail({
               </span>
             )}
             <Button
+              htmlType="button"
               className="min-w-[80px] justify-center"
               onClick={handleTest}
               disabled={!model.id.trim() || visibleTestState.phase === "testing"}
-              size="sm"
-              type="button"
-              variant="outline"
+              size="small"
             >
               {visibleTestState.phase === "success" && <CheckIcon />}
               {visibleTestState.phase === "testing"
@@ -363,21 +359,18 @@ export default function ModelDetail({
           labelFor="model-api-protocol"
           description={t.models.apiProtocolDescription}
         >
-          <NativeSelect
-            id="model-api-protocol"
-            value={model.api ?? ""}
-            onChange={(e) =>
-              onChange(changeEntryApi(model, e.target.value || undefined))
-            }
+          <Select
             className={model.api ? "text-primary" : "text-dim"}
-          >
-            <option value="">{t.models.inheritNone}</option>
-            {API_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </NativeSelect>
+            id="model-api-protocol"
+            onChange={(value) =>
+              onChange(changeEntryApi(model, value || undefined))
+            }
+            options={[
+              { label: t.models.inheritNone, value: "" },
+              ...API_OPTIONS.map((option) => ({ label: option, value: option })),
+            ]}
+            value={model.api ?? ""}
+          />
         </SettingsRow>
 
         {reasoningEnabled && supportedThinkingLevels.length > 0 && (
@@ -386,23 +379,20 @@ export default function ModelDetail({
             labelFor="model-thinking-default"
             description={t.models.thinkingOnDefaultDescription}
           >
-            <NativeSelect
+            <Select
               id="model-thinking-default"
-              value={model.thinkingDefaultLevel ?? defaultThinkingLevel ?? "high"}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   ...model,
-                  thinkingDefaultLevel: event.target
-                    .value as ConfiguredThinkingLevel,
+                  thinkingDefaultLevel: value as ConfiguredThinkingLevel,
                 })
               }
-            >
-              {supportedThinkingLevels.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </NativeSelect>
+              options={supportedThinkingLevels.map((level) => ({
+                label: level,
+                value: level,
+              }))}
+              value={model.thinkingDefaultLevel ?? defaultThinkingLevel ?? "high"}
+            />
           </SettingsRow>
         )}
       </SettingsSection>
@@ -421,10 +411,11 @@ export default function ModelDetail({
         >
           <div className="flex justify-end">
             <Button
+              danger
+              htmlType="button"
               onClick={() => setConfirmingDelete(true)}
-              size="sm"
-              type="button"
-              variant="destructive"
+              size="small"
+              type="primary"
             >
               {t.common.delete}
             </Button>
@@ -463,9 +454,8 @@ function DiagnosticPanel({
         </div>
         {diagnostic.suggestedPatch && (
           <Button
-            type="button"
-            variant="outline"
-            size="sm"
+            htmlType="button"
+            size="small"
             className="shrink-0"
             onClick={onApplyAndRetest}
           >
@@ -514,7 +504,7 @@ function CapabilityToggle({
       <Switch
         aria-label={label}
         checked={checked}
-        onCheckedChange={onChange}
+        onChange={onChange}
       />
     </div>
   );

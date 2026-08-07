@@ -13,14 +13,14 @@ import {
   Key,
   Aperture,
   Hexagon,
-} from "lucide-react";
+} from "@/components/icons";
 
 type IconComponent = React.ComponentType<{
-  size?: number | string;
+  size?: number;
   style?: React.CSSProperties;
 }>;
 
-// 将 provider ID 映射到轻量 Lucide 图标。
+// 将 provider ID 映射到统一的 Ant Design 图标语义。
 const PROVIDER_ICONS: Record<string, { Icon: IconComponent; hasColor: boolean }> = {
   anthropic: { Icon: Sparkles, hasColor: false },
   openai: { Icon: Zap, hasColor: false },
@@ -56,7 +56,7 @@ const PROVIDER_ICONS: Record<string, { Icon: IconComponent; hasColor: boolean }>
 };
 
 // Simple fallback icons for providers without a mapped icon
-function WindIcon({ size, style }: { size?: number | string; style?: React.CSSProperties }) {
+function WindIcon({ size, style }: { size?: number; style?: React.CSSProperties }) {
   return (
     <svg
       width={size ?? 16}
@@ -76,7 +76,7 @@ function WindIcon({ size, style }: { size?: number | string; style?: React.CSSPr
   );
 }
 
-function HuggingFaceIcon({ size, style }: { size?: number | string; style?: React.CSSProperties }) {
+function HuggingFaceIcon({ size, style }: { size?: number; style?: React.CSSProperties }) {
   return (
     <svg
       width={size ?? 16}

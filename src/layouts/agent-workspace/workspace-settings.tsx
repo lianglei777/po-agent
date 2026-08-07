@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Cpu, Images, Languages, ScrollText } from "lucide-react";
+import { ArrowLeft, Cpu, Images, Languages, ScrollText } from "@/components/icons";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {

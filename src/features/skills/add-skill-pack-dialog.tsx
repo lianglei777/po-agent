@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, LoaderCircle } from "lucide-react";
+import { Folder, LoaderCircle } from "@/components/icons";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {

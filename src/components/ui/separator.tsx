@@ -1,26 +1,24 @@
 "use client";
 
-import * as React from "react";
-import * as SeparatorPrimitive from "@radix-ui/react-separator";
-import { mergeClasses } from "@/lib/utils";
+import { Divider, type DividerProps } from "antd";
+
+type SeparatorProps = Omit<DividerProps, "orientation"> & {
+  decorative?: boolean;
+  orientation?: "horizontal" | "vertical";
+};
 
 function Separator({
-  className,
+  decorative: _decorative,
   orientation = "horizontal",
-  decorative = true,
+  style,
   ...props
-}: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
+}: SeparatorProps) {
+  void _decorative;
   return (
-    <SeparatorPrimitive.Root
-      className={mergeClasses(
-        "shrink-0 bg-border",
-        "bg-line-strong",
-        orientation === "horizontal" ? "h-px w-full" : "h-full w-px",
-        className,
-      )}
+    <Divider
       data-slot="separator"
-      decorative={decorative}
       orientation={orientation}
+      style={{ margin: 0, ...style }}
       {...props}
     />
   );

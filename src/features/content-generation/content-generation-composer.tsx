@@ -1,6 +1,6 @@
 "use client";
 
-import { FileImage, FileMusic, FileVideo, Send, X } from "lucide-react";
+import { FileImage, FileMusic, FileVideo, Send, X } from "@/components/icons";
 import { useState } from "react";
 import type {
   GenerationAssetSlot,

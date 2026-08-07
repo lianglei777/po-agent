@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { Noto_Sans_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -23,7 +24,9 @@ export default function RootLayout({
       className={notoSansMono.variable}
       suppressHydrationWarning
     >
-      <body>{children}</body>
+      <body>
+        <AntdRegistry>{children}</AntdRegistry>
+      </body>
     </html>
   );
 }

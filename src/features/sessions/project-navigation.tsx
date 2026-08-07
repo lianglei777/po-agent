@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Folder, MoreHorizontal, RefreshCw } from "lucide-react";
+import { Check, Folder, MoreHorizontal, RefreshCw } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -119,7 +119,7 @@ export function ProjectNavigation({
                         className={`h-8 min-w-0 bg-transparent ${
                           compact
                             ? "w-8 justify-center px-0"
-                            : "flex-1 justify-start gap-1.5 px-1 text-meta"
+                            : "flex-1 justify-start! gap-1.5 px-1 text-meta"
                         }`}
                         onClick={() => navigation.selectProject(project.path)}
                         title={project.path}
@@ -135,7 +135,7 @@ export function ProjectNavigation({
                     {compact ? <TooltipContent side="right">{name}</TooltipContent> : null}
                   </Tooltip>
                   {compact ? null : (
-                    <div className="hidden group-hover:flex group-focus-within:flex has-[[data-state=open]]:flex">
+                    <div className="flex w-8 shrink-0 opacity-0 transition-opacity duration-[var(--motion-fast)] group-hover:opacity-100 group-focus-within:opacity-100 has-[[data-state=open]]:opacity-100">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

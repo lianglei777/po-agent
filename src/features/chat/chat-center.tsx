@@ -13,8 +13,8 @@ import {
   MessageSquarePlus,
   Puzzle,
   ServerCog,
-  type LucideIcon,
-} from "lucide-react";
+  type AppIcon,
+} from "@/components/icons";
 import {
   Tooltip,
   TooltipContent,
@@ -345,7 +345,7 @@ function WelcomeAction({
 }: {
   disabledReason?: string | null;
   emphasized?: boolean;
-  icon: LucideIcon;
+  icon: AppIcon;
   label: string;
   onClick: () => void;
   status: string;
