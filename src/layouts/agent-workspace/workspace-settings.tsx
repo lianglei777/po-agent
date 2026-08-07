@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Cpu, Images, Languages, ScrollText } from "@/components/icons";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, Segmented } from "antd";
 import {
   ModelProviderPage,
   type ModelProviderSaveStatus,
@@ -10,7 +10,6 @@ import {
 import { SystemPromptWorkbench } from "@/features/instructions/system-prompt-workbench";
 import { useI18n } from "@/i18n/use-i18n";
 import { ContentGenerationSettings } from "@/features/content-generation/content-generation-settings";
-import { mergeClasses } from "@/lib/utils";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
 
 type SettingsSection = "models" | "content-generation" | "instructions" | "language";
@@ -58,12 +57,13 @@ export function WorkspaceSettings({
         className="flex w-60 shrink-0 flex-col px-4 py-3"
       >
         <Button
+          block
           className="h-9 justify-start px-2 text-muted"
+          htmlType="button"
+          icon={<ArrowLeft />}
           onClick={onBack}
-          type="button"
-          variant="ghost"
+          type="text"
         >
-          <ArrowLeft />
           {t.settings.exitSettings}
         </Button>
 
@@ -158,24 +158,15 @@ export function WorkspaceSettings({
               description={t.settings.languageDescription}
               title={t.common.language}
             >
-              <div className="inline-flex rounded-lg border border-line-subtle bg-subtle p-1">
-                <Button
-                  onClick={() => setLocale("zh")}
-                  size="sm"
-                  type="button"
-                  variant={locale === "zh" ? "secondary" : "ghost"}
-                >
-                  中文
-                </Button>
-                <Button
-                  onClick={() => setLocale("en")}
-                  size="sm"
-                  type="button"
-                  variant={locale === "en" ? "secondary" : "ghost"}
-                >
-                  English
-                </Button>
-              </div>
+              <Segmented
+                onChange={setLocale}
+                options={[
+                  { label: "中文", value: "zh" as const },
+                  { label: "English", value: "en" as const },
+                ]}
+                size="small"
+                value={locale}
+              />
             </SettingsReadingColumn>
           ) : null}
         </div>
@@ -196,18 +187,18 @@ function SettingsNavButton({
   selected: boolean;
 }) {
   return (
-    <button
+    <Button
       aria-current={selected ? "page" : undefined}
-      className={mergeClasses(
-        "flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-medium text-primary outline-none transition-colors duration-[var(--motion-fast)] hover:bg-hover focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "bg-selected",
-      )}
+      block
+      className="h-9 justify-start px-2 text-left text-xs font-medium"
+      color={selected ? "primary" : "default"}
+      htmlType="button"
+      icon={<span className="text-muted [&_svg]:size-3.5">{icon}</span>}
       onClick={onClick}
-      type="button"
+      variant={selected ? "filled" : "text"}
     >
-      <span className="text-muted [&_svg]:size-3.5">{icon}</span>
       <span className="truncate">{label}</span>
-    </button>
+    </Button>
   );
 }
 

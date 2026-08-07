@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button, Dropdown, Input, type InputRef } from "antd";
 import {
   ChevronDown,
   GitFork,
@@ -8,7 +9,6 @@ import {
   Pencil,
   Trash2,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,13 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { useI18n } from "@/i18n/use-i18n";
 import { deleteSession, renameSession } from "./api";
 import { getSessionTitle } from "./session-utils";
@@ -125,10 +118,12 @@ function SessionRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // 菜单打开时保持触发按钮可见，同时不挤压会话标题的布局空间。
+  const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState(session.name ?? "");
   const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<InputRef>(null);
   const title = getSessionTitle(session);
   const { t } = useI18n();
   const isDraft = Boolean(session.draft);
@@ -173,8 +168,9 @@ function SessionRow({
     return (
       <div className="flex h-9 items-center gap-1 px-2">
         <Input
+          aria-invalid={Boolean(error)}
           aria-label={`${t.sessions.rename} ${title}`}
-          className="h-7 text-xs"
+          className="text-xs"
           disabled={busy}
           onBlur={submitRename}
           onChange={(event) => setValue(event.target.value)}
@@ -186,6 +182,7 @@ function SessionRow({
             }
           }}
           ref={inputRef}
+          size="small"
           value={value}
         />
         {error ? <span className="sr-only">{error}</span> : null}
@@ -221,18 +218,19 @@ function SessionRow({
                 : t.sessions.collapseForks
             }
             className="size-6"
+            htmlType="button"
+            icon={
+              <ChevronDown
+                className={`size-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+              />
+            }
             onClick={(event) => {
               event.stopPropagation();
               onToggle();
             }}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          >
-            <ChevronDown
-              className={`size-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
-            />
-          </Button>
+            size="small"
+            type="text"
+          />
         ) : depth ? (
           <GitFork className="mx-1.5 size-3 flex-none text-dim" />
         ) : (
@@ -256,43 +254,50 @@ function SessionRow({
           </span>
         ) : null}
         {isDraft ? null : (
-          <div className="absolute right-1 top-1/2 -translate-y-1/2 hidden bg-inherit group-hover:flex group-focus-within:flex has-[[data-state=open]]:flex">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  aria-label={t.sessions.sessionActions}
-                  className="size-7"
-                  onClick={(event) => event.stopPropagation()}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem
-                  className="justify-center"
-                  onSelect={() => {
-                    setEditing(true);
-                    setError("");
-                  }}
-                >
-                  <Pencil className="size-3.5" />
-                  <span>{t.sessions.rename}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="justify-center text-destructive-text focus:text-destructive-text"
-                  onSelect={() => {
-                    setConfirming(true);
-                    setError("");
-                  }}
-                >
-                  <Trash2 className="size-3.5" />
-                  <span>{t.common.delete}</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <div
+            className={`absolute right-1 top-1/2 -translate-y-1/2 bg-inherit opacity-0 transition-opacity duration-[var(--motion-fast)] group-hover:opacity-100 group-focus-within:opacity-100 ${
+              menuOpen ? "opacity-100" : ""
+            }`}
+          >
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    icon: <Pencil className="size-3.5" />,
+                    key: "rename",
+                    label: t.sessions.rename,
+                    onClick: () => {
+                      setEditing(true);
+                      setError("");
+                    },
+                  },
+                  {
+                    danger: true,
+                    icon: <Trash2 className="size-3.5" />,
+                    key: "delete",
+                    label: t.common.delete,
+                    onClick: () => {
+                      setConfirming(true);
+                      setError("");
+                    },
+                  },
+                ],
+              }}
+              onOpenChange={setMenuOpen}
+              open={menuOpen}
+              placement="bottomRight"
+              trigger={["click"]}
+            >
+              <Button
+                aria-label={t.sessions.sessionActions}
+                className="size-7"
+                htmlType="button"
+                icon={<MoreHorizontal className="size-3.5" />}
+                onClick={(event) => event.stopPropagation()}
+                size="small"
+                type="text"
+              />
+            </Dropdown>
           </div>
         )}
       </div>
@@ -322,17 +327,18 @@ function SessionRow({
             <Button
               autoFocus
               disabled={busy}
+              htmlType="button"
               onClick={() => setConfirming(false)}
-              type="button"
-              variant="outline"
             >
               {t.common.cancel}
             </Button>
             <Button
+              danger
               disabled={busy}
+              htmlType="button"
+              loading={busy}
               onClick={() => void remove()}
-              type="button"
-              variant="destructive"
+              type="primary"
             >
               {busy
                 ? t.sessions.deletingSession

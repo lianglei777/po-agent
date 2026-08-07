@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useState, type FormEvent } from "react";
+import { Button, Input, Skeleton, Tooltip } from "antd";
 import { Folder, Plus } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import { addProject, browseProjects } from "./api";
 import type { ProjectBrowseResult } from "./types";
@@ -108,12 +101,12 @@ export function ProjectPicker({
   const triggerButton = (
     <Button
       aria-label={t.workspace.openProject}
+      htmlType="button"
+      icon={<Plus />}
       onClick={() => setOpen(true)}
-      size={trigger === "icon" ? "icon-sm" : "sm"}
-      type="button"
-      variant={trigger === "icon" ? "ghost" : "outline"}
+      size="small"
+      type={trigger === "icon" ? "text" : "default"}
     >
-      <Plus />
       {trigger === "button" ? t.sessions.openProject : null}
     </Button>
   );
@@ -121,9 +114,8 @@ export function ProjectPicker({
   return (
     <>
       {trigger === "icon" ? (
-        <Tooltip>
-          <TooltipTrigger asChild>{triggerButton}</TooltipTrigger>
-          <TooltipContent>{t.workspace.openProject}</TooltipContent>
+        <Tooltip mouseEnterDelay={0.35} title={t.workspace.openProject}>
+          {triggerButton}
         </Tooltip>
       ) : (
         triggerButton
@@ -155,13 +147,12 @@ export function ProjectPicker({
 
             {!browseOpen ? (
               <Button
-                className="w-full justify-center"
+                block
                 disabled={saving}
+                htmlType="button"
+                icon={<Folder />}
                 onClick={() => void browseForProject()}
-                type="button"
-                variant="outline"
               >
-                <Folder />
                 {t.sessions.browseDirectories}
               </Button>
             ) : null}
@@ -198,11 +189,10 @@ export function ProjectPicker({
                   {result?.roots.map((root) => (
                     <Button
                       className="max-w-full font-ui-mono text-meta"
+                      htmlType="button"
                       key={root}
                       onClick={() => void navigate(root)}
-                      size="sm"
-                      type="button"
-                      variant="outline"
+                      size="small"
                     >
                       <span className="truncate">{root}</span>
                     </Button>
@@ -217,35 +207,39 @@ export function ProjectPicker({
                       aria-label={t.sessions.loadingDirectories}
                       className="space-y-1 p-1"
                     >
-                      <Skeleton className="h-8 w-full" />
-                      <Skeleton className="h-8 w-[86%]" />
-                      <Skeleton className="h-8 w-[72%]" />
+                      {["w-full", "w-[86%]", "w-[72%]"].map((width) => (
+                        <Skeleton.Node active className={`h-8 ${width}`} key={width}>
+                          <span />
+                        </Skeleton.Node>
+                      ))}
                     </div>
                   ) : (
                     <>
                       {result?.parent ? (
                         <Button
-                          className="w-full justify-start"
+                          block
+                          className="justify-start"
+                          htmlType="button"
+                          icon={<Folder />}
                           onClick={() =>
                             void navigate(result.parent ?? undefined)
                           }
-                          type="button"
-                          variant="ghost"
+                          type="text"
                         >
-                          <Folder />
                           {t.sessions.parentDirectory}
                         </Button>
                       ) : null}
                       {result?.directories.map((directory, index) => (
                         <Button
-                          className="w-full justify-start font-ui-mono text-xs"
+                          block
+                          className="justify-start font-ui-mono text-xs"
+                          htmlType="button"
+                          icon={<Folder />}
                           key={index}
                           onClick={() => void navigate(directory.path)}
                           title={directory.path}
-                          type="button"
-                          variant="ghost"
+                          type="text"
                         >
-                          <Folder />
                           <span className="truncate">{directory.name}</span>
                         </Button>
                       ))}
@@ -263,10 +257,11 @@ export function ProjectPicker({
                 <p className="text-xs text-destructive-text">{error}</p>
               ) : null}
                 <Button
-                  className="w-full"
+                  block
                   disabled={!result || loading}
+                  htmlType="button"
                   onClick={() => void selectCurrent()}
-                  type="button"
+                  type="primary"
                 >
                   {t.sessions.chooseThisFolder}
                 </Button>
@@ -275,13 +270,17 @@ export function ProjectPicker({
 
             <DialogFooter>
               <Button
+                htmlType="button"
                 onClick={closePicker}
-                type="button"
-                variant="outline"
               >
                 {t.common.cancel}
               </Button>
-              <Button disabled={saving || !pathInput.trim()} type="submit">
+              <Button
+                disabled={saving || !pathInput.trim()}
+                htmlType="submit"
+                loading={saving}
+                type="primary"
+              >
                 {saving ? t.common.saving : t.sessions.addProject}
               </Button>
             </DialogFooter>

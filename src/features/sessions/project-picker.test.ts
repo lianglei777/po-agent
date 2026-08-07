@@ -21,7 +21,7 @@ describe("project picker interaction contract", () => {
     expect(picker).toContain("addSelectedProject");
     expect(picker).toContain("<Input");
     expect(picker).toContain("autoFocus");
-    expect(picker).toContain('type="submit"');
+    expect(picker).toContain('htmlType="submit"');
     expect(picker).toContain("max-h-[calc(100vh-2rem)]");
     expect(picker).toContain("{!browseOpen ? (");
     expect(picker).toMatch(/!browseOpen\s\?\s\([\s\S]*<DialogDescription>/);

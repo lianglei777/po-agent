@@ -1,16 +1,10 @@
 import {
   Languages,
   PanelLeftClose,
-  PanelLeftOpen,
   Settings,
 } from "@/components/icons";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Tooltip } from "antd";
 import { ProjectNavigation } from "@/features/sessions/project-navigation";
 import type { SessionNavigationController } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
@@ -54,27 +48,19 @@ export function WorkspaceSidebar({
             width={32}
           />
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={
-                compact
-                  ? t.workspace.expandPrimaryNavigation
-                  : t.workspace.collapsePrimaryNavigation
-              }
-              onClick={onToggleCompact}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              {compact ? <PanelLeftOpen /> : <PanelLeftClose />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side={compact ? "right" : "bottom"}>
-            {compact
-              ? t.workspace.expandPrimaryNavigation
-              : t.workspace.collapsePrimaryNavigation}
-          </TooltipContent>
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement={compact ? "right" : "bottom"}
+          title={t.workspace.collapsePrimaryNavigation}
+        >
+          <Button
+            aria-label={t.workspace.collapsePrimaryNavigation}
+            htmlType="button"
+            icon={<PanelLeftClose />}
+            onClick={onToggleCompact}
+            size="small"
+            type="text"
+          />
         </Tooltip>
       </div>
 
@@ -92,31 +78,32 @@ export function WorkspaceSidebar({
           label={t.workspace.settings}
           onClick={onOpenSettings}
         />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={
-                nextLocale === "zh"
-                  ? t.common.switchToChinese
-                  : t.common.switchToEnglish
-              }
-              className={
-                compact
-                  ? "size-5! shrink-0! p-0!"
-                  : "size-8! shrink-0! p-0!"
-              }
-              onClick={() => setLocale(nextLocale)}
-              type="button"
-              variant="ghost"
-            >
-              <Languages className="size-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side={compact ? "right" : "top"}>
-            {nextLocale === "zh"
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement={compact ? "right" : "top"}
+          title={
+            nextLocale === "zh"
               ? t.common.switchToChinese
-              : t.common.switchToEnglish}
-          </TooltipContent>
+              : t.common.switchToEnglish
+          }
+        >
+          <Button
+            aria-label={
+              nextLocale === "zh"
+                ? t.common.switchToChinese
+                : t.common.switchToEnglish
+            }
+            className={
+              compact
+                ? "size-6! shrink-0! p-0!"
+                : "size-8! shrink-0! p-0!"
+            }
+            htmlType="button"
+            icon={<Languages className="size-4" />}
+            onClick={() => setLocale(nextLocale)}
+            size="small"
+            type="text"
+          />
         </Tooltip>
       </div>
     </div>
@@ -137,24 +124,26 @@ function SidebarIconAction({
   onClick: () => void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-current={active ? "page" : undefined}
-          aria-label={label}
-          className={
-            compact
-              ? "size-5! shrink-0! p-0!"
-              : "size-8! shrink-0! p-0!"
-          }
-          onClick={onClick}
-          type="button"
-          variant={active ? "secondary" : "ghost"}
-        >
-          {icon}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side={compact ? "right" : "top"}>{label}</TooltipContent>
+    <Tooltip
+      mouseEnterDelay={0.35}
+      placement={compact ? "right" : "top"}
+      title={label}
+    >
+      <Button
+        aria-current={active ? "page" : undefined}
+        aria-label={label}
+        className={
+          compact
+            ? "size-6! shrink-0! p-0!"
+            : "size-8! shrink-0! p-0!"
+        }
+        color={active ? "primary" : "default"}
+        htmlType="button"
+        icon={icon}
+        onClick={onClick}
+        size="small"
+        variant={active ? "filled" : "text"}
+      />
     </Tooltip>
   );
 }

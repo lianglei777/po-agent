@@ -7,14 +7,8 @@ import {
   Search,
 } from "@/components/icons";
 import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button, Input, Tooltip } from "antd";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/use-i18n";
 import { getProjectName, getSessionTitle } from "./session-utils";
 import { SessionTree } from "./session-tree";
@@ -46,22 +40,20 @@ export function ConversationSidebar({
     <div className="flex h-full min-h-0 flex-col bg-[var(--conversation-bg)]">
       {primaryNavigationHidden ? (
         <header className="flex h-11 flex-none items-center border-b border-line-subtle px-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label={t.workspace.expandPrimaryNavigation}
-                className="text-muted"
-                onClick={onExpandPrimaryNavigation}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <PanelLeftOpen />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t.workspace.expandPrimaryNavigation}
-            </TooltipContent>
+          <Tooltip
+            mouseEnterDelay={0.35}
+            placement="bottom"
+            title={t.workspace.expandPrimaryNavigation}
+          >
+            <Button
+              aria-label={t.workspace.expandPrimaryNavigation}
+              className="text-muted"
+              htmlType="button"
+              icon={<PanelLeftOpen />}
+              onClick={onExpandPrimaryNavigation}
+              size="small"
+              type="text"
+            />
           </Tooltip>
         </header>
       ) : null}
@@ -72,43 +64,38 @@ export function ConversationSidebar({
             {projectName}
           </p>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              aria-label={t.workspace.hideConversations}
-              onClick={onClose}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <PanelRight />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t.workspace.hideConversations}</TooltipContent>
+        <Tooltip mouseEnterDelay={0.35} title={t.workspace.hideConversations}>
+          <Button
+            aria-label={t.workspace.hideConversations}
+            htmlType="button"
+            icon={<PanelRight />}
+            onClick={onClose}
+            size="small"
+            type="text"
+          />
         </Tooltip>
       </header>
 
       <div className="space-y-2 px-3 pb-3">
         <Button
-          className="w-full justify-center"
+          block
           disabled={!navigation.selectedCwd}
+          htmlType="button"
+          icon={<MessageSquarePlus />}
           onClick={navigation.newSession}
-          type="button"
-          variant="outline"
         >
-          <MessageSquarePlus />
           {t.workspace.newChat}
         </Button>
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-dim" />
-          <Input
-            aria-label={t.sessions.searchSessions}
-            className="h-8 pl-8 text-xs"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t.sessions.searchSessions}
-            value={query}
-          />
-        </div>
+        <Input
+          allowClear
+          aria-label={t.sessions.searchSessions}
+          className="text-xs"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t.sessions.searchSessions}
+          prefix={<Search className="size-3.5 text-dim" />}
+          size="small"
+          value={query}
+        />
       </div>
 
       <ScrollArea

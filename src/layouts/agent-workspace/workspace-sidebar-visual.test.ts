@@ -52,8 +52,8 @@ describe("workspace primary navigation", () => {
     expect(source).toContain("border-line-strong");
     expect(source).toContain("flex items-center");
     expect(source).not.toContain("onOpenSystemPrompt");
-    expect(source).toContain("<TooltipContent");
-    expect(source).toContain('"size-5! shrink-0! p-0!"');
+    expect(source).toContain('import { Button, Tooltip } from "antd"');
+    expect(source).toContain('"size-6! shrink-0! p-0!"');
     expect(source).toContain('"size-8! shrink-0! p-0!"');
     expect(source).toContain('<Settings className="size-4" />');
     expect(source).toContain('<Languages className="size-4" />');
@@ -62,14 +62,15 @@ describe("workspace primary navigation", () => {
 
   it("keeps project titles stable when the more action appears", () => {
     expect(projectSource).toContain("justify-start!");
-    expect(projectSource).toContain("w-8 shrink-0 opacity-0");
+    expect(projectSource).toContain("flex w-8 shrink-0 transition-opacity");
     expect(projectSource).toContain("group-hover:opacity-100");
+    expect(projectSource).toContain("openProjectMenu === project.path");
     expect(projectSource).not.toContain("hidden group-hover:flex");
   });
 
   it("supports compact, expanded, and fully hidden navigation without glass effects", () => {
     expect(source).toContain('compact ? "px-1.5 py-2.5" : "px-3 py-3"');
-    expect(source).toContain("t.workspace.expandPrimaryNavigation");
+    expect(source).not.toContain("t.workspace.expandPrimaryNavigation");
     expect(source).toContain("t.workspace.collapsePrimaryNavigation");
     expect(conversationSource).toContain("primaryNavigationHidden");
     expect(conversationSource).toContain(

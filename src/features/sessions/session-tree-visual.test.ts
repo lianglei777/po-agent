@@ -26,12 +26,11 @@ describe("session tree destructive actions", () => {
       "absolute right-1 top-1/2 -translate-y-1/2",
     );
     // hover 时通过 display 切换显示按钮，不使用透明度渐变
-    expect(sessionTreeSource).toContain("hidden bg-inherit group-hover:flex");
-    expect(sessionTreeSource).not.toContain("opacity-0");
-    expect(sessionTreeSource).not.toContain("group-hover:opacity-100");
-    expect(sessionTreeSource).not.toContain(
-      "hidden items-center group-hover:flex",
-    );
+    expect(sessionTreeSource).toContain("opacity-0 transition-opacity");
+    expect(sessionTreeSource).toContain("group-hover:opacity-100");
+    expect(sessionTreeSource).toContain("group-focus-within:opacity-100");
+    expect(sessionTreeSource).toContain('menuOpen ? "opacity-100"');
+    expect(sessionTreeSource).not.toContain("hidden bg-inherit group-hover:flex");
     expect(conversationSidebarSource).toContain(
       'viewportClassName="[&>div]:block!"',
     );
@@ -40,10 +39,9 @@ describe("session tree destructive actions", () => {
   it("uses a dropdown menu for row actions", () => {
     // hover 时显示 "..." 按钮，点击展开菜单提供重命名和删除选项
     expect(sessionTreeSource).toContain("MoreHorizontal");
-    expect(sessionTreeSource).toContain("<DropdownMenu");
-    expect(sessionTreeSource).toContain("<DropdownMenuTrigger");
-    expect(sessionTreeSource).toContain("<DropdownMenuContent");
-    expect(sessionTreeSource).toContain("<DropdownMenuItem");
+    expect(sessionTreeSource).toContain("<Dropdown");
+    expect(sessionTreeSource).toContain('trigger={["click"]}');
+    expect(sessionTreeSource).toContain("onOpenChange={setMenuOpen}");
     expect(sessionTreeSource).toContain("t.sessions.sessionActions");
     // 菜单项保留图标 + 文字，维持可发现性
     expect(sessionTreeSource).toContain("<Pencil");
@@ -52,9 +50,8 @@ describe("session tree destructive actions", () => {
     expect(sessionTreeSource).toContain("onDoubleClick");
   });
 
-  it("uses the shared start-aligned menu behavior in the session sidebar", () => {
-    expect(sessionTreeSource).toContain("<DropdownMenuContent");
-    expect(sessionTreeSource).toContain('align="start"');
+  it("uses the Ant Design dropdown placement in the session sidebar", () => {
+    expect(sessionTreeSource).toContain('placement="bottomRight"');
   });
 
   it("uses compact single-line Codex-style session rows", () => {

@@ -1,10 +1,5 @@
 import { Images, MessageSquare, PanelLeft, PanelLeftOpen } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Button, Segmented, Tooltip } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import type { SessionTreeNode } from "@/features/chat/agent-types";
 import { BranchHistory } from "@/features/chat/branch-history";
@@ -74,26 +69,25 @@ export function WorkspaceTopBar({
       <div className="flex-1" />
 
       {sessionSurface && onSessionSurfaceChange ? (
-        <div
+        <Segmented
           aria-label={t.workspace.sessionView}
-          className="mr-2 flex items-center rounded-control border border-line-subtle bg-subtle p-0.5"
-          role="tablist"
-        >
-          <SessionSurfaceButton
-            active={sessionSurface === "chat"}
-            label={t.workspace.sessionChatView}
-            onClick={() => onSessionSurfaceChange("chat")}
-          >
-            <MessageSquare />
-          </SessionSurfaceButton>
-          <SessionSurfaceButton
-            active={sessionSurface === "generation"}
-            label={t.workspace.sessionGenerationView}
-            onClick={() => onSessionSurfaceChange("generation")}
-          >
-            <Images />
-          </SessionSurfaceButton>
-        </div>
+          className="mr-2"
+          onChange={(value) => onSessionSurfaceChange(value)}
+          options={[
+            {
+              icon: <MessageSquare />,
+              label: t.workspace.sessionChatView,
+              value: "chat" as const,
+            },
+            {
+              icon: <Images />,
+              label: t.workspace.sessionGenerationView,
+              value: "generation" as const,
+            },
+          ]}
+          size="small"
+          value={sessionSurface}
+        />
       ) : null}
 
       {/* 分支历史按钮 */}
@@ -115,33 +109,6 @@ export function WorkspaceTopBar({
   );
 }
 
-function SessionSurfaceButton({
-  active,
-  children,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      aria-selected={active}
-      className={active
-        ? "flex h-7 items-center gap-1.5 rounded-md bg-canvas px-2 text-caption font-medium text-primary shadow-sm [&_svg]:size-3.5"
-        : "flex h-7 items-center gap-1.5 rounded-md px-2 text-caption text-muted hover:bg-hover hover:text-primary [&_svg]:size-3.5"}
-      onClick={onClick}
-      role="tab"
-      type="button"
-    >
-      {children}
-      {label}
-    </button>
-  );
-}
-
 function TopBarIconButton({
   children,
   label,
@@ -152,20 +119,16 @@ function TopBarIconButton({
   onClick: () => void;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-label={label}
-          className="text-muted"
-          onClick={onClick}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom">{label}</TooltipContent>
+    <Tooltip mouseEnterDelay={0.35} placement="bottom" title={label}>
+      <Button
+        aria-label={label}
+        className="text-muted"
+        htmlType="button"
+        icon={children}
+        onClick={onClick}
+        size="small"
+        type="text"
+      />
     </Tooltip>
   );
 }

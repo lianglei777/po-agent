@@ -29,8 +29,10 @@ describe("unified session surfaces", () => {
     expect(storeSource).toContain("setSessionSurface");
     expect(workspaceSource).toContain('sessionSurface === "generation"');
     expect(workspaceSource).toContain("onSessionSurfaceChange");
-    expect(topBarSource).toContain('role="tablist"');
-    expect(topBarSource).toContain('role="tab"');
+    expect(topBarSource).toContain("<Segmented");
+    expect(topBarSource).toContain("t.workspace.sessionView");
+    expect(topBarSource).toContain('value: "chat" as const');
+    expect(topBarSource).toContain('value: "generation" as const');
   });
 
   it("does not special-case legacy generation-only sessions", () => {
