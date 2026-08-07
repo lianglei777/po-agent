@@ -46,7 +46,8 @@ export function ProjectInstructionsEditor({
   ...props
 }: ProjectInstructionsEditorProps) {
   return (
-    <InstructionsStoreProvider>
+    // 项目切换时重建 Store，确保首帧不会复用上一个项目的指令草稿。
+    <InstructionsStoreProvider key={props.cwd}>
       <ProjectInstructionsEditorContent {...props} />
     </InstructionsStoreProvider>
   );
@@ -106,27 +107,34 @@ function ProjectInstructionsEditorContent({
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setProjectEditorField("loading", true);
     setProjectEditorField("error", "");
     try {
-      const result = await getProjectInstructions(cwd);
+      const result = await getProjectInstructions(cwd, signal);
+      if (signal?.aborted) return;
       setProjectEditorField("doc", result.project);
       setProjectEditorField("draft", result.project.content);
       setProjectEditorField("conflict", false);
     } catch (cause) {
+      if (signal?.aborted) return;
       setProjectEditorField(
         "error",
         cause instanceof Error ? cause.message : t.instructions.errorLoad,
       );
     } finally {
-      setProjectEditorField("loading", false);
+      if (!signal?.aborted) setProjectEditorField("loading", false);
     }
   }, [cwd, setProjectEditorField, t.instructions.errorLoad]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    // 取消旧项目请求，避免迟到响应覆盖当前项目的 AGENTS.md。
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => void load(controller.signal), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [load]);
 
   async function save(force = false) {

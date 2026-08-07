@@ -22,4 +22,11 @@ describe("project instructions editor visual contract", () => {
     expect(source).toContain("t.instructions.saveBeforeApply");
     expect(source).toContain("t.instructions.reloadUnavailableWhileRunning");
   });
+
+  it("isolates and cancels project-specific instruction loads", () => {
+    expect(source).toContain("key={props.cwd}");
+    expect(source).toContain("new AbortController()");
+    expect(source).toContain("getProjectInstructions(cwd, signal)");
+    expect(source).toContain("controller.abort()");
+  });
 });

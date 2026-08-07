@@ -73,6 +73,7 @@ export type ContentGenerationActions = {
     hasCredential: boolean,
     providerEnabled: boolean,
   ) => void;
+  beginSettingsLoad: () => void;
   updateRoute: (next: GenerationRouteDto) => void;
   setHasCredential: (next: boolean) => void;
   setProviderEnabled: (next: boolean) => void;
@@ -186,6 +187,8 @@ export function createContentGenerationStore(
         settingsError: "",
         settingsLoading: false,
       })),
+    beginSettingsLoad: () =>
+      set({ settingsLoading: true, settingsError: "" }),
     updateRoute: (next) =>
       set((state) => {
         const routes = state.routes.map((route) =>

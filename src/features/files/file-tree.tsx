@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   AtSign,
@@ -75,25 +75,34 @@ export function FileTree({
     ),
   );
   const { t } = useI18n();
+  // 当前项目的目录请求共享取消信号，切换项目时统一失效。
+  const treeRequestRef = useRef(new AbortController());
 
   const load = useCallback(
-    async (path: string) => {
+    async (
+      path: string,
+      signal: AbortSignal = treeRequestRef.current.signal,
+    ) => {
       setLoading((current) => new Set(current).add(path));
       try {
-        const entries = await loadDirectory(path);
+        const entries = await loadDirectory(path, signal);
+        if (signal.aborted) return null;
         setEntriesByPath((current) => ({ ...current, [path]: entries }));
         setError("");
         return entries;
       } catch (cause) {
+        if (signal.aborted) return null;
         setError(
           cause instanceof Error ? cause.message : t.files.unableToLoadFiles,
         );
       } finally {
-        setLoading((current) => {
-          const next = new Set(current);
-          next.delete(path);
-          return next;
-        });
+        if (!signal.aborted) {
+          setLoading((current) => {
+            const next = new Set(current);
+            next.delete(path);
+            return next;
+          });
+        }
       }
       return null;
     },
@@ -101,9 +110,18 @@ export function FileTree({
   );
 
   useEffect(() => {
+    treeRequestRef.current.abort();
+    const controller = new AbortController();
+    treeRequestRef.current = controller;
     resetTree();
-    const timer = window.setTimeout(() => void load(cwd), 0);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(
+      () => void load(cwd, controller.signal),
+      0,
+    );
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [cwd, load, resetTree]);
 
   const refreshDirectory = useCallback(

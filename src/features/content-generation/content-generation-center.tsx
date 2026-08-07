@@ -58,6 +58,7 @@ export function ContentGenerationCenter({
     applyCenterData,
     centerError,
     centerLoading,
+    centerSessionId,
     pendingActionId,
     replaceRun,
     routes,
@@ -77,6 +78,7 @@ export function ContentGenerationCenter({
         applyCenterData,
         centerError,
         centerLoading,
+        centerSessionId,
         pendingActionId,
         replaceRun,
         routes,
@@ -94,6 +96,7 @@ export function ContentGenerationCenter({
         applyCenterData,
         centerError,
         centerLoading,
+        centerSessionId,
         pendingActionId,
         replaceRun,
         routes,
@@ -111,6 +114,8 @@ export function ContentGenerationCenter({
   );
   const endOfConversation = useRef<HTMLDivElement>(null);
   const centerRevisionRef = useRef(0);
+  // Workspace Store 会跨 Session 存活，所有权确认前不能展示旧会话数据。
+  const ownsCenterSession = centerSessionId === session.id;
   const enabledRoutes = useMemo(
     () => routes.filter((item) => item.enabled),
     [routes],
@@ -254,7 +259,7 @@ export function ContentGenerationCenter({
     }
   }
 
-  if (centerLoading) {
+  if (!ownsCenterSession || centerLoading) {
     return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
   }
   if (!route) {

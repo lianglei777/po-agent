@@ -73,4 +73,9 @@ describe("content generation conversation", () => {
       .toBeLessThan(composerSource.indexOf("<AssetSlotInput"));
     expect(source).not.toContain("contentGenerationApiId");
   });
+
+  it("hides persisted center state until the current session owns it", () => {
+    expect(source).toContain("centerSessionId === session.id");
+    expect(source).toContain("!ownsCenterSession || centerLoading");
+  });
 });

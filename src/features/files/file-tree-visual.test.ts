@@ -24,4 +24,10 @@ describe("file tree", () => {
     expect(source).toContain("min-w-0 flex-1 flex-col overflow-hidden");
     expect(source).not.toContain("bg-panel");
   });
+
+  it("cancels directory requests when the project tree changes", () => {
+    expect(source).toContain("treeRequestRef.current.abort()");
+    expect(source).toContain("loadDirectory(path, signal)");
+    expect(source).toContain("if (signal.aborted) return null");
+  });
 });

@@ -29,4 +29,10 @@ describe("content generation settings", () => {
     expect(source).toContain("showApiKey");
     expect(source).toContain("removeCredentialConfirm");
   });
+
+  it("returns to loading state whenever the persisted settings view mounts", () => {
+    expect(source).toContain("beginSettingsLoad();");
+    expect(source).toContain("loading || !settingsReady");
+    expect(source).toContain("disabled={displayLoading || saving}");
+  });
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getSystemInstructions } from "./api";
+import { getProjectInstructions, getSystemInstructions } from "./api";
 import { InstructionApiError } from "./types";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -30,5 +30,28 @@ describe("instructions api", () => {
       message: "Instruction file changed",
       status: 409,
     });
+  });
+
+  it("forwards cancellation to project instruction requests", async () => {
+    const request = vi.fn(async () =>
+      Response.json({
+        success: true,
+        project: {
+          content: "",
+          exists: false,
+          filePath: "D:/code/project/AGENTS.md",
+          revision: "absent",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+    const controller = new AbortController();
+
+    await getProjectInstructions("D:/code/project", controller.signal);
+
+    expect(request).toHaveBeenCalledWith(
+      "/api/instructions/project?cwd=D%3A%2Fcode%2Fproject",
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 });

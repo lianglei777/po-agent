@@ -27,8 +27,11 @@ export function ContentGenerationSettings({
   const labels = t.contentGeneration;
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  // Store 会保留上次结果，本地就绪标记用于阻止重新挂载时展示陈旧控件。
+  const [settingsReady, setSettingsReady] = useState(false);
   const {
     applySettingsData,
+    beginSettingsLoad,
     hasCredential,
     providerEnabled,
     routes,
@@ -47,6 +50,7 @@ export function ContentGenerationSettings({
     useShallow(
       ({
         applySettingsData,
+        beginSettingsLoad,
         hasCredential,
         providerEnabled,
         routes,
@@ -63,6 +67,7 @@ export function ContentGenerationSettings({
         updatingId,
       }) => ({
         applySettingsData,
+        beginSettingsLoad,
         hasCredential,
         providerEnabled,
         routes,
@@ -83,6 +88,7 @@ export function ContentGenerationSettings({
 
   useEffect(() => {
     let disposed = false;
+    beginSettingsLoad();
     void Promise.all([
       loadRunningHubGenerationCredential(),
       loadGenerationRoutes(),
@@ -97,17 +103,28 @@ export function ContentGenerationSettings({
         );
       })
       .catch((cause) => !disposed && setSettingsError(messageOf(cause)))
-      .finally(() => !disposed && setSettingsLoading(false));
+      .finally(() => {
+        if (disposed) return;
+        setSettingsLoading(false);
+        setSettingsReady(true);
+      });
     return () => {
       disposed = true;
     };
-  }, [applySettingsData, setSettingsError, setSettingsLoading]);
+  }, [
+    applySettingsData,
+    beginSettingsLoad,
+    setSettingsError,
+    setSettingsLoading,
+  ]);
 
   useEffect(() => {
     onDirtyChange?.(apiKey.length > 0);
   }, [apiKey, onDirtyChange]);
 
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
+  const displayLoading = loading || !settingsReady;
 
   async function saveCredential() {
     const value = apiKey.trim();
@@ -179,7 +196,7 @@ export function ContentGenerationSettings({
               <h3 className="text-sm font-semibold text-primary">{labels.runningHubEnabled}</h3>
               <p className="mt-1 text-xs text-muted">{labels.runningHubEnabledDescription}</p>
             </div>
-            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} loading={updatingId === "runninghub"} onCheckedChange={(enabled) => void toggleProvider(enabled)} />
+            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} disabled={displayLoading} loading={updatingId === "runninghub"} onCheckedChange={(enabled) => void toggleProvider(enabled)} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-primary">{labels.runningHubCredential}</h3>
@@ -197,7 +214,7 @@ export function ContentGenerationSettings({
                   <Input
                     autoComplete="off"
                     className="pr-10"
-                    disabled={loading || saving}
+                    disabled={displayLoading || saving}
                     onChange={(event) => setApiKey(event.target.value)}
                     placeholder={hasCredential ? labels.apiKeyStored : labels.apiKeyPlaceholder}
                     type={showApiKey ? "text" : "password"}
@@ -214,13 +231,13 @@ export function ContentGenerationSettings({
                     {showApiKey ? <EyeOff /> : <Eye />}
                   </Button>
                 </div>
-                <Button disabled={!apiKey.trim() || loading || saving} onClick={() => void saveCredential()} type="button">
+                <Button disabled={!apiKey.trim() || displayLoading || saving} onClick={() => void saveCredential()} type="button">
                   {saving ? t.common.saving : t.common.save}
                 </Button>
               </div>
             </label>
             {hasCredential ? (
-              <Button className="mt-3" disabled={saving} onClick={() => void removeCredential()} size="sm" type="button" variant="ghost">
+              <Button className="mt-3" disabled={displayLoading || saving} onClick={() => void removeCredential()} size="sm" type="button" variant="ghost">
                 <Trash2 />
                 {labels.removeCredential}
               </Button>
@@ -235,7 +252,7 @@ export function ContentGenerationSettings({
             <p className="mt-1 text-xs text-muted">{labels.availableRoutesDescription}</p>
           </div>
           <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
-            {loading ? <p className="p-4 text-xs text-muted">{t.common.loading}</p> : routes.map((route) => (
+            {displayLoading ? <p className="p-4 text-xs text-muted">{t.common.loading}</p> : routes.map((route) => (
               <div className="flex items-center justify-between gap-4 p-4" key={route.id}>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-primary">{route.name}</p>

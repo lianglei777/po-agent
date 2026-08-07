@@ -28,6 +28,7 @@ describe("project panel", () => {
     expect(source).toContain("settingsContent");
     expect(source).toContain("cwd={cwd}");
     expect(source).toContain("projectName={projectName}");
+    expect(source).toContain("key={cwd}");
   });
 
   it("owns the close action for the expanded inspector", () => {

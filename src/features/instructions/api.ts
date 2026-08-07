@@ -61,12 +61,14 @@ export async function deleteSystemInstructions(
 /** 获取项目指令。 */
 export async function getProjectInstructions(
   cwd: string,
+  signal?: AbortSignal,
 ): Promise<ProjectInstructionsResponse> {
   const response = await fetch(
     `/api/instructions/project?cwd=${encodeURIComponent(cwd)}`,
     {
       method: "GET",
       headers: { "Content-Type": "application/json" },
+      signal,
     },
   );
   if (!response.ok) throw await parseError(response);

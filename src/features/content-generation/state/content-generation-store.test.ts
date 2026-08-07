@@ -72,6 +72,22 @@ describe("content generation store", () => {
     expect(store.getState().selectedRouteId).toBe("route-b");
   });
 
+  it("starts a fresh settings load without clearing shared route data", () => {
+    const store = createContentGenerationStore({
+      routes: [route("route-a")],
+      settingsLoading: false,
+      settingsError: "stale error",
+    });
+
+    store.getState().beginSettingsLoad();
+
+    expect(store.getState()).toMatchObject({
+      routes: [route("route-a")],
+      settingsLoading: true,
+      settingsError: "",
+    });
+  });
+
   it("replaces a durable run while preserving its list position", () => {
     const store = createContentGenerationStore({
       runs: [run("run-a", "queued"), run("run-b", "queued")],

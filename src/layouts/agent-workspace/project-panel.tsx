@@ -159,6 +159,7 @@ export function ProjectPanel({
           <FilePanel
             cwd={cwd}
             file={file}
+            key={cwd}
             onAtMention={onAtMention}
             onOpenFile={onOpenFile}
             refreshKey={refreshKey}
