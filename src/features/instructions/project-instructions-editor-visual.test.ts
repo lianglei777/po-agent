@@ -8,6 +8,17 @@ const source = readFileSync(
 );
 
 describe("project instructions editor visual contract", () => {
+  it("uses Ant Design for standard editor controls and feedback", () => {
+    expect(source).toContain(
+      'import { Alert, Button, Input, Skeleton, Tag } from "antd"',
+    );
+    expect(source).toContain("<Input.TextArea");
+    expect(source).toContain("<Skeleton");
+    expect(source).not.toContain("<Alert message=");
+    expect(source).not.toContain('from "@/components/ui/button"');
+    expect(source).not.toContain('from "@/components/ui/textarea"');
+  });
+
   it("offers an explicit apply action after the saved file becomes stale", () => {
     expect(source).toContain("agentId && needsApply");
     expect(source).toContain("reloadInstructions(agentId)");

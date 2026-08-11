@@ -1,16 +1,14 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { Tag } from "antd";
+import { Alert, Button, Empty, Input, Skeleton, Tag } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import {
   ChevronRight,
   ExternalLink,
-  LoaderCircle,
   RotateCw,
   Trash2,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ABSENT_REVISION,
   type InstructionDocument,
@@ -350,50 +347,47 @@ function SystemPromptWorkbenchContent({
         </header>
 
         {agentId && needsApply ? (
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-warning/30 bg-warning/8 px-6 py-3">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-warning">
-                {t.instructions.sessionOutdated}
-              </p>
-              <p className="mt-0.5 text-caption text-muted">
+          <Alert
+            action={(
+              <Button
+                disabled={isRunning || reloadBusy}
+                htmlType="button"
+                icon={<RotateCw />}
+                loading={reloadBusy}
+                onClick={() => void handleReload()}
+                size="small"
+              >
+                {reloadBusy
+                  ? t.instructions.applying
+                  : t.instructions.applyToSession}
+              </Button>
+            )}
+            className="shrink-0 rounded-none border-x-0"
+            description={(
+              <>
                 {isRunning
                   ? t.instructions.reloadUnavailableWhileRunning
                   : t.instructions.sessionOutdatedDescription}
-              </p>
-              {reloadError ? (
-                <p
-                  className="mt-1 text-caption text-destructive-text"
-                  role="alert"
-                >
-                  {reloadError}
-                </p>
-              ) : null}
-            </div>
-            <Button
-              disabled={isRunning || reloadBusy}
-              onClick={() => void handleReload()}
-              size="sm"
-              variant="outline"
-            >
-              {reloadBusy ? (
-                <LoaderCircle className="animate-spin" />
-              ) : (
-                <RotateCw />
-              )}
-              {reloadBusy
-                ? t.instructions.applying
-                : t.instructions.applyToSession}
-            </Button>
-          </div>
+                {reloadError ? (
+                  <span className="mt-1 block text-destructive-text">
+                    {reloadError}
+                  </span>
+                ) : null}
+              </>
+            )}
+            showIcon
+            title={t.instructions.sessionOutdated}
+            type={reloadError ? "error" : "warning"}
+          />
         ) : null}
 
         {agentId && !needsApply && reloadSuccess ? (
-          <div
-            className="shrink-0 border-b border-line-subtle bg-subtle px-6 py-2 text-caption text-success-text"
-            role="status"
-          >
-            {t.instructions.applied}
-          </div>
+          <Alert
+            className="shrink-0 rounded-none border-x-0"
+            showIcon
+            title={t.instructions.applied}
+            type="success"
+          />
         ) : null}
 
         <div className="grid min-h-0 flex-1 grid-cols-[14rem_minmax(0,1fr)]">
@@ -485,13 +479,14 @@ function SystemPromptWorkbenchContent({
           <div className="min-w-0 flex-1">
             {activeView === "global" && globalState.doc?.exists ? (
               <Button
-                className="text-destructive-text hover:bg-destructive/8 hover:text-destructive-text"
+                danger
                 disabled={globalState.deleting || globalState.loading}
+                htmlType="button"
+                icon={<Trash2 />}
                 onClick={() => setShowDeleteConfirm(true)}
-                size="sm"
-                variant="ghost"
+                size="small"
+                type="text"
               >
-                <Trash2 />
                 {t.instructions.delete}
               </Button>
             ) : null}
@@ -510,19 +505,18 @@ function SystemPromptWorkbenchContent({
                 disabled={
                   !globalDirty || globalState.saving || globalState.loading
                 }
+                htmlType="button"
+                loading={globalState.saving}
                 onClick={() => void saveGlobal()}
+                type="primary"
               >
-                {globalState.saving ? (
-                  <LoaderCircle className="animate-spin" />
-                ) : null}
                 {globalState.saving
                   ? t.instructions.saving
                   : t.instructions.save}
               </Button>
             ) : null}
             {activeView === "project" && cwd && onOpenProjectInstructions ? (
-              <Button onClick={handleOpenProjectInstructions}>
-                <ExternalLink />
+              <Button htmlType="button" icon={<ExternalLink />} onClick={handleOpenProjectInstructions}>
                 {projectDoc?.exists
                   ? t.instructions.editInFileWorkspace
                   : t.instructions.createInFileWorkspace}
@@ -541,6 +535,7 @@ function SystemPromptWorkbenchContent({
         onCancel={() => setShowDeleteConfirm(false)}
         onConfirm={() => void deleteGlobal()}
         open={showDeleteConfirm}
+        pending={globalState.deleting}
         title={t.instructions.deleteGlobalTitle}
       />
     </>
@@ -577,16 +572,20 @@ function EffectivePromptView({ prompt }: { prompt?: string | null }) {
           </pre>
         </ScrollArea>
       ) : (
-        <div className="grid min-h-0 flex-1 place-items-center px-8 text-center">
-          <div className="max-w-md">
-            <p className="text-sm font-medium text-primary">
-              {t.instructions.noActiveSystemPromptTitle}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              {t.instructions.noActiveSystemPrompt}
-            </p>
-          </div>
-        </div>
+        <Empty
+          className="my-auto px-8"
+          description={(
+            <>
+              <p className="font-medium text-primary">
+                {t.instructions.noActiveSystemPromptTitle}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {t.instructions.noActiveSystemPrompt}
+              </p>
+            </>
+          )}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       )}
     </>
   );
@@ -632,12 +631,7 @@ function ProjectInstructionsView({
         </p>
       </div>
       {loading ? (
-        <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted">
-          <span className="flex items-center gap-2">
-            <LoaderCircle className="animate-spin" />
-            {t.common.loading}
-          </span>
-        </div>
+        <Skeleton active className="p-5" paragraph={{ rows: 7 }} title={false} />
       ) : doc?.content ? (
         <ScrollArea className="min-h-0 flex-1">
           <pre className="min-h-full whitespace-pre-wrap break-words p-5 font-ui-mono text-xs leading-5 text-primary">
@@ -645,16 +639,20 @@ function ProjectInstructionsView({
           </pre>
         </ScrollArea>
       ) : (
-        <div className="grid min-h-0 flex-1 place-items-center px-8 text-center">
-          <div className="max-w-md">
-            <p className="text-sm font-medium text-primary">
-              {t.instructions.noProjectInstructionsTitle}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              {t.instructions.noProjectInstructionsDescription}
-            </p>
-          </div>
-        </div>
+        <Empty
+          className="my-auto px-8"
+          description={(
+            <>
+              <p className="font-medium text-primary">
+                {t.instructions.noProjectInstructionsTitle}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {t.instructions.noProjectInstructionsDescription}
+              </p>
+            </>
+          )}
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+        />
       )}
     </>
   );
@@ -705,37 +703,32 @@ function GlobalPromptEditor({
         </p>
       </div>
       {loading ? (
-        <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted">
-          <span className="flex items-center gap-2">
-            <LoaderCircle className="animate-spin" />
-            {t.common.loading}
-          </span>
-        </div>
+        <Skeleton active className="p-5" paragraph={{ rows: 7 }} title={false} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-          <Textarea
+          <Input.TextArea
             className="min-h-0 flex-1 resize-none font-ui-mono text-xs leading-5"
             onChange={(event) => onChange(event.target.value)}
             placeholder={t.instructions.globalContentPlaceholder}
             value={draft}
           />
           {error ? (
-            <div
-              className="shrink-0 space-y-2 rounded-lg border border-destructive/25 bg-destructive/8 p-3"
-              role="alert"
-            >
-              <p className="text-xs text-destructive-text">{error}</p>
-              {conflict ? (
+            <Alert
+              action={conflict ? (
                 <div className="flex gap-2">
-                  <Button onClick={onForceSave} size="sm" variant="destructive">
+                  <Button danger htmlType="button" onClick={onForceSave} size="small" type="primary">
                     {t.instructions.conflictOverwrite}
                   </Button>
-                  <Button onClick={onReload} size="sm" variant="outline">
+                  <Button htmlType="button" onClick={onReload} size="small">
                     {t.instructions.conflictReload}
                   </Button>
                 </div>
-              ) : null}
-            </div>
+              ) : undefined}
+              className="shrink-0"
+              showIcon
+              title={error}
+              type="error"
+            />
           ) : null}
         </div>
       )}
@@ -810,6 +803,7 @@ function ConfirmDialog({
   confirmLabel,
   onCancel,
   onConfirm,
+  pending,
 }: {
   open: boolean;
   title: string;
@@ -817,6 +811,7 @@ function ConfirmDialog({
   confirmLabel: string;
   onCancel: () => void;
   onConfirm: () => void;
+  pending: boolean;
 }) {
   const { t } = useI18n();
 
@@ -828,10 +823,10 @@ function ConfirmDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button autoFocus onClick={onCancel} variant="outline">
+          <Button autoFocus disabled={pending} htmlType="button" onClick={onCancel}>
             {t.common.cancel}
           </Button>
-          <Button onClick={onConfirm} variant="destructive">
+          <Button danger disabled={pending} htmlType="button" loading={pending} onClick={onConfirm} type="primary">
             {confirmLabel}
           </Button>
         </DialogFooter>

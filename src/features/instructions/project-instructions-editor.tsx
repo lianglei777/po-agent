@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
-import { Tag } from "antd";
+import { Alert, Button, Input, Skeleton, Tag } from "antd";
 import { useShallow } from "zustand/react/shallow";
-import { LoaderCircle, RotateCw, Trash2 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { RotateCw, Trash2 } from "@/components/icons";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import {
   ABSENT_REVISION,
   AGENTS_MD_TEMPLATE,
@@ -235,75 +233,76 @@ function ProjectInstructionsEditorContent({
           </div>
           <div className="flex shrink-0 gap-2">
             {!doc?.exists && !draft ? (
-              <Button onClick={() => setProjectEditorField("draft", AGENTS_MD_TEMPLATE)} size="sm" variant="outline">{t.instructions.createTemplate}</Button>
+              <Button htmlType="button" onClick={() => setProjectEditorField("draft", AGENTS_MD_TEMPLATE)} size="small">{t.instructions.createTemplate}</Button>
             ) : null}
-            <Button disabled={!dirty || saving || loading} onClick={() => void save()} size="sm">
-              {saving ? <LoaderCircle className="animate-spin" /> : null}{saving ? t.instructions.saving : t.instructions.save}
+            <Button disabled={!dirty || saving || loading} htmlType="button" loading={saving} onClick={() => void save()} size="small" type="primary">
+              {saving ? t.instructions.saving : t.instructions.save}
             </Button>
             {doc?.exists ? (
-              <Button disabled={deleting || loading} onClick={() => setConfirmDelete(true)} size="sm" variant="outline"><Trash2 />{t.instructions.delete}</Button>
+              <Button danger disabled={deleting || loading} htmlType="button" icon={<Trash2 />} onClick={() => setConfirmDelete(true)} size="small" type="text">{t.instructions.delete}</Button>
             ) : null}
           </div>
         </div>
         {agentId && needsApply ? (
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line-subtle bg-subtle px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-primary">
-                {t.instructions.sessionOutdated}
-              </p>
-              <p className="mt-1 text-caption text-muted">
+          <Alert
+            action={(
+              <Button
+                disabled={dirty || isRunning || applying}
+                htmlType="button"
+                icon={<RotateCw />}
+                loading={applying}
+                onClick={() => void applyToSession()}
+                size="small"
+              >
+                {applying
+                  ? t.instructions.applying
+                  : t.instructions.applyToSession}
+              </Button>
+            )}
+            className="shrink-0 rounded-none border-x-0"
+            description={(
+              <>
                 {dirty
                   ? t.instructions.saveBeforeApply
                   : t.instructions.sessionOutdatedDescription}
-              </p>
-              {isRunning ? (
-                <p className="mt-1 text-caption text-muted">
-                  {t.instructions.reloadUnavailableWhileRunning}
-                </p>
-              ) : null}
-              {applyError ? (
-                <p className="mt-1 text-caption text-destructive-text" role="alert">
-                  {applyError}
-                </p>
-              ) : null}
-            </div>
-            <Button
-              disabled={dirty || isRunning || applying}
-              onClick={() => void applyToSession()}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              {applying ? (
-                <LoaderCircle className="animate-spin" />
-              ) : (
-                <RotateCw />
-              )}
-              {applying
-                ? t.instructions.applying
-                : t.instructions.applyToSession}
-            </Button>
-          </div>
+                {isRunning ? (
+                  <span className="mt-1 block">
+                    {t.instructions.reloadUnavailableWhileRunning}
+                  </span>
+                ) : null}
+                {applyError ? (
+                  <span className="mt-1 block text-destructive-text">
+                    {applyError}
+                  </span>
+                ) : null}
+              </>
+            )}
+            showIcon
+            title={t.instructions.sessionOutdated}
+            type={applyError ? "error" : "warning"}
+          />
         ) : null}
         {agentId && !needsApply && applySuccess ? (
-          <div
-            className="shrink-0 border-b border-line-subtle bg-subtle px-4 py-2 text-caption text-success-text"
-            role="status"
-          >
-            {t.instructions.applied}
-          </div>
+          <Alert
+            className="shrink-0 rounded-none border-x-0"
+            showIcon
+            title={t.instructions.applied}
+            type="success"
+          />
         ) : null}
         {loading ? (
-          <div className="grid flex-1 place-items-center text-sm text-muted"><span className="flex items-center gap-2"><LoaderCircle className="animate-spin" />{t.common.loading}</span></div>
+          <Skeleton active className="p-4" paragraph={{ rows: 8 }} title={false} />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-4">
-            <Textarea className="min-h-0 flex-1 resize-none font-ui-mono text-xs" onChange={(event) => { setProjectEditorField("draft", event.target.value); setProjectEditorField("error", ""); setProjectEditorField("conflict", false); }} placeholder={t.instructions.contentPlaceholder} value={draft} />
+            <Input.TextArea className="min-h-0 flex-1 resize-none font-ui-mono text-xs" onChange={(event) => { setProjectEditorField("draft", event.target.value); setProjectEditorField("error", ""); setProjectEditorField("conflict", false); }} placeholder={t.instructions.contentPlaceholder} value={draft} />
             <p className="text-caption text-dim">{t.instructions.bytes.replace("{count}", String(new Blob([draft]).size))}</p>
             {error ? (
-              <div className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/8 p-3">
-                <p className="text-sm text-destructive-text">{error}</p>
-                {conflict ? <div className="flex gap-2"><Button onClick={() => void save(true)} size="sm" variant="destructive">{t.instructions.conflictOverwrite}</Button><Button onClick={() => void load()} size="sm" variant="outline">{t.instructions.conflictReload}</Button></div> : null}
-              </div>
+              <Alert
+                action={conflict ? <div className="flex gap-2"><Button danger htmlType="button" onClick={() => void save(true)} size="small" type="primary">{t.instructions.conflictOverwrite}</Button><Button htmlType="button" onClick={() => void load()} size="small">{t.instructions.conflictReload}</Button></div> : undefined}
+                showIcon
+                title={error}
+                type="error"
+              />
             ) : null}
           </div>
         )}
@@ -311,7 +310,7 @@ function ProjectInstructionsEditorContent({
       <Dialog onOpenChange={(next) => !next && setConfirmDelete(false)} open={confirmDelete}>
         <DialogContent className="sm:max-w-md" closeLabel={t.common.close}>
           <DialogHeader><DialogTitle>{t.instructions.deleteProjectTitle}</DialogTitle><DialogDescription>{t.instructions.deleteProjectDescription.replace("{path}", doc?.filePath ?? `${cwd}/AGENTS.md`)}</DialogDescription></DialogHeader>
-          <DialogFooter><Button autoFocus onClick={() => setConfirmDelete(false)} variant="outline">{t.common.cancel}</Button><Button disabled={deleting} onClick={() => void remove()} variant="destructive">{t.instructions.delete}</Button></DialogFooter>
+          <DialogFooter><Button autoFocus disabled={deleting} htmlType="button" onClick={() => setConfirmDelete(false)}>{t.common.cancel}</Button><Button danger disabled={deleting} htmlType="button" loading={deleting} onClick={() => void remove()} type="primary">{t.instructions.delete}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

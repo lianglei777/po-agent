@@ -8,6 +8,18 @@ const source = readFileSync(
 );
 
 describe("system prompt settings workbench visual contract", () => {
+  it("uses Ant Design for standard editor controls and feedback", () => {
+    expect(source).toContain(
+      'import { Alert, Button, Empty, Input, Skeleton, Tag } from "antd"',
+    );
+    expect(source).toContain("<Input.TextArea");
+    expect(source).toContain("<Skeleton");
+    expect(source).toContain("<Empty");
+    expect(source).not.toContain("<Alert message=");
+    expect(source).not.toContain('from "@/components/ui/button"');
+    expect(source).not.toContain('from "@/components/ui/textarea"');
+  });
+
   it("uses a source navigator and one focused content pane", () => {
     expect(source).toContain("grid-cols-[14rem_minmax(0,1fr)]");
     expect(source).toContain("<aside");
