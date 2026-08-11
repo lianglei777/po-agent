@@ -24,10 +24,14 @@ describe("content generation settings", () => {
   });
 
   it("supports masking and removal of the stored key", () => {
+    expect(source).toContain("<Input.Password");
+    expect(source).toContain("visibilityToggle={{");
     expect(source).toContain("Eye");
     expect(source).toContain("EyeOff");
     expect(source).toContain("showApiKey");
     expect(source).toContain("removeCredentialConfirm");
+    expect(source).not.toContain('className="absolute right-1');
+    expect(source).not.toContain("<Alert className=\"mt-3\" message=");
   });
 
   it("returns to loading state whenever the persisted settings view mounts", () => {

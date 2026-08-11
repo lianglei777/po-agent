@@ -2,10 +2,8 @@
 
 import { Eye, EyeOff, KeyRound, Trash2 } from "@/components/icons";
 import { useEffect, useState } from "react";
+import { Alert, Button, Input, Skeleton, Switch, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   deleteRunningHubGenerationCredential,
@@ -196,7 +194,7 @@ export function ContentGenerationSettings({
               <h3 className="text-sm font-semibold text-primary">{labels.runningHubEnabled}</h3>
               <p className="mt-1 text-xs text-muted">{labels.runningHubEnabledDescription}</p>
             </div>
-            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} disabled={displayLoading} loading={updatingId === "runninghub"} onCheckedChange={(enabled) => void toggleProvider(enabled)} />
+            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} disabled={displayLoading} loading={updatingId === "runninghub"} onChange={(enabled) => void toggleProvider(enabled)} />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-primary">{labels.runningHubCredential}</h3>
@@ -210,39 +208,31 @@ export function ContentGenerationSettings({
             <label className="block space-y-1.5 text-xs font-medium text-primary">
               <span>{labels.apiKey}</span>
               <div className="flex gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Input
+                <div className="min-w-0 flex-1">
+                  <Input.Password
                     autoComplete="off"
-                    className="pr-10"
                     disabled={displayLoading || saving}
+                    iconRender={(visible) => visible ? <EyeOff /> : <Eye />}
                     onChange={(event) => setApiKey(event.target.value)}
                     placeholder={hasCredential ? labels.apiKeyStored : labels.apiKeyPlaceholder}
-                    type={showApiKey ? "text" : "password"}
                     value={apiKey}
+                    visibilityToggle={{
+                      visible: showApiKey,
+                      onVisibleChange: setShowApiKey,
+                    }}
                   />
-                  <Button
-                    aria-label={showApiKey ? labels.hideApiKey : labels.showApiKey}
-                    className="absolute right-1 top-1/2 -translate-y-1/2"
-                    onClick={() => setShowApiKey((value) => !value)}
-                    size="icon-sm"
-                    type="button"
-                    variant="ghost"
-                  >
-                    {showApiKey ? <EyeOff /> : <Eye />}
-                  </Button>
                 </div>
-                <Button disabled={!apiKey.trim() || displayLoading || saving} onClick={() => void saveCredential()} type="button">
-                  {saving ? t.common.saving : t.common.save}
+                <Button disabled={!apiKey.trim() || displayLoading || saving} htmlType="button" loading={saving} onClick={() => void saveCredential()} type="primary">
+                  {t.common.save}
                 </Button>
               </div>
             </label>
             {hasCredential ? (
-              <Button className="mt-3" disabled={displayLoading || saving} onClick={() => void removeCredential()} size="sm" type="button" variant="ghost">
-                <Trash2 />
+              <Button className="mt-3" danger disabled={displayLoading || saving} htmlType="button" icon={<Trash2 />} onClick={() => void removeCredential()} size="small" type="text">
                 {labels.removeCredential}
               </Button>
             ) : null}
-            {error ? <p className="mt-3 text-xs text-destructive-text" role="alert">{error}</p> : null}
+            {error ? <Alert className="mt-3" showIcon title={error} type="error" /> : null}
           </div>
         </section>
 
@@ -252,13 +242,17 @@ export function ContentGenerationSettings({
             <p className="mt-1 text-xs text-muted">{labels.availableRoutesDescription}</p>
           </div>
           <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
-            {displayLoading ? <p className="p-4 text-xs text-muted">{t.common.loading}</p> : routes.map((route) => (
+            {displayLoading ? <Skeleton active className="p-4" paragraph={{ rows: 3 }} title={false} /> : routes.map((route) => (
               <div className="flex items-center justify-between gap-4 p-4" key={route.id}>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-primary">{route.name}</p>
                   <p className="mt-1 font-ui-mono text-caption text-muted">{route.capability}</p>
                 </div>
-                <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onCheckedChange={(enabled) => void toggleRoute(route.id, enabled)} title={!providerEnabled ? labels.enableProviderFirst : undefined} />
+                <Tooltip title={!providerEnabled ? labels.enableProviderFirst : undefined}>
+                  <span className="inline-flex shrink-0">
+                    <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onChange={(enabled) => void toggleRoute(route.id, enabled)} />
+                  </span>
+                </Tooltip>
               </div>
             ))}
           </div>

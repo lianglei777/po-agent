@@ -2,18 +2,13 @@
 
 import { FileImage, FileMusic, FileVideo, Send, X } from "@/components/icons";
 import { useState } from "react";
+import { Alert, Button, Checkbox, Input, Select, Switch } from "antd";
 import type {
   GenerationAssetSlot,
   GenerationParameterField,
   GenerationRouteDto,
   JsonValue,
 } from "@/contracts/generation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { mergeClasses } from "@/lib/utils";
 import { useI18n } from "@/i18n/use-i18n";
 
 export interface SelectedGenerationAsset {
@@ -83,24 +78,13 @@ export function ContentGenerationComposer({
           </p>
         </div>
         <Select
+          aria-label={t.contentGeneration.capability}
+          className="w-full sm:w-72"
           disabled={busy}
-          onValueChange={onRouteChange}
+          onChange={onRouteChange}
+          options={routes.map((item) => ({ label: item.name, value: item.id }))}
           value={route.id}
-        >
-          <SelectTrigger
-            aria-label={t.contentGeneration.capability}
-            className="w-full sm:w-72"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {routes.map((item) => (
-              <SelectItem key={item.id} value={item.id}>
-                {item.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </div>
 
       {assetSlots.length ? (
@@ -129,22 +113,23 @@ export function ContentGenerationComposer({
             const sameType = assets.filter((item) => item.slot === asset.slot);
             const reference = `@${referenceType(asset.file.type)} ${sameType.indexOf(asset) + 1}`;
             return (
-              <button
-                className="rounded-md border border-line-subtle bg-subtle px-2 py-1 font-ui-mono text-caption text-primary hover:bg-hover"
+              <Button
                 key={asset.id}
                 onClick={() => setPrompt((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}${reference} `)}
-                type="button"
+                size="small"
+                type="text"
               >
                 {reference}
-              </button>
+              </Button>
             );
           })}
         </div>
       ) : null}
 
-      <Textarea
+      <Input.TextArea
         aria-label={t.contentGeneration.prompt}
-        className="min-h-20 resize-none rounded-control border border-line-subtle bg-subtle px-3 py-2.5 shadow-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
+        autoSize={{ minRows: 3, maxRows: 8 }}
+        className="bg-subtle"
         disabled={busy}
         onChange={(event) => setPrompt(event.target.value)}
         placeholder={schema.prompt.required === false
@@ -208,14 +193,15 @@ export function ContentGenerationComposer({
         <Button
           aria-label={t.contentGeneration.generate}
           disabled={disabled}
+          htmlType="button"
+          icon={<Send />}
+          loading={busy}
           onClick={() => void submit()}
-          size="icon"
-          type="button"
-        >
-          <Send />
-        </Button>
+          shape="circle"
+          type="primary"
+        />
       </div>
-      {error ? <p className="mt-2 text-xs text-destructive-text">{error}</p> : null}
+      {error ? <Alert className="mt-2" showIcon title={error} type="error" /> : null}
     </div>
   );
 }
@@ -251,9 +237,16 @@ function AssetSlotInput({
         <div className="mt-1 flex items-center gap-1 text-caption text-muted" key={asset.id}>
           <Icon className="size-3 shrink-0" />
           <span className="min-w-0 flex-1 truncate" title={asset.file.name}>{asset.file.name}</span>
-          <button aria-label={`${t.contentGeneration.removeFile} ${asset.file.name}`} onClick={() => onRemove(asset.id)} type="button">
-            <X className="size-3" />
-          </button>
+          <Button
+            aria-label={`${t.contentGeneration.removeFile} ${asset.file.name}`}
+            disabled={disabled}
+            htmlType="button"
+            icon={<X />}
+            onClick={() => onRemove(asset.id)}
+            shape="circle"
+            size="small"
+            type="text"
+          />
         </div>
       ))}
       {remaining > 0 ? (
@@ -297,21 +290,15 @@ function SelectParameterControl({
       <label className="space-y-1 text-caption text-muted" title={field.description}>
         <span>{translatedLabel}</span>
         <Select
+          className="w-full"
           disabled={disabled}
-          onValueChange={(v) => onChange(optionValue(field, v))}
+          onChange={(nextValue) => onChange(optionValue(field, nextValue))}
+          options={field.options?.map((option) => ({
+            label: option.label,
+            value: String(option.value),
+          }))}
           value={String(value ?? "")}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {field.options?.map((option) => (
-              <SelectItem key={String(option.value)} value={String(option.value)}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
       </label>
     );
   }
@@ -346,7 +333,7 @@ function SwitchParameterControl({
 }) {
   return (
     <label className="flex items-center gap-2 text-xs text-primary" title={field.description}>
-      <Switch checked={value === true} disabled={disabled} onCheckedChange={onChange} />
+      <Switch checked={value === true} disabled={disabled} onChange={onChange} size="small" />
       {translatedLabel}
     </label>
   );
@@ -370,26 +357,20 @@ function MultiSelectParameterControl({
   return (
     <fieldset className="space-y-1.5">
       <legend className="text-caption text-muted">{translatedLabel}</legend>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
         {field.options?.map((option) => {
           const active = selected.includes(option.value as never);
           return (
-            <button
-              className={mergeClasses(
-                "rounded-control border px-2 py-1 text-caption transition-colors",
-                active
-                  ? "border-accent bg-accent-soft text-accent-deep"
-                  : "border-line-subtle bg-subtle text-muted hover:bg-hover hover:text-primary",
-              )}
+            <Checkbox
+              checked={active}
               disabled={disabled}
               key={String(option.value)}
-              onClick={() => onChange(active
+              onChange={() => onChange(active
                 ? selected.filter((item) => item !== option.value)
                 : [...selected, option.value])}
-              type="button"
             >
               {option.label}
-            </button>
+            </Checkbox>
           );
         })}
       </div>

@@ -10,6 +10,7 @@ import {
   Square,
 } from "@/components/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Button, Empty, Skeleton, Tag, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import type {
   GenerationArtifactDto,
@@ -19,7 +20,6 @@ import type {
   JsonValue,
   ProviderJobDto,
 } from "@/contracts/generation";
-import { Button } from "@/components/ui/button";
 import { MediaPreview } from "@/components/ui/media-preview";
 import { rawFileUrl } from "@/lib/raw-file-url";
 import type { SessionInfo } from "@/features/sessions/types";
@@ -260,10 +260,10 @@ export function ContentGenerationCenter({
   }
 
   if (!ownsCenterSession || centerLoading) {
-    return <div className="grid flex-1 place-items-center text-sm text-muted">{t.common.loading}</div>;
+    return <div className="flex-1 p-6"><Skeleton active paragraph={{ rows: 5 }} /></div>;
   }
   if (!route) {
-    return <div className="grid flex-1 place-items-center text-sm text-destructive-text">{t.contentGeneration.apiUnavailable}</div>;
+    return <div className="flex-1 p-6"><Alert showIcon title={t.contentGeneration.apiUnavailable} type="warning" /></div>;
   }
   const selectedRoute = route;
 
@@ -287,12 +287,11 @@ export function ContentGenerationCenter({
               ))}
             </div>
           ) : (
-            <div className="grid min-h-52 place-items-center text-center text-sm text-muted">
-              <div>
-                <p className="font-medium text-primary">{t.contentGeneration.noJobs}</p>
-                <p className="mt-1 text-xs">{t.contentGeneration.noJobsDescription}</p>
-              </div>
-            </div>
+            <Empty
+              className="my-12"
+              description={<><p className="font-medium text-primary">{t.contentGeneration.noJobs}</p><p className="mt-1 text-xs text-muted">{t.contentGeneration.noJobsDescription}</p></>}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           )}
           <div ref={endOfConversation} />
         </div>
@@ -400,28 +399,26 @@ function GenerationResult({
     <article className="max-w-[92%] text-sm text-primary">
       <div className="flex items-center gap-2 font-medium">
         {active ? <LoaderCircle className="size-4 animate-spin text-muted" /> : status === "succeeded" ? <CheckCircle2 className="size-4 text-success-text" /> : <AlertTriangle className="size-4 text-destructive-text" />}
-        <span>{runStatusLabel(status, t.contentGeneration)}</span>
+        <Tag color={statusColor(status)} variant="filled">{runStatusLabel(status, t.contentGeneration)}</Tag>
       </div>
       {job?.remoteTaskId ? (
         <div className="mt-3 flex max-w-xl items-center gap-2 rounded-md border border-line-subtle bg-subtle px-3 py-2">
           <span className="shrink-0 text-caption text-muted">{t.contentGeneration.taskId}</span>
           <code className="min-w-0 flex-1 truncate font-ui-mono text-xs">{job.remoteTaskId}</code>
-          <Button aria-label={copied ? t.contentGeneration.copied : t.contentGeneration.copyTaskId} onClick={() => void navigator.clipboard.writeText(job.remoteTaskId ?? "").then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })} size="icon-sm" type="button" variant="ghost">
-            {copied ? <Check /> : <Copy />}
-          </Button>
+          <Tooltip title={copied ? t.contentGeneration.copied : t.contentGeneration.copyTaskId}>
+            <Button aria-label={copied ? t.contentGeneration.copied : t.contentGeneration.copyTaskId} htmlType="button" icon={copied ? <Check /> : <Copy />} onClick={() => void navigator.clipboard.writeText(job.remoteTaskId ?? "").then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); })} shape="circle" size="small" type="text" />
+          </Tooltip>
         </div>
       ) : null}
       {errorMessage ? <p className="mt-3 text-xs text-destructive-text">{errorMessage}</p> : null}
       {active ? (
-        <Button className="mt-2" disabled={busy} onClick={() => {
+        <Button className="mt-2" danger disabled={busy} htmlType="button" icon={<Square />} loading={busy} onClick={() => {
           if (window.confirm(t.contentGeneration.cancelRunConfirm)) onCancel();
-        }} size="sm" type="button" variant="ghost">
-          {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
+        }} size="small" type="text">
           {t.contentGeneration.cancelRun}
         </Button>
       ) : status === "failed" || status === "cancelled" ? (
-        <Button className="mt-2" disabled={busy} onClick={onRetry} size="sm" type="button" variant="ghost">
-          {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+        <Button className="mt-2" disabled={busy} htmlType="button" icon={<RotateCcw />} loading={busy} onClick={onRetry} size="small" type="text">
           {t.contentGeneration.retryRun}
         </Button>
       ) : null}
@@ -453,6 +450,13 @@ function GenerationOutput({ artifact, cwd, index }: { artifact: GenerationArtifa
 
 function runStatusLabel(status: GenerationRunStatus, labels: ReturnType<typeof useI18n>["t"]["contentGeneration"]) {
   return labels.runStatuses[status];
+}
+
+function statusColor(status: GenerationRunStatus) {
+  if (status === "succeeded") return "success";
+  if (status === "failed") return "error";
+  if (status === "cancelled") return "default";
+  return "processing";
 }
 
 function assetName(asset: NonNullable<GenerationRunViewDto["run"]["input"]["assets"]>[number]) {

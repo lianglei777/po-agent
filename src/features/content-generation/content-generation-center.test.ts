@@ -13,6 +13,13 @@ const composerSource = readFileSync(
 );
 
 describe("content generation conversation", () => {
+  it("uses Ant Design controls without deprecated v6 alert props", () => {
+    expect(source).toContain('from "antd"');
+    expect(composerSource).toContain('from "antd"');
+    expect(source).not.toContain("<Alert message=");
+    expect(composerSource).not.toContain("<Alert className=\"mt-2\" message=");
+  });
+
   it("refreshes durable local runs without directly polling the provider", () => {
     expect(source).toContain("REFRESH_INTERVAL_MS = 2_000");
     expect(source).toContain("loadGenerationRuns(session.id)");
@@ -67,8 +74,8 @@ describe("content generation conversation", () => {
     expect(source).toContain("void setSelectedRouteId(");
     expect(source).not.toContain("<header");
     expect(composerSource).toContain("routes: GenerationRouteDto[]");
-    expect(composerSource).toContain("onValueChange={onRouteChange}");
-    expect(composerSource).toContain("routes.map((item)");
+    expect(composerSource).toContain("onChange={onRouteChange}");
+    expect(composerSource).toContain("options={routes.map((item)");
     expect(composerSource.indexOf("t.contentGeneration.capability"))
       .toBeLessThan(composerSource.indexOf("<AssetSlotInput"));
     expect(source).not.toContain("contentGenerationApiId");
