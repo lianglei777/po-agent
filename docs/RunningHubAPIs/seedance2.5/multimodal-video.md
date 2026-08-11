@@ -25,13 +25,13 @@ curl --location --request POST 'https://www.runninghub.cn/openapi/v2/bytedance/s
   "resolution": "720p",
   "duration": "25",
   "imageUrls": [
-    "https://rh-images-switch-1252422369.cos.ap-guangzhou.myqcloud.com/input/openapi/seedance25-ref/82a640656c3da4a4c243ddcf236a456f3f18a3f9f6ffcb3bec3f45ae0a22e4fa.jpg?q-sign-algorithm=sha1&q-ak=AKIDREPLACED&q-sign-time=1786011294%3B1788603354&q-key-time=1786011294%3B1788603354&q-header-list=host&q-url-param-list=&q-signature=abdd256484fc57e871320b67c925238c2e71ab31"
+    "https://example.com/reference-image.jpg"
   ],
   "videoUrls": [
-    "https://rh-images-switch-1252422369.cos.ap-guangzhou.myqcloud.com/input/openapi/seedance25-ref/eb8baf4046aec345ff0f77e1eedb48c72d4a663e47fbef0d0e0a18e5d885a867.mp4?q-sign-algorithm=sha1&q-ak=AKIDREPLACED&q-sign-time=1786011312%3B1788603372&q-key-time=1786011312%3B1788603372&q-header-list=host&q-url-param-list=&q-signature=2cb04afc61f10fe074d03e6284f609dd152c0479"
+    "https://example.com/reference-video.mp4"
   ],
   "audioUrls": [
-    "https://rh-images-switch-1252422369.cos.ap-guangzhou.myqcloud.com/input/openapi/seedance25-ref/e3c88488e65b8c87a6f06120983ce2cb12ea3aeba99f8cadb7ee5d6d284ef2c6.mp3?q-sign-algorithm=sha1&q-ak=AKIDREPLACED&q-sign-time=1786011280%3B1788603340&q-key-time=1786011280%3B1788603340&q-header-list=host&q-url-param-list=&q-signature=5c51ba130eeef3357393ed586f39a1025e273eeb"
+    "https://example.com/reference-audio.mp3"
   ],
   "conversionSlots": [
     "all"

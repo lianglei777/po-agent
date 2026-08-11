@@ -270,6 +270,7 @@ export function ChatInput({
                 value: `${model.provider}:${model.id}`,
               }))}
               placement="topLeft"
+              popupMatchSelectWidth={false}
               prefix={<Cpu className="size-3.5 opacity-60" />}
               size="small"
               value={modelKey}

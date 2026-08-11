@@ -83,6 +83,7 @@ export function ContentGenerationComposer({
           disabled={busy}
           onChange={onRouteChange}
           options={routes.map((item) => ({ label: item.name, value: item.id }))}
+          popupMatchSelectWidth={false}
           value={route.id}
         />
       </div>
@@ -297,6 +298,7 @@ function SelectParameterControl({
             label: option.label,
             value: String(option.value),
           }))}
+          popupMatchSelectWidth={false}
           value={String(value ?? "")}
         />
       </label>
