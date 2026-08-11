@@ -64,13 +64,14 @@ export class SqliteGenerationRepository implements GenerationRepository {
       }
       this.database.prepare(`
         INSERT INTO generation_routes(
-          id, name, capability, provider_id, provider_operation,
+          id, name, capability, product, provider_id, provider_operation,
           enabled, is_default, revision, defaults_json, adapter_config_json,
           input_schema_json, credential_ref, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
           capability = excluded.capability,
+          product = excluded.product,
           provider_id = excluded.provider_id,
           provider_operation = excluded.provider_operation,
           enabled = excluded.enabled,
@@ -85,6 +86,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         route.id,
         route.name,
         route.capability,
+        route.product,
         route.providerId,
         route.providerOperation,
         route.enabled ? 1 : 0,
@@ -126,9 +128,25 @@ export class SqliteGenerationRepository implements GenerationRepository {
   }
 
   async setRouteEnabled(id: string, enabled: boolean, updatedAt: string): Promise<boolean> {
-    return this.database.prepare(`
-      UPDATE generation_routes SET enabled = ?, updated_at = ? WHERE id = ?
-    `).run(enabled ? 1 : 0, updatedAt, id).changes > 0;
+    return this.database.transaction(() => {
+      if (enabled) {
+        // 启用默认路由时，需先清除同 capability 下其他已启用默认路由的 is_default，
+        // 避免违反 generation_routes_default_capability_unique 部分唯一索引
+        const row = this.database.prepare(
+          "SELECT capability, is_default FROM generation_routes WHERE id = ?",
+        ).get(id);
+        if (row && requiredNumber(row, "is_default") === 1) {
+          this.database.prepare(`
+            UPDATE generation_routes
+            SET is_default = 0, updated_at = ?
+            WHERE capability = ? AND id <> ? AND is_default = 1 AND enabled = 1
+          `).run(updatedAt, requiredString(row, "capability"), id);
+        }
+      }
+      return this.database.prepare(`
+        UPDATE generation_routes SET enabled = ?, updated_at = ? WHERE id = ?
+      `).run(enabled ? 1 : 0, updatedAt, id).changes > 0;
+    });
   }
 
   async isProviderEnabled(providerId: string): Promise<boolean> {
@@ -485,6 +503,7 @@ function routeFromRow(row: SqliteRow): GenerationRoute {
     id: requiredString(row, "id"),
     name: requiredString(row, "name"),
     capability: requiredString(row, "capability") as GenerationCapability,
+    product: requiredString(row, "product"),
     providerId: requiredString(row, "provider_id"),
     providerOperation: requiredString(row, "provider_operation"),
     enabled: requiredNumber(row, "enabled") === 1,

@@ -77,7 +77,7 @@ export const en = {
     credentialMissing: "No API key is configured.",
     removeCredential: "Remove API key",
     removeCredentialConfirm: "Remove the saved RunningHub API key?",
-    availableRoutes: "Available routes",
+    availableRoutes: "Multimodal APIs",
     availableRoutesDescription:
       "These application-managed routes define the supported capabilities and inputs. They are read-only.",
     routeEnabled: "Enabled",
@@ -196,6 +196,8 @@ export const en = {
       realPersonMode: "Real person mode",
       conversionSlots: "Asset conversion scope",
       seed: "Seed",
+      bitrateMode: "Bitrate mode",
+      outputFormat: "Output format",
       firstFrameUrl: "First frame",
       lastFrameUrl: "Last frame",
       imageUrls: "Reference images",

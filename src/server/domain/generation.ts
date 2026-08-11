@@ -35,6 +35,7 @@ export interface GenerationRoute {
   id: string;
   name: string;
   capability: GenerationCapability;
+  product: string;
   providerId: string;
   providerOperation: string;
   enabled: boolean;

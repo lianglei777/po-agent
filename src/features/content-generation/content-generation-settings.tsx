@@ -4,6 +4,7 @@ import { Eye, EyeOff, KeyRound, Trash2 } from "@/components/icons";
 import { useEffect, useState } from "react";
 import { Alert, Button, Input, Skeleton, Switch, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
+import type { GenerationRouteDto } from "@/contracts/generation";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   deleteRunningHubGenerationCredential,
@@ -241,21 +242,32 @@ export function ContentGenerationSettings({
             <h3 className="text-sm font-semibold text-primary">{labels.availableRoutes}</h3>
             <p className="mt-1 text-xs text-muted">{labels.availableRoutesDescription}</p>
           </div>
-          <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
-            {displayLoading ? <Skeleton active className="p-4" paragraph={{ rows: 3 }} title={false} /> : routes.map((route) => (
-              <div className="flex items-center justify-between gap-4 p-4" key={route.id}>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-primary">{route.name}</p>
-                  <p className="mt-1 font-ui-mono text-caption text-muted">{route.capability}</p>
+          {displayLoading ? (
+            <Skeleton active className="p-4" paragraph={{ rows: 3 }} title={false} />
+          ) : (
+            <div className="space-y-3">
+              {groupRoutesByProduct(routes).map((group) => (
+                <div key={group.product}>
+                  <p className="mb-1.5 px-1 text-xs font-semibold text-muted">{group.product}</p>
+                  <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
+                    {group.routes.map((route) => (
+                      <div className="flex items-center justify-between gap-4 p-4" key={route.id}>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-primary">{route.name}</p>
+                          <p className="mt-1 font-ui-mono text-caption text-muted">{route.capability}</p>
+                        </div>
+                        <Tooltip title={!providerEnabled ? labels.enableProviderFirst : undefined}>
+                          <span className="inline-flex shrink-0">
+                            <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onChange={(enabled) => void toggleRoute(route.id, enabled)} />
+                          </span>
+                        </Tooltip>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <Tooltip title={!providerEnabled ? labels.enableProviderFirst : undefined}>
-                  <span className="inline-flex shrink-0">
-                    <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onChange={(enabled) => void toggleRoute(route.id, enabled)} />
-                  </span>
-                </Tooltip>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>
@@ -264,4 +276,18 @@ export function ContentGenerationSettings({
 
 function messageOf(value: unknown) {
   return value instanceof Error ? value.message : "Request failed";
+}
+
+// 按产品分组路由，保持首次出现顺序
+function groupRoutesByProduct(routes: GenerationRouteDto[]) {
+  const groups: { product: string; routes: GenerationRouteDto[] }[] = [];
+  for (const route of routes) {
+    const existing = groups.find((g) => g.product === route.product);
+    if (existing) {
+      existing.routes.push(route);
+    } else {
+      groups.push({ product: route.product, routes: [route] });
+    }
+  }
+  return groups;
 }

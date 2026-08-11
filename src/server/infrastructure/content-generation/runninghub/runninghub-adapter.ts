@@ -25,6 +25,12 @@ const OPERATION_PATHS: Record<string, string> = {
     "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video",
   "seedance-2-multimodal-video":
     "/openapi/v2/rhart-video/sparkvideo-2.0/multimodal-video",
+  "seedance-2-5-text-to-video":
+    "/openapi/v2/bytedance/seedance-2.5-token/text-to-video",
+  "seedance-2-5-image-to-video":
+    "/openapi/v2/bytedance/seedance-2.5-token/image-to-video",
+  "seedance-2-5-multimodal-video":
+    "/openapi/v2/bytedance/seedance-2.5-token/multimodal-video",
 };
 
 export class RunningHubAdapter implements GenerationProvider {
@@ -238,6 +244,31 @@ function requestBody(
         realPersonMode: value(parameters, "realPersonMode", true),
         conversionSlots: value(parameters, "conversionSlots", ["all"]),
       };
+    case "seedance-2-5-text-to-video":
+      return {
+        ...common,
+        ...videoParameters25(parameters),
+        webSearch: value(parameters, "webSearch", false),
+      };
+    case "seedance-2-5-image-to-video":
+      return {
+        ...common,
+        ...videoParameters25(parameters),
+        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
+        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
+        realPersonMode: value(parameters, "realPersonMode", true),
+        conversionSlots: value(parameters, "conversionSlots", ["all"]),
+      };
+    case "seedance-2-5-multimodal-video":
+      return {
+        ...common,
+        ...videoParameters25(parameters),
+        imageUrls: urlsForSlot(assets, "imageUrls"),
+        videoUrls: urlsForSlot(assets, "videoUrls"),
+        audioUrls: urlsForSlot(assets, "audioUrls"),
+        realPersonMode: value(parameters, "realPersonMode", true),
+        conversionSlots: value(parameters, "conversionSlots", ["all"]),
+      };
     default:
       throw new AppError(
         "GENERATION_OPERATION_UNSUPPORTED",
@@ -255,6 +286,15 @@ function videoParameters(parameters: Record<string, JsonValue>) {
     ratio: value(parameters, "aspectRatio", "adaptive"),
     returnLastFrame: value(parameters, "returnLastFrame", false),
     seed: value(parameters, "seed", -1),
+  };
+}
+
+// Seedance 2.5 在 2.0 基础上新增 bitrateMode 与 outputFormat
+function videoParameters25(parameters: Record<string, JsonValue>) {
+  return {
+    ...videoParameters(parameters),
+    bitrateMode: value(parameters, "bitrateMode", "standard"),
+    outputFormat: value(parameters, "outputFormat", "mp4"),
   };
 }
 

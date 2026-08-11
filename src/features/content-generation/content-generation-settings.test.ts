@@ -18,7 +18,8 @@ describe("content generation settings", () => {
 
   it("shows application-managed routes as read-only status", () => {
     expect(source).toContain("loadGenerationRoutes");
-    expect(source).toContain("routes.map((route)");
+    expect(source).toContain("groupRoutesByProduct(routes)");
+    expect(source).toContain("group.routes.map((route)");
     expect(source).not.toContain("bodyTemplate");
     expect(source).not.toContain("providerOperation");
   });

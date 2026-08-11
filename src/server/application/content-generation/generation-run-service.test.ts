@@ -36,6 +36,7 @@ describe("GenerationRunService", () => {
     const result = await service.createRun({
       sessionId: "session-1",
       capability: "text-to-video",
+      routeId: "runninghub-seedance-2-text-to-video",
       prompt: " rainy bamboo forest ",
       parameters: { durationSeconds: 10 },
       source: "agent-tool",

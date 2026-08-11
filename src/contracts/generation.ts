@@ -219,6 +219,7 @@ export interface GenerationRouteDto {
   id: string;
   name: string;
   capability: GenerationCapability;
+  product: string;
   providerId: string;
   enabled: boolean;
   isDefault: boolean;

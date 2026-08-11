@@ -139,6 +139,54 @@ describe("RunningHubAdapter", () => {
       code: "GENERATION_DOWNLOAD_URL_REJECTED",
     });
   });
+
+  it("maps seedance 2.5 text-to-video with bitrateMode and outputFormat", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      taskId: "remote-25",
+      status: "RUNNING",
+      errorCode: "",
+      errorMessage: "",
+      results: null,
+    }));
+    const adapter = new RunningHubAdapter(fetcher as typeof fetch);
+
+    await adapter.submit({
+      operation: "seedance-2-5-text-to-video",
+      generation: {
+        prompt: "cinematic city night",
+        parameters: {
+          resolution: "1080p",
+          durationSeconds: 10,
+          generateAudio: true,
+          aspectRatio: "16:9",
+          webSearch: false,
+          returnLastFrame: false,
+          bitrateMode: "high",
+          outputFormat: "mov",
+          seed: 42,
+        },
+      },
+      assets: [],
+      credential: "secret-key",
+    });
+
+    const [url, init] = fetcher.mock.calls[0];
+    expect(url).toBe(
+      "https://www.runninghub.cn/openapi/v2/bytedance/seedance-2.5-token/text-to-video",
+    );
+    expect(JSON.parse(String(init?.body))).toEqual({
+      prompt: "cinematic city night",
+      resolution: "1080p",
+      duration: "10",
+      generateAudio: true,
+      ratio: "16:9",
+      webSearch: false,
+      returnLastFrame: false,
+      bitrateMode: "high",
+      outputFormat: "mov",
+      seed: 42,
+    });
+  });
 });
 
 function jsonResponse(value: unknown): Response {

@@ -26,7 +26,7 @@ describe("content generation conversation", () => {
     expect(source).not.toContain("pollContentGenerationJob");
   });
 
-  it("provides five RunningHub routes with stable semantic input schemas", () => {
+  it("provides all RunningHub routes with stable semantic input schemas", () => {
     const routes = createRunningHubRoutes();
     expect(routes.map((route) => route.id)).toEqual([
       "runninghub-seedream-v5-pro-text-to-image",
@@ -34,8 +34,11 @@ describe("content generation conversation", () => {
       "runninghub-seedance-2-text-to-video",
       "runninghub-seedance-2-image-to-video",
       "runninghub-seedance-2-multimodal-video",
+      "runninghub-seedance-2-5-text-to-video",
+      "runninghub-seedance-2-5-image-to-video",
+      "runninghub-seedance-2-5-multimodal-video",
     ]);
-    expect(routes.every((route) => route.revision === 2)).toBe(true);
+    expect(routes.every((route) => route.revision === 3)).toBe(true);
     expect(routes[2].inputSchema.parameters?.map((field) => field.key)).toContain("aspectRatio");
     expect(routes[1].inputSchema.assets?.map((slot) => slot.key)).toEqual(["imageUrls"]);
     expect(routes[3].inputSchema.assets).toMatchObject([
@@ -47,6 +50,11 @@ describe("content generation conversation", () => {
       "videoUrls",
       "audioUrls",
     ]);
+    // Seedance 2.5 路由包含新增的 bitrateMode 与 outputFormat 字段
+    expect(routes[5].inputSchema.parameters?.map((field) => field.key)).toContain("bitrateMode");
+    expect(routes[5].inputSchema.parameters?.map((field) => field.key)).toContain("outputFormat");
+    // 2.5 multimodal 素材上限提升：图片 30、视频 10、音频 10
+    expect(routes[7].inputSchema.assets?.map((slot) => slot.maxFiles)).toEqual([30, 10, 10]);
   });
 
   it("renders durable runs as user and provider turns with local artifacts", () => {

@@ -16,6 +16,7 @@ describe("SqliteDatabase", () => {
       { version: 2, name: "generation_retry_idempotency" },
       { version: 3, name: "generation_route_input_schema" },
       { version: 4, name: "generation_paid_capability_settings" },
+      { version: 5, name: "generation_route_product" },
     ]);
     expect(database.prepare(`
       SELECT name FROM sqlite_master

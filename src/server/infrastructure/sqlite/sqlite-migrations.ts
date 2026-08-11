@@ -143,4 +143,13 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
       VALUES ('runninghub', 0, CURRENT_TIMESTAMP);
     `,
   },
+  {
+    version: 5,
+    name: "generation_route_product",
+    sql: `
+      ALTER TABLE generation_routes
+        ADD COLUMN product TEXT NOT NULL
+        DEFAULT '';
+    `,
+  },
 ];

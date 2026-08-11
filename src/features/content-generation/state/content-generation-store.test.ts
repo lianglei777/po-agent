@@ -9,6 +9,7 @@ const route = (id: string, enabled = true): GenerationRouteDto => ({
   id,
   name: id,
   capability: "text-to-image",
+  product: "Test Product",
   providerId: "provider",
   enabled,
   isDefault: false,

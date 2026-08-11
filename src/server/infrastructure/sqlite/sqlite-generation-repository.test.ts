@@ -64,6 +64,27 @@ describe("SqliteGenerationRepository", () => {
     );
   });
 
+  it("clears is_default on conflicting enabled routes when toggling via setRouteEnabled", async () => {
+    // route-1 已在 beforeEach 中创建：enabled=true, isDefault=true
+    await repository.upsertRoute({
+      ...route(),
+      id: "route-2",
+      name: "Second route",
+      enabled: false,
+      isDefault: true,
+      revision: 2,
+    });
+
+    // 启用第二条同 capability 的默认路由，不应触发唯一索引冲突
+    await expect(repository.setRouteEnabled("route-2", true, NOW)).resolves.toBe(true);
+    await expect(repository.getRoute("route-1")).resolves.toEqual(
+      expect.objectContaining({ enabled: true, isDefault: false }),
+    );
+    await expect(repository.getRoute("route-2")).resolves.toEqual(
+      expect.objectContaining({ enabled: true, isDefault: true }),
+    );
+  });
+
   it("uses expected statuses to protect state transitions", async () => {
     await repository.createRun(run(), job());
     const next = { ...run(), status: "running" as const, updatedAt: "later" };
@@ -166,6 +187,7 @@ function route(): GenerationRoute {
     id: "route-1",
     name: "RunningHub text to video",
     capability: "text-to-video",
+    product: "Test Product",
     providerId: "runninghub",
     providerOperation: "text-to-video",
     enabled: true,

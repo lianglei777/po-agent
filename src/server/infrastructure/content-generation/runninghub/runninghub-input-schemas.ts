@@ -9,7 +9,9 @@ const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 export function runningHubInputSchema(
   capability: GenerationCapability,
+  operation?: string,
 ): GenerationInputSchema {
+  const isSeedance25 = operation?.startsWith("seedance-2-5") ?? false;
   switch (capability) {
     case "text-to-image":
       return imageSchema();
@@ -19,60 +21,11 @@ export function runningHubInputSchema(
         assets: [mediaSlot("imageUrls", "参考图片", "image", 10, 10 * 1024 * 1024, IMAGE_TYPES, true)],
       };
     case "text-to-video":
-      return {
-        prompt: { required: true, maxLength: 20_480 },
-        parameters: [
-          ...videoFields(),
-          booleanField("webSearch", "联网搜索增强", false, true),
-          booleanField("returnLastFrame", "返回视频尾帧", false, true),
-          seedField(),
-        ],
-      };
+      return isSeedance25 ? textToVideo25Schema() : textToVideoSchema();
     case "image-to-video":
-      return {
-        prompt: { required: false, maxLength: 20_480 },
-        parameters: [
-          ...videoFields(),
-          booleanField("realPersonMode", "真人模式", true, true),
-          multiSelectField("conversionSlots", "素材资产化范围", [
-            ["全部首尾帧", "all"],
-            ["首帧", "firstFrameUrl"],
-            ["尾帧", "lastFrameUrl"],
-          ]),
-          booleanField("returnLastFrame", "返回视频尾帧", false, true),
-          seedField(),
-        ],
-        assets: [
-          mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES, true),
-          mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES),
-        ],
-      };
+      return isSeedance25 ? imageToVideo25Schema() : imageToVideoSchema();
     case "multimodal-to-video":
-      return {
-        prompt: { required: true, maxLength: 20_480 },
-        parameters: [
-          ...videoFields(),
-          booleanField("realPersonMode", "真人模式", true, true),
-          multiSelectField("conversionSlots", "素材资产化范围", [
-            ["全部素材", "all"],
-            ...Array.from({ length: 9 }, (_, index) => [
-              `图片 ${index + 1}`,
-              `image${index + 1}`,
-            ] as [string, string]),
-            ...Array.from({ length: 3 }, (_, index) => [
-              `视频 ${index + 1}`,
-              `video${index + 1}`,
-            ] as [string, string]),
-          ]),
-          booleanField("returnLastFrame", "返回视频尾帧", false, true),
-          seedField(),
-        ],
-        assets: [
-          mediaSlot("imageUrls", "参考图片", "image", 9, 30 * 1024 * 1024, IMAGE_TYPES),
-          mediaSlot("videoUrls", "参考视频", "video", 3, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
-          mediaSlot("audioUrls", "参考音频", "audio", 3, 50 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
-        ],
-      };
+      return isSeedance25 ? multimodalVideo25Schema() : multimodalVideoSchema();
   }
 }
 
@@ -88,6 +41,135 @@ function imageSchema(): GenerationInputSchema {
   };
 }
 
+// ── Seedance 2.0 schemas ──
+
+function textToVideoSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...videoFields(),
+      booleanField("webSearch", "联网搜索增强", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+  };
+}
+
+function imageToVideoSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: false, maxLength: 20_480 },
+    parameters: [
+      ...videoFields(),
+      booleanField("realPersonMode", "真人模式", true, true),
+      multiSelectField("conversionSlots", "素材资产化范围", [
+        ["全部首尾帧", "all"],
+        ["首帧", "firstFrameUrl"],
+        ["尾帧", "lastFrameUrl"],
+      ]),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES, true),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES),
+    ],
+  };
+}
+
+function multimodalVideoSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...videoFields(),
+      booleanField("realPersonMode", "真人模式", true, true),
+      multiSelectField("conversionSlots", "素材资产化范围", [
+        ["全部素材", "all"],
+        ...Array.from({ length: 9 }, (_, index) => [
+          `图片 ${index + 1}`,
+          `image${index + 1}`,
+        ] as [string, string]),
+        ...Array.from({ length: 3 }, (_, index) => [
+          `视频 ${index + 1}`,
+          `video${index + 1}`,
+        ] as [string, string]),
+      ]),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 9, 30 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("videoUrls", "参考视频", "video", 3, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
+      mediaSlot("audioUrls", "参考音频", "audio", 3, 50 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+  };
+}
+
+// ── Seedance 2.5 schemas ──
+// 2.5 差异：分辨率去掉 native1080p/native4k；时长扩展至 4-30 且支持 -1 智能时长；
+// 新增 bitrateMode 与 outputFormat；multimodal 素材上限大幅提升。
+
+function textToVideo25Schema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...videoFields25(),
+      booleanField("webSearch", "联网搜索增强", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+  };
+}
+
+function imageToVideo25Schema(): GenerationInputSchema {
+  return {
+    prompt: { required: false, maxLength: 20_480 },
+    parameters: [
+      // 2.5 image-to-video 仅支持 adaptive 比例
+      ...videoFields25(["adaptive"]),
+      booleanField("realPersonMode", "真人模式", true, true),
+      multiSelectField("conversionSlots", "素材资产化范围", [
+        ["全部首尾帧", "all"],
+        ["首帧", "firstFrameUrl"],
+        ["尾帧", "lastFrameUrl"],
+      ]),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES, true),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES),
+    ],
+  };
+}
+
+function multimodalVideo25Schema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...videoFields25(),
+      booleanField("realPersonMode", "真人模式", true, true),
+      multiSelectField("conversionSlots", "素材资产化范围", [
+        ["全部素材", "all"],
+        ...Array.from({ length: 30 }, (_, index) => [
+          `图片 ${index + 1}`,
+          `image${index + 1}`,
+        ] as [string, string]),
+        ...Array.from({ length: 10 }, (_, index) => [
+          `视频 ${index + 1}`,
+          `video${index + 1}`,
+        ] as [string, string]),
+      ]),
+      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 30, 50 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("videoUrls", "参考视频", "video", 10, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
+      mediaSlot("audioUrls", "参考音频", "audio", 10, 50 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+  };
+}
+
 function videoFields(): GenerationParameterField[] {
   return [
     selectField("resolution", "分辨率", ["480p", "720p", "native1080p", "native4k", "1080p", "2k", "4k"], "720p"),
@@ -95,6 +177,37 @@ function videoFields(): GenerationParameterField[] {
     selectField("aspectRatio", "画面比例", ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"], "adaptive"),
     booleanField("generateAudio", "生成音频", true),
   ];
+}
+
+// Seedance 2.5 视频公共字段：分辨率去掉 native 系列；时长 4-30 且支持 -1 智能时长；
+// 新增 bitrateMode 与 outputFormat。ratioValues 参数允许 image-to-video 限制为仅 adaptive。
+function videoFields25(
+  ratioValues: string[] = ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"],
+): GenerationParameterField[] {
+  return [
+    selectField("resolution", "分辨率", ["480p", "720p", "1080p", "2k", "4k"], "720p"),
+    durationField25(),
+    selectField("aspectRatio", "画面比例", ratioValues, "adaptive"),
+    booleanField("generateAudio", "生成音频", true),
+    selectField("bitrateMode", "画质档位", ["standard", "high"], "standard"),
+    selectField("outputFormat", "输出格式", ["mp4", "mov"], "mp4"),
+  ];
+}
+
+// 2.5 时长支持 -1 智能时长，需要自定义 label
+function durationField25(): GenerationParameterField {
+  const values: number[] = [-1, ...Array.from({ length: 27 }, (_, index) => index + 4)];
+  return {
+    key: "durationSeconds",
+    label: "时长",
+    type: "select",
+    required: true,
+    defaultValue: 5,
+    options: values.map((value) => ({
+      label: value === -1 ? "智能时长" : String(value),
+      value,
+    })),
+  };
 }
 
 function selectField(
