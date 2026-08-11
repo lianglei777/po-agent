@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Input } from "antd";
+import { Alert, Button, Input, Tag } from "antd";
+import { Check } from "@/components/icons";
 import { removeApiKey, saveApiKey } from "../api";
 import {
   type ApiKeyProvider,
@@ -67,26 +68,9 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <SectionTitle>{t.models.apiKey}</SectionTitle>
-        <div className="flex items-center gap-1.5">
-          <span
-            className="h-[7px] w-[7px] rounded-full"
-            style={{
-              background: provider.configured
-                ? "var(--success)"
-                : "var(--border)",
-            }}
-          />
-          <span
-            className="text-meta"
-            style={{
-              color: provider.configured
-                ? "var(--success)"
-                : "var(--text-dim)",
-            }}
-          >
+        <Tag color={provider.configured ? "success" : undefined} variant="filled">
             {provider.configured ? t.models.configured : t.models.notConfigured}
-          </span>
-        </div>
+        </Tag>
       </div>
 
       {/* Description */}
@@ -117,29 +101,20 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
           style={{ flex: 1 }}
         />
         <Button
-          size="small"
-          onClick={handleSave}
           disabled={saving || !apiKey.trim() || savedOk}
           htmlType="button"
-          style={
-            savedOk
-              ? {
-                  background: "var(--success)",
-                  borderColor: "var(--success)",
-                  color: "var(--primary-foreground)",
-                }
-              : undefined
-          }
+          icon={savedOk ? <Check /> : undefined}
+          loading={saving}
+          onClick={handleSave}
+          size="small"
+          type="primary"
         >
-          {savedOk && <CheckIcon />}
           {savedOk ? t.common.saved : saving ? t.common.saving : t.common.save}
         </Button>
       </div>
 
       {error && (
-        <p className="text-xs text-destructive-text">
-          {error}
-        </p>
+        <Alert showIcon title={error} type="error" />
       )}
 
       {/* Disconnect button */}
@@ -147,6 +122,7 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
         <Button
           danger
           htmlType="button"
+          loading={removing}
           onClick={() => setConfirmingRemove(true)}
           disabled={removing}
           className="self-start"
@@ -176,9 +152,7 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
             </DialogDescription>
           </DialogHeader>
           {error ? (
-            <p className="text-sm text-destructive-text" role="alert">
-              {error}
-            </p>
+            <Alert showIcon title={error} type="error" />
           ) : null}
           <DialogFooter>
             <Button
@@ -193,6 +167,7 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
               danger
               disabled={removing}
               htmlType="button"
+              loading={removing}
               onClick={() => void handleRemove()}
               type="primary"
             >
@@ -222,89 +197,24 @@ function SecretTextInput({
 }) {
   const [userVisible, setUserVisible] = useState(false);
   const visible = userVisible && value !== "";
-  const { t } = useI18n();
 
   return (
-    <div className="relative" style={style}>
-      <Input
+    <div style={style}>
+      <Input.Password
         aria-label={label}
-        size="small"
-        type={visible ? "text" : "password"}
-        value={value}
+        autoComplete="off"
+        className="font-ui-mono"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        className="pr-9 font-ui-mono"
-      />
-      <Button
-        aria-label={visible ? t.models.hideApiKey : t.models.showApiKey}
-        className="absolute top-1/2 right-[5px] size-6 -translate-y-1/2 text-dim"
-        htmlType="button"
-        onClick={() => setUserVisible((v) => !v)}
         size="small"
-        type="text"
-      >
-        {visible ? <EyeOffIcon /> : <EyeIcon />}
-      </Button>
+        spellCheck={false}
+        value={value}
+        visibilityToggle={{
+          visible,
+          onVisibleChange: setUserVisible,
+        }}
+      />
     </div>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.89 1 12a18.45 18.45 0 0 1 5.06-6.94" />
-      <path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c5 0 9.27 3.11 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <path d="M14.12 14.12A3 3 0 0 1 9.88 9.88" />
-      <path d="M1 1l22 22" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      style={{
-        strokeDasharray: 18,
-        animation: "saved-check-draw 0.35s ease forwards",
-      }}
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
   );
 }

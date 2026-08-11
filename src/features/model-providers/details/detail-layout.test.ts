@@ -41,12 +41,25 @@ describe("model provider detail layout", () => {
       expect(source).toContain('from "antd"');
       expect(source).not.toMatch(/@\/components\/ui\/(button|input|textarea|switch|checkbox)/);
     }
-    expect(providerSource).toContain("Button, Checkbox, Input, Select");
+    expect(providerSource).toContain(
+      "Alert, Button, Checkbox, Empty, Input, Select",
+    );
     expect(providerSource).toContain("<Input.Password");
     expect(providerSource).toContain("visibilityToggle={{");
     expect(providerSource).not.toContain("absolute top-1/2 right-[5px]");
     expect(providerSource).not.toContain("function EyeIcon");
-    expect(modelSource).toContain("Button, Input, Select, Switch");
+    expect(apiKeySource).toContain("<Input.Password");
+    expect(apiKeySource).toContain("visibilityToggle={{");
+    expect(apiKeySource).not.toContain("absolute top-1/2 right-[5px]");
+    expect(apiKeySource).not.toContain("function EyeIcon");
+    expect(modelSource).toContain("Alert, Button, Input, Select, Switch, Tag, Tooltip");
     expect(compatSource).toContain("<Input.TextArea");
+    expect(compatSource).toContain("<Typography.Text");
+    expect(oauthSource).toContain("<Alert");
+    expect(oauthSource).toContain("<Spin");
+    expect(modelSource).not.toContain("<Alert message=");
+    expect(providerSource).not.toContain("<Alert message=");
+    expect(apiKeySource).not.toContain("<Alert message=");
+    expect(oauthSource).not.toContain("<Alert message=");
   });
 });

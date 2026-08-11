@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Input, Select } from "antd";
+import { Alert, Button, Checkbox, Empty, Input, Select } from "antd";
 import {
   API_OPTIONS,
   type ModelDiscoverySuggestion,
@@ -296,6 +296,7 @@ function ModelDiscoveryPanel({
           className="shrink-0"
           disabled={discovering}
           htmlType="button"
+          loading={discovering}
           onClick={() => onDiscoverModels(providerName)}
           size="small"
         >
@@ -304,24 +305,26 @@ function ModelDiscoveryPanel({
       </div>
 
       {relevant?.phase === "error" && (
-        <p className="border-t border-line-subtle px-4 py-3 text-xs text-destructive-text">
-          {relevant.message}
-        </p>
+        <Alert className="rounded-none border-x-0 border-b-0" showIcon title={relevant.message} type="error" />
       )}
 
       {relevant?.phase === "result" && (
         <div className="space-y-2 border-t border-line-subtle px-4 py-3.5">
           {relevant.remoteError && (
-            <p className="text-xs text-dim">
-              {t.models.remoteDiscoveryFailed}: {relevant.remoteError}
-            </p>
+            <Alert
+              description={relevant.remoteError}
+              showIcon
+              title={t.models.remoteDiscoveryFailed}
+              type="warning"
+            />
           )}
           {newSuggestions.length === 0 ? (
-            <p className="text-xs text-dim">
-              {existingHiddenCount > 0
+            <Empty
+              description={existingHiddenCount > 0
                 ? t.models.allDiscoveredModelsExist
                 : t.models.noDiscoveredModels}
-            </p>
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           ) : (
             <>
               <div className="flex items-center justify-between gap-3">
@@ -373,6 +376,7 @@ function ModelDiscoveryPanel({
                     setSelectedIds(new Set());
                   }}
                   size="small"
+                  type="primary"
                 >
                   {t.models.addSelected} ({selectedSuggestions.length})
                 </Button>

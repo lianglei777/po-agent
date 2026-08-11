@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import { Button, Input, Select, Switch } from "antd";
+import { Alert, Button, Input, Select, Switch, Tag, Tooltip } from "antd";
+import { Check } from "@/components/icons";
 import { testModelConfig } from "../api";
 import { getEffectiveApi } from "@/contracts/model-compat";
 import {
@@ -171,8 +172,6 @@ export default function ModelDetail({
   }, [model.id]);
 
   let testSummary: string | null = null;
-  let testBorderColor = "var(--border)";
-  let testBgColor = "var(--bg-panel)";
 
   if (visibleTestState.phase === "testing") {
     testSummary = t.models.testingConnection;
@@ -182,12 +181,8 @@ export default function ModelDetail({
     testSummary = `${t.models.connected} | ${visibleTestState.latencyMs ?? "?"}ms${
       visibleTestState.responseText ? ` | ${visibleTestState.responseText}` : ""
     }`;
-    testBorderColor = "rgba(22,163,74,0.25)";
-    testBgColor = "rgba(22,163,74,0.08)";
   } else if (visibleTestState.phase === "error") {
     testSummary = `${t.models.failed} | ${visibleTestState.latencyMs ?? "?"}ms | ${visibleTestState.message}`;
-    testBorderColor = "rgba(220,38,38,0.25)";
-    testBgColor = "rgba(220,38,38,0.08)";
   }
 
   return (
@@ -290,27 +285,26 @@ export default function ModelDetail({
         >
           <div className="flex items-center justify-end gap-2">
             {testSummary && (
-              <span
-                title={testSummary}
-                className="inline-flex h-6 max-w-[160px] items-center overflow-hidden text-ellipsis whitespace-nowrap rounded border px-2 text-meta"
-                style={{
-                  borderColor: testBorderColor,
-                  background: testBgColor,
-                  color: "var(--text)",
-                  boxSizing: "border-box",
-                }}
-              >
-                {testSummary}
-              </span>
+              <Tooltip title={testSummary}>
+                <Tag
+                  className="max-w-[180px] overflow-hidden text-ellipsis whitespace-nowrap"
+                  color={testStatusColor(visibleTestState.phase)}
+                  variant="filled"
+                >
+                  {testSummary}
+                </Tag>
+              </Tooltip>
             )}
             <Button
               htmlType="button"
               className="min-w-[80px] justify-center"
               onClick={handleTest}
               disabled={!model.id.trim() || visibleTestState.phase === "testing"}
+              icon={visibleTestState.phase === "success" ? <Check /> : undefined}
+              loading={visibleTestState.phase === "testing"}
               size="small"
+              type="primary"
             >
-              {visibleTestState.phase === "success" && <CheckIcon />}
               {visibleTestState.phase === "testing"
                 ? t.models.testing
                 : visibleTestState.phase === "success"
@@ -435,58 +429,50 @@ function DiagnosticPanel({
 }) {
   const { t } = useI18n();
   return (
-    <section
+    <Alert
+      action={diagnostic.suggestedPatch ? (
+        <Button
+          htmlType="button"
+          size="small"
+          className="shrink-0"
+          onClick={onApplyAndRetest}
+        >
+          {t.models.applySuggestionAndRetest}
+        </Button>
+      ) : undefined}
       aria-live="polite"
-      className="rounded-lg border p-3"
-      style={{
-        borderColor: "rgba(220,38,38,0.25)",
-        background: "rgba(220,38,38,0.06)",
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-ui-mono text-meta text-destructive-text">
-            {diagnostic.code}
-          </div>
-          <p className="mt-1 text-xs leading-5 text-primary">
-            {diagnostic.summary}
-          </p>
-        </div>
-        {diagnostic.suggestedPatch && (
-          <Button
-            htmlType="button"
-            size="small"
-            className="shrink-0"
-            onClick={onApplyAndRetest}
-          >
-            {t.models.applySuggestionAndRetest}
-          </Button>
-        )}
-      </div>
-      {diagnostic.suggestedPatch && (
-        <div className="mt-2 rounded border border-line bg-panel p-2">
-          <div className="text-meta font-medium text-muted">
-            {t.models.suggestedChange}
-          </div>
-          <pre className="mt-1 overflow-x-auto font-ui-mono text-meta leading-4 text-primary">
-            {JSON.stringify(diagnostic.suggestedPatch.changes, null, 2)}
-          </pre>
-          <p className="mt-1 text-meta leading-4 text-dim">
-            {diagnostic.suggestedPatch.reason}
-          </p>
-        </div>
+      description={(
+        <>
+          <p>{diagnostic.summary}</p>
+          {diagnostic.suggestedPatch && (
+            <div className="mt-2 rounded border border-line bg-panel p-2">
+              <div className="text-meta font-medium text-muted">
+                {t.models.suggestedChange}
+              </div>
+              <pre className="mt-1 overflow-x-auto font-ui-mono text-meta leading-4 text-primary">
+                {JSON.stringify(diagnostic.suggestedPatch.changes, null, 2)}
+              </pre>
+              <p className="mt-1 text-meta leading-4 text-dim">
+                {diagnostic.suggestedPatch.reason}
+              </p>
+            </div>
+          )}
+          {diagnostic.technicalMessage && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-meta text-muted">
+                {t.models.diagnosticDetails}
+              </summary>
+              <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-panel p-2 font-ui-mono text-meta leading-4 text-muted">
+                {diagnostic.technicalMessage}
+              </pre>
+            </details>
+          )}
+        </>
       )}
-      {diagnostic.technicalMessage && (
-        <details className="mt-2">
-          <summary className="cursor-pointer text-meta text-muted">
-            {t.models.diagnosticDetails}
-          </summary>
-          <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-panel p-2 font-ui-mono text-meta leading-4 text-muted">
-            {diagnostic.technicalMessage}
-          </pre>
-        </details>
-      )}
-    </section>
+      showIcon
+      title={<code className="font-ui-mono">{diagnostic.code}</code>}
+      type="error"
+    />
   );
 }
 
@@ -510,17 +496,9 @@ function CapabilityToggle({
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-    >
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
+function testStatusColor(phase: ModelTestState["phase"]) {
+  if (phase === "success") return "success";
+  if (phase === "error") return "error";
+  if (phase === "testing") return "processing";
+  return "warning";
 }

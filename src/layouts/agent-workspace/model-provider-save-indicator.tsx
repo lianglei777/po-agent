@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, Tag } from "antd";
 import type { ModelProviderSaveStatus } from "@/features/model-providers/model-provider-page";
 import { useI18n } from "@/i18n/use-i18n";
 import { mergeClasses } from "@/lib/utils";
@@ -32,11 +32,10 @@ export function ModelProviderSaveIndicator({
         </span>
         {status.onRetry ? (
           <Button
-            className="h-7 shrink-0 px-2"
+            className="shrink-0"
+            htmlType="button"
             onClick={status.onRetry}
-            size="sm"
-            type="button"
-            variant="outline"
+            size="small"
           >
             {t.models.retrySave}
           </Button>
@@ -53,19 +52,16 @@ export function ModelProviderSaveIndicator({
         : t.models.autoSaved;
 
   return (
-    <div
+    <Tag
       className={mergeClasses(
-        "min-w-24 text-right text-xs",
-        status.phase === "saved"
-          ? "text-accent-deep"
-          : status.phase === "pending"
-            ? "text-dim"
-            : "text-muted",
+        "min-w-24 text-center",
         className,
       )}
+      color={status.phase === "saved" ? "success" : undefined}
       role="status"
+      variant="filled"
     >
       {label}
-    </div>
+    </Tag>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "antd";
 import type {
   ApiKeyProvider,
   ModelsJson,
   Selection,
 } from "../types";
 import { useI18n } from "@/i18n/use-i18n";
-import { Button } from "@/components/ui/button";
 import { ChevronRight, Plus, Server } from "@/components/icons";
 import {
   getSelectionKey,
@@ -71,12 +71,11 @@ export function ModelProviderSidebar({
     <aside className="flex w-[224px] shrink-0 flex-col border-r border-line-subtle">
       <div className="flex-1 overflow-y-auto px-1.5 py-2">
         <Button
-          type="button"
-          variant="outline"
+          htmlType="button"
+          icon={<Plus />}
           className="mb-1.5 w-full"
           onClick={onAddProvider}
         >
-          <Plus />
           {t.models.addProvider}
         </Button>
         <div className="mb-2 border-t border-line-subtle" />

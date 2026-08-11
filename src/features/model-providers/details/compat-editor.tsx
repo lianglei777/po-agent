@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Input, Select } from "antd";
+import { Input, Select, Typography } from "antd";
 import {
   getCompatFields,
   type CompatFieldDefinition,
@@ -219,9 +219,9 @@ function JsonCompatTextarea({
         }}
       />
       {invalid && (
-        <span className="text-meta text-destructive-text">
+        <Typography.Text className="text-meta" type="danger">
           {t.models.invalidJsonObject}
-        </span>
+        </Typography.Text>
       )}
     </div>
   );

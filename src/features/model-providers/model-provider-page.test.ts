@@ -84,4 +84,11 @@ describe("Model Provider page", () => {
     expect(sidebarSource).toContain('border-line-subtle');
     expect(sidebarSource).not.toContain('bg-panel');
   });
+
+  it("uses Ant Design for standard page feedback and actions", () => {
+    expect(source).toContain('import { Alert, Empty, Skeleton } from "antd"');
+    expect(sidebarSource).toContain('import { Button } from "antd"');
+    expect(source).not.toContain("<Alert message=");
+    expect(sidebarSource).not.toContain('from "@/components/ui/button"');
+  });
 });

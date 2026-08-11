@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Input } from "antd";
+import { Alert, Button, Input, Spin, Typography } from "antd";
 import { logoutOAuth, submitOAuthInput } from "../api";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -167,6 +167,7 @@ export default function OAuthDetail({
               htmlType="button"
               size="small"
               onClick={startLogin}
+              type="primary"
             >
               {t.models.login}
             </Button>
@@ -202,9 +203,7 @@ export default function OAuthDetail({
             </DialogDescription>
           </DialogHeader>
           {state.phase === "error" ? (
-            <p className="text-sm text-destructive-text" role="alert">
-              {state.message}
-            </p>
+            <Alert showIcon title={state.message} type="error" />
           ) : null}
           <DialogFooter>
             <Button
@@ -219,6 +218,7 @@ export default function OAuthDetail({
               danger
               disabled={disconnecting}
               htmlType="button"
+              loading={disconnecting}
               onClick={() => void disconnect()}
               type="primary"
             >
@@ -250,15 +250,15 @@ function OAuthState({
     return <p className="text-body-sm text-muted">{t.models.connectOAuth}</p>;
   }
   if (state.phase === "connecting") {
-    return <p className="text-body-sm text-muted">{t.models.openingLogin}</p>;
+    return <div className="flex items-center gap-2 text-body-sm text-muted"><Spin size="small" />{t.models.openingLogin}</div>;
   }
   if (state.phase === "auth") {
     return (
       <div className="flex flex-col gap-2 text-body-sm text-muted">
         {state.instructions && <p>{state.instructions}</p>}
-        <a className="text-accent-deep hover:underline" href={state.url} target="_blank" rel="noreferrer">
+        <Typography.Link href={state.url} target="_blank" rel="noreferrer">
           {t.models.openLoginPage}
-        </a>
+        </Typography.Link>
       </div>
     );
   }
@@ -269,9 +269,9 @@ function OAuthState({
         <code className="self-start rounded border border-line px-4 py-2 text-[16px] font-bold">
           {state.userCode}
         </code>
-        <a className="text-accent-deep hover:underline" href={state.verificationUri} target="_blank" rel="noreferrer">
+        <Typography.Link href={state.verificationUri} target="_blank" rel="noreferrer">
           {state.verificationUri}
-        </a>
+        </Typography.Link>
       </div>
     );
   }
@@ -294,6 +294,7 @@ function OAuthState({
             size="small"
             disabled={!canSubmit}
             onClick={() => submit(state.token, input)}
+            type="primary"
           >
             {t.models.submit}
           </Button>
@@ -320,15 +321,12 @@ function OAuthState({
     );
   }
   if (state.phase === "success") {
-    return (
-      <p className="text-body-sm text-success-text">
-        {t.models.connectedSuccessfully}
-      </p>
-    );
+    return <Alert showIcon title={t.models.connectedSuccessfully} type="success" />;
+  }
+  if (state.phase === "progress") {
+    return <div className="flex items-center gap-2 text-body-sm text-muted"><Spin size="small" />{state.message}</div>;
   }
   return (
-    <p className={`text-body-sm ${state.phase === "error" ? "text-destructive-text" : "text-muted"}`}>
-      {state.message}
-    </p>
+    <Alert showIcon title={state.message} type="error" />
   );
 }

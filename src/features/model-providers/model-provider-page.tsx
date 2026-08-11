@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Alert, Empty, Skeleton } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import ApiKeyDetail from "./details/api-key-detail";
 import ModelDetail from "./details/model-detail";
@@ -34,7 +35,6 @@ function ModelProviderPageContent({
   onSaveStatusChange,
 }: ModelProviderPageProps) {
   const modelConfig = useModelProviders(onSaved);
-  const { t } = useI18n();
 
   useEffect(() => {
     onDirtyChange(modelConfig.dirty);
@@ -77,9 +77,7 @@ function ModelProviderPageContent({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-canvas">
       {modelConfig.loading ? (
-        <div className="grid min-h-0 flex-1 place-items-center text-sm text-dim">
-          {t.common.loading}
-        </div>
+        <Skeleton active className="p-6" paragraph={{ rows: 8 }} />
       ) : (
         <div className="flex min-h-0 flex-1">
           <ModelProviderSidebar
@@ -91,9 +89,7 @@ function ModelProviderPageContent({
           />
           <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
             {modelConfig.loadError ? (
-              <p className="text-body-sm text-destructive-text">
-                {modelConfig.loadError}
-              </p>
+              <Alert showIcon title={modelConfig.loadError} type="error" />
             ) : (
               <ModelsConfigDetail modelConfig={modelConfig} />
             )}
@@ -174,8 +170,10 @@ function ModelsConfigDetail({
 function EmptySelection() {
   const { t } = useI18n();
   return (
-    <div className="grid h-full place-items-center text-body-sm text-dim">
-      {t.models.selectProviderOrModel}
-    </div>
+    <Empty
+      className="my-auto"
+      description={t.models.selectProviderOrModel}
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+    />
   );
 }
