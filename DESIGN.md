@@ -137,7 +137,7 @@ Ant Design blue (`#1677ff`) is the primary action, selection, link, focus, switc
 - The process is open while running and collapses after completion; recoverable tool failures remain local to their step.
 - Final answer content stays outside the execution disclosure and remains directly readable.
 - Tool rows reserve stable columns for command summary, status, and disclosure controls.
-- The floating Composer keeps model, thinking, compaction, attachments, queue/steer/stop, and send controls in one compact toolbar.
+- The floating Composer keeps model, thinking, attachments, queue/steer/stop, and send controls in one compact toolbar. Context compaction remains an automatic runtime concern configured from General settings.
 - Generate is a sibling Session view, not a separate Session type. Returning to Chat restores the same conversation, while generation Runs remain associated with the same Session.
 - Long conversations use a Codex-style turn navigator overlaid on the Chat panel's right edge. User turns form a quiet continuous rail of short marks; hovering one mark expands nearby marks into a wave and reveals the user prompt plus the following assistant summary. Clicking a mark jumps to that turn without changing panel widths.
 

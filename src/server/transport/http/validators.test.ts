@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseAgentCommand,
   parseCreateAgent,
+  parseUpdateAgentSettings,
   parseDeleteProjectInstructions,
   parseDeleteSystemInstructions,
   parseModelsConfig,
@@ -47,15 +48,21 @@ describe("agent HTTP validation", () => {
     ).toThrow("message or images must be provided");
   });
 
-  it.each(["set_auto_compaction", "set_auto_retry"] as const)(
-    "parses %s commands",
-    (type) => {
-      expect(parseAgentCommand({ type, enabled: true })).toEqual({
-        type,
-        enabled: true,
-      });
-    },
-  );
+  it("parses the auto-retry command", () => {
+    expect(parseAgentCommand({ type: "set_auto_retry", enabled: true })).toEqual({
+      type: "set_auto_retry",
+      enabled: true,
+    });
+  });
+
+  it("parses global Agent settings updates", () => {
+    expect(
+      parseUpdateAgentSettings({ autoCompactionEnabled: false }),
+    ).toEqual({ autoCompactionEnabled: false });
+    expect(() =>
+      parseUpdateAgentSettings({ autoCompactionEnabled: "false" }),
+    ).toThrow("autoCompactionEnabled must be a boolean");
+  });
 
   it("accepts the skills market package contract", () => {
     expect(

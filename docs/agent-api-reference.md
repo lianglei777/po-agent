@@ -158,6 +158,8 @@ Content-Type: text/event-stream; charset=utf-8
 | Method | Path | 用途 |
 | --- | --- | --- |
 | `POST` | `/api/agent/new` | 创建并配置 Agent Runtime |
+| `GET` | `/api/agent-settings` | 读取全局 Agent 设置 |
+| `PATCH` | `/api/agent-settings` | 更新全局 Agent 设置并刷新存活 Runtime |
 | `GET` | `/api/agent/:id` | 获取 Runtime Snapshot |
 | `POST` | `/api/agent/:id` | 执行统一 Agent Command |
 | `GET` | `/api/agent/:id/events` | 订阅 Agent SSE 事件 |
@@ -276,8 +278,6 @@ interface AgentRuntimeState {
   sessionFile: string;
   isStreaming: boolean;
   isCompacting: boolean;
-  compactionAvailable: boolean;
-  autoCompactionEnabled: boolean;
   autoRetryEnabled: boolean;
   model?: {
     id: string;
@@ -752,8 +752,6 @@ Runtime 已加载：
     "sessionFile": "C:\\Users\\example\\.pi\\agent\\sessions\\...jsonl",
     "isStreaming": false,
     "isCompacting": false,
-    "compactionAvailable": false,
-    "autoCompactionEnabled": true,
     "autoRetryEnabled": true,
     "model": {
       "id": "qwen3-coder-next",
@@ -891,35 +889,6 @@ Fork 成功后，原 Session Runtime 会被销毁。新 Session 在需要时重�
 ```
 
 允许值见 `ThinkingLevel`。
-
-#### compact
-
-```json
-{
-  "type": "compact",
-  "customInstructions": "保留所有文件修改和待办事项"
-}
-```
-
-响应可能包含：
-
-```json
-{
-  "summary": "...",
-  "firstKeptEntryId": "a1b2c3d4",
-  "tokensBefore": 90000,
-  "details": {}
-}
-```
-
-#### set_auto_compaction
-
-```json
-{
-  "type": "set_auto_compaction",
-  "enabled": true
-}
-```
 
 #### steer
 
@@ -1102,6 +1071,37 @@ SSE 每 25 秒发送一次注释 Heartbeat：
 ```
 
 客户端断开时会自动取消订阅。若 Runtime 未加载，该接口会从 Session Storage 恢复。
+
+### 6.5 全局 Agent 设置
+
+自动上下文压缩是全局 Agent 偏好，不依赖当前 Session。
+
+读取设置：
+
+```http
+GET /api/agent-settings
+```
+
+```json
+{
+  "autoCompactionEnabled": true
+}
+```
+
+更新设置：
+
+```http
+PATCH /api/agent-settings
+Content-Type: application/json
+```
+
+```json
+{
+  "autoCompactionEnabled": false
+}
+```
+
+成功响应返回更新后的完整设置。服务端先持久化 Pi 全局设置，再通知当前进程中所有存活的 Agent Runtime 重新加载设置；之后创建或恢复的 Runtime 会直接读取最新值。
 
 浏览器示例：
 

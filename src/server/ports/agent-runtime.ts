@@ -27,6 +27,8 @@ export interface AgentRuntime {
   isAlive(): boolean;
   /** 标记模型配置已更新，在下一次请求模型前重新加载。 */
   invalidateModelConfig(invalidation: ModelConfigInvalidation): void;
+  /** 重新加载全局与项目 Agent 设置。 */
+  reloadAgentSettings(): Promise<void>;
   /** 向 Agent 发送命令并等待返回结果。 */
   execute<T = unknown>(command: AgentCommand): Promise<T>;
   /** 获取 Agent 当前运行时状态。 */
@@ -88,4 +90,6 @@ export interface AgentRuntimeRegistry {
   touch(sessionId: string): void;
   /** 通知所有已加载运行时模型配置已更新。 */
   invalidateModelConfig(invalidation: ModelConfigInvalidation): void;
+  /** 通知所有已加载运行时重新读取 Agent 设置。 */
+  reloadAgentSettings(): Promise<void>;
 }

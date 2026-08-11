@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
+import { AgentSettingsService } from "@/server/application/agent-settings-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
@@ -24,6 +25,7 @@ import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-di
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
 import { InMemoryWorkspaceRoots } from "@/server/infrastructure/filesystem/workspace-roots";
 import { PiAgentRuntimeFactory } from "@/server/infrastructure/pi/pi-agent-runtime";
+import { PiAgentSettingsStore } from "@/server/infrastructure/pi/pi-agent-settings-store";
 import { PiCredentialProvider } from "@/server/infrastructure/pi/pi-credential-provider";
 import { PiModelProvider } from "@/server/infrastructure/pi/pi-model-provider";
 import { PiSessionRepository } from "@/server/infrastructure/pi/pi-session-repository";
@@ -41,6 +43,7 @@ function createContainer() {
   const sessions = new PiSessionRepository();
   const runtimes = new InMemoryAgentRegistry();
   const runtimeFactory = new PiAgentRuntimeFactory();
+  const agentSettings = new PiAgentSettingsStore();
   const roots = new InMemoryWorkspaceRoots();
   const credentials = new PiCredentialProvider();
   const models = new PiModelProvider();
@@ -130,6 +133,7 @@ function createContainer() {
       roots,
       generationAgentTools,
     ),
+    agentSettingsService: new AgentSettingsService(agentSettings, runtimes),
     modelService: new ModelService(models, runtimes),
     projectService: new ProjectService(
       projectRepository,

@@ -77,18 +77,6 @@ export function canAttachImagesToModel(model?: ModelInfo) {
   return model?.input?.includes("image") ?? false;
 }
 
-export function canCompactContext({
-  compactionAvailable,
-  isCompacting,
-  running,
-}: {
-  compactionAvailable: boolean;
-  isCompacting: boolean;
-  running: boolean;
-}) {
-  return compactionAvailable && !isCompacting && !running;
-}
-
 function defaultModelKey(data: LoadedModelData) {
   if (data.defaultModel) {
     return `${data.defaultModel.provider}:${data.defaultModel.modelId}`;

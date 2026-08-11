@@ -84,6 +84,14 @@ export class InMemoryAgentRegistry implements AgentRuntimeRegistry {
     }
   }
 
+  async reloadAgentSettings(): Promise<void> {
+    await Promise.all(
+      [...this.runtimes.values()].map(({ runtime }) =>
+        runtime.reloadAgentSettings(),
+      ),
+    );
+  }
+
   private createTimer(sessionId: string): ReturnType<typeof setTimeout> {
     const timer = setTimeout(() => this.destroy(sessionId), this.idleTimeoutMs);
     timer.unref?.();

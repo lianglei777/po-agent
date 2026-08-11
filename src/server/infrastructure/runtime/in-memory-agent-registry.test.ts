@@ -46,6 +46,23 @@ describe("InMemoryAgentRegistry", () => {
     registry.destroy(first.sessionId);
     registry.destroy(second.sessionId);
   });
+
+  it("reloads Agent settings in every loaded runtime", async () => {
+    const registry = new InMemoryAgentRegistry();
+    const first = createRuntime("session-1");
+    const second = createRuntime("session-2");
+    first.reloadAgentSettings = vi.fn(async () => {});
+    second.reloadAgentSettings = vi.fn(async () => {});
+    registry.register(first.sessionId, first);
+    registry.register(second.sessionId, second);
+
+    await registry.reloadAgentSettings();
+
+    expect(first.reloadAgentSettings).toHaveBeenCalledOnce();
+    expect(second.reloadAgentSettings).toHaveBeenCalledOnce();
+    registry.destroy(first.sessionId);
+    registry.destroy(second.sessionId);
+  });
 });
 
 function createRuntime(
@@ -62,8 +79,6 @@ function createRuntime(
       sessionFile: `${sessionId}.jsonl`,
       isStreaming: false,
       isCompacting: false,
-      compactionAvailable: false,
-      autoCompactionEnabled: true,
       autoRetryEnabled: true,
       contextUsage: null,
       systemPrompt: "",
@@ -71,6 +86,7 @@ function createRuntime(
     }),
     subscribe: () => () => {},
     invalidateModelConfig,
+    reloadAgentSettings: async () => {},
     destroy: () => {},
   };
 }

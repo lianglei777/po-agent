@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   canAttachImagesToModel,
-  canCompactContext,
   resolveLoadedModelState,
   resolveThinkingLevelForMode,
   thinkingModeFromLevel,
@@ -36,7 +35,6 @@ describe("resolveLoadedModelState", () => {
     ).toBe("openai:gpt-5");
   });
 });
-
 describe("resolveSubmitTarget", () => {
   it("blocks prompt submission before optimistic UI when no session or cwd exists", () => {
     expect(
@@ -71,7 +69,6 @@ describe("resolveSubmitTarget", () => {
     ).toEqual({ type: "existing", sessionId: "session-1" });
   });
 });
-
 describe("thinking mode mapping", () => {
   it("maps On to high when the model supports it", () => {
     expect(
@@ -126,31 +123,5 @@ describe("image input support", () => {
       }),
     ).toBe(false);
     expect(canAttachImagesToModel(undefined)).toBe(false);
-  });
-});
-
-describe("context compaction availability", () => {
-  it("requires backend availability and an idle runtime", () => {
-    expect(
-      canCompactContext({
-        compactionAvailable: true,
-        isCompacting: false,
-        running: false,
-      }),
-    ).toBe(true);
-    expect(
-      canCompactContext({
-        compactionAvailable: false,
-        isCompacting: false,
-        running: false,
-      }),
-    ).toBe(false);
-    expect(
-      canCompactContext({
-        compactionAvailable: true,
-        isCompacting: false,
-        running: true,
-      }),
-    ).toBe(false);
   });
 });

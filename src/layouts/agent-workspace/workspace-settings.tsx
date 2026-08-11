@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, Cpu, Images, Languages, ScrollText } from "@/components/icons";
+import { ArrowLeft, Cpu, Images, ScrollText, Settings } from "@/components/icons";
 import { useState } from "react";
-import { Button, Segmented } from "antd";
+import { Button, Segmented, Switch } from "antd";
 import {
   ModelProviderPage,
   type ModelProviderSaveStatus,
@@ -10,9 +10,10 @@ import {
 import { SystemPromptWorkbench } from "@/features/instructions/system-prompt-workbench";
 import { useI18n } from "@/i18n/use-i18n";
 import { ContentGenerationSettings } from "@/features/content-generation/content-generation-settings";
+import { useAgentSettings } from "@/features/agent-settings/use-agent-settings";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
 
-type SettingsSection = "models" | "content-generation" | "instructions" | "language";
+type SettingsSection = "models" | "content-generation" | "instructions" | "general";
 
 export function WorkspaceSettings({
   agentId,
@@ -45,10 +46,11 @@ export function WorkspaceSettings({
   onSystemPromptChange: (prompt: string) => void;
   onSystemPromptDirtyChange: (dirty: boolean) => void;
 }) {
-  const [section, setSection] = useState<SettingsSection>("models");
+  const [section, setSection] = useState<SettingsSection>("general");
   const [modelProviderSaveStatus, setModelProviderSaveStatus] =
     useState<ModelProviderSaveStatus>({ phase: "idle" });
   const { locale, setLocale, t } = useI18n();
+  const agentSettings = useAgentSettings();
 
   return (
     <div className="flex h-full min-h-0 bg-[var(--workspace-bg)]">
@@ -71,16 +73,16 @@ export function WorkspaceSettings({
           {t.workspace.settings}
         </p>
         <SettingsNavButton
+          icon={<Settings />}
+          label={t.settings.general}
+          onClick={() => setSection("general")}
+          selected={section === "general"}
+        />
+        <SettingsNavButton
           icon={<Cpu />}
           label={t.workspace.modelProvider}
           onClick={() => setSection("models")}
           selected={section === "models"}
-        />
-        <SettingsNavButton
-          icon={<ScrollText />}
-          label={t.workspace.systemPrompt}
-          onClick={() => setSection("instructions")}
-          selected={section === "instructions"}
         />
         <SettingsNavButton
           icon={<Images />}
@@ -89,10 +91,10 @@ export function WorkspaceSettings({
           selected={section === "content-generation"}
         />
         <SettingsNavButton
-          icon={<Languages />}
-          label={t.common.language}
-          onClick={() => setSection("language")}
-          selected={section === "language"}
+          icon={<ScrollText />}
+          label={t.workspace.systemPrompt}
+          onClick={() => setSection("instructions")}
+          selected={section === "instructions"}
         />
       </aside>
 
@@ -153,20 +155,54 @@ export function WorkspaceSettings({
             />
           </div>
 
-          {section === "language" ? (
+          {section === "general" ? (
             <SettingsReadingColumn
-              description={t.settings.languageDescription}
-              title={t.common.language}
+              description={t.settings.generalDescription}
+              title={t.settings.general}
             >
-              <Segmented
-                onChange={setLocale}
-                options={[
-                  { label: "中文", value: "zh" as const },
-                  { label: "English", value: "en" as const },
-                ]}
-                size="small"
-                value={locale}
-              />
+              <div className="space-y-8">
+                <SettingsRow
+                  description={t.settings.languageDescription}
+                  label={t.common.language}
+                >
+                  <Segmented
+                    onChange={setLocale}
+                    options={[
+                      { label: "中文", value: "zh" as const },
+                      { label: "English", value: "en" as const },
+                    ]}
+                    size="small"
+                    value={locale}
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  description={t.settings.autoCompactDescription}
+                  label={t.settings.autoCompact}
+                >
+                  <div className="flex flex-col items-end">
+                    <Switch
+                      checked={agentSettings.autoCompactionEnabled}
+                      className="custom-switch"
+                      disabled={agentSettings.loading || agentSettings.saving}
+                      loading={agentSettings.loading || agentSettings.saving}
+                      onChange={(checked) =>
+                        void agentSettings.setAutoCompaction(checked)
+                      }
+                      size="small"
+                    />
+                    {agentSettings.error ? (
+                      <p
+                        className="mt-2 max-w-56 text-right text-xs text-destructive-text"
+                        role="alert"
+                      >
+                        {agentSettings.error === "load"
+                          ? t.settings.autoCompactLoadError
+                          : t.settings.autoCompactSaveError}
+                      </p>
+                    ) : null}
+                  </div>
+                </SettingsRow>
+              </div>
             </SettingsReadingColumn>
           ) : null}
         </div>
@@ -225,5 +261,27 @@ function SettingsReadingColumn({
         <section className="py-6">{children}</section>
       </div>
     </main>
+  );
+}
+
+function SettingsRow({
+  children,
+  description,
+  label,
+}: {
+  children: React.ReactNode;
+  description: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-6">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-primary">{label}</p>
+        <p className="mt-1 max-w-[55ch] text-body-sm leading-6 text-muted">
+          {description}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center pt-0.5">{children}</div>
+    </div>
   );
 }

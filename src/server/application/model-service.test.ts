@@ -125,5 +125,6 @@ function runtimeRegistryStub(
     destroy: vi.fn(),
     touch: vi.fn(),
     invalidateModelConfig,
+    reloadAgentSettings: vi.fn(),
   };
 }

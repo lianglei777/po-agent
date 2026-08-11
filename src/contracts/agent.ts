@@ -26,8 +26,6 @@ export type AgentCommand =
   | { type: "fork"; entryId: string }
   | { type: "navigate_tree"; targetId: string }
   | { type: "set_thinking_level"; level: ThinkingLevel }
-  | { type: "compact"; customInstructions?: string }
-  | { type: "set_auto_compaction"; enabled: boolean }
   | { type: "steer"; message: string; images?: ImageInput[] }
   | { type: "follow_up"; message: string; images?: ImageInput[] }
   | { type: "get_tools" }
@@ -216,8 +214,6 @@ export interface AgentRuntimeState {
   sessionFile: string;
   isStreaming: boolean;
   isCompacting: boolean;
-  compactionAvailable: boolean;
-  autoCompactionEnabled: boolean;
   autoRetryEnabled: boolean;
   model?: {
     id: string;
@@ -266,13 +262,6 @@ export interface NavigateTreeResponse {
   summaryEntry?: unknown;
 }
 
-export interface CompactAgentResponse {
-  summary: string;
-  firstKeptEntryId: string;
-  tokensBefore: number;
-  details?: unknown;
-}
-
 export interface AgentToolInfo {
   name: string;
   description: string;
@@ -291,7 +280,6 @@ export type AgentCommandResponse =
   | AgentRuntimeState
   | ForkAgentResponse
   | NavigateTreeResponse
-  | CompactAgentResponse
   | AgentToolsResponse;
 
 export type AgentCommandResult<C extends AgentCommand> =
@@ -303,9 +291,7 @@ export type AgentCommandResult<C extends AgentCommand> =
         ? ForkAgentResponse
         : C["type"] extends "navigate_tree"
           ? NavigateTreeResponse
-          : C["type"] extends "compact"
-            ? CompactAgentResponse
-            : C["type"] extends "get_tools"
+          : C["type"] extends "get_tools"
               ? AgentToolsResponse
               : C["type"] extends "reload_instructions"
                 ? AgentRuntimeState

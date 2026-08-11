@@ -16,10 +16,6 @@ type RetryInfo = {
   maxAttempts: number;
   errorMessage?: string;
 } | null;
-type CompactionAvailability = {
-  sessionId: string;
-  available: boolean;
-} | null;
 
 export type ChatState = {
   messages: AgentMessage[];
@@ -37,10 +33,6 @@ export type ChatState = {
   partialToolResults: Map<string, ToolResultMessage>;
   retryInfo: RetryInfo;
   isCompacting: boolean;
-  compactionAvailability: CompactionAvailability;
-  compactError: string;
-  compactResult: boolean;
-  compactNotice: string;
   models: ModelInfo[];
   modelKey: string;
   thinkingLevel: ThinkingLevel;
@@ -67,10 +59,6 @@ export type ChatActions = {
   ) => void;
   setRetryInfo: (next: RetryInfo) => void;
   setIsCompacting: (next: boolean) => void;
-  setCompactionAvailability: (next: CompactionAvailability) => void;
-  setCompactError: (next: string) => void;
-  setCompactResult: (next: boolean) => void;
-  setCompactNotice: (next: string) => void;
   setModels: (next: ModelInfo[]) => void;
   setModelKey: (next: StateUpdater<string>) => void;
   setThinkingLevel: (next: ThinkingLevel) => void;
@@ -98,10 +86,6 @@ export const DEFAULT_CHAT_STATE: ChatState = {
   partialToolResults: new Map(),
   retryInfo: null,
   isCompacting: false,
-  compactionAvailability: null,
-  compactError: "",
-  compactResult: false,
-  compactNotice: "",
   models: [],
   modelKey: "",
   thinkingLevel: "auto",
@@ -148,11 +132,6 @@ export function createChatStore(initialState: Partial<ChatState> = {}) {
       })),
     setRetryInfo: (retryInfo) => set({ retryInfo }),
     setIsCompacting: (isCompacting) => set({ isCompacting }),
-    setCompactionAvailability: (compactionAvailability) =>
-      set({ compactionAvailability }),
-    setCompactError: (compactError) => set({ compactError }),
-    setCompactResult: (compactResult) => set({ compactResult }),
-    setCompactNotice: (compactNotice) => set({ compactNotice }),
     setModels: (models) => set({ models }),
     setModelKey: (next) =>
       set((state) => ({ modelKey: resolveUpdater(state.modelKey, next) })),

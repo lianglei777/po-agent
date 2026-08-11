@@ -86,8 +86,6 @@ describe("AgentService", () => {
         sessionFile: "original.jsonl",
         isStreaming: false,
         isCompacting: false,
-        compactionAvailable: false,
-        autoCompactionEnabled: true,
         autoRetryEnabled: true,
         contextUsage: null,
         systemPrompt: "",
@@ -95,6 +93,7 @@ describe("AgentService", () => {
       }),
       subscribe: () => () => {},
       invalidateModelConfig: () => {},
+      reloadAgentSettings: async () => {},
       destroy,
     };
     const registry = new InMemoryAgentRegistry();
@@ -129,14 +128,13 @@ function runtimeStub(
     sessionFile: "created.jsonl",
     isAlive: () => true,
     invalidateModelConfig: () => {},
+    reloadAgentSettings: async () => {},
     execute: async <T,>() => undefined as T,
     getState: async () => ({
       sessionId: "created",
       sessionFile: "created.jsonl",
       isStreaming: false,
       isCompacting: false,
-      compactionAvailable: false,
-      autoCompactionEnabled: true,
       autoRetryEnabled: true,
       contextUsage: null,
       systemPrompt: "",

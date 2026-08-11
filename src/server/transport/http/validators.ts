@@ -5,6 +5,7 @@ import {
   type ImageInput,
   type ThinkingLevel,
 } from "@/contracts/agent";
+import type { UpdateAgentSettingsRequest } from "@/contracts/agent-settings";
 import { AppError } from "@/server/domain/app-error";
 import type {
   ImportLocalSkillInput,
@@ -87,6 +88,18 @@ export function parseCreateAgent(value: unknown): CreateAgentRequest {
   };
 }
 
+export function parseUpdateAgentSettings(
+  value: unknown,
+): UpdateAgentSettingsRequest {
+  const object = asObject(value);
+  return {
+    autoCompactionEnabled: requiredBoolean(
+      object,
+      "autoCompactionEnabled",
+    ),
+  };
+}
+
 export function parseAgentCommand(value: unknown): AgentCommand {
   const object = asObject(value);
   const type = requiredString(object, "type");
@@ -119,12 +132,6 @@ export function parseAgentCommand(value: unknown): AgentCommand {
       return { type, targetId: requiredString(object, "targetId") };
     case "set_thinking_level":
       return { type, level: parseThinkingLevel(object.level) };
-    case "compact":
-      return {
-        type,
-        customInstructions: optionalString(object, "customInstructions"),
-      };
-    case "set_auto_compaction":
     case "set_auto_retry":
       return { type, enabled: requiredBoolean(object, "enabled") };
     case "set_tools":

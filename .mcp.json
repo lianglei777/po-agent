@@ -2,7 +2,7 @@
   "mcpServers": {
     "ant-design": {
       "command": "npx",
-      "args": ["-y", "@ant-design/mcp-server"]
+      "args": ["-y", "@ant-design/cli", "mcp"]
     }
   }
 }

@@ -12,7 +12,6 @@ import {
   Brain,
   Clock3,
   Cpu,
-  Minimize2,
   Paperclip,
   Send,
   Square,
@@ -38,12 +37,6 @@ export function ChatInput({
   canAttachImages,
   thinkingMode,
   isCompacting,
-  compactError,
-  compactResult,
-  compactNotice,
-  canCompact,
-  setCompactResult,
-  setCompactNotice,
   actionError,
   undoable,
   undoEdit,
@@ -59,7 +52,6 @@ export function ChatInput({
   stop,
   changeModel,
   changeThinkingMode,
-  compact,
   handleKeyDown,
   handlePaste,
   setActionError,
@@ -76,12 +68,6 @@ export function ChatInput({
   canAttachImages: boolean;
   thinkingMode: ThinkingMode;
   isCompacting: boolean;
-  compactError: string;
-  compactResult: boolean;
-  compactNotice: string;
-  canCompact: boolean;
-  setCompactResult: (value: boolean) => void;
-  setCompactNotice: (value: string) => void;
   actionError: string;
   undoable: { leafId: string } | null;
   undoEdit: () => Promise<void>;
@@ -101,7 +87,6 @@ export function ChatInput({
   stop: () => Promise<void>;
   changeModel: (value: string) => Promise<void>;
   changeThinkingMode: (value: ThinkingMode) => Promise<void>;
-  compact: () => Promise<void>;
   handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   handlePaste: ClipboardEventHandler<HTMLTextAreaElement>;
   setActionError: (value: string) => void;
@@ -122,13 +107,6 @@ export function ChatInput({
       ? [{ label: t.chat.input.thinkingOn, value: "on" as const }]
       : []),
   ];
-
-  const compactDisabled = running || (!canCompact && !isCompacting);
-  const compactTooltip = running
-    ? t.chat.input.compactUnavailableWhileRunning
-    : !canCompact && !isCompacting
-      ? t.chat.input.alreadyCompacted
-      : t.chat.input.compactContext;
 
   return (
     <div
@@ -152,30 +130,6 @@ export function ChatInput({
               </span>
               {t.chat.input.compacting}
             </span>
-          </InlineStatus>
-        ) : null}
-
-        {compactError ? (
-          <InlineStatus tone="error">{compactError}</InlineStatus>
-        ) : null}
-
-        {compactResult ? (
-          <InlineStatus
-            dismissLabel={t.chat.input.dismissNotice}
-            onDismiss={() => setCompactResult(false)}
-            tone="success"
-          >
-            {t.chat.input.compactSuccess}
-          </InlineStatus>
-        ) : null}
-
-        {compactNotice ? (
-          <InlineStatus
-            dismissLabel={t.chat.input.dismissNotice}
-            onDismiss={() => setCompactNotice("")}
-            tone="info"
-          >
-            {compactNotice}
           </InlineStatus>
         ) : null}
 
@@ -213,8 +167,10 @@ export function ChatInput({
         ) : null}
 
         <div
-          className={`overflow-hidden rounded-composer border border-line-strong bg-elevated shadow-[var(--shadow-composer)] transition-[border-color,box-shadow] duration-[var(--motion-standard)] focus-within:border-ring has-[textarea:focus-visible]:ring-2 has-[textarea:focus-visible]:ring-ring ${
-            running ? "border-warning/50" : "border-line-strong"
+          className={`overflow-hidden rounded-composer border border-line-strong bg-elevated shadow-[var(--shadow-composer)] transition-[border-color,box-shadow] duration-[var(--motion-standard)] has-[textarea:focus-visible]:shadow-[var(--shadow-composer-focus)] ${
+            running
+              ? "border-warning/50"
+              : "has-[textarea:focus-visible]:border-ring"
           }`}
         >
           {running && agentPhase ? (
@@ -257,11 +213,11 @@ export function ChatInput({
             </div>
           ) : null}
 
-          {/* 文字输入 textarea */}
+          {/* Ant borderless textarea 仍会绘制内部焦点线；由 Composer 统一承载可见焦点。 */}
           <Textarea
             aria-label={t.chat.input.messageLabel}
-            autoSize={{ minRows: 3, maxRows: 8 }}
-            className="min-h-[72px] max-h-[220px] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-5 pt-4 pb-2 text-prose leading-[1.6] shadow-none placeholder:text-dim focus-visible:border-0 focus-visible:ring-0"
+            autoSize={{ minRows: 2, maxRows: 8 }}
+            className="min-h-16 max-h-[220px] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-4 pt-3 pb-2 text-prose leading-[1.6] shadow-none outline-none placeholder:text-dim focus:border-0 focus:shadow-none focus:outline-none focus-visible:border-0 focus-visible:outline-none! focus-visible:ring-0"
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
@@ -272,9 +228,10 @@ export function ChatInput({
             }
             ref={textareaRef}
             value={draft}
+            variant="borderless"
           />
 
-          <div className="flex min-h-12 items-center gap-1.5 px-3 pb-3">
+          <div className="flex h-12 items-center gap-1.5 px-3 py-1.5">
             <input
               accept="image/*"
               className="hidden"
@@ -330,64 +287,47 @@ export function ChatInput({
               value={thinkingMode}
             />
 
-            {/* compact */}
-            <Tooltip
-              mouseEnterDelay={0.35}
-              placement="top"
-              title={compactTooltip}
-            >
-              <span className="inline-flex">
-                <Button
-                  className="h-9 px-2 text-xs"
-                  disabled={compactDisabled}
-                  htmlType="button"
-                  icon={<Minimize2 className="size-3.5" />}
-                  onClick={() => void compact()}
-                  size="small"
-                  type="text"
-                >
-                  {isCompacting
-                    ? t.chat.input.abortCompact
-                    : t.chat.input.compact}
-                </Button>
-              </span>
-            </Tooltip>
-
             <div className="flex-1" />
 
-            {running ? (
+            {running || isCompacting ? (
               <>
-                {/* queue button */}
-                <Button
-                  className="h-9 px-2.5 text-xs"
-                  disabled={!canSubmit}
-                  htmlType="button"
-                  icon={<Clock3 />}
-                  onClick={() => void submit("follow_up")}
-                  size="small"
-                  title={t.chat.input.queueTitle}
-                >
-                  <span>{t.chat.input.queue}</span>
-                </Button>
+                {running && !isCompacting ? (
+                  <>
+                    {/* queue button */}
+                    <Button
+                      className="h-9 px-2.5 text-xs"
+                      disabled={!canSubmit}
+                      htmlType="button"
+                      icon={<Clock3 />}
+                      onClick={() => void submit("follow_up")}
+                      size="small"
+                      title={t.chat.input.queueTitle}
+                    >
+                      <span>{t.chat.input.queue}</span>
+                    </Button>
 
-                {/* steer button */}
-                <Button
-                  className="h-9 px-3 text-xs"
-                  disabled={!canSubmit}
-                  htmlType="button"
-                  icon={<Send />}
-                  onClick={() => void submit("steer")}
-                  size="small"
-                  title={t.chat.input.steerTitle}
-                  type="primary"
-                >
-                  <span>{t.chat.input.steer}</span>
-                </Button>
+                    {/* steer button */}
+                    <Button
+                      className="h-9 px-3 text-xs"
+                      disabled={!canSubmit}
+                      htmlType="button"
+                      icon={<Send />}
+                      onClick={() => void submit("steer")}
+                      size="small"
+                      title={t.chat.input.steerTitle}
+                      type="primary"
+                    >
+                      <span>{t.chat.input.steer}</span>
+                    </Button>
+                  </>
+                ) : null}
                 {/* stop send */}
                 <Button
                   aria-label={
                     stopping
                       ? t.chat.input.stoppingAgent
+                      : isCompacting
+                        ? t.chat.input.stopCompaction
                       : t.chat.input.stopAgent
                   }
                   className="size-9 border-destructive/30 text-destructive-text hover:bg-destructive/10 hover:text-destructive-text"
@@ -397,7 +337,13 @@ export function ChatInput({
                   icon={<Square className="size-3.5 fill-current" />}
                   loading={stopping}
                   onClick={() => void stop()}
-                  title={stopping ? t.chat.input.stopping : t.chat.input.stop}
+                  title={
+                    stopping
+                      ? t.chat.input.stopping
+                      : isCompacting
+                        ? t.chat.input.stopCompaction
+                        : t.chat.input.stop
+                  }
                 />
               </>
             ) : (

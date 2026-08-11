@@ -59,8 +59,17 @@ export const en = {
   },
   settings: {
     exitSettings: "Exit settings",
+    general: "General",
+    generalDescription:
+      "Configure interface language and context management preferences.",
     languageDescription:
       "Choose the interface language used across navigation, dialogs, and status messages.",
+    autoCompact: "Auto context compaction",
+    autoCompactDescription:
+      "Automatically compress conversation history when approaching the context window limit to avoid exceeding model capacity.",
+    autoCompactLoadError: "Unable to load the auto-compaction setting.",
+    autoCompactSaveError:
+      "Unable to save the auto-compaction setting. The previous value was restored.",
   },
   contentGeneration: {
     paidGenerationConfirm: "This action calls a paid content generation API. Submit this generation task?",
@@ -290,6 +299,7 @@ export const en = {
       steerTitle: "Interrupt and steer the current run",
       stop: "Stop",
       stopAgent: "Stop agent",
+      stopCompaction: "Stop context compaction",
       stoppingAgent: "Stopping agent",
       stopping: "Stopping...",
       send: "Send",
@@ -299,14 +309,7 @@ export const en = {
       thinkingOff: "Off",
       thinkingOn: "On",
       thinkingUnsupported: "Thinking is not supported by the selected model.",
-      compact: "Compact",
-      compactContext: "Compact context",
-      abortCompact: "Abort compact",
       compacting: "Compacting context...",
-      compactSuccess: "Context compacted",
-      alreadyCompacted: "There is no context available to compact.",
-      compactUnavailableWhileRunning:
-        "Wait for the current task to finish before compacting.",
       dismissNotice: "Dismiss notice",
       settings: "Settings",
       agentSettings: "Agent settings",

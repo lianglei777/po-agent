@@ -9,9 +9,12 @@ const source = readFileSync(
 
 describe("chat input visual contract", () => {
   it("keeps the composer structural and gives focus a semantic accent", () => {
-    expect(source).toContain("focus-within:border-ring");
-    expect(source).toContain("has-[textarea:focus-visible]:ring-2");
-    expect(source).toContain("has-[textarea:focus-visible]:ring-ring");
+    expect(source).toContain("has-[textarea:focus-visible]:border-ring");
+    expect(source).toContain(
+      "has-[textarea:focus-visible]:shadow-[var(--shadow-composer-focus)]",
+    );
+    expect(source).not.toContain("has-[textarea:focus-visible]:ring-2");
+    expect(source).not.toContain("has-[textarea:focus-visible]:ring-ring");
     expect(source).not.toContain("focus-within:ring-2");
     expect(source).toContain(
       "rounded-composer border border-line-strong bg-elevated shadow-[var(--shadow-composer)]",
@@ -21,7 +24,8 @@ describe("chat input visual contract", () => {
   });
 
   it("keeps composer controls in one compact toolbar", () => {
-    expect(source).toContain("flex min-h-12 items-center");
+    expect(source).toContain("flex h-12 items-center");
+    expect(source).toContain("gap-1.5 px-3 py-1.5");
     expect(source).not.toContain("border-t border-line-subtle bg-subtle");
     expect(source).not.toContain("id=\"composer-shortcut\"");
     expect(source).not.toContain("t.chat.input.shortcutIdle");
@@ -32,23 +36,12 @@ describe("chat input visual contract", () => {
     expect(source).toContain("t.chat.input.queue");
     expect(source).toContain("t.chat.input.steer");
     expect(source).toContain("t.chat.input.stopAgent");
-    expect(source).toContain("t.chat.input.compact");
   });
 
-  it("does not present tokensBefore as the amount saved", () => {
-    expect(source).not.toContain("compactResult.tokensBefore.toLocaleString()");
-  });
-
-  it("keeps the compact label stable when the action is unavailable", () => {
-    expect(source).not.toContain("t.chat.input.compacted");
-  });
-
-  it("explains why the disabled compact action is unavailable", () => {
-    expect(source).toContain("<Tooltip");
-    expect(source).toContain("title={compactTooltip}");
-    expect(source).toContain('className="inline-flex"');
-    expect(source).toContain("t.chat.input.alreadyCompacted");
-    expect(source).toContain("t.chat.input.compactUnavailableWhileRunning");
+  it("does not expose manual context compaction controls", () => {
+    expect(source).not.toContain("{t.chat.input.compact}");
+    expect(source).not.toContain("compactTooltip");
+    expect(source).not.toContain("Minimize2");
   });
 
   it("uses a compact round idle send button", () => {
@@ -63,6 +56,8 @@ describe("chat input visual contract", () => {
     expect(source).toContain('import { Button, Select, Tooltip } from "antd"');
     expect(source).toContain('import { Textarea } from "@/components/ui/textarea"');
     expect(source).toContain('ref={textareaRef}');
-    expect(source).toContain('autoSize={{ minRows: 3, maxRows: 8 }}');
+    expect(source).toContain('autoSize={{ minRows: 2, maxRows: 8 }}');
+    expect(source).toContain('variant="borderless"');
+    expect(source).toContain("focus-visible:outline-none!");
   });
 });

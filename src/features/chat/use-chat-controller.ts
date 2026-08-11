@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
-  ApiRequestError,
   createAgent,
   loadModels,
   loadRuntime,
@@ -19,7 +18,6 @@ import {
   sendCommand,
 } from "./agent-api";
 import {
-  canCompactContext,
   canAttachImagesToModel,
   resolveLoadedModelState,
   resolveThinkingLevelForMode,
@@ -102,14 +100,6 @@ export function useChatController(options: ChatControllerOptions) {
     setRetryInfo,
     isCompacting,
     setIsCompacting,
-    compactionAvailability,
-    setCompactionAvailability,
-    compactError,
-    setCompactError,
-    compactResult,
-    setCompactResult,
-    compactNotice,
-    setCompactNotice,
     models,
     setModels,
     modelKey,
@@ -155,14 +145,6 @@ export function useChatController(options: ChatControllerOptions) {
         setRetryInfo,
         isCompacting,
         setIsCompacting,
-        compactionAvailability,
-        setCompactionAvailability,
-        compactError,
-        setCompactError,
-        compactResult,
-        setCompactResult,
-        compactNotice,
-        setCompactNotice,
         models,
         setModels,
         modelKey,
@@ -206,14 +188,6 @@ export function useChatController(options: ChatControllerOptions) {
         setRetryInfo,
         isCompacting,
         setIsCompacting,
-        compactionAvailability,
-        setCompactionAvailability,
-        compactError,
-        setCompactError,
-        compactResult,
-        setCompactResult,
-        compactNotice,
-        setCompactNotice,
         models,
         setModels,
         modelKey,
@@ -257,22 +231,11 @@ export function useChatController(options: ChatControllerOptions) {
   );
   const stats = useMemo(() => sessionStats(messages), [messages]);
   const agentPhase = phaseLabel(runningTools, running);
-  const compactionAvailable =
-    compactionAvailability !== null &&
-    compactionAvailability.sessionId === session?.id &&
-    compactionAvailability.available;
-  const canCompact = canCompactContext({
-    compactionAvailable,
-    isCompacting,
-    running,
-  });
-
   const syncRuntimeState = useCallback(
     (state?: {
       sessionId?: string;
       isStreaming?: boolean;
       isCompacting?: boolean;
-      compactionAvailable?: boolean;
       contextUsage?: ContextUsage | null;
       systemPrompt?: string;
       thinkingLevel?: ThinkingLevel;
@@ -280,12 +243,6 @@ export function useChatController(options: ChatControllerOptions) {
     }) => {
       if (!state) return;
       setIsCompacting(Boolean(state.isCompacting));
-      if (state.sessionId) {
-        setCompactionAvailability({
-          sessionId: state.sessionId,
-          available: Boolean(state.compactionAvailable),
-        });
-      }
       onContextUsageChange?.(state.contextUsage ?? null);
       onSystemPromptChange?.(state.systemPrompt ?? null);
       if (state.thinkingLevel) setThinkingLevel(state.thinkingLevel);
@@ -294,7 +251,6 @@ export function useChatController(options: ChatControllerOptions) {
     [
       onContextUsageChange,
       onSystemPromptChange,
-      setCompactionAvailability,
       setIsCompacting,
       setModelKey,
       setThinkingLevel,
@@ -441,11 +397,10 @@ export function useChatController(options: ChatControllerOptions) {
           break;
         case "compaction_start":
           setIsCompacting(true);
-          setCompactError("");
           break;
         case "compaction_end":
           setIsCompacting(false);
-          if (event.errorMessage) setCompactError(event.errorMessage);
+          if (event.errorMessage) setActionError(event.errorMessage);
           else if (!event.aborted) {
             void reloadHistory();
           }
@@ -461,7 +416,7 @@ export function useChatController(options: ChatControllerOptions) {
       dispatchStream,
       handleAgentEnd,
       reloadHistory,
-      setCompactError,
+      setActionError,
       setIsCompacting,
       setMessages,
       setPartialToolResults,
@@ -610,21 +565,7 @@ export function useChatController(options: ChatControllerOptions) {
     onSessionStatsChange?.(stats);
   }, [onSessionStatsChange, stats]);
 
-  // compact 成功反馈自动消失
-  useEffect(() => {
-    if (!compactResult) return;
-    const timer = window.setTimeout(() => setCompactResult(false), 6000);
-    return () => window.clearTimeout(timer);
-  }, [compactResult, setCompactResult]);
-
-  // compact info 提示自动消失
-  useEffect(() => {
-    if (!compactNotice) return;
-    const timer = window.setTimeout(() => setCompactNotice(""), 6000);
-    return () => window.clearTimeout(timer);
-  }, [compactNotice, setCompactNotice]);
-
-  // 编辑撤销提示自动消失(对齐 compact 反馈的超时)
+  // 编辑撤销提示自动消失。
   useEffect(() => {
     if (!undoable || running) return;
     const timer = window.setTimeout(() => setUndoable(null), 8000);
@@ -893,7 +834,13 @@ export function useChatController(options: ChatControllerOptions) {
     if (!id || stopping) return;
     setStopping(true);
     try {
-      await sendCommand(id, { type: "abort" });
+      await sendCommand(id, {
+        type: isCompacting ? "abort_compaction" : "abort",
+      });
+      if (isCompacting) {
+        setIsCompacting(false);
+        setStopping(false);
+      }
     } catch (cause) {
       setStopping(false);
       setActionError(cause instanceof Error ? cause.message : "Stop failed");
@@ -943,44 +890,6 @@ export function useChatController(options: ChatControllerOptions) {
         await sendCommand(id, { type: "set_thinking_level", level });
       } catch (cause) {
         setActionError(cause instanceof Error ? cause.message : "Thinking change failed");
-      }
-    }
-  }
-
-  async function compact() {
-    const id = sessionIdRef.current;
-    if (!id) return;
-    setCompactError("");
-    const aborting = isCompacting;
-    // 仅在发起压缩时设置 loading 状态；abort 路径 isCompacting 已为 true
-    if (!aborting) {
-      setIsCompacting(true);
-    }
-    try {
-      if (aborting) {
-        await sendCommand(id, { type: "abort_compaction" });
-        setIsCompacting(false);
-        return;
-      }
-      await sendCommand(id, { type: "compact" });
-      setIsCompacting(false);
-      setCompactResult(true);
-      // 刷新消息列表，使 canCompact 从内部 compactionSummary 派生为 false。
-      void reloadHistory();
-    } catch (cause) {
-      setIsCompacting(false);
-      const code = cause instanceof ApiRequestError ? cause.code : undefined;
-      const message =
-        cause instanceof Error ? cause.message : "Compact failed";
-      if (
-        !aborting &&
-        (code === "COMPACTION_NOT_AVAILABLE" ||
-          /already compacted/i.test(message))
-      ) {
-        // 上下文已压缩且无新消息，显示 info 提示而非红色错误
-        setCompactNotice(t.chat.input.alreadyCompacted);
-      } else {
-        setCompactError(message);
       }
     }
   }
@@ -1052,12 +961,6 @@ export function useChatController(options: ChatControllerOptions) {
     agentPhase,
     retryInfo,
     isCompacting,
-    compactError,
-    compactResult,
-    compactNotice,
-    canCompact,
-    setCompactResult,
-    setCompactNotice,
     models,
     modelKey,
     currentModel,
@@ -1091,7 +994,6 @@ export function useChatController(options: ChatControllerOptions) {
     stop,
     changeModel,
     changeThinkingMode,
-    compact,
     fork,
     editFromHere,
     handleKeyDown,
