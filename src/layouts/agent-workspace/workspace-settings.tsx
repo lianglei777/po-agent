@@ -58,7 +58,7 @@ export function WorkspaceSettings({
       >
         <Button
           block
-          className="h-9 justify-start px-2 text-muted"
+          className="h-9 justify-start! px-2 text-muted"
           htmlType="button"
           icon={<ArrowLeft />}
           onClick={onBack}
@@ -190,7 +190,7 @@ function SettingsNavButton({
     <Button
       aria-current={selected ? "page" : undefined}
       block
-      className="h-9 justify-start px-2 text-left text-xs font-medium"
+      className="h-9 justify-start! px-2 text-left text-xs font-medium"
       color={selected ? "primary" : "default"}
       htmlType="button"
       icon={<span className="text-muted [&_svg]:size-3.5">{icon}</span>}

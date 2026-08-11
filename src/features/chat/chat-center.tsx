@@ -194,7 +194,7 @@ function ChatCenterContent({
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
             <div
-              className="chat-scrollbar min-w-0 flex-1 overflow-y-auto overscroll-contain"
+              className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
               style={{ marginBottom: chatInputHeight || undefined }}
               ref={(node) => {
                 controller.setScrollerNode(node);
