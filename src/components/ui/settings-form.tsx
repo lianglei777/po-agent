@@ -1,7 +1,7 @@
 "use client";
 
+import { Card } from "antd";
 import type { ReactNode } from "react";
-import { Card } from "@/components/ui/card";
 import { mergeClasses } from "@/lib/utils";
 
 export function SectionTitle({ children }: { children: ReactNode }) {
@@ -26,7 +26,10 @@ export function SettingsSection({
       <h2 className="px-0.5 text-body-sm font-semibold text-primary">
         {title}
       </h2>
-      <Card className="overflow-hidden rounded-floating border-line-subtle bg-elevated">
+      <Card
+        className="overflow-hidden rounded-floating border-line-subtle bg-elevated"
+        styles={{ body: { padding: 0 } }}
+      >
         {children}
       </Card>
     </section>

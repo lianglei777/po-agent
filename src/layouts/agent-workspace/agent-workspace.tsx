@@ -1,13 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Button } from "antd";
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ResizeHandle } from "@/components/ui/resize-handle";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatCenter } from "@/features/chat/chat-center";
 import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
 import { ContentGenerationStoreProvider } from "@/features/content-generation/state/content-generation-store-provider";
@@ -486,20 +485,19 @@ function AgentWorkspaceContent() {
   ) : null;
 
   return (
-    <TooltipProvider>
+    <div
+      className="relative h-dvh min-w-[1024px] overflow-hidden bg-[var(--workspace-bg)]"
+      data-conversation-open={conversationOpen}
+      data-project-panel-open={showProjectPanel}
+      data-primary-nav-expanded={primaryNavExpanded}
+      data-testid="agent-workspace"
+      ref={workspaceRef}
+    >
       <div
-        className="relative h-dvh min-w-[1024px] overflow-hidden bg-[var(--workspace-bg)]"
-        data-conversation-open={conversationOpen}
-        data-project-panel-open={showProjectPanel}
-        data-primary-nav-expanded={primaryNavExpanded}
-        data-testid="agent-workspace"
-        ref={workspaceRef}
+        className={
+          activeView === "chat" ? "flex h-full min-h-0 min-w-0" : "hidden"
+        }
       >
-        <div
-          className={
-            activeView === "chat" ? "flex h-full min-h-0 min-w-0" : "hidden"
-          }
-        >
           <AnimatePresence initial={false}>
             {primaryNavHidden ? null : (
               <motion.aside
@@ -788,12 +786,17 @@ function AgentWorkspaceContent() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button autoFocus onClick={cancelDiscard} variant="outline">
+              <Button autoFocus htmlType="button" onClick={cancelDiscard}>
                 {instructionChangesDirty
                   ? t.instructions.continueEditing
                   : t.models.continueEditing}
               </Button>
-              <Button onClick={confirmDiscard} variant="destructive">
+              <Button
+                danger
+                htmlType="button"
+                onClick={confirmDiscard}
+                type="primary"
+              >
                 {instructionChangesDirty
                   ? t.instructions.discardChanges
                   : t.models.discardChanges}
@@ -801,8 +804,7 @@ function AgentWorkspaceContent() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
-    </TooltipProvider>
+    </div>
   );
 }
 

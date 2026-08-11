@@ -8,31 +8,11 @@ const readUi = (name: string) =>
 const readSource = (path: string) => readFileSync(`${root}/${path}`, "utf8");
 
 describe("Ant Design shared UI contract", () => {
-  test("backs standard controls with Ant Design", () => {
-    const controls = {
-      accordion: "Collapse",
-      badge: "Tag",
-      button: "AntButton",
-      card: "AntCard",
-      checkbox: "AntCheckbox",
-      dialog: "Modal",
-      "dropdown-menu": "Dropdown",
-      input: "AntInput",
-      "radio-card": "Radio",
-      "segmented-control": "Segmented",
-      select: "AntSelect",
-      separator: "Divider",
-      skeleton: "Skeleton",
-      switch: "AntSwitch",
-      textarea: "Input.TextArea",
-      tooltip: "AntTooltip",
-    } as const;
-
-    for (const [file, component] of Object.entries(controls)) {
-      const source = readUi(file);
-      expect(source).toContain('from "antd"');
-      expect(source).toContain(component);
-    }
+  test("keeps only compatibility components with product invariants", () => {
+    expect(readUi("dialog")).toContain('from "antd"');
+    expect(readUi("textarea")).toContain("Input.TextArea");
+    expect(readUi("scroll-area")).toContain('from "@radix-ui/react-scroll-area"');
+    expect(readUi("resize-handle")).toContain('role="separator"');
   });
 
   test("preserves the deliberate dialog dismissal policy", () => {
@@ -45,21 +25,10 @@ describe("Ant Design shared UI contract", () => {
   });
 
   test("preserves native input refs needed by focus and selection workflows", () => {
-    const input = readUi("input");
     const textarea = readUi("textarea");
 
-    expect(input).toContain("HTMLInputElement");
-    expect(input).toContain("instance?.input");
     expect(textarea).toContain("HTMLTextAreaElement");
     expect(textarea).toContain("resizableTextArea?.textArea");
-  });
-
-  test("maps legacy callbacks without duplicating component behavior", () => {
-    expect(readUi("switch")).toContain("onCheckedChange?.(checked)");
-    expect(readUi("checkbox")).toContain("onCheckedChange?.(event.target.checked)");
-    expect(readUi("button")).toContain('danger={variant === "destructive"}');
-    expect(readUi("badge")).not.toContain("bordered=");
-    expect(readUi("badge")).toContain('variant={variant === "outline" ? "outlined" : "filled"}');
   });
 
   test("keeps domain-only resize behavior custom and keyboard accessible", () => {
