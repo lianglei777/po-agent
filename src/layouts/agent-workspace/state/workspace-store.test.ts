@@ -64,16 +64,18 @@ describe("agent workspace store", () => {
     };
 
     expect(
-      store.getState().replaceDeletedSession(
-        { ...session, id: "another-session" },
-        replacement,
-      ),
+      store
+        .getState()
+        .replaceDeletedSession(
+          { ...session, id: "another-session" },
+          replacement,
+        ),
     ).toBe(false);
     expect(store.getState().selectedSession).toEqual(session);
 
-    expect(
-      store.getState().replaceDeletedSession(session, replacement),
-    ).toBe(true);
+    expect(store.getState().replaceDeletedSession(session, replacement)).toBe(
+      true,
+    );
     expect(store.getState()).toMatchObject({
       selectedSession: null,
       newSessionCwd: session.cwd,
@@ -101,6 +103,7 @@ describe("agent workspace store", () => {
     const store = createWorkspaceStore({
       modelProviderDirty: true,
       contentGenerationDirty: true,
+      webAccessDirty: true,
       systemPromptDirty: true,
       projectInstructionsDirty: true,
       projectInstructionsOpen: true,
@@ -111,6 +114,7 @@ describe("agent workspace store", () => {
     expect(store.getState()).toMatchObject({
       modelProviderDirty: false,
       contentGenerationDirty: false,
+      webAccessDirty: false,
       systemPromptDirty: false,
       projectInstructionsDirty: false,
       projectInstructionsOpen: false,

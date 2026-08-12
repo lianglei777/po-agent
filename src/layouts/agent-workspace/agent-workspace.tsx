@@ -2,12 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "antd";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -130,6 +125,7 @@ function AgentWorkspaceContent() {
   const {
     setModelProviderDirty,
     setContentGenerationDirty,
+    setWebAccessDirty,
     setSystemPromptDirty,
     setProjectInstructionsDirty,
     markModelsSaved,
@@ -498,144 +494,206 @@ function AgentWorkspaceContent() {
           activeView === "chat" ? "flex h-full min-h-0 min-w-0" : "hidden"
         }
       >
+        <AnimatePresence initial={false}>
+          {primaryNavHidden ? null : (
+            <motion.aside
+              animate={{
+                opacity: 1,
+                width: effectivePrimaryNavWidth,
+                x: 0,
+              }}
+              className="relative flex-none overflow-hidden bg-transparent"
+              exit={{ opacity: 0, width: 0, x: -8 }}
+              initial={{ opacity: 0, width: 0, x: -8 }}
+              key="primary-navigation"
+              transition={panelTransition}
+            >
+              <div
+                className="flex h-full flex-col"
+                style={{ width: `${effectivePrimaryNavWidth}px` }}
+              >
+                <WorkspaceSidebar
+                  activeView={activeView}
+                  compact={
+                    effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
+                  }
+                  navigation={sessionNavigation}
+                  onOpenSettings={handleOpenModelProvider}
+                  onToggleCompact={() => setPrimaryNavExpanded(false)}
+                />
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        <div className="my-2 ml-2 flex min-w-0 flex-1 overflow-hidden rounded-l-xl rounded-r-sm bg-canvas">
           <AnimatePresence initial={false}>
-            {primaryNavHidden ? null : (
+            {conversationOpen ? (
               <motion.aside
                 animate={{
                   opacity: 1,
-                  width: effectivePrimaryNavWidth,
+                  width: panelWidths.conversation,
                   x: 0,
                 }}
-                className="relative flex-none overflow-hidden bg-transparent"
+                className="flex-none overflow-hidden bg-canvas"
                 exit={{ opacity: 0, width: 0, x: -8 }}
                 initial={{ opacity: 0, width: 0, x: -8 }}
-                key="primary-navigation"
-                transition={panelTransition}
+                key="conversation-panel"
+                transition={
+                  resizingPanel === "conversation"
+                    ? { duration: 0 }
+                    : panelTransition
+                }
               >
                 <div
-                  className="flex h-full flex-col"
-                  style={{ width: `${effectivePrimaryNavWidth}px` }}
+                  className="h-full flex-none"
+                  style={{ width: `${panelWidths.conversation}px` }}
                 >
-                  <WorkspaceSidebar
-                    activeView={activeView}
-                    compact={
-                      effectivePrimaryNavWidth === COLLAPSED_PRIMARY_NAV_WIDTH
-                    }
+                  <ConversationSidebar
                     navigation={sessionNavigation}
-                    onOpenSettings={handleOpenModelProvider}
-                    onToggleCompact={() => setPrimaryNavExpanded(false)}
+                    onClose={() => setConversationOpen(false)}
+                    onExpandPrimaryNavigation={() =>
+                      setPrimaryNavExpanded(true)
+                    }
+                    primaryNavigationHidden={primaryNavHidden}
                   />
                 </div>
               </motion.aside>
-            )}
+            ) : null}
           </AnimatePresence>
+          {conversationOpen ? (
+            <ResizeHandle
+              ariaLabel={t.workspace.resizeConversationSidebar}
+              className="mt-11"
+              direction={1}
+              max={conversationBounds.max}
+              min={conversationBounds.min}
+              onResize={(conversation) =>
+                setPanelWidths((current) => ({
+                  ...current,
+                  conversation,
+                }))
+              }
+              onResizeEnd={() => setResizingPanel(null)}
+              onResizeStart={() => setResizingPanel("conversation")}
+              value={panelWidths.conversation}
+            />
+          ) : null}
 
-          <div className="my-2 ml-2 flex min-w-0 flex-1 overflow-hidden rounded-l-xl rounded-r-sm bg-canvas">
-            <AnimatePresence initial={false}>
-              {conversationOpen ? (
-                <motion.aside
-                  animate={{
-                    opacity: 1,
-                    width: panelWidths.conversation,
-                    x: 0,
-                  }}
-                  className="flex-none overflow-hidden bg-canvas"
-                  exit={{ opacity: 0, width: 0, x: -8 }}
-                  initial={{ opacity: 0, width: 0, x: -8 }}
-                  key="conversation-panel"
-                  transition={
-                    resizingPanel === "conversation"
-                      ? { duration: 0 }
-                      : panelTransition
-                  }
-                >
-                  <div
-                    className="h-full flex-none"
-                    style={{ width: `${panelWidths.conversation}px` }}
-                  >
-                    <ConversationSidebar
-                      navigation={sessionNavigation}
-                      onClose={() => setConversationOpen(false)}
-                      onExpandPrimaryNavigation={() =>
-                        setPrimaryNavExpanded(true)
-                      }
-                      primaryNavigationHidden={primaryNavHidden}
-                    />
-                  </div>
-                </motion.aside>
-              ) : null}
-            </AnimatePresence>
-            {conversationOpen ? (
+          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
+            <WorkspaceTopBar
+              activeView={activeView}
+              branchActiveLeafId={branchState?.activeLeafId}
+              branchRunning={branchState?.running}
+              branchTree={branchState?.tree}
+              onBranchChangeLeaf={
+                branchState
+                  ? (leafId) => void branchState.changeLeaf(leafId)
+                  : undefined
+              }
+              conversationOpen={conversationOpen}
+              onExpandPrimaryNavigation={() => setPrimaryNavExpanded(true)}
+              onToggleConversation={() => toggleConversation()}
+              primaryNavigationHidden={primaryNavHidden}
+              showBranchHistory={Boolean(selectedSession)}
+              sessionSurface={selectedSession ? sessionSurface : undefined}
+              onSessionSurfaceChange={
+                selectedSession ? setSessionSurface : undefined
+              }
+            />
+
+            <div className="flex min-h-0 flex-1">
+              {selectedSession && sessionSurface === "generation" ? (
+                <ContentGenerationCenter
+                  key={selectedSession.id}
+                  onChanged={handleAgentEnd}
+                  session={selectedSession}
+                />
+              ) : (
+                <ChatCenter
+                  key={chatInstanceKey}
+                  modelsRevision={modelsRevision}
+                  newSessionCwd={newSessionCwd}
+                  onAgentEnd={handleAgentEnd}
+                  onBranchState={setBranchState}
+                  onOpenModelProvider={handleOpenModelProvider}
+                  onOpenSkills={handleOpenSkills}
+                  onSessionCreated={handleSessionCreated}
+                  onSessionForked={handleSessionForked}
+                  onSystemPromptChange={setCurrentSystemPrompt}
+                  projectName={activeCwd ? getProjectName(activeCwd) : null}
+                  session={selectedSession}
+                />
+              )}
+            </div>
+          </section>
+        </div>
+
+        {showProjectDock && !narrowWorkspace ? (
+          <>
+            {showProjectPanel && projectPanelContent ? (
               <ResizeHandle
-                ariaLabel={t.workspace.resizeConversationSidebar}
-                className="mt-11"
-                direction={1}
-                max={conversationBounds.max}
-                min={conversationBounds.min}
-                onResize={(conversation) =>
-                  setPanelWidths((current) => ({
-                    ...current,
-                    conversation,
-                  }))
+                ariaLabel={t.workspace.resizeProjectPanel}
+                className="bg-transparent"
+                direction={-1}
+                max={inspectorBounds.max}
+                min={inspectorBounds.min}
+                onResize={(inspector) =>
+                  setPanelWidths((current) => ({ ...current, inspector }))
                 }
                 onResizeEnd={() => setResizingPanel(null)}
-                onResizeStart={() => setResizingPanel("conversation")}
-                value={panelWidths.conversation}
+                onResizeStart={() => setResizingPanel("inspector")}
+                value={panelWidths.inspector}
               />
             ) : null}
-
-            <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-canvas">
-              <WorkspaceTopBar
-                activeView={activeView}
-                branchActiveLeafId={branchState?.activeLeafId}
-                branchRunning={branchState?.running}
-                branchTree={branchState?.tree}
-                onBranchChangeLeaf={
-                  branchState
-                    ? (leafId) => void branchState.changeLeaf(leafId)
-                    : undefined
-                }
-                conversationOpen={conversationOpen}
-                onExpandPrimaryNavigation={() => setPrimaryNavExpanded(true)}
-                onToggleConversation={() =>
-                  toggleConversation()
-                }
-                primaryNavigationHidden={primaryNavHidden}
-                showBranchHistory={Boolean(selectedSession)}
-                sessionSurface={selectedSession ? sessionSurface : undefined}
-                onSessionSurfaceChange={selectedSession ? setSessionSurface : undefined}
+            <div className="my-2 ml-1 mr-2 flex flex-none overflow-hidden rounded-l-sm rounded-r-xl bg-canvas">
+              <ProjectPanelDock
+                activeTab={projectPanelTab}
+                onSelect={handleProjectPanelTabChange}
+                open={projectPanelOpen}
               />
+              <AnimatePresence initial={false}>
+                {showProjectPanel && projectPanelContent ? (
+                  <motion.div
+                    animate={{
+                      opacity: 1,
+                      width: panelWidths.inspector,
+                      x: 0,
+                    }}
+                    className="min-w-0 flex-none overflow-hidden"
+                    exit={{ opacity: 0, width: 0, x: 8 }}
+                    initial={{ opacity: 0, width: 0, x: 8 }}
+                    key="desktop-project-panel"
+                    transition={
+                      resizingPanel === "inspector"
+                        ? { duration: 0 }
+                        : panelTransition
+                    }
+                  >
+                    <div
+                      className="h-full flex-none"
+                      style={{ width: `${panelWidths.inspector}px` }}
+                    >
+                      {projectPanelContent}
+                    </div>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          </>
+        ) : null}
 
-              <div className="flex min-h-0 flex-1">
-                {selectedSession && sessionSurface === "generation" ? (
-                  <ContentGenerationCenter
-                    key={selectedSession.id}
-                    onChanged={handleAgentEnd}
-                    session={selectedSession}
-                  />
-                ) : (
-                  <ChatCenter
-                    key={chatInstanceKey}
-                    modelsRevision={modelsRevision}
-                    newSessionCwd={newSessionCwd}
-                    onAgentEnd={handleAgentEnd}
-                    onBranchState={setBranchState}
-                    onOpenModelProvider={handleOpenModelProvider}
-                    onOpenSkills={handleOpenSkills}
-                    onSessionCreated={handleSessionCreated}
-                    onSessionForked={handleSessionForked}
-                    onSystemPromptChange={setCurrentSystemPrompt}
-                    projectName={activeCwd ? getProjectName(activeCwd) : null}
-                    session={selectedSession}
-                  />
-                )}
-              </div>
-            </section>
-          </div>
-
-          {showProjectDock && !narrowWorkspace ? (
-            <>
-              {showProjectPanel && projectPanelContent ? (
+        {showProjectDock && narrowWorkspace ? (
+          <AnimatePresence initial={false}>
+            {showProjectPanel && projectPanelContent ? (
+              <motion.div
+                animate={{ opacity: 1, x: 0 }}
+                className="absolute top-2 right-2 bottom-2 z-30 flex"
+                exit={{ opacity: 0, x: 12 }}
+                initial={{ opacity: 0, x: 12 }}
+                key="narrow-project-panel"
+                transition={panelTransition}
+              >
                 <ResizeHandle
                   ariaLabel={t.workspace.resizeProjectPanel}
                   className="bg-transparent"
@@ -649,161 +707,98 @@ function AgentWorkspaceContent() {
                   onResizeStart={() => setResizingPanel("inspector")}
                   value={panelWidths.inspector}
                 />
-              ) : null}
-              <div className="my-2 ml-1 mr-2 flex flex-none overflow-hidden rounded-l-sm rounded-r-xl bg-canvas">
-                <ProjectPanelDock
-                  activeTab={projectPanelTab}
-                  onSelect={handleProjectPanelTabChange}
-                  open={projectPanelOpen}
-                />
-                <AnimatePresence initial={false}>
-                  {showProjectPanel && projectPanelContent ? (
-                    <motion.div
-                      animate={{
-                        opacity: 1,
-                        width: panelWidths.inspector,
-                        x: 0,
-                      }}
-                      className="min-w-0 flex-none overflow-hidden"
-                      exit={{ opacity: 0, width: 0, x: 8 }}
-                      initial={{ opacity: 0, width: 0, x: 8 }}
-                      key="desktop-project-panel"
-                      transition={
-                        resizingPanel === "inspector"
-                          ? { duration: 0 }
-                          : panelTransition
-                      }
-                    >
-                      <div
-                        className="h-full flex-none"
-                        style={{ width: `${panelWidths.inspector}px` }}
-                      >
-                        {projectPanelContent}
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </div>
-            </>
-          ) : null}
-
-          {showProjectDock && narrowWorkspace ? (
-            <AnimatePresence initial={false}>
-              {showProjectPanel && projectPanelContent ? (
-                <motion.div
-                  animate={{ opacity: 1, x: 0 }}
-                  className="absolute top-2 right-2 bottom-2 z-30 flex"
-                  exit={{ opacity: 0, x: 12 }}
-                  initial={{ opacity: 0, x: 12 }}
-                  key="narrow-project-panel"
-                  transition={panelTransition}
-                >
-                  <ResizeHandle
-                    ariaLabel={t.workspace.resizeProjectPanel}
-                    className="bg-transparent"
-                    direction={-1}
-                    max={inspectorBounds.max}
-                    min={inspectorBounds.min}
-                    onResize={(inspector) =>
-                      setPanelWidths((current) => ({ ...current, inspector }))
-                    }
-                    onResizeEnd={() => setResizingPanel(null)}
-                    onResizeStart={() => setResizingPanel("inspector")}
-                    value={panelWidths.inspector}
-                  />
-                  <div className="flex overflow-hidden rounded-xl border border-line-subtle bg-canvas shadow-floating">
-                    <ProjectPanelDock
-                      activeTab={projectPanelTab}
-                      onSelect={handleProjectPanelTabChange}
-                      open={projectPanelOpen}
-                    />
-                    <div
-                      className="min-w-0 flex-none"
-                      style={{ width: `${panelWidths.inspector}px` }}
-                    >
-                      {projectPanelContent}
-                    </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  animate={{ opacity: 1, x: 0 }}
-                  className="my-2 ml-2 mr-2 overflow-hidden rounded-xl bg-canvas"
-                  exit={{ opacity: 0, x: 8 }}
-                  initial={{ opacity: 0, x: 8 }}
-                  key="narrow-project-dock"
-                  transition={panelTransition}
-                >
+                <div className="flex overflow-hidden rounded-xl border border-line-subtle bg-canvas shadow-floating">
                   <ProjectPanelDock
                     activeTab={projectPanelTab}
                     onSelect={handleProjectPanelTabChange}
                     open={projectPanelOpen}
                   />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          ) : null}
-        </div>
-
-        {activeView === "model-provider" ? (
-          <WorkspaceSettings
-            agentId={selectedSession?.id}
-            currentSystemPrompt={currentSystemPrompt}
-            cwd={activeCwd ?? undefined}
-            instructionsNeedApply={instructionsNeedApply}
-            isRunning={branchState?.busy}
-            onBack={() =>
-              requestNavigation("chat", () => setActiveView("chat"))
-            }
-            onInstructionsApplied={() => setInstructionsNeedApply(false)}
-            onInstructionsChanged={handleInstructionsChanged}
-            onContentGenerationDirtyChange={setContentGenerationDirty}
-            onModelDirtyChange={setModelProviderDirty}
-            onModelsSaved={markModelsSaved}
-            onOpenProjectInstructions={handleOpenProjectInstructions}
-            onSystemPromptChange={setCurrentSystemPrompt}
-            onSystemPromptDirtyChange={setSystemPromptDirty}
-          />
-        ) : null}
-
-        <Dialog
-          onOpenChange={(open) => {
-            if (!open) cancelDiscard();
-          }}
-          open={confirmingDiscard}
-        >
-          <DialogContent showCloseButton={false}>
-            <DialogHeader>
-              <DialogTitle>
-                {instructionChangesDirty
-                  ? t.instructions.discardChangesTitle
-                  : t.models.discardChangesTitle}
-              </DialogTitle>
-              <DialogDescription>
-                {instructionChangesDirty
-                  ? t.instructions.discardChangesDescription
-                  : t.models.discardChangesDescription}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button autoFocus htmlType="button" onClick={cancelDiscard}>
-                {instructionChangesDirty
-                  ? t.instructions.continueEditing
-                  : t.models.continueEditing}
-              </Button>
-              <Button
-                danger
-                htmlType="button"
-                onClick={confirmDiscard}
-                type="primary"
+                  <div
+                    className="min-w-0 flex-none"
+                    style={{ width: `${panelWidths.inspector}px` }}
+                  >
+                    {projectPanelContent}
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                animate={{ opacity: 1, x: 0 }}
+                className="my-2 ml-2 mr-2 overflow-hidden rounded-xl bg-canvas"
+                exit={{ opacity: 0, x: 8 }}
+                initial={{ opacity: 0, x: 8 }}
+                key="narrow-project-dock"
+                transition={panelTransition}
               >
-                {instructionChangesDirty
-                  ? t.instructions.discardChanges
-                  : t.models.discardChanges}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <ProjectPanelDock
+                  activeTab={projectPanelTab}
+                  onSelect={handleProjectPanelTabChange}
+                  open={projectPanelOpen}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        ) : null}
+      </div>
+
+      {activeView === "model-provider" ? (
+        <WorkspaceSettings
+          agentId={selectedSession?.id}
+          currentSystemPrompt={currentSystemPrompt}
+          cwd={activeCwd ?? undefined}
+          instructionsNeedApply={instructionsNeedApply}
+          isRunning={branchState?.busy}
+          onBack={() => requestNavigation("chat", () => setActiveView("chat"))}
+          onInstructionsApplied={() => setInstructionsNeedApply(false)}
+          onInstructionsChanged={handleInstructionsChanged}
+          onContentGenerationDirtyChange={setContentGenerationDirty}
+          onWebAccessDirtyChange={setWebAccessDirty}
+          onModelDirtyChange={setModelProviderDirty}
+          onModelsSaved={markModelsSaved}
+          onOpenProjectInstructions={handleOpenProjectInstructions}
+          onSystemPromptChange={setCurrentSystemPrompt}
+          onSystemPromptDirtyChange={setSystemPromptDirty}
+        />
+      ) : null}
+
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) cancelDiscard();
+        }}
+        open={confirmingDiscard}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>
+              {instructionChangesDirty
+                ? t.instructions.discardChangesTitle
+                : t.models.discardChangesTitle}
+            </DialogTitle>
+            <DialogDescription>
+              {instructionChangesDirty
+                ? t.instructions.discardChangesDescription
+                : t.models.discardChangesDescription}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button autoFocus htmlType="button" onClick={cancelDiscard}>
+              {instructionChangesDirty
+                ? t.instructions.continueEditing
+                : t.models.continueEditing}
+            </Button>
+            <Button
+              danger
+              htmlType="button"
+              onClick={confirmDiscard}
+              type="primary"
+            >
+              {instructionChangesDirty
+                ? t.instructions.discardChanges
+                : t.models.discardChanges}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

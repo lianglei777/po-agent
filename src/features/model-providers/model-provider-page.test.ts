@@ -3,9 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(
-  fileURLToPath(
-    new URL("./model-provider-page.tsx", import.meta.url),
-  ),
+  fileURLToPath(new URL("./model-provider-page.tsx", import.meta.url)),
   "utf8",
 );
 const sidebarSource = readFileSync(
@@ -47,6 +45,7 @@ describe("Model Provider page", () => {
     expect(source).toContain("modelConfig.saving");
     expect(source).toContain("modelConfig.savedOk");
     expect(source).toContain("modelConfig.saveRetryAvailable");
+    expect(source).toContain("onSaved");
     expect(controllerSource).toContain("createDebouncedSaveQueue");
     expect(controllerSource).toContain("AUTO_SAVE_DELAY_MS");
     expect(controllerSource).toContain("failedToSaveRef.current");
@@ -79,10 +78,12 @@ describe("Model Provider page", () => {
   });
 
   it("uses a Codex-style settings rail and centered content column", () => {
-    expect(source).toContain('className="min-w-0 flex-1 overflow-y-auto px-6 py-6"');
-    expect(sidebarSource).toContain('w-[224px]');
-    expect(sidebarSource).toContain('border-line-subtle');
-    expect(sidebarSource).not.toContain('bg-panel');
+    expect(source).toContain(
+      'className="min-w-0 flex-1 overflow-y-auto px-6 py-6"',
+    );
+    expect(sidebarSource).toContain("w-[224px]");
+    expect(sidebarSource).toContain("border-line-subtle");
+    expect(sidebarSource).not.toContain("bg-panel");
   });
 
   it("uses Ant Design for standard page feedback and actions", () => {

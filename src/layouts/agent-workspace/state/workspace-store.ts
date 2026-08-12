@@ -34,6 +34,7 @@ export type WorkspaceState = {
   instructionsNeedApply: boolean;
   modelProviderDirty: boolean;
   contentGenerationDirty: boolean;
+  webAccessDirty: boolean;
   systemPromptDirty: boolean;
   projectInstructionsDirty: boolean;
   sessionRefreshKey: number;
@@ -56,6 +57,7 @@ export type WorkspaceActions = {
   setInstructionsNeedApply: (needsApply: boolean) => void;
   setModelProviderDirty: (dirty: boolean) => void;
   setContentGenerationDirty: (dirty: boolean) => void;
+  setWebAccessDirty: (dirty: boolean) => void;
   setSystemPromptDirty: (dirty: boolean) => void;
   setProjectInstructionsDirty: (dirty: boolean) => void;
   setPrimaryNavExpanded: (expanded: boolean) => void;
@@ -105,6 +107,7 @@ export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
   instructionsNeedApply: false,
   modelProviderDirty: false,
   contentGenerationDirty: false,
+  webAccessDirty: false,
   systemPromptDirty: false,
   projectInstructionsDirty: false,
   sessionRefreshKey: 0,
@@ -139,11 +142,11 @@ export function createWorkspaceStore(
     setModelProviderDirty: (modelProviderDirty) => set({ modelProviderDirty }),
     setContentGenerationDirty: (contentGenerationDirty) =>
       set({ contentGenerationDirty }),
+    setWebAccessDirty: (webAccessDirty) => set({ webAccessDirty }),
     setSystemPromptDirty: (systemPromptDirty) => set({ systemPromptDirty }),
     setProjectInstructionsDirty: (projectInstructionsDirty) =>
       set({ projectInstructionsDirty }),
-    setPrimaryNavExpanded: (primaryNavExpanded) =>
-      set({ primaryNavExpanded }),
+    setPrimaryNavExpanded: (primaryNavExpanded) => set({ primaryNavExpanded }),
     setConversationOpen: (conversationOpen) => set({ conversationOpen }),
     toggleConversation: () =>
       set((state) => ({ conversationOpen: !state.conversationOpen })),
@@ -235,6 +238,7 @@ export function createWorkspaceStore(
       set({
         modelProviderDirty: false,
         contentGenerationDirty: false,
+        webAccessDirty: false,
         systemPromptDirty: false,
         projectInstructionsDirty: false,
         projectInstructionsOpen: false,

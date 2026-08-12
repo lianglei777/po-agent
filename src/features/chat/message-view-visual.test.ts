@@ -33,14 +33,16 @@ describe("chat execution process visual contract", () => {
     expect(source).toContain("const generationReviews = useMemo");
     expect(source).toContain("generationReviews.map((details)");
     expect(source).toContain("generationDetailsWithView");
-    expect(source).toContain("loadGenerationRun(details.runId)");
+    expect(source).toContain("generationRunIdsKey(sourceGenerationDetails)");
     expect(source).toContain("results={currentResults}");
     expect(source).not.toContain("if (details.review)");
   });
 
-  it("polls active generation runs every ten seconds and promotes completed media", () => {
+  it("polls active generation runs every ten seconds without unstable dependencies", () => {
     expect(source).toContain("const GENERATION_POLL_INTERVAL_MS = 10_000");
-    expect(source).toContain("window.setInterval(refresh, GENERATION_POLL_INTERVAL_MS)");
+    expect(source).toContain("window.setTimeout(poll, GENERATION_POLL_INTERVAL_MS)");
+    expect(source).toContain("}, [activeRunIdsKey])");
+    expect(source).not.toContain("[generationPollingKey, sourceGenerationDetails]");
     expect(source).toContain("<GenerationArtifactGallery artifacts={generatedArtifacts} cwd={cwd} />");
   });
 

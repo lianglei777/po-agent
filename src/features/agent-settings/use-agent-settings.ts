@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  loadAgentSettings,
-  updateAgentSettings,
-} from "./agent-settings-api";
+import { loadAgentSettings, updateAgentSettings } from "./agent-settings-api";
 
 type AgentSettingsError = "load" | "save" | null;
 
@@ -35,7 +32,7 @@ export function useAgentSettings() {
 
   const setAutoCompaction = useCallback(
     async (enabled: boolean) => {
-      if (loading || saving) return;
+      if (loading || saving) return false;
       const previous = autoCompactionEnabled;
       setAutoCompactionEnabled(enabled);
       setSaving(true);
@@ -45,9 +42,11 @@ export function useAgentSettings() {
           autoCompactionEnabled: enabled,
         });
         setAutoCompactionEnabled(settings.autoCompactionEnabled);
+        return true;
       } catch {
         setAutoCompactionEnabled(previous);
         setError("save");
+        return false;
       } finally {
         setSaving(false);
       }

@@ -49,6 +49,7 @@ function runtimeRegistryStub(): AgentRuntimeRegistry {
     destroy: vi.fn(),
     touch: vi.fn(),
     invalidateModelConfig: vi.fn(),
+    invalidateWebAccessConfig: vi.fn(),
     reloadAgentSettings: vi.fn(async () => {}),
   };
 }

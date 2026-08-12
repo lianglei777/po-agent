@@ -15,6 +15,7 @@ import {
   validatePackageSpec,
   validateSkillName,
 } from "./pi-skill-provider";
+import { resolveBuiltinWebAccessDir } from "./pi-resource-loader";
 
 const skillFixture: SkillInfo = {
   skillId: "packed-id",
@@ -65,6 +66,28 @@ describe("PiSkillProvider helpers", () => {
           },
         }],
       });
+    const getExtensions = vi
+      .spyOn(DefaultResourceLoader.prototype, "getExtensions")
+      .mockReturnValue({
+        extensions: [{
+          resolvedPath: path.join(
+            resolveBuiltinWebAccessDir(),
+            "index.ts",
+          ),
+          tools: new Map(
+            ["web_search", "fetch_content", "get_search_content", "source_check"]
+              .map((name) => [name, {
+                definition: {
+                  name,
+                  promptGuidelines: [],
+                  execute: vi.fn(),
+                },
+              }]),
+          ),
+        }] as never,
+        errors: [],
+        runtime: {} as never,
+      });
 
     try {
       const provider = new PiSkillProvider({ run: vi.fn() } as ProcessRunner);
@@ -81,6 +104,7 @@ describe("PiSkillProvider helpers", () => {
     } finally {
       reload.mockRestore();
       getSkills.mockRestore();
+      getExtensions.mockRestore();
     }
   });
 

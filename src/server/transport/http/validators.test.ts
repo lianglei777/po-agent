@@ -3,6 +3,7 @@ import {
   parseAgentCommand,
   parseCreateAgent,
   parseUpdateAgentSettings,
+  parseUpdateWebAccessSettings,
   parseDeleteProjectInstructions,
   parseDeleteSystemInstructions,
   parseModelsConfig,
@@ -49,32 +50,58 @@ describe("agent HTTP validation", () => {
   });
 
   it("parses generation review only for a prompt command", () => {
-    expect(parseAgentCommand({
-      type: "prompt",
-      message: "Generate a video",
-      generationReview: true,
-    })).toMatchObject({ generationReview: true });
-    expect(parseAgentCommand({
-      type: "steer",
-      message: "Continue",
-      generationReview: true,
-    })).not.toHaveProperty("generationReview");
+    expect(
+      parseAgentCommand({
+        type: "prompt",
+        message: "Generate a video",
+        generationReview: true,
+      }),
+    ).toMatchObject({ generationReview: true });
+    expect(
+      parseAgentCommand({
+        type: "steer",
+        message: "Continue",
+        generationReview: true,
+      }),
+    ).not.toHaveProperty("generationReview");
   });
 
   it("parses the auto-retry command", () => {
-    expect(parseAgentCommand({ type: "set_auto_retry", enabled: true })).toEqual({
+    expect(
+      parseAgentCommand({ type: "set_auto_retry", enabled: true }),
+    ).toEqual({
       type: "set_auto_retry",
       enabled: true,
     });
   });
 
   it("parses global Agent settings updates", () => {
-    expect(
-      parseUpdateAgentSettings({ autoCompactionEnabled: false }),
-    ).toEqual({ autoCompactionEnabled: false });
+    expect(parseUpdateAgentSettings({ autoCompactionEnabled: false })).toEqual({
+      autoCompactionEnabled: false,
+    });
     expect(() =>
       parseUpdateAgentSettings({ autoCompactionEnabled: "false" }),
     ).toThrow("autoCompactionEnabled must be a boolean");
+  });
+
+  it("parses Web Access settings and rejects incomplete provider lists", () => {
+    const input = {
+      mode: "custom",
+      providers: [
+        { id: "brave", enabled: true, apiKey: "secret" },
+        { id: "tavily", enabled: false, apiKey: "" },
+        { id: "exa", enabled: true, apiKey: "" },
+        { id: "duckduckgo", enabled: true, apiKey: "" },
+      ],
+      fallbackOn: ["network", "quota"],
+    };
+    expect(parseUpdateWebAccessSettings(input)).toEqual(input);
+    expect(() =>
+      parseUpdateWebAccessSettings({
+        ...input,
+        providers: input.providers.slice(1),
+      }),
+    ).toThrow(/every supported provider/);
   });
 
   it("accepts the skills market package contract", () => {
@@ -131,9 +158,9 @@ describe("agent HTTP validation", () => {
         cwd: "C:\\work",
       }),
     ).toThrow("scope must be global or project");
-    expect(() =>
-      parseSkillPackRemove({ packId: "pack_abc", cwd: "" }),
-    ).toThrow("cwd must be a non-empty string");
+    expect(() => parseSkillPackRemove({ packId: "pack_abc", cwd: "" })).toThrow(
+      "cwd must be a non-empty string",
+    );
   });
 
   it("parses Skill Pack source installs and maintenance", () => {
@@ -271,9 +298,9 @@ describe("agent HTTP validation", () => {
     expect(() =>
       parseSaveSystemInstructions({ content: 123, expectedRevision: "r" }),
     ).toThrow("content must be a string");
-    expect(() =>
-      parseSaveSystemInstructions({ content: "x" }),
-    ).toThrow("expectedRevision must be a non-empty string");
+    expect(() => parseSaveSystemInstructions({ content: "x" })).toThrow(
+      "expectedRevision must be a non-empty string",
+    );
   });
 
   it("parses delete system instructions requests", () => {
@@ -323,8 +350,8 @@ describe("agent HTTP validation", () => {
       expectedRevision: "sha256:abc",
       force: undefined,
     });
-    expect(() =>
-      parseDeleteProjectInstructions({ cwd: "C:\\work" }),
-    ).toThrow("expectedRevision must be a non-empty string");
+    expect(() => parseDeleteProjectInstructions({ cwd: "C:\\work" })).toThrow(
+      "expectedRevision must be a non-empty string",
+    );
   });
 });

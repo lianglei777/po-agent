@@ -19,7 +19,10 @@ import type {
 } from "@/server/ports/agent-runtime";
 import type { AgentToolDefinition } from "@/server/ports/agent-tool";
 import { mapPiMessage } from "./message-mapper";
-import { createPiResourceLoader } from "./pi-resource-loader";
+import {
+  BUILTIN_WEB_TOOL_NAMES,
+  createPiResourceLoader,
+} from "./pi-resource-loader";
 
 const FULL_BUILTIN_TOOLS = [
   "bash",
@@ -43,7 +46,10 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
     }
     const resourceLoader = await createPiResourceLoader({ cwd: input.cwd });
     const customTools = input.customTools?.map(toPiToolDefinition) ?? [];
-    const requiredToolNames = customTools.map((tool) => tool.name);
+    const requiredToolNames = [
+      ...BUILTIN_WEB_TOOL_NAMES,
+      ...customTools.map((tool) => tool.name),
+    ];
     const selectedToolNames = [
       ...(input.toolNames ?? FULL_BUILTIN_TOOLS),
       ...requiredToolNames,
@@ -69,6 +75,8 @@ export class PiAgentRuntime implements AgentRuntime {
   private alive = true;
   private modelConfigRevision = 0;
   private appliedModelConfigRevision = 0;
+  private webAccessConfigRevision = 0;
+  private appliedWebAccessConfigRevision = 0;
 
   constructor(
     private readonly session: AgentSession,
@@ -92,6 +100,10 @@ export class PiAgentRuntime implements AgentRuntime {
     this.modelConfigRevision += 1;
   }
 
+  invalidateWebAccessConfig(): void {
+    this.webAccessConfigRevision += 1;
+  }
+
   async reloadAgentSettings(): Promise<void> {
     await this.session.settingsManager.reload();
   }
@@ -101,6 +113,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
     switch (command.type) {
       case "prompt":
+        await this.refreshWebAccessConfigIfNeeded();
         await this.refreshModelConfigIfNeeded();
         await this.session.prompt(command.message, {
           images: mapImages(command.images),
@@ -127,8 +140,9 @@ export class PiAgentRuntime implements AgentRuntime {
         return undefined as T;
       }
       case "fork": {
-        const sessionFile =
-          this.session.sessionManager.createBranchedSession(command.entryId);
+        const sessionFile = this.session.sessionManager.createBranchedSession(
+          command.entryId,
+        );
         if (!sessionFile) {
           throw new AppError(
             "SESSION_NOT_FOUND",
@@ -200,6 +214,14 @@ export class PiAgentRuntime implements AgentRuntime {
           400,
         );
     }
+  }
+
+  private async refreshWebAccessConfigIfNeeded(): Promise<void> {
+    if (this.appliedWebAccessConfigRevision === this.webAccessConfigRevision) {
+      return;
+    }
+    await this.session.reload();
+    this.appliedWebAccessConfigRevision = this.webAccessConfigRevision;
   }
 
   async getState(): Promise<AgentRuntimeState> {
@@ -290,9 +312,7 @@ export class PiAgentRuntime implements AgentRuntime {
   }
 }
 
-function toPiToolDefinition(
-  definition: AgentToolDefinition,
-): ToolDefinition {
+function toPiToolDefinition(definition: AgentToolDefinition): ToolDefinition {
   return {
     name: definition.name,
     label: definition.label,
@@ -340,10 +360,7 @@ export function mapEvents(event: AgentSessionEvent): AgentEvent[] {
     mapped.message.role === "assistant" &&
     mapped.message.failure
   ) {
-    return [
-      mapped,
-      { type: "agent_error", error: mapped.message.failure },
-    ];
+    return [mapped, { type: "agent_error", error: mapped.message.failure }];
   }
   return [mapped];
 }
@@ -409,4 +426,3 @@ function mapEvent(event: AgentSessionEvent): AgentEvent | null {
       return null;
   }
 }
-

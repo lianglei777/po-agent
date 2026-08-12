@@ -13,6 +13,7 @@ export function useWorkspaceNavigationGuard() {
     activeView,
     modelProviderDirty,
     contentGenerationDirty,
+    webAccessDirty,
     systemPromptDirty,
     projectInstructionsDirty,
     projectInstructionsOpen,
@@ -22,6 +23,7 @@ export function useWorkspaceNavigationGuard() {
       activeView: state.activeView,
       modelProviderDirty: state.modelProviderDirty,
       contentGenerationDirty: state.contentGenerationDirty,
+      webAccessDirty: state.webAccessDirty,
       systemPromptDirty: state.systemPromptDirty,
       projectInstructionsDirty: state.projectInstructionsDirty,
       projectInstructionsOpen: state.projectInstructionsOpen,
@@ -42,7 +44,10 @@ export function useWorkspaceNavigationGuard() {
         shouldConfirmWorkspaceNavigation(
           activeView,
           targetView,
-          modelProviderDirty || contentGenerationDirty || systemPromptDirty,
+          modelProviderDirty ||
+            contentGenerationDirty ||
+            webAccessDirty ||
+            systemPromptDirty,
         )
       ) {
         pendingNavigationRef.current = action;
@@ -54,6 +59,7 @@ export function useWorkspaceNavigationGuard() {
     [
       activeView,
       contentGenerationDirty,
+      webAccessDirty,
       modelProviderDirty,
       projectInstructionsDirty,
       projectInstructionsOpen,
@@ -76,8 +82,7 @@ export function useWorkspaceNavigationGuard() {
 
   return {
     confirmingDiscard,
-    instructionChangesDirty:
-      projectInstructionsDirty || systemPromptDirty,
+    instructionChangesDirty: projectInstructionsDirty || systemPromptDirty,
     requestNavigation,
     cancelDiscard,
     confirmDiscard,

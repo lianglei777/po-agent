@@ -16,9 +16,10 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function loadGenerationRun(runId: string) {
+export function loadGenerationRun(runId: string, signal?: AbortSignal) {
   return requestJson<GenerationRunViewDto>(
     `/api/generation-runs/${encodeURIComponent(runId)}`,
+    { signal },
   );
 }
 

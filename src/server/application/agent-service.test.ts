@@ -94,6 +94,7 @@ describe("AgentService", () => {
       }),
       subscribe: () => () => {},
       invalidateModelConfig: () => {},
+      invalidateWebAccessConfig: () => {},
       reloadAgentSettings: async () => {},
       destroy,
     };
@@ -162,6 +163,7 @@ function runtimeStub(
     sessionFile: "created.jsonl",
     isAlive: () => true,
     invalidateModelConfig: () => {},
+    invalidateWebAccessConfig: () => {},
     reloadAgentSettings: async () => {},
     execute: async <T,>() => undefined as T,
     getState: async () => ({

@@ -43,6 +43,11 @@ import {
   generationDetailsWithView,
   generationToolDetails,
 } from "./generation-tool-presentation";
+import {
+  activeGenerationRunIdsKey,
+  generationRunIds,
+  generationRunIdsKey,
+} from "./generation-polling";
 import { GenerationReviewCard } from "./generation-review-card";
 import {
   buildMessagePresentation,
@@ -339,40 +344,66 @@ function AssistantTurnView({
   const [generationViews, setGenerationViews] = useState(
     () => new Map<string, GenerationRunViewDto>(),
   );
-  const generationPollingKey = sourceGenerationDetails.map((details) => {
-    const status = generationViews.get(details.runId)?.run.status ?? details.status;
-    return `${details.runId}:${status}`;
-  }).join("|");
+  const runIdsKey = generationRunIdsKey(sourceGenerationDetails);
+  const activeRunIdsKey = activeGenerationRunIdsKey(
+    sourceGenerationDetails,
+    generationViews,
+  );
   useEffect(() => {
-    if (!sourceGenerationDetails.length) return;
+    const runIds = generationRunIds(runIdsKey);
+    if (!runIds.length) return;
     let disposed = false;
+    const controller = new AbortController();
     const refresh = async () => {
       const settled = await Promise.allSettled(
-        sourceGenerationDetails.map((details) => loadGenerationRun(details.runId)),
+        runIds.map((runId) => loadGenerationRun(runId, controller.signal)),
       );
       if (disposed) return;
       setGenerationViews((current) => {
         const next = new Map(current);
         settled.forEach((result, index) => {
           if (result.status === "fulfilled") {
-            next.set(sourceGenerationDetails[index]!.runId, result.value);
+            next.set(runIds[index]!, result.value);
           }
         });
         return next;
       });
     };
     void refresh();
-    const hasActive = generationPollingKey.split("|").some((entry) =>
-      /:(queued|running|cancel_requested)$/.test(entry),
-    );
-    const timer = hasActive
-      ? window.setInterval(refresh, GENERATION_POLL_INTERVAL_MS)
-      : undefined;
     return () => {
       disposed = true;
-      if (timer) window.clearInterval(timer);
+      controller.abort();
     };
-  }, [generationPollingKey, sourceGenerationDetails]);
+  }, [runIdsKey]);
+  useEffect(() => {
+    const runIds = generationRunIds(activeRunIdsKey);
+    if (!runIds.length) return;
+    let disposed = false;
+    let timer: number | undefined;
+    let controller: AbortController | undefined;
+    const poll = async () => {
+      controller = new AbortController();
+      const settled = await Promise.allSettled(
+        runIds.map((runId) => loadGenerationRun(runId, controller!.signal)),
+      );
+      if (disposed) return;
+      setGenerationViews((current) => {
+        const next = new Map(current);
+        settled.forEach((result, index) => {
+          if (result.status === "fulfilled") next.set(runIds[index]!, result.value);
+        });
+        return next;
+      });
+      // 上一次请求结束后再计时，避免慢请求叠加成并发轮询。
+      timer = window.setTimeout(poll, GENERATION_POLL_INTERVAL_MS);
+    };
+    timer = window.setTimeout(poll, GENERATION_POLL_INTERVAL_MS);
+    return () => {
+      disposed = true;
+      controller?.abort();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [activeRunIdsKey]);
   const currentResults = useMemo(() => {
     const next = new Map(results);
     for (const step of process) {

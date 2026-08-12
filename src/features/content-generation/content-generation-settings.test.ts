@@ -32,12 +32,17 @@ describe("content generation settings", () => {
     expect(source).toContain("showApiKey");
     expect(source).toContain("removeCredentialConfirm");
     expect(source).not.toContain('className="absolute right-1');
-    expect(source).not.toContain("<Alert className=\"mt-3\" message=");
+    expect(source).not.toContain('<Alert className="mt-3" message=');
   });
 
   it("returns to loading state whenever the persisted settings view mounts", () => {
     expect(source).toContain("beginSettingsLoad();");
     expect(source).toContain("loading || !settingsReady");
     expect(source).toContain("disabled={displayLoading || saving}");
+  });
+
+  it("shows global feedback after automatically persisted switches", () => {
+    expect(source).toContain("App.useApp()");
+    expect(source).toContain("message.success(t.common.settingsSaved)");
   });
 });

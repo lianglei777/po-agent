@@ -9,8 +9,7 @@ export interface ModelConfigTarget {
 }
 
 export type ModelConfigInvalidation =
-  | { scope: "all" }
-  | { scope: "targets"; targets: ModelConfigTarget[] };
+  { scope: "all" } | { scope: "targets"; targets: ModelConfigTarget[] };
 
 /**
  * Agent 运行时端口，表示一个存活的 Agent 会话实例。
@@ -27,6 +26,8 @@ export interface AgentRuntime {
   isAlive(): boolean;
   /** 标记模型配置已更新，在下一次请求模型前重新加载。 */
   invalidateModelConfig(invalidation: ModelConfigInvalidation): void;
+  /** 标记 Web Access 配置已更新，在下一次提示前重新加载扩展。 */
+  invalidateWebAccessConfig(): void;
   /** 重新加载全局与项目 Agent 设置。 */
   reloadAgentSettings(): Promise<void>;
   /** 向 Agent 发送命令并等待返回结果。 */
@@ -90,6 +91,8 @@ export interface AgentRuntimeRegistry {
   touch(sessionId: string): void;
   /** 通知所有已加载运行时模型配置已更新。 */
   invalidateModelConfig(invalidation: ModelConfigInvalidation): void;
+  /** 通知所有已加载运行时 Web Access 配置已更新。 */
+  invalidateWebAccessConfig(): void;
   /** 通知所有已加载运行时重新读取 Agent 设置。 */
   reloadAgentSettings(): Promise<void>;
 }

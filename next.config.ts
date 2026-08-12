@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@earendil-works/pi-ai",
     "@earendil-works/pi-coding-agent",
+    "pi-web-access",
   ],
   // 这两个 SDK 运行时按 __dirname 读取自带主题/模板/提示词等资源，
   // 显式纳入 trace，避免 standalone 产物漏拷导致容器内运行时缺文件。
@@ -17,6 +18,8 @@ const nextConfig: NextConfig = {
     "/*": [
       "node_modules/@earendil-works/pi-coding-agent/dist/**/*",
       "node_modules/@earendil-works/pi-ai/dist/**/*",
+      // pi-web-access 由 Pi Extension loader 在运行时加载 TypeScript 入口，静态 import 无法覆盖完整文件集。
+      "node_modules/pi-web-access/**/*",
     ],
   },
   outputFileTracingExcludes: {

@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff, KeyRound, Trash2 } from "@/components/icons";
 import { useEffect, useState } from "react";
-import { Alert, Button, Input, Skeleton, Switch, Tooltip } from "antd";
+import { Alert, App, Button, Input, Skeleton, Switch, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import type { GenerationRouteDto } from "@/contracts/generation";
 import { useI18n } from "@/i18n/use-i18n";
@@ -23,6 +23,7 @@ export function ContentGenerationSettings({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useI18n();
+  const { message } = App.useApp();
   const labels = t.contentGeneration;
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -160,7 +161,10 @@ export function ContentGenerationSettings({
     setUpdatingId("runninghub");
     setSettingsError("");
     try {
-      setProviderEnabled((await updateRunningHubGenerationSettings(enabled)).enabled);
+      setProviderEnabled(
+        (await updateRunningHubGenerationSettings(enabled)).enabled,
+      );
+      void message.success(t.common.settingsSaved);
     } catch (cause) {
       setSettingsError(messageOf(cause));
     } finally {
@@ -174,6 +178,7 @@ export function ContentGenerationSettings({
     try {
       const updated = await updateGenerationRoute(routeId, enabled);
       updateRoute(updated);
+      void message.success(t.common.settingsSaved);
     } catch (cause) {
       setSettingsError(messageOf(cause));
     } finally {
@@ -192,19 +197,35 @@ export function ContentGenerationSettings({
         <section className="space-y-4">
           <div className="flex items-center justify-between gap-6 rounded-lg border border-line-subtle p-4">
             <div>
-              <h3 className="text-sm font-semibold text-primary">{labels.runningHubEnabled}</h3>
-              <p className="mt-1 text-xs text-muted">{labels.runningHubEnabledDescription}</p>
+              <h3 className="text-sm font-semibold text-primary">
+                {labels.runningHubEnabled}
+              </h3>
+              <p className="mt-1 text-xs text-muted">
+                {labels.runningHubEnabledDescription}
+              </p>
             </div>
-            <Switch aria-label={labels.runningHubEnabled} checked={providerEnabled} disabled={displayLoading} loading={updatingId === "runninghub"} onChange={(enabled) => void toggleProvider(enabled)} />
+            <Switch
+              aria-label={labels.runningHubEnabled}
+              checked={providerEnabled}
+              disabled={displayLoading}
+              loading={updatingId === "runninghub"}
+              onChange={(enabled) => void toggleProvider(enabled)}
+            />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-primary">{labels.runningHubCredential}</h3>
-            <p className="mt-1 text-xs text-muted">{labels.runningHubCredentialDescription}</p>
+            <h3 className="text-sm font-semibold text-primary">
+              {labels.runningHubCredential}
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              {labels.runningHubCredentialDescription}
+            </p>
           </div>
           <div className="rounded-lg border border-line-subtle bg-subtle p-4">
             <div className="mb-3 flex items-center gap-2 text-xs text-muted">
               <KeyRound className="size-4" />
-              <span>{hasCredential ? labels.apiKeyStored : labels.credentialMissing}</span>
+              <span>
+                {hasCredential ? labels.apiKeyStored : labels.credentialMissing}
+              </span>
             </div>
             <label className="block space-y-1.5 text-xs font-medium text-primary">
               <span>{labels.apiKey}</span>
@@ -213,9 +234,13 @@ export function ContentGenerationSettings({
                   <Input.Password
                     autoComplete="off"
                     disabled={displayLoading || saving}
-                    iconRender={(visible) => visible ? <EyeOff /> : <Eye />}
+                    iconRender={(visible) => (visible ? <EyeOff /> : <Eye />)}
                     onChange={(event) => setApiKey(event.target.value)}
-                    placeholder={hasCredential ? labels.apiKeyStored : labels.apiKeyPlaceholder}
+                    placeholder={
+                      hasCredential
+                        ? labels.apiKeyStored
+                        : labels.apiKeyPlaceholder
+                    }
                     value={apiKey}
                     visibilityToggle={{
                       visible: showApiKey,
@@ -223,42 +248,91 @@ export function ContentGenerationSettings({
                     }}
                   />
                 </div>
-                <Button disabled={!apiKey.trim() || displayLoading || saving} htmlType="button" loading={saving} onClick={() => void saveCredential()} type="primary">
+                <Button
+                  disabled={!apiKey.trim() || displayLoading || saving}
+                  htmlType="button"
+                  loading={saving}
+                  onClick={() => void saveCredential()}
+                  type="primary"
+                >
                   {t.common.save}
                 </Button>
               </div>
             </label>
             {hasCredential ? (
-              <Button className="mt-3" danger disabled={displayLoading || saving} htmlType="button" icon={<Trash2 />} onClick={() => void removeCredential()} size="small" type="text">
+              <Button
+                className="mt-3"
+                danger
+                disabled={displayLoading || saving}
+                htmlType="button"
+                icon={<Trash2 />}
+                onClick={() => void removeCredential()}
+                size="small"
+                type="text"
+              >
                 {labels.removeCredential}
               </Button>
             ) : null}
-            {error ? <Alert className="mt-3" showIcon title={error} type="error" /> : null}
+            {error ? (
+              <Alert className="mt-3" showIcon title={error} type="error" />
+            ) : null}
           </div>
         </section>
 
         <section className="space-y-4">
           <div>
-            <h3 className="text-sm font-semibold text-primary">{labels.availableRoutes}</h3>
-            <p className="mt-1 text-xs text-muted">{labels.availableRoutesDescription}</p>
+            <h3 className="text-sm font-semibold text-primary">
+              {labels.availableRoutes}
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              {labels.availableRoutesDescription}
+            </p>
           </div>
           {displayLoading ? (
-            <Skeleton active className="p-4" paragraph={{ rows: 3 }} title={false} />
+            <Skeleton
+              active
+              className="p-4"
+              paragraph={{ rows: 3 }}
+              title={false}
+            />
           ) : (
             <div className="space-y-3">
               {groupRoutesByProduct(routes).map((group) => (
                 <div key={group.product}>
-                  <p className="mb-1.5 px-1 text-xs font-semibold text-muted">{group.product}</p>
+                  <p className="mb-1.5 px-1 text-xs font-semibold text-muted">
+                    {group.product}
+                  </p>
                   <div className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
                     {group.routes.map((route) => (
-                      <div className="flex items-center justify-between gap-4 p-4" key={route.id}>
+                      <div
+                        className="flex items-center justify-between gap-4 p-4"
+                        key={route.id}
+                      >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-primary">{route.name}</p>
-                          <p className="mt-1 font-ui-mono text-caption text-muted">{route.capability}</p>
+                          <p className="truncate text-sm font-medium text-primary">
+                            {route.name}
+                          </p>
+                          <p className="mt-1 font-ui-mono text-caption text-muted">
+                            {route.capability}
+                          </p>
                         </div>
-                        <Tooltip title={!providerEnabled ? labels.enableProviderFirst : undefined}>
+                        <Tooltip
+                          title={
+                            !providerEnabled
+                              ? labels.enableProviderFirst
+                              : undefined
+                          }
+                        >
                           <span className="inline-flex shrink-0">
-                            <Switch aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`} checked={route.enabled} disabled={!providerEnabled} loading={updatingId === route.id} onChange={(enabled) => void toggleRoute(route.id, enabled)} />
+                            <Switch
+                              aria-label={`${route.name} ${route.enabled ? labels.routeEnabled : labels.routeDisabled}`}
+                              checked={route.enabled}
+                              disabled={!providerEnabled}
+                              loading={updatingId === route.id}
+                              onChange={(enabled) =>
+                                void toggleRoute(route.id, enabled)
+                              }
+                            />
                           </span>
                         </Tooltip>
                       </div>

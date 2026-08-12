@@ -11,6 +11,7 @@ export const en = {
     save: "Save",
     saved: "Saved",
     saving: "Saving...",
+    settingsSaved: "Settings saved",
     search: "Search",
     language: "Language",
     switchToEnglish: "Switch to English",
@@ -71,11 +72,42 @@ export const en = {
     autoCompactSaveError:
       "Unable to save the auto-compaction setting. The previous value was restored.",
   },
+  webAccess: {
+    title: "Web access",
+    description:
+      "Configure the search providers and API keys used by the agent for web research.",
+    strategy: "Search strategy",
+    strategyDescription:
+      "Use automatic provider selection or define an ordered fallback route.",
+    auto: "Automatic",
+    custom: "Custom fallback",
+    providers: "Search providers",
+    providersDescription:
+      "API keys are stored locally. Use the eye button to show or hide a key while editing it.",
+    keyRequired: "API Key required",
+    keyOptional: "API Key optional",
+    noKeyRequired: "No API Key required",
+    apiKeyPlaceholder: "Enter API Key",
+    moveUp: "Move provider up",
+    moveDown: "Move provider down",
+    fallback: "Fallback conditions",
+    fallbackDescription:
+      "Try the next enabled provider when one of these failures occurs.",
+    fallbackKinds: {
+      transient: "Temporary service failure",
+      quota: "Quota or rate limit",
+      network: "Network error",
+      "invalid-response": "Invalid response",
+    },
+  },
   contentGeneration: {
-    paidGenerationConfirm: "This action calls a paid content generation API. Submit this generation task?",
-    paidGenerationRetryConfirm: "Retrying calls the paid content generation API again. Retry this task?",
+    paidGenerationConfirm:
+      "This action calls a paid content generation API. Submit this generation task?",
+    paidGenerationRetryConfirm:
+      "Retrying calls the paid content generation API again. Retry this task?",
     runningHubEnabled: "Enable RunningHub generation",
-    runningHubEnabledDescription: "Master switch. When off, no new paid generation task is submitted. Every generation still requires explicit user approval.",
+    runningHubEnabledDescription:
+      "Master switch. When off, no new paid generation task is submitted. Every generation still requires explicit user approval.",
     enableProviderFirst: "Enable the RunningHub master switch first.",
     title: "Content generation",
     description:
@@ -99,17 +131,21 @@ export const en = {
     emptyProviders: "Add a content provider to configure generation APIs.",
     deleteProviderConfirm: "Delete this provider? Remove its APIs first.",
     newProvider: "New provider",
-    providerDescription: "Manage the provider identity, shared credential, and available generation APIs.",
+    providerDescription:
+      "Manage the provider identity, shared credential, and available generation APIs.",
     providerSettings: "Provider settings",
     providerName: "Provider name",
     providerType: "Provider type",
     commonApiKey: "Shared API key",
     providerApis: "Generation APIs",
-    saveProviderBeforeAddingApi: "Save the provider before adding generation APIs.",
-    allProviderApisAdded: "All built-in APIs for this provider have been added.",
+    saveProviderBeforeAddingApi:
+      "Save the provider before adding generation APIs.",
+    allProviderApisAdded:
+      "All built-in APIs for this provider have been added.",
     addCustomApi: "Add custom API",
     newApi: "New generation API",
-    apiDescription: "Configure generation options and read the provider API documentation.",
+    apiDescription:
+      "Configure generation options and read the provider API documentation.",
     credentialMode: "API credential",
     inheritProviderCredential: "Use provider API key",
     overrideCredential: "Use a separate API key",
@@ -117,16 +153,20 @@ export const en = {
     promptRequired: "Prompt is required",
     apiHeaders: "API-level headers",
     apiDocumentation: "API documentation",
-    apiDocumentationDescription: "This content comes from the bundled provider documentation and describes request parameters, responses, and usage.",
+    apiDocumentationDescription:
+      "This content comes from the bundled provider documentation and describes request parameters, responses, and usage.",
     documentationLoading: "Loading API documentation",
-    documentationLoadFailed: "API documentation could not be loaded. Try again later.",
-    documentationUnavailable: "No Markdown documentation is available for this API.",
+    documentationLoadFailed:
+      "API documentation could not be loaded. Try again later.",
+    documentationUnavailable:
+      "No Markdown documentation is available for this API.",
     apis: "Configured APIs",
     addApi: "Add API",
     addRunningHub: "Add RunningHub template",
     builtInTemplates: "Built-in RunningHub templates",
     templateInputs: "Generation inputs",
-    templateInputsDescription: "These inputs appear in generation conversations, so users do not need to edit request JSON.",
+    templateInputsDescription:
+      "These inputs appear in generation conversations, so users do not need to edit request JSON.",
     advancedProtocol: "Advanced protocol configuration",
     empty: "Add or select a content generation API.",
     basic: "Basic information",
@@ -172,7 +212,8 @@ export const en = {
     noJobsDescription: "Enter a prompt below to start the first generation.",
     prompt: "Generation prompt",
     promptPlaceholder: "Describe the image or video to generate...",
-    optionalPromptPlaceholder: "Add motion, camera, or style directions (optional)...",
+    optionalPromptPlaceholder:
+      "Add motion, camera, or style directions (optional)...",
     assetsReady: "Reference assets supported",
     chooseFile: "Choose file",
     addMoreFiles: "Add more",
@@ -193,7 +234,8 @@ export const en = {
     retryQuery: "Retry query",
     retrying: "Querying...",
     cancelRun: "Cancel generation",
-    cancelRunConfirm: "Cancel local tracking for this generation? If it was already submitted, the provider task may continue running and billing may still apply.",
+    cancelRunConfirm:
+      "Cancel local tracking for this generation? If it was already submitted, the provider task may continue running and billing may still apply.",
     retryRun: "Generate again",
     inputs: {
       resolution: "Resolution",

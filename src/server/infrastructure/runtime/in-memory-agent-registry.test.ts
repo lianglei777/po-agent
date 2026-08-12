@@ -63,6 +63,23 @@ describe("InMemoryAgentRegistry", () => {
     registry.destroy(first.sessionId);
     registry.destroy(second.sessionId);
   });
+
+  it("invalidates Web Access config in every loaded runtime", () => {
+    const registry = new InMemoryAgentRegistry();
+    const first = createRuntime("session-1");
+    const second = createRuntime("session-2");
+    first.invalidateWebAccessConfig = vi.fn();
+    second.invalidateWebAccessConfig = vi.fn();
+    registry.register(first.sessionId, first);
+    registry.register(second.sessionId, second);
+
+    registry.invalidateWebAccessConfig();
+
+    expect(first.invalidateWebAccessConfig).toHaveBeenCalledOnce();
+    expect(second.invalidateWebAccessConfig).toHaveBeenCalledOnce();
+    registry.destroy(first.sessionId);
+    registry.destroy(second.sessionId);
+  });
 });
 
 function createRuntime(
@@ -73,7 +90,7 @@ function createRuntime(
     sessionId,
     sessionFile: `${sessionId}.jsonl`,
     isAlive: () => true,
-    execute: async <T,>() => undefined as T,
+    execute: async <T>() => undefined as T,
     getState: async () => ({
       sessionId,
       sessionFile: `${sessionId}.jsonl`,
@@ -86,6 +103,7 @@ function createRuntime(
     }),
     subscribe: () => () => {},
     invalidateModelConfig,
+    invalidateWebAccessConfig: () => {},
     reloadAgentSettings: async () => {},
     destroy: () => {},
   };

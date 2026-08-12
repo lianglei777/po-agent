@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import {
-  getAgentDir,
-  ModelRuntime,
-} from "@earendil-works/pi-coding-agent";
+import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
 import { AgentSettingsService } from "@/server/application/agent-settings-service";
+import { WebAccessSettingsService } from "@/server/application/web-access-settings-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
@@ -35,6 +33,7 @@ import { PiModelProvider } from "@/server/infrastructure/pi/pi-model-provider";
 import { PiSessionRepository } from "@/server/infrastructure/pi/pi-session-repository";
 import { PiSkillPackProvider } from "@/server/infrastructure/pi/pi-skill-pack-provider";
 import { PiSkillProvider } from "@/server/infrastructure/pi/pi-skill-provider";
+import { PiWebAccessSettingsStore } from "@/server/infrastructure/pi/pi-web-access-settings-store";
 import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-runner";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { PendingInputRegistry } from "@/server/infrastructure/runtime/pending-input-registry";
@@ -54,6 +53,9 @@ function createContainer() {
   const runtimes = new InMemoryAgentRegistry();
   const runtimeFactory = new PiAgentRuntimeFactory(modelRuntime);
   const agentSettings = new PiAgentSettingsStore();
+  const webAccessSettings = new PiWebAccessSettingsStore(
+    path.join(agentDir, "web-search.json"),
+  );
   const roots = new InMemoryWorkspaceRoots();
   const credentials = new PiCredentialProvider(modelRuntime);
   const models = new PiModelProvider(modelRuntime);
@@ -65,7 +67,12 @@ function createContainer() {
   );
   const processes = new NodeProcessRunner();
   const skills = new PiSkillProvider(processes);
-  const skillPacks = new PiSkillPackProvider(undefined, undefined, undefined, roots);
+  const skillPacks = new PiSkillPackProvider(
+    undefined,
+    undefined,
+    undefined,
+    roots,
+  );
   const instructionStore = new NodeInstructionStore(agentDir);
   let generationRunService: GenerationRunService | undefined;
   let generationAssetService: GenerationAssetService | undefined;
@@ -79,9 +86,7 @@ function createContainer() {
 
   function getGenerationRunService() {
     if (generationRunService) return generationRunService;
-    const database = new SqliteDatabase(
-      path.join(agentDir, "po-agent.sqlite"),
-    );
+    const database = new SqliteDatabase(path.join(agentDir, "po-agent.sqlite"));
     const repository = new SqliteGenerationRepository(database);
     const ready = seedGenerationRoutes(repository, createRunningHubRoutes());
     generationCredentialStore = new FileGenerationCredentialStore(
@@ -148,6 +153,10 @@ function createContainer() {
       generationReviews,
     ),
     agentSettingsService: new AgentSettingsService(agentSettings, runtimes),
+    webAccessSettingsService: new WebAccessSettingsService(
+      webAccessSettings,
+      runtimes,
+    ),
     modelService: new ModelService(models, runtimes),
     projectService: new ProjectService(
       projectRepository,

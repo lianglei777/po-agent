@@ -6,6 +6,13 @@ import {
   type ThinkingLevel,
 } from "@/contracts/agent";
 import type { UpdateAgentSettingsRequest } from "@/contracts/agent-settings";
+import {
+  WEB_SEARCH_FALLBACK_KINDS,
+  WEB_SEARCH_PROVIDER_IDS,
+  type UpdateWebAccessSettingsRequest,
+  type WebSearchFallbackKind,
+  type WebSearchProviderId,
+} from "@/contracts/web-access";
 import { AppError } from "@/server/domain/app-error";
 import type {
   ImportLocalSkillInput,
@@ -44,10 +51,7 @@ export function asObject(value: unknown, name = "body"): JsonObject {
   return value as JsonObject;
 }
 
-export function requiredString(
-  object: JsonObject,
-  key: string,
-): string {
+export function requiredString(object: JsonObject, key: string): string {
   const value = object[key];
   if (typeof value !== "string" || !value.trim()) {
     invalid(`${key} must be a non-empty string`);
@@ -65,10 +69,7 @@ export function optionalString(
   return value;
 }
 
-export function requiredBoolean(
-  object: JsonObject,
-  key: string,
-): boolean {
+export function requiredBoolean(object: JsonObject, key: string): boolean {
   const value = object[key];
   if (typeof value !== "boolean") invalid(`${key} must be a boolean`);
   return value;
@@ -93,10 +94,58 @@ export function parseUpdateAgentSettings(
 ): UpdateAgentSettingsRequest {
   const object = asObject(value);
   return {
-    autoCompactionEnabled: requiredBoolean(
-      object,
-      "autoCompactionEnabled",
-    ),
+    autoCompactionEnabled: requiredBoolean(object, "autoCompactionEnabled"),
+  };
+}
+
+export function parseUpdateWebAccessSettings(
+  value: unknown,
+): UpdateWebAccessSettingsRequest {
+  const object = asObject(value);
+  const mode = requiredString(object, "mode");
+  if (mode !== "auto" && mode !== "custom") {
+    invalid("mode must be auto or custom");
+  }
+  if (!Array.isArray(object.providers)) {
+    invalid("providers must be an array");
+  }
+  const providers = object.providers.map((value, index) => {
+    const provider = asObject(value, `providers[${index}]`);
+    const id = requiredString(provider, "id");
+    if (!WEB_SEARCH_PROVIDER_IDS.includes(id as WebSearchProviderId)) {
+      invalid(`providers[${index}].id is not supported`);
+    }
+    return {
+      id: id as WebSearchProviderId,
+      enabled: requiredBoolean(provider, "enabled"),
+      apiKey: optionalString(provider, "apiKey") ?? "",
+    };
+  });
+  if (
+    providers.length !== WEB_SEARCH_PROVIDER_IDS.length ||
+    new Set(providers.map(({ id }) => id)).size !==
+      WEB_SEARCH_PROVIDER_IDS.length
+  ) {
+    invalid("providers must contain every supported provider exactly once");
+  }
+  const fallbackOn = parseStringArray(object.fallbackOn, "fallbackOn");
+  if (!fallbackOn) invalid("fallbackOn must be an array of strings");
+  if (
+    fallbackOn.length === 0 ||
+    fallbackOn.some(
+      (kind) =>
+        !WEB_SEARCH_FALLBACK_KINDS.includes(kind as WebSearchFallbackKind),
+    )
+  ) {
+    invalid("fallbackOn contains an unsupported fallback kind");
+  }
+  if (mode === "custom" && !providers.some(({ enabled }) => enabled)) {
+    invalid("custom mode requires at least one enabled provider");
+  }
+  return {
+    mode,
+    providers,
+    fallbackOn: [...new Set(fallbackOn)] as WebSearchFallbackKind[],
   };
 }
 
@@ -255,7 +304,9 @@ export function parseSkillPackInstallSource(
   };
 }
 
-export function parseSkillPackMaintain(value: unknown): MaintainSkillPackRequest {
+export function parseSkillPackMaintain(
+  value: unknown,
+): MaintainSkillPackRequest {
   const object = asObject(value);
   return {
     packId: requiredString(object, "packId"),
@@ -355,12 +406,12 @@ function messageOrImages(
   return value;
 }
 
-function parseStringArray(
-  value: unknown,
-  key: string,
-): string[] | undefined {
+function parseStringArray(value: unknown, key: string): string[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === "string")
+  ) {
     invalid(`${key} must be an array of strings`);
   }
   return value;
@@ -387,10 +438,7 @@ function parseStringRecord(
 }
 
 /** 解析可选布尔值，undefined 时返回 undefined。 */
-function optionalBoolean(
-  object: JsonObject,
-  key: string,
-): boolean | undefined {
+function optionalBoolean(object: JsonObject, key: string): boolean | undefined {
   const value = object[key];
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") invalid(`${key} must be a boolean`);

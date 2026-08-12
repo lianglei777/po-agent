@@ -84,6 +84,12 @@ export class InMemoryAgentRegistry implements AgentRuntimeRegistry {
     }
   }
 
+  invalidateWebAccessConfig(): void {
+    for (const { runtime } of this.runtimes.values()) {
+      runtime.invalidateWebAccessConfig();
+    }
+  }
+
   async reloadAgentSettings(): Promise<void> {
     await Promise.all(
       [...this.runtimes.values()].map(({ runtime }) =>
@@ -98,4 +104,3 @@ export class InMemoryAgentRegistry implements AgentRuntimeRegistry {
     return timer;
   }
 }
-

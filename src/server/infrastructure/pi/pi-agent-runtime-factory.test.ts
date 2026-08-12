@@ -8,6 +8,12 @@ const sdk = vi.hoisted(() => ({
 }));
 const resources = vi.hoisted(() => ({
   createPiResourceLoader: vi.fn(),
+  builtinWebToolNames: [
+    "web_search",
+    "fetch_content",
+    "get_search_content",
+    "source_check",
+  ],
 }));
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
@@ -20,6 +26,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 vi.mock("./pi-resource-loader", () => ({
   createPiResourceLoader: resources.createPiResourceLoader,
+  BUILTIN_WEB_TOOL_NAMES: resources.builtinWebToolNames,
 }));
 
 import { PiAgentRuntimeFactory } from "./pi-agent-runtime";
@@ -41,7 +48,16 @@ describe("PiAgentRuntimeFactory", () => {
       expect.objectContaining({
         resourceLoader,
         modelRuntime: sdk.modelRuntime,
-        tools: ["bash", "read", "edit", "write", "grep", "find", "ls"],
+        tools: [
+          "bash",
+          "read",
+          "edit",
+          "write",
+          "grep",
+          "find",
+          "ls",
+          ...resources.builtinWebToolNames,
+        ],
       }),
     );
   });
@@ -72,7 +88,11 @@ describe("PiAgentRuntimeFactory", () => {
     });
 
     const options = sdk.createAgentSession.mock.calls.at(-1)?.[0];
-    expect(options.tools).toEqual(["read", "generate_image"]);
+    expect(options.tools).toEqual([
+      "read",
+      ...resources.builtinWebToolNames,
+      "generate_image",
+    ]);
     expect(options.customTools).toHaveLength(1);
     const onUpdate = vi.fn();
     await expect(options.customTools[0].execute(

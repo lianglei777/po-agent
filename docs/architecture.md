@@ -93,6 +93,8 @@ Application Service 编排用例和业务流程，只依赖 domain 和 ports。�
 
 SDK 类型、文件格式和供应商差异必须在这一层转换成项目自己的 domain 类型。
 
+Web 搜索和网页抓取由 infrastructure 内置的 `pi-web-access` Extension 提供。Po Agent 固定并随应用发布该依赖，由 Pi ResourceLoader 直接加载，不进入用户 Skill Pack 安装流程。正常 Session 始终开放 `web_search`、`fetch_content`、`get_search_content` 和 `source_check`；搜索供应商、API Key 和回退顺序保存在 `<PI_CODING_AGENT_DIR>/web-search.json`，由独立的 Web Access 设置端口管理并通过 `/api/web-access` 暴露给本机设置页。配置写入后，存活 Runtime 会在下一次 Prompt 前重新加载 Extension。远程内容按不可信数据处理，Po Agent 禁止 `fetch_content` 读取本地路径，本地文件仍必须经过已注册 workspace root 的文件能力。
+
 ### Transport
 
 位置：`src/server/transport`

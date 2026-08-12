@@ -53,6 +53,7 @@ export function useWorkspaceSettingsActions() {
     useShallow((state) => ({
       setModelProviderDirty: state.setModelProviderDirty,
       setContentGenerationDirty: state.setContentGenerationDirty,
+      setWebAccessDirty: state.setWebAccessDirty,
       setSystemPromptDirty: state.setSystemPromptDirty,
       setProjectInstructionsDirty: state.setProjectInstructionsDirty,
       markModelsSaved: state.markModelsSaved,

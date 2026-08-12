@@ -81,51 +81,51 @@ Content-Type: text/event-stream; charset=utf-8
 
 ### 1.5 通用错误代码
 
-| Code | 常见状态码 | 含义 |
-| --- | ---: | --- |
-| `VALIDATION_ERROR` | 400、403、416 | 请求体、路径或 Range 参数不合法 |
-| `SESSION_NOT_FOUND` | 404 | Session 或指定 Session Entry 不存在 |
-| `FILE_NOT_FOUND` | 404 | 文件或目录不存在 |
-| `NOT_A_FILE` | 400 | 目标不是文件 |
-| `NOT_A_DIRECTORY` | 400 | 目标不是目录 |
-| `FILE_TOO_LARGE` | 413 | 文本或图片超过预览限制 |
-| `MODEL_NOT_FOUND` | 404 | 模型不存在 |
-| `UNSUPPORTED_COMMAND` | 400 | Agent Command 类型不受支持 |
-| `COMPACTION_NOT_AVAILABLE` | 409 | 当前没有可压缩的较早上下文，或上下文已压缩且没有新增内容 |
-| `OAUTH_PROVIDER_NOT_FOUND` | 404 | OAuth Provider 不存在 |
-| `PENDING_INPUT_NOT_FOUND` | 404 | OAuth Pending Input Token 不存在或 Provider 不匹配 |
-| `SKILL_INSTALL_FAILED` | 500 | Skill CLI 安装失败 |
-| `SKILL_PACK_NOT_FOUND` | 404 | Skill Pack 不存在或 opaque ID 已失效 |
-| `SKILL_PACK_INSTALL_BUSY` | 409 | 另一个 Skill Pack 安装或移除操作正在运行 |
-| `SKILL_PACK_INSTALL_FAILED` | 500 | Skill Pack 安装或安装后校验失败 |
-| `SKILL_PACK_REMOVE_FAILED` | 500 | Skill Pack 移除或移除后校验失败 |
-| `SKILL_PACK_BROKEN` | 409 | Skill Pack 已配置但资源不完整 |
-| `INSTRUCTION_TOO_LARGE` | 400 | 指令内容超过 64 KB 限制 |
-| `INSTRUCTION_CONFLICT` | 409 | 指令文件已被其他进程修改 |
-| `PROJECT_NOT_REGISTERED` | 403 | 项目根目录未注册 |
-| `INSTRUCTION_READ_FAILED` | 500 | 读取指令文件失败 |
-| `INSTRUCTION_WRITE_FAILED` | 500 | 写入指令文件失败 |
-| `INSTRUCTION_DELETE_FAILED` | 500 | 删除指令文件失败 |
-| `AGENT_BUSY` | 409 | Agent 正在流式输出或压缩中，无法重载 |
-| `INSTRUCTION_RELOAD_FAILED` | 500 | 重载指令失败 |
-| `INTERNAL_ERROR` | 500 | 未归类的服务端错误 |
+| Code                        |    常见状态码 | 含义                                                     |
+| --------------------------- | ------------: | -------------------------------------------------------- |
+| `VALIDATION_ERROR`          | 400、403、416 | 请求体、路径或 Range 参数不合法                          |
+| `SESSION_NOT_FOUND`         |           404 | Session 或指定 Session Entry 不存在                      |
+| `FILE_NOT_FOUND`            |           404 | 文件或目录不存在                                         |
+| `NOT_A_FILE`                |           400 | 目标不是文件                                             |
+| `NOT_A_DIRECTORY`           |           400 | 目标不是目录                                             |
+| `FILE_TOO_LARGE`            |           413 | 文本或图片超过预览限制                                   |
+| `MODEL_NOT_FOUND`           |           404 | 模型不存在                                               |
+| `UNSUPPORTED_COMMAND`       |           400 | Agent Command 类型不受支持                               |
+| `COMPACTION_NOT_AVAILABLE`  |           409 | 当前没有可压缩的较早上下文，或上下文已压缩且没有新增内容 |
+| `OAUTH_PROVIDER_NOT_FOUND`  |           404 | OAuth Provider 不存在                                    |
+| `PENDING_INPUT_NOT_FOUND`   |           404 | OAuth Pending Input Token 不存在或 Provider 不匹配       |
+| `SKILL_INSTALL_FAILED`      |           500 | Skill CLI 安装失败                                       |
+| `SKILL_PACK_NOT_FOUND`      |           404 | Skill Pack 不存在或 opaque ID 已失效                     |
+| `SKILL_PACK_INSTALL_BUSY`   |           409 | 另一个 Skill Pack 安装或移除操作正在运行                 |
+| `SKILL_PACK_INSTALL_FAILED` |           500 | Skill Pack 安装或安装后校验失败                          |
+| `SKILL_PACK_REMOVE_FAILED`  |           500 | Skill Pack 移除或移除后校验失败                          |
+| `SKILL_PACK_BROKEN`         |           409 | Skill Pack 已配置但资源不完整                            |
+| `INSTRUCTION_TOO_LARGE`     |           400 | 指令内容超过 64 KB 限制                                  |
+| `INSTRUCTION_CONFLICT`      |           409 | 指令文件已被其他进程修改                                 |
+| `PROJECT_NOT_REGISTERED`    |           403 | 项目根目录未注册                                         |
+| `INSTRUCTION_READ_FAILED`   |           500 | 读取指令文件失败                                         |
+| `INSTRUCTION_WRITE_FAILED`  |           500 | 写入指令文件失败                                         |
+| `INSTRUCTION_DELETE_FAILED` |           500 | 删除指令文件失败                                         |
+| `AGENT_BUSY`                |           409 | Agent 正在流式输出或压缩中，无法重载                     |
+| `INSTRUCTION_RELOAD_FAILED` |           500 | 重载指令失败                                             |
+| `INTERNAL_ERROR`            |           500 | 未归类的服务端错误                                       |
 
 ## 2. API 总览
 
 ### 2.1 Utility
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/home` | 获取当前用户 Home 目录 |
+| Method | Path        | 用途                   |
+| ------ | ----------- | ---------------------- |
+| `GET`  | `/api/home` | 获取当前用户 Home 目录 |
 
 ### 2.2 Projects
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/projects` | 获取持久化项目列表。 |
-| `POST` | `/api/projects` | 校验并添加项目目录。 |
-| `DELETE` | `/api/projects?path=...` | 仅从项目列表移除项目。 |
-| `GET` | `/api/projects/browse?path=...` | 浏览本机目录。 |
+| Method   | Path                            | 用途                   |
+| -------- | ------------------------------- | ---------------------- |
+| `GET`    | `/api/projects`                 | 获取持久化项目列表。   |
+| `POST`   | `/api/projects`                 | 校验并添加项目目录。   |
+| `DELETE` | `/api/projects?path=...`        | 仅从项目列表移除项目。 |
+| `GET`    | `/api/projects/browse?path=...` | 浏览本机目录。         |
 
 `POST /api/projects` 请求体：
 
@@ -145,91 +145,91 @@ Content-Type: text/event-stream; charset=utf-8
 
 ### 2.3 Sessions
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/sessions` | 列出 Session |
-| `GET` | `/api/sessions/:id` | 获取 Session Tree、Context 和可选 Runtime State |
-| `PATCH` | `/api/sessions/:id` | 重命名 Session |
-| `DELETE` | `/api/sessions/:id` | 删除 Session，并重挂直接子 Session |
-| `GET` | `/api/sessions/:id/context` | 获取当前或指定 Leaf 的上下文 |
+| Method   | Path                        | 用途                                            |
+| -------- | --------------------------- | ----------------------------------------------- |
+| `GET`    | `/api/sessions`             | 列出 Session                                    |
+| `GET`    | `/api/sessions/:id`         | 获取 Session Tree、Context 和可选 Runtime State |
+| `PATCH`  | `/api/sessions/:id`         | 重命名 Session                                  |
+| `DELETE` | `/api/sessions/:id`         | 删除 Session，并重挂直接子 Session              |
+| `GET`    | `/api/sessions/:id/context` | 获取当前或指定 Leaf 的上下文                    |
 
 ### 2.4 Agent
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `POST` | `/api/agent/new` | 创建并配置 Agent Runtime |
-| `GET` | `/api/agent-settings` | 读取全局 Agent 设置 |
-| `PATCH` | `/api/agent-settings` | 更新全局 Agent 设置并刷新存活 Runtime |
-| `GET` | `/api/agent/:id` | 获取 Runtime Snapshot |
-| `POST` | `/api/agent/:id` | 执行统一 Agent Command |
-| `GET` | `/api/agent/:id/events` | 订阅 Agent SSE 事件 |
+| Method  | Path                    | 用途                                  |
+| ------- | ----------------------- | ------------------------------------- |
+| `POST`  | `/api/agent/new`        | 创建并配置 Agent Runtime              |
+| `GET`   | `/api/agent-settings`   | 读取全局 Agent 设置                   |
+| `PATCH` | `/api/agent-settings`   | 更新全局 Agent 设置并刷新存活 Runtime |
+| `GET`   | `/api/agent/:id`        | 获取 Runtime Snapshot                 |
+| `POST`  | `/api/agent/:id`        | 执行统一 Agent Command                |
+| `GET`   | `/api/agent/:id/events` | 订阅 Agent SSE 事件                   |
 
 ### 2.5 Models
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/models` | 获取当前可用模型和默认模型 |
-| `GET` | `/api/models-config` | 读取原始模型配置 |
-| `GET` | `/api/models-config/bootstrap` | 获取模型配置弹窗初始化数据 |
-| `PUT` | `/api/models-config` | 覆盖原始模型配置 |
-| `POST` | `/api/models-config/discover` | 根据 Provider 草稿发现并补齐模型建议 |
-| `POST` | `/api/models-config/test` | 隔离测试模型配置 |
+| Method | Path                           | 用途                                 |
+| ------ | ------------------------------ | ------------------------------------ |
+| `GET`  | `/api/models`                  | 获取当前可用模型和默认模型           |
+| `GET`  | `/api/models-config`           | 读取原始模型配置                     |
+| `GET`  | `/api/models-config/bootstrap` | 获取模型配置弹窗初始化数据           |
+| `PUT`  | `/api/models-config`           | 覆盖原始模型配置                     |
+| `POST` | `/api/models-config/discover`  | 根据 Provider 草稿发现并补齐模型建议 |
+| `POST` | `/api/models-config/test`      | 隔离测试模型配置                     |
 
 ### 2.6 Auth
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/auth/providers` | 获取 OAuth Provider |
-| `GET` | `/api/auth/all-providers` | 获取 OAuth 和 API Key Provider |
-| `GET` | `/api/auth/api-key/:provider` | 获取 API Key 配置状态 |
-| `POST` | `/api/auth/api-key/:provider` | 保存 API Key |
-| `DELETE` | `/api/auth/api-key/:provider` | 删除 API Key |
-| `GET` | `/api/auth/login/:provider` | 启动 OAuth SSE 流程 |
-| `POST` | `/api/auth/login/:provider` | 回传 OAuth 人工输入 |
-| `POST` | `/api/auth/logout/:provider` | 退出 Provider 登录 |
+| Method   | Path                          | 用途                           |
+| -------- | ----------------------------- | ------------------------------ |
+| `GET`    | `/api/auth/providers`         | 获取 OAuth Provider            |
+| `GET`    | `/api/auth/all-providers`     | 获取 OAuth 和 API Key Provider |
+| `GET`    | `/api/auth/api-key/:provider` | 获取 API Key 配置状态          |
+| `POST`   | `/api/auth/api-key/:provider` | 保存 API Key                   |
+| `DELETE` | `/api/auth/api-key/:provider` | 删除 API Key                   |
+| `GET`    | `/api/auth/login/:provider`   | 启动 OAuth SSE 流程            |
+| `POST`   | `/api/auth/login/:provider`   | 回传 OAuth 人工输入            |
+| `POST`   | `/api/auth/logout/:provider`  | 退出 Provider 登录             |
 
 ### 2.7 Files
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/files/[...path]?type=list` | 列出目录 |
-| `GET` | `/api/files/[...path]?type=read` | 读取文本 |
-| `GET` | `/api/files/[...path]?type=raw` | 读取或流式传输二进制 |
-| `GET` | `/api/files/[...path]?type=binary` | `raw` 的别名 |
-| `GET` | `/api/files/[...path]?type=watch` | 订阅文件变化 SSE |
+| Method | Path                               | 用途                 |
+| ------ | ---------------------------------- | -------------------- |
+| `GET`  | `/api/files/[...path]?type=list`   | 列出目录             |
+| `GET`  | `/api/files/[...path]?type=read`   | 读取文本             |
+| `GET`  | `/api/files/[...path]?type=raw`    | 读取或流式传输二进制 |
+| `GET`  | `/api/files/[...path]?type=binary` | `raw` 的别名         |
+| `GET`  | `/api/files/[...path]?type=watch`  | 订阅文件变化 SSE     |
 
 ### 2.8 Skills
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/skills` | 加载当前工作区可用 Skills |
-| `PATCH` | `/api/skills` | 修改 Skill 的模型调用开关 |
-| `POST` | `/api/skills/search` | 搜索可安装 Skill |
-| `POST` | `/api/skills/install` | 安装 Skill |
-| `POST` | `/api/skills/local` | 导入本地 Skill 文件 |
-| `DELETE` | `/api/skills` | 移除 Skill |
+| Method   | Path                  | 用途                      |
+| -------- | --------------------- | ------------------------- |
+| `GET`    | `/api/skills`         | 加载当前工作区可用 Skills |
+| `PATCH`  | `/api/skills`         | 修改 Skill 的模型调用开关 |
+| `POST`   | `/api/skills/search`  | 搜索可安装 Skill          |
+| `POST`   | `/api/skills/install` | 安装 Skill                |
+| `POST`   | `/api/skills/local`   | 导入本地 Skill 文件       |
+| `DELETE` | `/api/skills`         | 移除 Skill                |
 
 ### 2.9 Skill Packs
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/skill-packs` | 加载官方目录和当前已配置的 Pi Packages |
-| `POST` | `/api/skill-packs/install` | 从服务端官方目录安装 Skill Pack |
-| `POST` | `/api/skill-packs/install-source` | 从 npm、Git、HTTPS 或本地绝对目录安装 Skill Pack |
-| `POST` | `/api/skill-packs/update` | 更新支持更新的已安装 Skill Pack |
-| `POST` | `/api/skill-packs/repair` | 修复损坏的已配置 Skill Pack |
-| `DELETE` | `/api/skill-packs` | 移除已安装的 Skill Pack |
+| Method   | Path                              | 用途                                             |
+| -------- | --------------------------------- | ------------------------------------------------ |
+| `GET`    | `/api/skill-packs`                | 加载官方目录和当前已配置的 Pi Packages           |
+| `POST`   | `/api/skill-packs/install`        | 从服务端官方目录安装 Skill Pack                  |
+| `POST`   | `/api/skill-packs/install-source` | 从 npm、Git、HTTPS 或本地绝对目录安装 Skill Pack |
+| `POST`   | `/api/skill-packs/update`         | 更新支持更新的已安装 Skill Pack                  |
+| `POST`   | `/api/skill-packs/repair`         | 修复损坏的已配置 Skill Pack                      |
+| `DELETE` | `/api/skill-packs`                | 移除已安装的 Skill Pack                          |
 
 ### 2.10 Instructions
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/instructions/system` | 读取全局追加提示词 |
-| `PUT` | `/api/instructions/system` | 保存全局追加提示词 |
-| `DELETE` | `/api/instructions/system` | 删除全局追加提示词 |
-| `GET` | `/api/instructions/project?cwd=...` | 读取项目 AGENTS.md |
-| `PUT` | `/api/instructions/project` | 保存项目 AGENTS.md |
-| `DELETE` | `/api/instructions/project` | 删除项目 AGENTS.md |
+| Method   | Path                                | 用途               |
+| -------- | ----------------------------------- | ------------------ |
+| `GET`    | `/api/instructions/system`          | 读取全局追加提示词 |
+| `PUT`    | `/api/instructions/system`          | 保存全局追加提示词 |
+| `DELETE` | `/api/instructions/system`          | 删除全局追加提示词 |
+| `GET`    | `/api/instructions/project?cwd=...` | 读取项目 AGENTS.md |
+| `PUT`    | `/api/instructions/project`         | 保存项目 AGENTS.md |
+| `DELETE` | `/api/instructions/project`         | 删除项目 AGENTS.md |
 
 ## 3. 通用数据结构
 
@@ -237,13 +237,7 @@ Content-Type: text/event-stream; charset=utf-8
 
 ```ts
 type ThinkingLevel =
-  | "auto"
-  | "off"
-  | "minimal"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh";
+  "auto" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 ```
 
 `auto` 在设置 Agent Runtime 时表示不强制调用 SDK 的 Thinking Level setter。
@@ -483,9 +477,7 @@ GET /api/projects/browse?path=C%3A%5Cworkspace
     { "name": "C:\\", "path": "C:\\" },
     { "name": "workspace", "path": "C:\\workspace" }
   ],
-  "directories": [
-    { "name": "project", "path": "C:\\workspace\\project" }
-  ]
+  "directories": [{ "name": "project", "path": "C:\\workspace\\project" }]
 }
 ```
 
@@ -542,9 +534,9 @@ GET /api/sessions/:id?includeState=true
 
 Query：
 
-| 参数 | 必需 | 说明 |
-| --- | --- | --- |
-| `includeState` | 否 | 等于字符串 `true` 时附加 Runtime Snapshot |
+| 参数           | 必需 | 说明                                      |
+| -------------- | ---- | ----------------------------------------- |
+| `includeState` | 否   | 等于字符串 `true` 时附加 Runtime Snapshot |
 
 响应：
 
@@ -648,9 +640,9 @@ GET /api/sessions/:id/context?leafId=:entryId
 
 Query：
 
-| 参数 | 必需 | 说明 |
-| --- | --- | --- |
-| `leafId` | 否 | 指定 Session Tree Entry；省略时使用当前 Leaf |
+| 参数     | 必需 | 说明                                         |
+| -------- | ---- | -------------------------------------------- |
+| `leafId` | 否   | 指定 Session Tree Entry；省略时使用当前 Leaf |
 
 响应：
 
@@ -1103,6 +1095,33 @@ Content-Type: application/json
 
 成功响应返回更新后的完整设置。服务端先持久化 Pi 全局设置，再通知当前进程中所有存活的 Agent Runtime 重新加载设置；之后创建或恢复的 Runtime 会直接读取最新值。
 
+### 6.6 Web Access 设置
+
+Web Access 设置管理 `pi-web-access` 使用的搜索供应商、API Key、顺序和回退条件。当前接口面向本机单用户设置页，响应包含完整 API Key，并设置 `Cache-Control: no-store`；不要将 Po Agent API 直接暴露到公网。
+
+```http
+GET /api/web-access
+PUT /api/web-access
+Content-Type: application/json
+```
+
+请求和响应使用相同结构：
+
+```json
+{
+  "mode": "custom",
+  "providers": [
+    { "id": "brave", "enabled": true, "apiKey": "BSA_..." },
+    { "id": "exa", "enabled": true, "apiKey": "" },
+    { "id": "duckduckgo", "enabled": true, "apiKey": "" },
+    { "id": "tavily", "enabled": false, "apiKey": "" }
+  ],
+  "fallbackOn": ["transient", "quota", "network", "invalid-response"]
+}
+```
+
+`mode: "auto"` 删除显式 `searchRouting`，恢复 `pi-web-access` 自动选择；`mode: "custom"` 按启用 Provider 在数组中的顺序写入路由。保存后，存活 Runtime 会在下一次普通 Prompt 前重新加载 Extension，后续搜索使用新配置。
+
 浏览器示例：
 
 ```ts
@@ -1257,14 +1276,14 @@ Content-Type: application/json
 
 字段：
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `providerName` | 是 | Provider ID，用于匹配 Pi 内置模型目录 |
-| `provider` | 是 | Provider 草稿配置 |
-| `provider.api` | 否 | API 类型；`openai-completions` 和 `openai-responses` 会尝试远程 `/models` |
-| `provider.baseUrl` | 否 | 远程模型发现的基础 URL |
-| `provider.apiKey` | 否 | 仅用于本次远程发现，不会写入响应 |
-| `provider.headers` | 否 | 远程发现请求附加 Header，值必须是字符串 |
+| 字段               | 必需 | 说明                                                                      |
+| ------------------ | ---- | ------------------------------------------------------------------------- |
+| `providerName`     | 是   | Provider ID，用于匹配 Pi 内置模型目录                                     |
+| `provider`         | 是   | Provider 草稿配置                                                         |
+| `provider.api`     | 否   | API 类型；`openai-completions` 和 `openai-responses` 会尝试远程 `/models` |
+| `provider.baseUrl` | 否   | 远程模型发现的基础 URL                                                    |
+| `provider.apiKey`  | 否   | 仅用于本次远程发现，不会写入响应                                          |
+| `provider.headers` | 否   | 远程发现请求附加 Header，值必须是字符串                                   |
 
 响应：
 
@@ -1323,12 +1342,12 @@ Content-Type: application/json
 
 字段：
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `provider` | 是 | Provider ID |
-| `modelId` | 是 | Model ID |
-| `config` | 否 | 临时测试配置；必须是 Object |
-| `timeoutMs` | 否 | 超时毫秒数，默认 `15000` |
+| 字段        | 必需 | 说明                        |
+| ----------- | ---- | --------------------------- |
+| `provider`  | 是   | Provider ID                 |
+| `modelId`   | 是   | Model ID                    |
+| `config`    | 否   | 临时测试配置；必须是 Object |
+| `timeoutMs` | 否   | 超时毫秒数，默认 `15000`    |
 
 响应：
 
@@ -1713,18 +1732,18 @@ GET /api/files/[...path]?type=read
 
 支持的语言映射：
 
-| 扩展名 | language |
-| --- | --- |
+| 扩展名        | language     |
+| ------------- | ------------ |
 | `.ts`, `.tsx` | `typescript` |
 | `.js`, `.jsx` | `javascript` |
-| `.json` | `json` |
-| `.md` | `markdown` |
-| `.css` | `css` |
-| `.html` | `html` |
-| `.py` | `python` |
-| `.sh` | `shell` |
-| `.ps1` | `powershell` |
-| 其他 | `text` |
+| `.json`       | `json`       |
+| `.md`         | `markdown`   |
+| `.css`        | `css`        |
+| `.html`       | `html`       |
+| `.py`         | `python`     |
+| `.sh`         | `shell`      |
+| `.ps1`        | `powershell` |
+| 其他          | `text`       |
 
 限制：
 
@@ -1746,18 +1765,18 @@ GET /api/files/[...path]?type=binary
 
 支持 MIME：
 
-| 扩展名 | Content-Type |
-| --- | --- |
-| `.png` | `image/png` |
-| `.jpg`, `.jpeg` | `image/jpeg` |
-| `.gif` | `image/gif` |
-| `.webp` | `image/webp` |
-| `.svg` | `image/svg+xml` |
-| `.mp3` | `audio/mpeg` |
-| `.wav` | `audio/wav` |
-| `.ogg` | `audio/ogg` |
-| `.pdf` | `application/pdf` |
-| 其他 | `application/octet-stream` |
+| 扩展名          | Content-Type               |
+| --------------- | -------------------------- |
+| `.png`          | `image/png`                |
+| `.jpg`, `.jpeg` | `image/jpeg`               |
+| `.gif`          | `image/gif`                |
+| `.webp`         | `image/webp`               |
+| `.svg`          | `image/svg+xml`            |
+| `.mp3`          | `audio/mpeg`               |
+| `.wav`          | `audio/wav`                |
+| `.ogg`          | `audio/ogg`                |
+| `.pdf`          | `application/pdf`          |
+| 其他            | `application/octet-stream` |
 
 图片最大 `10 MiB`。音频和其他二进制没有额外业务大小限制，使用 Stream 返回。
 
@@ -1986,11 +2005,11 @@ Content-Type: application/json
 
 字段：
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `package` | 是 | `skills add` 接受的 Skill Package |
-| `scope` | 是 | `global` 或 `project` |
-| `cwd` | Project 必需 | 已注册的 Workspace Root；Global 下用于安装后验证 |
+| 字段      | 必需         | 说明                                             |
+| --------- | ------------ | ------------------------------------------------ |
+| `package` | 是           | `skills add` 接受的 Skill Package                |
+| `scope`   | 是           | `global` 或 `project`                            |
+| `cwd`     | Project 必需 | 已注册的 Workspace Root；Global 下用于安装后验证 |
 
 CLI：
 
@@ -2049,11 +2068,11 @@ Content-Type: application/json
 
 字段：
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `sourceFilePath` | 是 | 本地 skill 文件的绝对路径（`.md` 文件）或包含 `SKILL.md` 的目录路径 |
-| `scope` | 是 | `global` 或 `project` |
-| `cwd` | Project 必需 | 已注册的 Workspace Root |
+| 字段             | 必需         | 说明                                                                |
+| ---------------- | ------------ | ------------------------------------------------------------------- |
+| `sourceFilePath` | 是           | 本地 skill 文件的绝对路径（`.md` 文件）或包含 `SKILL.md` 的目录路径 |
+| `scope`          | 是           | `global` 或 `project`                                               |
+| `cwd`            | Project 必需 | 已注册的 Workspace Root                                             |
 
 行为：
 
@@ -2107,10 +2126,10 @@ Content-Type: application/json
 
 字段：
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `skillId` | 是 | 要移除的技能 ID |
-| `cwd` | 是 | 已注册的 Workspace Root |
+| 字段      | 必需 | 说明                    |
+| --------- | ---- | ----------------------- |
+| `skillId` | 是   | 要移除的技能 ID         |
+| `cwd`     | 是   | 已注册的 Workspace Root |
 
 CLI：
 
@@ -2344,11 +2363,11 @@ Content-Type: application/json
 }
 ```
 
-| 字段 | 必需 | 说明 |
-| --- | --- | --- |
-| `content` | 是 | 文件文本内容 |
-| `expectedRevision` | 是 | 客户端上次读取到的 revision；首次创建时传 `sha256:absent` |
-| `force` | 否 | 为 `true` 时跳过 revision 冲突检查 |
+| 字段               | 必需 | 说明                                                      |
+| ------------------ | ---- | --------------------------------------------------------- |
+| `content`          | 是   | 文件文本内容                                              |
+| `expectedRevision` | 是   | 客户端上次读取到的 revision；首次创建时传 `sha256:absent` |
+| `force`            | 否   | 为 `true` 时跳过 revision 冲突检查                        |
 
 响应与读取接口相同。内容超过 64 KB 时返回 `400 INSTRUCTION_TOO_LARGE`。
 revision 不匹配时返回 `409 INSTRUCTION_CONFLICT`。
@@ -2621,11 +2640,11 @@ data: <JSON>
 
 事件名：
 
-| API | eventName |
-| --- | --- |
-| Agent Events | `agent` |
-| OAuth Login | `oauth` |
-| File Watch | `file` |
+| API          | eventName |
+| ------------ | --------- |
+| Agent Events | `agent`   |
+| OAuth Login  | `oauth`   |
+| File Watch   | `file`    |
 
 每 25 秒发送 Heartbeat 注释。客户端关闭连接后，服务端会：
 
@@ -2709,13 +2728,13 @@ GET /api/agent/019e.../events
 
 ## 16. 实现位置
 
-| 内容 | 目录 |
-| --- | --- |
-| Next.js Route Handler | `src/app/api` |
-| HTTP JSON 和错误转换 | `src/server/transport/http` |
-| SSE Transport | `src/server/transport/sse` |
-| Application Service | `src/server/application` |
-| Domain Contracts | `src/server/domain` |
-| Port Interfaces | `src/server/ports` |
-| Pi SDK、文件系统和进程适配器 | `src/server/infrastructure` |
-| 依赖组装 | `src/server/composition/container.ts` |
+| 内容                         | 目录                                  |
+| ---------------------------- | ------------------------------------- |
+| Next.js Route Handler        | `src/app/api`                         |
+| HTTP JSON 和错误转换         | `src/server/transport/http`           |
+| SSE Transport                | `src/server/transport/sse`            |
+| Application Service          | `src/server/application`              |
+| Domain Contracts             | `src/server/domain`                   |
+| Port Interfaces              | `src/server/ports`                    |
+| Pi SDK、文件系统和进程适配器 | `src/server/infrastructure`           |
+| 依赖组装                     | `src/server/composition/container.ts` |

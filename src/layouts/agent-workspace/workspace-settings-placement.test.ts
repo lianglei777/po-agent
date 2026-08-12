@@ -47,6 +47,7 @@ describe("workspace composition", () => {
     expect(workspaceSource).toContain("onBack={() =>");
     expect(settingsSource).toContain("<ModelProviderPage");
     expect(settingsSource).toContain("<SystemPromptWorkbench");
+    expect(settingsSource).toContain("<WebAccessSettings");
     expect(settingsSource).toContain(
       "onDirtyChange={onSystemPromptDirtyChange}",
     );
@@ -75,11 +76,12 @@ describe("workspace composition", () => {
     expect(saveIndicatorSource).toContain('role="status"');
     expect(saveIndicatorSource).toContain('role="alert"');
     expect(settingsSource).toContain(
-      "useState<ModelProviderSaveStatus>({ phase: \"idle\" })",
+      'useState<ModelProviderSaveStatus>({ phase: "idle" })',
     );
     expect(settingsSource).toContain(
       "onSaveStatusChange={setModelProviderSaveStatus}",
     );
+    expect(settingsSource).toContain("message.success(t.common.settingsSaved)");
     expect(workspaceSource).not.toContain("modelProviderSaveStatus");
   });
 

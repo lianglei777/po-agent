@@ -1,8 +1,15 @@
 "use client";
 
-import { ArrowLeft, Cpu, Images, ScrollText, Settings } from "@/components/icons";
+import {
+  ArrowLeft,
+  Cpu,
+  Globe,
+  Images,
+  ScrollText,
+  Settings,
+} from "@/components/icons";
 import { useState } from "react";
-import { Button, Segmented, Switch } from "antd";
+import { App, Button, Segmented, Switch } from "antd";
 import {
   ModelProviderPage,
   type ModelProviderSaveStatus,
@@ -11,9 +18,11 @@ import { SystemPromptWorkbench } from "@/features/instructions/system-prompt-wor
 import { useI18n } from "@/i18n/use-i18n";
 import { ContentGenerationSettings } from "@/features/content-generation/content-generation-settings";
 import { useAgentSettings } from "@/features/agent-settings/use-agent-settings";
+import { WebAccessSettings } from "@/features/web-access/web-access-settings";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
 
-type SettingsSection = "models" | "content-generation" | "instructions" | "general";
+type SettingsSection =
+  "models" | "web-access" | "content-generation" | "instructions" | "general";
 
 export function WorkspaceSettings({
   agentId,
@@ -26,6 +35,7 @@ export function WorkspaceSettings({
   onInstructionsChanged,
   onContentGenerationDirtyChange,
   onModelDirtyChange,
+  onWebAccessDirtyChange,
   onModelsSaved,
   onOpenProjectInstructions,
   onSystemPromptChange,
@@ -41,6 +51,7 @@ export function WorkspaceSettings({
   onInstructionsChanged: () => void;
   onContentGenerationDirtyChange: (dirty: boolean) => void;
   onModelDirtyChange: (dirty: boolean) => void;
+  onWebAccessDirtyChange: (dirty: boolean) => void;
   onModelsSaved: () => void;
   onOpenProjectInstructions: () => void;
   onSystemPromptChange: (prompt: string) => void;
@@ -50,6 +61,7 @@ export function WorkspaceSettings({
   const [modelProviderSaveStatus, setModelProviderSaveStatus] =
     useState<ModelProviderSaveStatus>({ phase: "idle" });
   const { locale, setLocale, t } = useI18n();
+  const { message } = App.useApp();
   const agentSettings = useAgentSettings();
 
   return (
@@ -85,6 +97,12 @@ export function WorkspaceSettings({
           selected={section === "models"}
         />
         <SettingsNavButton
+          icon={<Globe />}
+          label={t.webAccess.title}
+          onClick={() => setSection("web-access")}
+          selected={section === "web-access"}
+        />
+        <SettingsNavButton
           icon={<Images />}
           label={t.contentGeneration.title}
           onClick={() => setSection("content-generation")}
@@ -112,12 +130,25 @@ export function WorkspaceSettings({
         <div className="flex min-h-0 min-w-0 flex-1">
           <div
             className={
+              section === "web-access"
+                ? "flex min-h-0 min-w-0 flex-1"
+                : "hidden"
+            }
+          >
+            <WebAccessSettings onDirtyChange={onWebAccessDirtyChange} />
+          </div>
+
+          <div
+            className={
               section === "models" ? "flex min-h-0 min-w-0 flex-1" : "hidden"
             }
           >
             <ModelProviderPage
               onDirtyChange={onModelDirtyChange}
-              onSaved={onModelsSaved}
+              onSaved={() => {
+                onModelsSaved();
+                void message.success(t.common.settingsSaved);
+              }}
               onSaveStatusChange={setModelProviderSaveStatus}
             />
           </div>
@@ -166,7 +197,10 @@ export function WorkspaceSettings({
                   label={t.common.language}
                 >
                   <Segmented
-                    onChange={setLocale}
+                    onChange={(nextLocale) => {
+                      setLocale(nextLocale);
+                      void message.success(t.common.settingsSaved);
+                    }}
                     options={[
                       { label: "中文", value: "zh" as const },
                       { label: "English", value: "en" as const },
@@ -186,7 +220,13 @@ export function WorkspaceSettings({
                       disabled={agentSettings.loading || agentSettings.saving}
                       loading={agentSettings.loading || agentSettings.saving}
                       onChange={(checked) =>
-                        void agentSettings.setAutoCompaction(checked)
+                        void agentSettings
+                          .setAutoCompaction(checked)
+                          .then((saved) => {
+                            if (saved) {
+                              void message.success(t.common.settingsSaved);
+                            }
+                          })
                       }
                       size="small"
                     />

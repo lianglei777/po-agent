@@ -7,22 +7,26 @@ import { mapEvents, PiAgentRuntime } from "./pi-agent-runtime";
 
 describe("mapEvents", () => {
   it("forwards partial tool results for incremental UI updates", () => {
-    expect(mapEvents({
-      type: "tool_execution_update",
-      toolCallId: "tool-1",
-      toolName: "generate_image",
-      args: {},
-      partialResult: {
+    expect(
+      mapEvents({
+        type: "tool_execution_update",
+        toolCallId: "tool-1",
+        toolName: "generate_image",
+        args: {},
+        partialResult: {
+          content: [{ type: "text", text: "Generation is running" }],
+          details: { runId: "run-1", status: "running" },
+        },
+      }),
+    ).toEqual([
+      {
+        type: "tool_execution_update",
+        toolCallId: "tool-1",
+        toolName: "generate_image",
         content: [{ type: "text", text: "Generation is running" }],
         details: { runId: "run-1", status: "running" },
       },
-    })).toEqual([{
-      type: "tool_execution_update",
-      toolCallId: "tool-1",
-      toolName: "generate_image",
-      content: [{ type: "text", text: "Generation is running" }],
-      details: { runId: "run-1", status: "running" },
-    }]);
+    ]);
   });
 
   it("emits a structured agent error after an errored assistant message", () => {
@@ -74,6 +78,26 @@ describe("mapEvents", () => {
 });
 
 describe("PiAgentRuntime model config refresh", () => {
+  it("preserves required tools when the active tool selection changes", async () => {
+    const setActiveToolsByName = vi.fn();
+    const runtime = new PiAgentRuntime(
+      {
+        sessionId: "session-1",
+        sessionFile: "session-1.jsonl",
+        setActiveToolsByName,
+      } as unknown as AgentSession,
+      ["web_search", "fetch_content"],
+    );
+
+    await runtime.execute({ type: "set_tools", toolNames: ["read"] });
+
+    expect(setActiveToolsByName).toHaveBeenCalledWith([
+      "read",
+      "web_search",
+      "fetch_content",
+    ]);
+  });
+
   it("reloads the SDK settings snapshot on demand", async () => {
     const reload = vi.fn(async () => {});
     const runtime = new PiAgentRuntime({
@@ -85,6 +109,25 @@ describe("PiAgentRuntime model config refresh", () => {
     await runtime.reloadAgentSettings();
 
     expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("reloads Web Access extensions once before the next prompt", async () => {
+    const reload = vi.fn(async () => {});
+    const prompt = vi.fn(async () => {});
+    const runtime = new PiAgentRuntime({
+      sessionId: "session-1",
+      sessionFile: "session-1.jsonl",
+      reload,
+      prompt,
+      modelRuntime: { refresh: vi.fn() },
+    } as unknown as AgentSession);
+
+    runtime.invalidateWebAccessConfig();
+    await runtime.execute({ type: "prompt", message: "search" });
+    await runtime.execute({ type: "prompt", message: "search again" });
+
+    expect(reload).toHaveBeenCalledOnce();
+    expect(prompt).toHaveBeenCalledTimes(2);
   });
 
   it("refreshes and rebinds the current model before the next prompt", async () => {
