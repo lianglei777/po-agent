@@ -97,15 +97,18 @@ describe("PiAgentRuntime model config refresh", () => {
       ...previousModel,
       compat: { supportsDeveloperRole: false },
     };
-    const refresh = vi.fn();
-    const find = vi.fn(() => refreshedModel);
+    const refresh = vi.fn(async () => ({
+      aborted: false,
+      errors: new Map(),
+    }));
+    const getModel = vi.fn(() => refreshedModel);
     const setModel = vi.fn(async () => {});
     const prompt = vi.fn(async () => {});
     const runtime = new PiAgentRuntime({
       sessionId: "session-1",
       sessionFile: "session-1.jsonl",
       model: previousModel,
-      modelRegistry: { refresh, find },
+      modelRuntime: { refresh, getModel },
       setModel,
       prompt,
     } as unknown as AgentSession);
@@ -117,7 +120,7 @@ describe("PiAgentRuntime model config refresh", () => {
     await runtime.execute({ type: "prompt", message: "continue" });
 
     expect(refresh).toHaveBeenCalledOnce();
-    expect(find).toHaveBeenCalledWith("custom", "model-a");
+    expect(getModel).toHaveBeenCalledWith("custom", "model-a");
     expect(setModel).toHaveBeenCalledWith(refreshedModel);
     expect(prompt).toHaveBeenCalledWith("continue", { images: undefined });
     expect(setModel.mock.invocationCallOrder[0]).toBeLessThan(
@@ -126,13 +129,16 @@ describe("PiAgentRuntime model config refresh", () => {
   });
 
   it("ignores changes for another model", async () => {
-    const refresh = vi.fn();
+    const refresh = vi.fn(async () => ({
+      aborted: false,
+      errors: new Map(),
+    }));
     const prompt = vi.fn(async () => {});
     const runtime = new PiAgentRuntime({
       sessionId: "session-1",
       sessionFile: "session-1.jsonl",
       model: { provider: "custom", id: "model-b" },
-      modelRegistry: { refresh },
+      modelRuntime: { refresh },
       prompt,
     } as unknown as AgentSession);
 
@@ -148,14 +154,17 @@ describe("PiAgentRuntime model config refresh", () => {
 
   it("refreshes when the current model provider is targeted", async () => {
     const model = { provider: "custom", id: "model-b" };
-    const refresh = vi.fn();
-    const find = vi.fn(() => model);
+    const refresh = vi.fn(async () => ({
+      aborted: false,
+      errors: new Map(),
+    }));
+    const getModel = vi.fn(() => model);
     const setModel = vi.fn(async () => {});
     const runtime = new PiAgentRuntime({
       sessionId: "session-1",
       sessionFile: "session-1.jsonl",
       model,
-      modelRegistry: { refresh, find },
+      modelRuntime: { refresh, getModel },
       setModel,
       prompt: vi.fn(async () => {}),
     } as unknown as AgentSession);
@@ -170,7 +179,10 @@ describe("PiAgentRuntime model config refresh", () => {
   });
 
   it("does not refresh model config for non-prompt commands", async () => {
-    const refresh = vi.fn();
+    const refresh = vi.fn(async () => ({
+      aborted: false,
+      errors: new Map(),
+    }));
     const manager = SessionManager.inMemory("C:\\workspace");
     const runtime = new PiAgentRuntime({
       sessionId: "session-1",
@@ -183,7 +195,7 @@ describe("PiAgentRuntime model config refresh", () => {
           keepRecentTokens: 20_000,
         }),
       },
-      modelRegistry: { refresh },
+      modelRuntime: { refresh },
       getContextUsage: vi.fn(() => null),
       systemPrompt: "",
       thinkingLevel: "off",
@@ -193,5 +205,35 @@ describe("PiAgentRuntime model config refresh", () => {
     await runtime.execute({ type: "get_state" });
 
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the model config invalidated when refresh reports an error", async () => {
+    const refresh = vi
+      .fn()
+      .mockResolvedValueOnce({
+        aborted: false,
+        errors: new Map([["custom", new Error("invalid config")]]),
+      })
+      .mockResolvedValueOnce({ aborted: false, errors: new Map() });
+    const model = { provider: "custom", id: "model-a" };
+    const getModel = vi.fn(() => model);
+    const prompt = vi.fn(async () => {});
+    const runtime = new PiAgentRuntime({
+      sessionId: "session-1",
+      sessionFile: "session-1.jsonl",
+      model,
+      modelRuntime: { refresh, getModel },
+      setModel: vi.fn(async () => {}),
+      prompt,
+    } as unknown as AgentSession);
+
+    runtime.invalidateModelConfig({ scope: "all" });
+    await expect(
+      runtime.execute({ type: "prompt", message: "first" }),
+    ).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+    await runtime.execute({ type: "prompt", message: "second" });
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(prompt).toHaveBeenCalledOnce();
   });
 });

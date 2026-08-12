@@ -1,33 +1,29 @@
-import path from "node:path";
 import {
-  AuthStorage,
-  getAgentDir,
-  ModelRegistry,
+  type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
+import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import { AppError } from "@/server/domain/app-error";
 import type { OAuthCallbacks } from "@/server/domain/auth";
 import type { CredentialProvider } from "@/server/ports/credential-provider";
 
 export class PiCredentialProvider implements CredentialProvider {
-  private readonly auth = AuthStorage.create(
-    path.join(getAgentDir(), "auth.json"),
-  );
+  constructor(private readonly modelRuntime: Promise<ModelRuntime>) {}
 
   async listOAuthProviders() {
-    return this.auth
-      .getOAuthProviders()
-      .map((provider) => ({ id: provider.id, name: provider.name }));
+    const runtime = await this.modelRuntime;
+    return runtime
+      .getProviders()
+      .filter((provider) => Boolean(provider.auth.oauth))
+      .map(({ id, name }) => ({ id, name }));
   }
 
   async listApiKeyProviders() {
-    const registry = ModelRegistry.create(
-      this.auth,
-      path.join(getAgentDir(), "models.json"),
-    );
-    const ids = new Set(registry.getAll().map((model) => model.provider));
+    const runtime = await this.modelRuntime;
+    const ids = new Set(runtime.getModels().map((model) => model.provider));
     return [...ids]
+      .filter((id) => Boolean(runtime.getProvider(id)?.auth.apiKey))
       .sort()
-      .map((id) => ({ id, name: registry.getProviderDisplayName(id) }));
+      .map((id) => ({ id, name: runtime.getProvider(id)?.name ?? id }));
   }
 
   async listConfiguredApiKeyProviders() {
@@ -48,15 +44,27 @@ export class PiCredentialProvider implements CredentialProvider {
   }
 
   async getApiKeyStatus(provider: string) {
-    return this.auth.getAuthStatus(provider);
+    return (await this.modelRuntime).getProviderAuthStatus(provider);
   }
 
   async setApiKey(provider: string, apiKey: string): Promise<void> {
-    this.auth.set(provider, { type: "api_key", key: apiKey });
+    const runtime = await this.modelRuntime;
+    const candidate = runtime.getProvider(provider);
+    if (!candidate?.auth.apiKey?.login) {
+      throw new AppError(
+        "MODEL_NOT_FOUND",
+        `API Key provider ${provider} was not found`,
+        404,
+      );
+    }
+    await runtime.login(provider, "api_key", {
+      prompt: async () => apiKey,
+      notify: () => {},
+    });
   }
 
   async removeApiKey(provider: string): Promise<void> {
-    this.auth.remove(provider);
+    await (await this.modelRuntime).logout(provider);
   }
 
   async startOAuth(
@@ -64,10 +72,8 @@ export class PiCredentialProvider implements CredentialProvider {
     callbacks: OAuthCallbacks,
     signal: AbortSignal,
   ): Promise<void> {
-    const oauth = this.auth
-      .getOAuthProviders()
-      .find((candidate) => candidate.id === provider);
-    if (!oauth) {
+    const runtime = await this.modelRuntime;
+    if (!runtime.getProvider(provider)?.auth.oauth) {
       throw new AppError(
         "OAUTH_PROVIDER_NOT_FOUND",
         `OAuth provider ${provider} was not found`,
@@ -75,28 +81,76 @@ export class PiCredentialProvider implements CredentialProvider {
       );
     }
 
-    await this.auth.login(provider, {
+    await runtime.login(provider, "oauth", {
       signal,
-      onAuth: (info) => callbacks.emit({ type: "auth", ...info }),
-      onDeviceCode: (info) =>
-        callbacks.emit({ type: "device_code", ...info }),
-      onProgress: (message) =>
-        callbacks.emit({ type: "progress", message }),
-      onPrompt: (prompt) =>
-        callbacks.requestInput({ provider, ...prompt }),
-      onManualCodeInput: () =>
-        callbacks.requestInput({
-          provider,
-          message: "Enter the authorization code",
-        }),
-      onSelect: async (prompt) =>
-        callbacks.requestInput({ provider, ...prompt }),
+      notify: (event) => emitAuthEvent(callbacks, event),
+      prompt: (prompt) => requestAuthInput(callbacks, provider, prompt),
     });
     callbacks.emit({ type: "complete" });
   }
 
   async logout(provider: string): Promise<void> {
-    this.auth.logout(provider);
+    await (await this.modelRuntime).logout(provider);
   }
+}
+
+function emitAuthEvent(callbacks: OAuthCallbacks, event: AuthEvent): void {
+  switch (event.type) {
+    case "auth_url":
+      callbacks.emit({
+        type: "auth",
+        url: event.url,
+        instructions: event.instructions,
+      });
+      break;
+    case "device_code":
+      callbacks.emit({
+        type: "device_code",
+        userCode: event.userCode,
+        verificationUri: event.verificationUri,
+        intervalSeconds: event.intervalSeconds,
+        expiresInSeconds: event.expiresInSeconds,
+      });
+      break;
+    case "progress":
+    case "info":
+      callbacks.emit({ type: "progress", message: event.message });
+      break;
+  }
+}
+
+function requestAuthInput(
+  callbacks: OAuthCallbacks,
+  provider: string,
+  prompt: AuthPrompt,
+): Promise<string> {
+  const request = callbacks.requestInput({
+    provider,
+    message: prompt.message,
+    placeholder: "placeholder" in prompt ? prompt.placeholder : undefined,
+    options:
+      prompt.type === "select"
+        ? prompt.options.map(({ id, label }) => ({ id, label }))
+        : undefined,
+  });
+  return prompt.signal ? rejectOnAbort(request, prompt.signal) : request;
+}
+
+function rejectOnAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    void operation.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 

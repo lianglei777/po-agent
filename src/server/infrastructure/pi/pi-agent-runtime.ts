@@ -1,5 +1,6 @@
 import {
   createAgentSession,
+  type ModelRuntime,
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
@@ -31,6 +32,8 @@ const FULL_BUILTIN_TOOLS = [
 ];
 
 export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
+  constructor(private readonly modelRuntime: Promise<ModelRuntime>) {}
+
   async create(input: CreateRuntimeInput): Promise<AgentRuntime> {
     const manager = input.sessionFile
       ? SessionManager.open(input.sessionFile)
@@ -45,10 +48,12 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
       ...(input.toolNames ?? FULL_BUILTIN_TOOLS),
       ...requiredToolNames,
     ];
+    const modelRuntime = await this.modelRuntime;
     const { session } = await createAgentSession({
       cwd: input.cwd,
       resourceLoader,
       sessionManager: manager,
+      modelRuntime,
       tools: [...new Set(selectedToolNames)],
       customTools,
       noTools:
@@ -107,7 +112,7 @@ export class PiAgentRuntime implements AgentRuntime {
       case "get_state":
         return (await this.getState()) as T;
       case "set_model": {
-        const model = this.session.modelRegistry.find(
+        const model = this.session.modelRuntime.getModel(
           command.provider,
           command.modelId,
         );
@@ -251,9 +256,24 @@ export class PiAgentRuntime implements AgentRuntime {
 
     const targetRevision = this.modelConfigRevision;
     const currentModel = this.session.model;
-    this.session.modelRegistry.refresh();
+    const result = await this.session.modelRuntime.refresh({
+      allowNetwork: false,
+    });
+    if (result.aborted || result.errors.size > 0) {
+      const details = [...result.errors.entries()].map(
+        ([provider, error]) => `${provider}: ${error.message}`,
+      );
+      throw new AppError(
+        "INTERNAL_ERROR",
+        result.aborted
+          ? "Model config refresh was aborted"
+          : `Model config refresh failed: ${details.join("; ")}`,
+        500,
+      );
+    }
+    // 仅在刷新完整成功后提交 revision；失败时下一次 Prompt 必须继续重试。
     if (currentModel) {
-      const refreshedModel = this.session.modelRegistry.find(
+      const refreshedModel = this.session.modelRuntime.getModel(
         currentModel.provider,
         currentModel.id,
       );

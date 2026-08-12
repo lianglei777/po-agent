@@ -2,18 +2,16 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  AuthStorage,
   createAgentSession,
   getAgentDir,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import {
-  getModels,
-  getProviders,
   getSupportedThinkingLevels,
 } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@/server/domain/agent-command";
+import { AppError } from "@/server/domain/app-error";
 import type {
   DiscoverModelsInput,
   DiscoverModelsResult,
@@ -31,18 +29,13 @@ import { evaluateModelTestMessages } from "./model-test-result";
 import { mapModelDiagnostic } from "./model-diagnostic-mapper";
 
 export class PiModelProvider implements ModelProvider {
-  private readonly auth = AuthStorage.create(
-    path.join(getAgentDir(), "auth.json"),
-  );
+  constructor(private readonly modelRuntime: Promise<ModelRuntime>) {}
 
   async listAvailable(): Promise<ModelInfo[]> {
     const config = await this.readConfig();
     const thinkingDefaults = getThinkingDefaultLevels(config);
-    const registry = ModelRegistry.create(
-      this.auth,
-      path.join(getAgentDir(), "models.json"),
-    );
-    return registry.getAvailable().map((model) => ({
+    const models = await (await this.modelRuntime).getAvailable();
+    return models.map((model) => ({
       id: model.id,
       name: model.name,
       provider: model.provider,
@@ -84,14 +77,21 @@ export class PiModelProvider implements ModelProvider {
     const temporary = `${filePath}.${process.pid}.tmp`;
     await fs.writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`);
     await fs.rename(temporary, filePath);
+    const result = await (await this.modelRuntime).refresh({
+      allowNetwork: false,
+    });
+    if (result.aborted || result.errors.size > 0) {
+      throw modelRefreshError(result);
+    }
   }
 
   async discoverModels(
     input: DiscoverModelsInput,
   ): Promise<DiscoverModelsResult> {
+    const runtime = await this.modelRuntime;
     return buildModelDiscoverySuggestions(input, {
       fetchModels: selectFetchModels(input.provider.api),
-      catalogModels: getProviders().flatMap((provider) => getModels(provider)),
+      catalogModels: [...runtime.getModels()],
     });
   }
 
@@ -111,8 +111,12 @@ export class PiModelProvider implements ModelProvider {
         const sanitized = sanitizeModelsConfig(input.config);
         await fs.writeFile(configPath, JSON.stringify(sanitized));
       }
-      const registry = ModelRegistry.create(this.auth, configPath);
-      const model = registry.find(input.provider, input.modelId);
+      const testRuntime = await ModelRuntime.create({
+        authPath: path.join(getAgentDir(), "auth.json"),
+        modelsPath: configPath,
+        allowModelNetwork: false,
+      });
+      const model = testRuntime.getModel(input.provider, input.modelId);
       if (!model) {
         return failedTestResult(
           started,
@@ -127,6 +131,7 @@ export class PiModelProvider implements ModelProvider {
       ({ session } = await createAgentSession({
         cwd: directory,
         sessionManager: SessionManager.inMemory(directory),
+        modelRuntime: testRuntime,
         model,
         noTools: "all",
       }));
@@ -177,6 +182,22 @@ export class PiModelProvider implements ModelProvider {
       await fs.rm(directory, { recursive: true, force: true });
     }
   }
+}
+
+function modelRefreshError(result: {
+  aborted: boolean;
+  errors: ReadonlyMap<string, Error>;
+}): AppError {
+  const details = [...result.errors.entries()].map(
+    ([provider, error]) => `${provider}: ${error.message}`,
+  );
+  return new AppError(
+    "INTERNAL_ERROR",
+    result.aborted
+      ? "Model config refresh was aborted"
+      : `Model config refresh failed: ${details.join("; ")}`,
+    500,
+  );
 }
 
 function failedTestResult(
@@ -251,6 +272,7 @@ function isConfiguredThinkingLevel(
     value === "low" ||
     value === "medium" ||
     value === "high" ||
-    value === "xhigh"
+    value === "xhigh" ||
+    value === "max"
   );
 }

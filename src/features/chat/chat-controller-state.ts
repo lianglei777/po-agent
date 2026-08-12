@@ -48,6 +48,7 @@ const THINKING_ON_PREFERENCE: ThinkingLevel[] = [
   "low",
   "minimal",
   "xhigh",
+  "max",
 ];
 
 export function thinkingModeFromLevel(level: ThinkingLevel): ThinkingMode {

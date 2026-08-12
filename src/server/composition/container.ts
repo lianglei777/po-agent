@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import {
+  getAgentDir,
+  ModelRuntime,
+} from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
 import { AgentSettingsService } from "@/server/application/agent-settings-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
@@ -41,23 +44,29 @@ import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
 
 function createContainer() {
+  const agentDir = getAgentDir();
+  // 模型、凭证与所有 Agent Session 必须共享同一 Runtime，避免配置和认证快照分叉。
+  const modelRuntime = ModelRuntime.create({
+    authPath: path.join(agentDir, "auth.json"),
+    modelsPath: path.join(agentDir, "models.json"),
+  });
   const sessions = new PiSessionRepository();
   const runtimes = new InMemoryAgentRegistry();
-  const runtimeFactory = new PiAgentRuntimeFactory();
+  const runtimeFactory = new PiAgentRuntimeFactory(modelRuntime);
   const agentSettings = new PiAgentSettingsStore();
   const roots = new InMemoryWorkspaceRoots();
-  const credentials = new PiCredentialProvider();
-  const models = new PiModelProvider();
+  const credentials = new PiCredentialProvider(modelRuntime);
+  const models = new PiModelProvider(modelRuntime);
   const pendingInputs = new PendingInputRegistry();
   const fileSystem = new NodeWorkspaceFileService();
   const directoryBrowser = new NodeDirectoryBrowser();
   const projectRepository = new JsonProjectRepository(
-    path.join(getAgentDir(), "projects.json"),
+    path.join(agentDir, "projects.json"),
   );
   const processes = new NodeProcessRunner();
   const skills = new PiSkillProvider(processes);
   const skillPacks = new PiSkillPackProvider(undefined, undefined, undefined, roots);
-  const instructionStore = new NodeInstructionStore(getAgentDir());
+  const instructionStore = new NodeInstructionStore(agentDir);
   let generationRunService: GenerationRunService | undefined;
   let generationAssetService: GenerationAssetService | undefined;
   let generationCredentialStore: FileGenerationCredentialStore | undefined;
@@ -71,12 +80,12 @@ function createContainer() {
   function getGenerationRunService() {
     if (generationRunService) return generationRunService;
     const database = new SqliteDatabase(
-      path.join(getAgentDir(), "po-agent.sqlite"),
+      path.join(agentDir, "po-agent.sqlite"),
     );
     const repository = new SqliteGenerationRepository(database);
     const ready = seedGenerationRoutes(repository, createRunningHubRoutes());
     generationCredentialStore = new FileGenerationCredentialStore(
-      path.join(getAgentDir(), "generation-credentials.json"),
+      path.join(agentDir, "generation-credentials.json"),
     );
     generationRunService = new GenerationRunService(repository, {
       ready,

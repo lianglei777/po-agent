@@ -4,6 +4,7 @@ import { validateToolArguments } from "@earendil-works/pi-ai";
 const sdk = vi.hoisted(() => ({
   createAgentSession: vi.fn(),
   createSessionManager: vi.fn(),
+  modelRuntime: {},
 }));
 const resources = vi.hoisted(() => ({
   createPiResourceLoader: vi.fn(),
@@ -30,7 +31,8 @@ describe("PiAgentRuntimeFactory", () => {
     const resourceLoader = { reload: vi.fn() };
     resources.createPiResourceLoader.mockResolvedValue(resourceLoader);
 
-    await new PiAgentRuntimeFactory().create({ cwd: "C:\\workspace" });
+    await new PiAgentRuntimeFactory(Promise.resolve(sdk.modelRuntime as never))
+      .create({ cwd: "C:\\workspace" });
 
     expect(resources.createPiResourceLoader).toHaveBeenCalledWith({
       cwd: "C:\\workspace",
@@ -38,6 +40,7 @@ describe("PiAgentRuntimeFactory", () => {
     expect(sdk.createAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
         resourceLoader,
+        modelRuntime: sdk.modelRuntime,
         tools: ["bash", "read", "edit", "write", "grep", "find", "ls"],
       }),
     );
@@ -52,7 +55,7 @@ describe("PiAgentRuntimeFactory", () => {
       details: { runId: "run-1" },
     }));
 
-    await new PiAgentRuntimeFactory().create({
+    await new PiAgentRuntimeFactory(Promise.resolve(sdk.modelRuntime as never)).create({
       cwd: "C:\\workspace",
       toolNames: ["read"],
       customTools: [{
