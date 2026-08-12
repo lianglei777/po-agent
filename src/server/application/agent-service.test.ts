@@ -6,6 +6,7 @@ import type {
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { AgentService } from "./agent-service";
+import { GenerationReviewRegistry } from "./content-generation/generation-review-registry";
 
 describe("AgentService", () => {
   it("creates and configures a runtime without starting a prompt", async () => {
@@ -117,6 +118,39 @@ describe("AgentService", () => {
 
     expect(destroy).toHaveBeenCalledOnce();
     expect(registry.get("original")).toBeUndefined();
+  });
+
+  it("scopes generation review to the active prompt execution", async () => {
+    let finishPrompt: (() => void) | undefined;
+    const runtime = runtimeStub({
+      execute: async <T,>() =>
+        new Promise<T>((resolve) => {
+          finishPrompt = () => resolve(undefined as T);
+        }),
+    });
+    const runtimes = new InMemoryAgentRegistry();
+    runtimes.register("session-1", runtime);
+    const reviews = new GenerationReviewRegistry();
+    const service = new AgentService(
+      {} as SessionRepository,
+      runtimes,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      reviews,
+    );
+
+    await service.execute("session-1", {
+      type: "prompt",
+      message: "Generate with review",
+      generationReview: true,
+    });
+    expect(reviews.requiresReview("session-1")).toBe(true);
+
+    finishPrompt?.();
+    await vi.waitFor(() =>
+      expect(reviews.requiresReview("session-1")).toBe(false),
+    );
   });
 });
 

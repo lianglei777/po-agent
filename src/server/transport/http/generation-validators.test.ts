@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseCreateGenerationRun, parseRetryGenerationRun } from "./generation-validators";
+import {
+  parseConfirmGenerationRun,
+  parseCreateGenerationRun,
+  parseRetryGenerationRun,
+} from "./generation-validators";
 
 describe("parseCreateGenerationRun", () => {
   it("parses named artifact and workspace asset references", () => {
@@ -65,5 +69,18 @@ describe("parseRetryGenerationRun", () => {
       idempotencyKey: "retry-1",
     });
     expect(() => parseRetryGenerationRun({})).toThrowError();
+  });
+});
+
+describe("parseConfirmGenerationRun", () => {
+  it("accepts an editable prompt and JSON parameters", () => {
+    expect(parseConfirmGenerationRun({
+      prompt: "revised prompt",
+      parameters: { durationSeconds: 10, generateAudio: false },
+    })).toEqual({
+      prompt: "revised prompt",
+      parameters: { durationSeconds: 10, generateAudio: false },
+    });
+    expect(() => parseConfirmGenerationRun({ prompt: 1 })).toThrowError();
   });
 });

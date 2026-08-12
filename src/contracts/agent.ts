@@ -19,7 +19,12 @@ export interface ImageInput {
 }
 
 export type AgentCommand =
-  | { type: "prompt"; message: string; images?: ImageInput[] }
+  | {
+      type: "prompt";
+      message: string;
+      images?: ImageInput[];
+      generationReview?: boolean;
+    }
   | { type: "abort" }
   | { type: "get_state" }
   | { type: "set_model"; provider: string; modelId: string }

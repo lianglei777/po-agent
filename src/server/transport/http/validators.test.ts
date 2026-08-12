@@ -48,6 +48,19 @@ describe("agent HTTP validation", () => {
     ).toThrow("message or images must be provided");
   });
 
+  it("parses generation review only for a prompt command", () => {
+    expect(parseAgentCommand({
+      type: "prompt",
+      message: "Generate a video",
+      generationReview: true,
+    })).toMatchObject({ generationReview: true });
+    expect(parseAgentCommand({
+      type: "steer",
+      message: "Continue",
+      generationReview: true,
+    })).not.toHaveProperty("generationReview");
+  });
+
   it("parses the auto-retry command", () => {
     expect(parseAgentCommand({ type: "set_auto_retry", enabled: true })).toEqual({
       type: "set_auto_retry",

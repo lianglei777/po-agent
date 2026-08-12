@@ -29,6 +29,21 @@ describe("chat execution process visual contract", () => {
     expect(source).not.toContain("const automaticValue = streaming");
   });
 
+  it("promotes generation review to the assistant message surface", () => {
+    expect(source).toContain("const generationReviews = useMemo");
+    expect(source).toContain("generationReviews.map((details)");
+    expect(source).toContain("generationDetailsWithView");
+    expect(source).toContain("loadGenerationRun(details.runId)");
+    expect(source).toContain("results={currentResults}");
+    expect(source).not.toContain("if (details.review)");
+  });
+
+  it("polls active generation runs every ten seconds and promotes completed media", () => {
+    expect(source).toContain("const GENERATION_POLL_INTERVAL_MS = 10_000");
+    expect(source).toContain("window.setInterval(refresh, GENERATION_POLL_INTERVAL_MS)");
+    expect(source).toContain("<GenerationArtifactGallery artifacts={generatedArtifacts} cwd={cwd} />");
+  });
+
   it("keeps tool status and disclosure controls in stable columns", () => {
     expect(source).toContain("styles.stepSummary");
     expect(source).toContain("styles.stepStatus");

@@ -70,6 +70,104 @@ describe("GenerationRunService", () => {
     });
   });
 
+  it("fills schema field defaults that are absent from route defaults", async () => {
+    const result = await service.prepareRun({
+      sessionId: "session-1",
+      capability: "text-to-image",
+      prompt: "minimal poster",
+      source: "agent-tool",
+      idempotencyKey: "schema-defaults",
+    });
+
+    expect(result.run.input.parameters).toMatchObject({
+      resolution: "2k",
+      outputFormat: "png",
+      width: 1024,
+      height: 1024,
+    });
+  });
+
+  it("persists a reviewable run without creating provider work until confirmation", async () => {
+    const prepared = await service.prepareRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      routeId: "runninghub-seedance-2-text-to-video",
+      prompt: "rainy bamboo forest",
+      parameters: { durationSeconds: 5 },
+      source: "agent-tool",
+      sourceRef: "tool-review-1",
+      idempotencyKey: "review-1",
+    });
+
+    expect(prepared).toMatchObject({
+      run: {
+        status: "awaiting_confirmation",
+        input: {
+          parameters: {
+            resolution: "720p",
+            durationSeconds: 5,
+            aspectRatio: "adaptive",
+            generateAudio: true,
+            webSearch: false,
+            returnLastFrame: false,
+            seed: -1,
+          },
+        },
+      },
+      jobs: [],
+    });
+    await expect(repository.claimDueJobs({
+      owner: "worker",
+      now: NOW,
+      leaseExpiresAt: "2026-08-06T00:01:00.000Z",
+      limit: 10,
+    })).resolves.toEqual([]);
+
+    const confirmed = await service.confirmRun(prepared.run.id, {
+      prompt: "rainy bamboo forest at dawn",
+      parameters: {
+        resolution: "720p",
+        durationSeconds: 10,
+        generateAudio: false,
+      },
+    });
+
+    expect(confirmed).toMatchObject({
+      run: {
+        status: "queued",
+        prompt: "rainy bamboo forest at dawn",
+        input: { parameters: { durationSeconds: 10, generateAudio: false } },
+      },
+      jobs: [{ status: "created" }],
+    });
+    await expect(service.confirmRun(prepared.run.id, {
+      prompt: "ignored after the first confirmation",
+      parameters: {},
+    })).resolves.toMatchObject({
+      run: { prompt: "rainy bamboo forest at dawn" },
+      jobs: [{ status: "created" }],
+    });
+  });
+
+  it("rejects invalid edits while keeping a prepared run unsubmitted", async () => {
+    const prepared = await service.prepareRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      prompt: "review this",
+      source: "agent-tool",
+      idempotencyKey: "review-invalid",
+    });
+
+    await expect(service.confirmRun(prepared.run.id, {
+      prompt: "review this",
+      parameters: { durationSeconds: 99 },
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+    await expect(service.getRun(prepared.run.id)).resolves.toMatchObject({
+      run: { status: "awaiting_confirmation" },
+      jobs: [],
+    });
+  });
+
   it("returns the existing run for an identical idempotent request", async () => {
     const input = {
       sessionId: "session-1",

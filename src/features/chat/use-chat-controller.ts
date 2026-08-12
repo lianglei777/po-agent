@@ -7,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
@@ -204,6 +205,7 @@ export function useChatController(options: ChatControllerOptions) {
     ),
   );
   const { t } = useI18n();
+  const [generationReview, setGenerationReview] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -786,6 +788,7 @@ export function useChatController(options: ChatControllerOptions) {
           type: "prompt",
           message: text,
           images: imageInputs.length ? imageInputs : undefined,
+          generationReview,
         });
         onSessionCreated?.(created.sessionId);
       } else {
@@ -799,6 +802,7 @@ export function useChatController(options: ChatControllerOptions) {
           type: mode,
           message: text,
           images: imageInputs.length ? imageInputs : undefined,
+          ...(mode === "prompt" ? { generationReview } : {}),
         });
       }
       setMessages((current) =>
@@ -967,6 +971,8 @@ export function useChatController(options: ChatControllerOptions) {
     canAttachImages,
     thinkingLevel,
     thinkingMode,
+    generationReview,
+    setGenerationReview,
     forkingEntryId,
     undoable,
     undoEdit,

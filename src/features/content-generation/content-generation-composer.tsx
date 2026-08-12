@@ -2,13 +2,16 @@
 
 import { FileImage, FileMusic, FileVideo, Send, X } from "@/components/icons";
 import { useState } from "react";
-import { Alert, Button, Checkbox, Input, Select, Switch } from "antd";
+import { Alert, Button, Input, Select } from "antd";
 import type {
   GenerationAssetSlot,
-  GenerationParameterField,
   GenerationRouteDto,
   JsonValue,
 } from "@/contracts/generation";
+import {
+  defaultGenerationParameters,
+  GenerationParameterEditor,
+} from "@/components/generation/generation-parameter-editor";
 import { useI18n } from "@/i18n/use-i18n";
 
 export interface SelectedGenerationAsset {
@@ -39,7 +42,7 @@ export function ContentGenerationComposer({
   const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [parameters, setParameters] = useState<Record<string, JsonValue>>(
-    () => defaultParameters(route),
+    () => defaultGenerationParameters(route),
   );
   const [assets, setAssets] = useState<SelectedGenerationAsset[]>([]);
   const schema = route.inputSchema;
@@ -60,11 +63,7 @@ export function ContentGenerationComposer({
     }
   }
 
-  // 按控件类型分组--select/number/text 统一网格，boolean 横向开关，multi-select chip 切换
   const allFields = schema.parameters ?? [];
-  const selectFields = allFields.filter((f) => f.type === "select" || f.type === "number" || f.type === "text");
-  const booleanFields = allFields.filter((f) => f.type === "boolean");
-  const multiSelectFields = allFields.filter((f) => f.type === "multi-select");
 
   return (
     <div className="mx-auto max-w-[820px] rounded-[22px] border border-line-strong bg-canvas p-3 shadow-floating">
@@ -139,51 +138,14 @@ export function ContentGenerationComposer({
         value={prompt}
       />
 
-      {/* 选择项与数值--统一网格布局 */}
-      {selectFields.length ? (
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-line-subtle pt-3 sm:grid-cols-4">
-          {selectFields.map((field) => (
-            <SelectParameterControl
-              disabled={busy}
-              field={field}
-              key={field.key}
-              onChange={(value) => setParameters((current) => ({ ...current, [field.key]: value }))}
-              value={parameters[field.key]}
-              translatedLabel={inputLabels[field.key] ?? field.label}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {/* 开关项--横向排列 */}
-      {booleanFields.length ? (
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line-subtle pt-3">
-          {booleanFields.map((field) => (
-            <SwitchParameterControl
-              disabled={busy}
-              field={field}
-              key={field.key}
-              onChange={(value) => setParameters((current) => ({ ...current, [field.key]: value }))}
-              value={parameters[field.key]}
-              translatedLabel={inputLabels[field.key] ?? field.label}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {/* 多选项--inline chip 切换 */}
-      {multiSelectFields.length ? (
-        <div className="mt-3 space-y-1.5 border-t border-line-subtle pt-3">
-          {multiSelectFields.map((field) => (
-            <MultiSelectParameterControl
-              disabled={busy}
-              field={field}
-              key={field.key}
-              onChange={(value) => setParameters((current) => ({ ...current, [field.key]: value }))}
-              value={parameters[field.key]}
-              translatedLabel={inputLabels[field.key] ?? field.label}
-            />
-          ))}
+      {allFields.length ? (
+        <div className="mt-3 border-t border-line-subtle pt-3">
+          <GenerationParameterEditor
+            disabled={busy}
+            fields={allFields}
+            onChange={setParameters}
+            values={parameters}
+          />
         </div>
       ) : null}
 
@@ -270,126 +232,6 @@ function AssetSlotInput({
       ) : null}
     </div>
   );
-}
-
-// 选择项与数值控件--select 使用 Radix Select，number/text 使用 Input
-function SelectParameterControl({
-  disabled,
-  field,
-  onChange,
-  value,
-  translatedLabel,
-}: {
-  disabled: boolean;
-  field: GenerationParameterField;
-  onChange: (value: JsonValue) => void;
-  value: JsonValue | undefined;
-  translatedLabel: string;
-}) {
-  if (field.type === "select") {
-    return (
-      <label className="space-y-1 text-caption text-muted" title={field.description}>
-        <span>{translatedLabel}</span>
-        <Select
-          className="w-full"
-          disabled={disabled}
-          onChange={(nextValue) => onChange(optionValue(field, nextValue))}
-          options={field.options?.map((option) => ({
-            label: option.label,
-            value: String(option.value),
-          }))}
-          popupMatchSelectWidth={false}
-          value={String(value ?? "")}
-        />
-      </label>
-    );
-  }
-  return (
-    <label className="space-y-1 text-caption text-muted" title={field.description}>
-      <span>{translatedLabel}</span>
-      <Input
-        disabled={disabled}
-        max={field.max}
-        min={field.min}
-        onChange={(event) => onChange(field.type === "number" ? Number(event.target.value) : event.target.value)}
-        type={field.type === "number" ? "number" : "text"}
-        value={typeof value === "string" || typeof value === "number" ? value : ""}
-      />
-    </label>
-  );
-}
-
-// 开关项--使用 Switch primitive
-function SwitchParameterControl({
-  disabled,
-  field,
-  onChange,
-  value,
-  translatedLabel,
-}: {
-  disabled: boolean;
-  field: GenerationParameterField;
-  onChange: (value: JsonValue) => void;
-  value: JsonValue | undefined;
-  translatedLabel: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 text-xs text-primary" title={field.description}>
-      <Switch checked={value === true} disabled={disabled} onChange={onChange} size="small" />
-      {translatedLabel}
-    </label>
-  );
-}
-
-// 多选项--inline chip 切换，选中态高亮
-function MultiSelectParameterControl({
-  disabled,
-  field,
-  onChange,
-  value,
-  translatedLabel,
-}: {
-  disabled: boolean;
-  field: GenerationParameterField;
-  onChange: (value: JsonValue) => void;
-  value: JsonValue | undefined;
-  translatedLabel: string;
-}) {
-  const selected = Array.isArray(value) ? value : [];
-  return (
-    <fieldset className="space-y-1.5">
-      <legend className="text-caption text-muted">{translatedLabel}</legend>
-      <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {field.options?.map((option) => {
-          const active = selected.includes(option.value as never);
-          return (
-            <Checkbox
-              checked={active}
-              disabled={disabled}
-              key={String(option.value)}
-              onChange={() => onChange(active
-                ? selected.filter((item) => item !== option.value)
-                : [...selected, option.value])}
-            >
-              {option.label}
-            </Checkbox>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
-function defaultParameters(route: GenerationRouteDto) {
-  return Object.fromEntries(
-    (route.inputSchema.parameters ?? [])
-      .filter((field) => field.defaultValue !== undefined)
-      .map((field) => [field.key, structuredClone(field.defaultValue) as JsonValue]),
-  );
-}
-
-function optionValue(field: GenerationParameterField, serialized: string) {
-  return field.options?.find((option) => String(option.value) === serialized)?.value ?? serialized;
 }
 
 function referenceType(mimeType: string) {

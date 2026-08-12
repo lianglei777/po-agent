@@ -15,6 +15,7 @@ export interface GenerationFileStore {
   saveOutput(input: {
     cwd: string;
     runId: string;
+    nameHint: string;
     index: number;
     extension?: string;
     data: Uint8Array;

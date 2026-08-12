@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { MediaPreview } from "@/components/ui/media-preview";
 import type { GenerationToolDetails } from "@/contracts/generation";
+import type { GenerationRunViewDto } from "@/contracts/generation";
+import { loadGenerationRun } from "@/lib/client/generation-run-api";
 import { rawFileUrl } from "@/lib/raw-file-url";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/use-i18n";
@@ -38,8 +40,10 @@ import type {
 import { toolResults } from "./chat-logic";
 import {
   generationArtifactPath,
+  generationDetailsWithView,
   generationToolDetails,
 } from "./generation-tool-presentation";
+import { GenerationReviewCard } from "./generation-review-card";
 import {
   buildMessagePresentation,
   collapseGenerationQueries,
@@ -49,6 +53,8 @@ import {
   type AssistantTurnPresentationItem,
 } from "./message-presentation";
 import styles from "./message-view.module.css";
+
+const GENERATION_POLL_INTERVAL_MS = 10_000;
 
 // 懒加载代码块组件，避免将 react-syntax-highlighter 打入主 bundle
 const CodeBlock = dynamic(
@@ -321,9 +327,69 @@ function AssistantTurnView({
     [turn],
   );
   const process = useMemo(() => collapseGenerationQueries(rawProcess), [rawProcess]);
+  const sourceGenerationDetails = useMemo(() => {
+    const unique = new Map<string, GenerationToolDetails>();
+    for (const step of process) {
+      if (step.block.type !== "toolCall") continue;
+      const details = generationToolDetails(results.get(step.block.toolCallId)?.details);
+      if (details) unique.set(details.runId, details);
+    }
+    return [...unique.values()];
+  }, [process, results]);
+  const [generationViews, setGenerationViews] = useState(
+    () => new Map<string, GenerationRunViewDto>(),
+  );
+  const generationPollingKey = sourceGenerationDetails.map((details) => {
+    const status = generationViews.get(details.runId)?.run.status ?? details.status;
+    return `${details.runId}:${status}`;
+  }).join("|");
+  useEffect(() => {
+    if (!sourceGenerationDetails.length) return;
+    let disposed = false;
+    const refresh = async () => {
+      const settled = await Promise.allSettled(
+        sourceGenerationDetails.map((details) => loadGenerationRun(details.runId)),
+      );
+      if (disposed) return;
+      setGenerationViews((current) => {
+        const next = new Map(current);
+        settled.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            next.set(sourceGenerationDetails[index]!.runId, result.value);
+          }
+        });
+        return next;
+      });
+    };
+    void refresh();
+    const hasActive = generationPollingKey.split("|").some((entry) =>
+      /:(queued|running|cancel_requested)$/.test(entry),
+    );
+    const timer = hasActive
+      ? window.setInterval(refresh, GENERATION_POLL_INTERVAL_MS)
+      : undefined;
+    return () => {
+      disposed = true;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [generationPollingKey, sourceGenerationDetails]);
+  const currentResults = useMemo(() => {
+    const next = new Map(results);
+    for (const step of process) {
+      if (step.block.type !== "toolCall") continue;
+      const result = results.get(step.block.toolCallId);
+      const details = generationToolDetails(result?.details);
+      if (!result || !details) continue;
+      next.set(step.block.toolCallId, {
+        ...result,
+        details: generationDetailsWithView(details, generationViews.get(details.runId)),
+      });
+    }
+    return next;
+  }, [generationViews, process, results]);
   const status = useMemo(
-    () => executionProcessStatus(process, results, turn.streaming),
-    [process, results, turn.streaming],
+    () => executionProcessStatus(process, currentResults, turn.streaming),
+    [currentResults, process, turn.streaming],
   );
   const latestMessage = turn.messages.at(-1);
   const identityMessage =
@@ -346,14 +412,23 @@ function AssistantTurnView({
     const unique = new Map<string, GenerationToolDetails["artifacts"][number]>();
     for (const step of process) {
       if (step.block.type !== "toolCall") continue;
-      const details = generationToolDetails(results.get(step.block.toolCallId)?.details);
-      if (details?.status !== "succeeded") continue;
+      const details = generationToolDetails(currentResults.get(step.block.toolCallId)?.details);
+      if (details?.status !== "succeeded" || details.review) continue;
       for (const artifact of details.artifacts) {
         if (artifact.kind === "image" || artifact.kind === "video") unique.set(artifact.id, artifact);
       }
     }
     return [...unique.values()];
-  }, [process, results]);
+  }, [currentResults, process]);
+  const generationReviews = useMemo(() => {
+    const unique = new Map<string, GenerationToolDetails>();
+    for (const step of process) {
+      if (step.block.type !== "toolCall") continue;
+      const details = generationToolDetails(currentResults.get(step.block.toolCallId)?.details);
+      if (details?.review) unique.set(details.runId, details);
+    }
+    return [...unique.values()];
+  }, [currentResults, process]);
 
   return (
     <div>
@@ -376,7 +451,7 @@ function AssistantTurnView({
           assistantError={Boolean(error)}
           cwd={cwd}
           process={process}
-          results={results}
+          results={currentResults}
           status={status}
         />
       ) : null}
@@ -435,6 +510,18 @@ function AssistantTurnView({
           ))}
         </div>
       ) : null}
+
+      {generationReviews.map((details) => (
+        <GenerationReviewCard
+          cwd={cwd}
+          details={details}
+          key={details.runId}
+          onViewChange={(view) => setGenerationViews((current) =>
+            new Map(current).set(details.runId, view)
+          )}
+          view={generationViews.get(details.runId)}
+        />
+      ))}
 
       {generatedArtifacts.length ? (
         <GenerationArtifactGallery artifacts={generatedArtifacts} cwd={cwd} />
@@ -569,9 +656,13 @@ function ExecutionStep({
     const generationFinished = generation
       ? ["succeeded", "failed", "cancelled"].includes(generation.status)
       : Boolean(result);
+    const generationAwaitingReview =
+      generation?.status === "awaiting_confirmation";
     const toolFailed = Boolean(result?.isError || generation?.status === "failed");
     const statusLabel = toolFailed
       ? t.chat.message.toolError
+      : generationAwaitingReview
+        ? t.chat.message.generationAwaitingReview
       : generationFinished
         ? t.chat.message.toolDone
         : t.chat.message.toolRunning;
@@ -590,10 +681,18 @@ function ExecutionStep({
           <Tag
             className={styles.stepStatus}
             color={
-              toolFailed ? "error" : generationFinished ? "success" : undefined
+              toolFailed
+                ? "error"
+                : generationAwaitingReview
+                  ? "warning"
+                  : generationFinished
+                    ? "success"
+                    : undefined
             }
             variant={
-              toolFailed || generationFinished ? "filled" : "outlined"
+              toolFailed || generationFinished || generationAwaitingReview
+                ? "filled"
+                : "outlined"
             }
           >
             {statusLabel}

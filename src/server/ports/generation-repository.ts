@@ -12,7 +12,7 @@ import type {
 export interface CreateGenerationRunResult {
   created: boolean;
   run: GenerationRun;
-  job: ProviderJob;
+  job?: ProviderJob;
 }
 
 export interface CreateGenerationRetryResult {
@@ -37,8 +37,12 @@ export interface GenerationRepository {
 
   createRun(
     run: GenerationRun,
-    job: ProviderJob,
+    job?: ProviderJob,
   ): Promise<CreateGenerationRunResult>;
+  confirmRun(
+    run: GenerationRun,
+    job: ProviderJob,
+  ): Promise<CreateGenerationRunResult | null>;
   createRetryJob(
     run: GenerationRun,
     job: ProviderJob,

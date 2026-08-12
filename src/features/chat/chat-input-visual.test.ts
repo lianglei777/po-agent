@@ -31,11 +31,20 @@ describe("chat input visual contract", () => {
     expect(source).not.toContain("t.chat.input.shortcutIdle");
     expect(source).not.toContain("t.chat.input.shortcutRunning");
     expect(source).toContain("t.chat.input.thinking");
+    expect(source).toContain("t.chat.input.generationControl");
+    expect(source).toContain("t.chat.input.generationAutomatic");
+    expect(source).toContain("t.chat.input.generationReview");
     expect(source).not.toContain("t.chat.input.tools");
     expect(source).not.toContain("changeTools");
     expect(source).toContain("t.chat.input.queue");
     expect(source).toContain("t.chat.input.steer");
     expect(source).toContain("t.chat.input.stopAgent");
+  });
+
+  it("keeps generation review as an explicit composer choice", () => {
+    expect(source).toContain('value={generationReview ? "review" : "automatic"}');
+    expect(source).toContain('setGenerationReview(value === "review")');
+    expect(source).toContain("disabled={running}");
   });
 
   it("does not expose manual context compaction controls", () => {

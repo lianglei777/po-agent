@@ -2,6 +2,7 @@ import type {
   GenerationArtifactDto,
   GenerationCapability,
   GenerationInputAsset,
+  GenerationRouteDto,
   GenerationRunStatus,
   GenerationToolDetails,
   JsonValue,
@@ -12,6 +13,7 @@ import type {
   AgentToolProvider,
   AgentToolResult,
 } from "@/server/ports/agent-tool";
+import type { GenerationReviewRegistry } from "./generation-review-registry";
 import type {
   GenerationRunService,
   GenerationRunView,
@@ -45,6 +47,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       videoWaitTimeoutMs?: number;
       pollIntervalMs?: number;
     } = {},
+    private readonly reviews?: GenerationReviewRegistry,
   ) {
     this.imageWaitTimeoutMs = options.imageWaitTimeoutMs ?? options.waitTimeoutMs ?? 5 * 60_000;
     this.videoWaitTimeoutMs = options.videoWaitTimeoutMs ?? options.waitTimeoutMs ?? 20 * 60_000;
@@ -78,6 +81,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         "The generation tool waits for completion. Do not poll get_generation automatically. Use it only when the user explicitly asks about an existing run.",
         "When referring to identifiers, distinguish the Po Agent local run ID from the provider task ID.",
         "Use workspace-relative paths or artifact IDs for generation assets.",
+        "If a generation result is awaiting_confirmation, tell the user the parameter review is ready and do not query or resubmit it.",
       ],
       parameters: generateSchema(video),
       execute: async ({ toolCallId, input, signal, onUpdate }) => {
@@ -99,7 +103,11 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
             ? {}
             : { aspectRatio: parsed.aspectRatio }),
         };
-        const view = await this.getRunService().createRun({
+        const service = this.getRunService();
+        const create = this.reviews?.requiresReview(sessionId)
+          ? service.prepareRun.bind(service)
+          : service.createRun.bind(service);
+        const view = await create({
           sessionId,
           capability,
           routeId: parsed.routeId,
@@ -110,6 +118,12 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
           sourceRef: toolCallId,
           idempotencyKey: `agent-tool:${sessionId}:${toolCallId}`,
         });
+        if (view.run.status === "awaiting_confirmation") {
+          const route = await service.getRoute(view.run.routeId);
+          return generationToolResult(view, {
+            route: route ? generationRouteDetails(route) : undefined,
+          });
+        }
         return this.waitForRun(
           view,
           video ? this.videoWaitTimeoutMs : this.imageWaitTimeoutMs,
@@ -294,7 +308,10 @@ function generationCapability(
 
 function generationToolResult(
   view: GenerationRunView,
-  options: { waitTimedOut?: boolean } = {},
+  options: {
+    waitTimedOut?: boolean;
+    route?: GenerationRouteDto;
+  } = {},
 ): AgentToolResult<GenerationToolDetails> {
   const providerJob = view.jobs.at(-1);
   const details: GenerationToolDetails = {
@@ -310,6 +327,14 @@ function generationToolResult(
     artifacts: view.artifacts.map((artifact): GenerationArtifactDto => ({
       ...artifact,
     })),
+    ...(view.run.status === "awaiting_confirmation" && options.route
+      ? {
+          review: {
+            route: options.route,
+            input: view.run.input,
+          },
+        }
+      : {}),
     ...(view.run.errorCode || view.run.errorMessage
       ? {
           error: {
@@ -335,6 +360,9 @@ function generationToolResult(
 }
 
 function generationPhase(view: GenerationRunView): GenerationToolDetails["phase"] {
+  if (view.run.status === "awaiting_confirmation") {
+    return "awaiting_confirmation";
+  }
   if (view.run.status === "succeeded") return "completed";
   if (view.run.status === "failed") return "failed";
   if (view.run.status === "cancelled") return "cancelled";
@@ -352,6 +380,23 @@ function generationPhase(view: GenerationRunView): GenerationToolDetails["phase"
     default:
       return "queued";
   }
+}
+
+function generationRouteDetails(
+  route: NonNullable<Awaited<ReturnType<GenerationRunService["getRoute"]>>>,
+): GenerationRouteDto {
+  return {
+    id: route.id,
+    name: route.name,
+    capability: route.capability,
+    product: route.product,
+    providerId: route.providerId,
+    enabled: route.enabled,
+    isDefault: route.isDefault,
+    revision: route.revision,
+    defaults: route.defaults,
+    inputSchema: route.inputSchema,
+  };
 }
 
 function requiredString(input: Record<string, unknown>, key: string): string {

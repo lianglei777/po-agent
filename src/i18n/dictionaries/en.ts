@@ -224,6 +224,7 @@ export const en = {
       failed: "Failed",
     },
     runStatuses: {
+      awaiting_confirmation: "Awaiting confirmation",
       queued: "Queued",
       running: "Generating",
       succeeded: "Completed",
@@ -232,6 +233,7 @@ export const en = {
       cancelled: "Cancelled",
     },
     toolPhases: {
+      awaiting_confirmation: "Awaiting confirmation",
       queued: "Queued",
       preparing: "Preparing assets",
       submitting: "Submitting",
@@ -309,6 +311,9 @@ export const en = {
       thinkingOff: "Off",
       thinkingOn: "On",
       thinkingUnsupported: "Thinking is not supported by the selected model.",
+      generationControl: "Generation",
+      generationAutomatic: "Automatic",
+      generationReview: "Review first",
       compacting: "Compacting context...",
       dismissNotice: "Dismiss notice",
       settings: "Settings",
@@ -343,6 +348,7 @@ export const en = {
       toolError: "Error",
       toolDone: "Done",
       toolRunning: "Running",
+      generationAwaitingReview: "Awaiting confirmation",
       waitingForOutput: "(waiting for output)",
       noOutput: "(no output)",
       messageActions: "Message actions",
@@ -354,6 +360,17 @@ export const en = {
       generationDuration: "Duration",
       generationContinuesInBackground: "Task continues in the background",
       openGenerationArtifact: "Open generated artifact",
+      generationReviewTitle: "Review generation parameters",
+      generationAssetsLocked:
+        "{count} reference asset(s) will be used. Change assets in the Generate view if needed.",
+      generationReviewNotice:
+        "No provider request is submitted until you confirm these parameters.",
+      generationNotNow: "Not now",
+      generationConfirm: "Confirm generation",
+      generationConfirmedQueued: "Parameters confirmed. Waiting to generate",
+      generationConfirmedRunning: "Parameters confirmed. Generating",
+      generationDownloading: "Downloading generated result",
+      generationCompleted: "Generation completed",
     },
   },
   sessions: {

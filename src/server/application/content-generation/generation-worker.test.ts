@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GenerationProvider } from "@/server/ports/generation-provider";
+import type { GenerationFileStore } from "@/server/ports/generation-file-store";
 import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
@@ -16,6 +17,7 @@ describe("GenerationWorker", () => {
   let execution: GenerationExecutionService;
   let worker: GenerationWorker;
   let runService: GenerationRunService;
+  let files: GenerationFileStore & { saveOutput: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
     database = new SqliteDatabase(":memory:");
@@ -59,11 +61,11 @@ describe("GenerationWorker", () => {
         contentType: "video/mp4",
       })),
     };
-    const files = {
+    files = {
       saveInput: vi.fn(async () => ".po-agent/generation-inputs/input.png"),
       readInput: vi.fn(),
       saveOutput: vi.fn(async () =>
-        ".po-agent/generated/id-1/output-1.mp4"
+        ".po-agent/generated/id-1/rainy-bamboo-forest-1.mp4"
       ),
     };
     execution = new GenerationExecutionService(
@@ -105,6 +107,9 @@ describe("GenerationWorker", () => {
 
     now = new Date("2026-08-06T00:00:05.000Z");
     await expect(worker.runOnce()).resolves.toBe(1);
+    expect(files.saveOutput).toHaveBeenCalledWith(expect.objectContaining({
+      nameHint: "rainy-bamboo-forest",
+    }));
 
     await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
       run: { status: "succeeded", completedAt: now.toISOString() },
@@ -112,7 +117,7 @@ describe("GenerationWorker", () => {
       artifacts: [{
         id: "id-2-1",
         kind: "video",
-        localPath: ".po-agent/generated/id-1/output-1.mp4",
+        localPath: ".po-agent/generated/id-1/rainy-bamboo-forest-1.mp4",
         contentType: "video/mp4",
         sizeBytes: 3,
       }, {

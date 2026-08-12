@@ -112,6 +112,9 @@ export function parseAgentCommand(value: unknown): AgentCommand {
         type,
         message: messageOrImages(object, images),
         images,
+        ...(type === "prompt" && object.generationReview !== undefined
+          ? { generationReview: requiredBoolean(object, "generationReview") }
+          : {}),
       };
     }
     case "abort":

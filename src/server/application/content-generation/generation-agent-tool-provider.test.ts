@@ -7,6 +7,7 @@ import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlit
 import { GenerationRunService } from "./generation-run-service";
 import { seedGenerationRoutes } from "./seed-generation-routes";
 import { GenerationAgentToolProvider } from "./generation-agent-tool-provider";
+import { GenerationReviewRegistry } from "./generation-review-registry";
 
 const NOW = "2026-08-06T00:00:00.000Z";
 
@@ -112,6 +113,36 @@ describe("GenerationAgentToolProvider", () => {
       type: "text",
       text: expect.stringContaining("RunningHub task ID: 2013508786110730241"),
     })]);
+  });
+
+  it("returns a route-aware parameter review without creating provider work", async () => {
+    const reviews = new GenerationReviewRegistry();
+    reviews.begin("session-1", true);
+    provider = new GenerationAgentToolProvider(
+      () => service,
+      { waitTimeoutMs: 0, pollIntervalMs: 0 },
+      reviews,
+    );
+
+    const result = await provider.getTools({
+      sessionId: "session-1",
+      cwd: "D:\\project",
+    })[0]!.execute({
+      toolCallId: "call-review",
+      input: { prompt: "A quiet lake", userAuthorized: true },
+    });
+
+    expect(result.details).toMatchObject({
+      status: "awaiting_confirmation",
+      phase: "awaiting_confirmation",
+      review: {
+        route: { id: "runninghub-seedream-v5-pro-text-to-image" },
+        input: { prompt: "A quiet lake" },
+      },
+    });
+    await expect(service.getRun(
+      (result.details as GenerationToolDetails).runId,
+    )).resolves.toMatchObject({ jobs: [] });
   });
 
   it("maps assets to a multimodal video run without exposing provider fields", async () => {

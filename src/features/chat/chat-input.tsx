@@ -14,6 +14,7 @@ import {
   Cpu,
   Paperclip,
   Send,
+  Settings2,
   Square,
   X,
 } from "@/components/icons";
@@ -36,6 +37,7 @@ export function ChatInput({
   currentModel,
   canAttachImages,
   thinkingMode,
+  generationReview,
   isCompacting,
   actionError,
   undoable,
@@ -52,6 +54,7 @@ export function ChatInput({
   stop,
   changeModel,
   changeThinkingMode,
+  setGenerationReview,
   handleKeyDown,
   handlePaste,
   setActionError,
@@ -67,6 +70,7 @@ export function ChatInput({
   currentModel?: ModelInfo;
   canAttachImages: boolean;
   thinkingMode: ThinkingMode;
+  generationReview: boolean;
   isCompacting: boolean;
   actionError: string;
   undoable: { leafId: string } | null;
@@ -87,6 +91,7 @@ export function ChatInput({
   stop: () => Promise<void>;
   changeModel: (value: string) => Promise<void>;
   changeThinkingMode: (value: ThinkingMode) => Promise<void>;
+  setGenerationReview: (value: boolean) => void;
   handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   handlePaste: ClipboardEventHandler<HTMLTextAreaElement>;
   setActionError: (value: string) => void;
@@ -288,6 +293,26 @@ export function ChatInput({
               value={thinkingMode}
             />
 
+            <CompactSelect
+              disabled={running}
+              icon={<Settings2 />}
+              label={t.chat.input.generationControl}
+              onValueChange={(value) =>
+                setGenerationReview(value === "review")
+              }
+              options={[
+                {
+                  label: t.chat.input.generationAutomatic,
+                  value: "automatic",
+                },
+                {
+                  label: t.chat.input.generationReview,
+                  value: "review",
+                },
+              ]}
+              value={generationReview ? "review" : "automatic"}
+            />
+
             <div className="flex-1" />
 
             {running || isCompacting ? (
@@ -443,12 +468,14 @@ function CompactSelect({
   value,
   options,
   onValueChange,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   options: Array<{ label: string; value: string }>;
   onValueChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const selectedLabel =
     options.find((option) => option.value === value)?.label ?? value;
@@ -457,6 +484,7 @@ function CompactSelect({
     <Select
       aria-label={label}
       className="max-w-36 text-xs"
+      disabled={disabled}
       labelRender={() => `${label}: ${selectedLabel}`}
       onChange={onValueChange}
       options={options.map((option) => ({

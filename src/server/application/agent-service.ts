@@ -14,6 +14,7 @@ import type {
   AgentRuntimeRegistry,
 } from "@/server/ports/agent-runtime";
 import type { AgentToolProvider } from "@/server/ports/agent-tool";
+import type { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import type { SessionRepository } from "@/server/ports/session-repository";
 
@@ -36,6 +37,7 @@ export class AgentService {
     private readonly runtimeFactory: AgentRuntimeFactory,
     private readonly roots: WorkspaceRootProvider,
     private readonly tools?: AgentToolProvider,
+    private readonly generationReviews?: GenerationReviewRegistry,
   ) {}
 
   /**
@@ -101,7 +103,13 @@ export class AgentService {
     this.runtimes.touch(sessionId);
 
     if (command.type === "prompt") {
-      this.runInBackground(runtime, command);
+      this.generationReviews?.begin(
+        sessionId,
+        command.generationReview === true,
+      );
+      this.runInBackground(runtime, command, () =>
+        this.generationReviews?.end(sessionId),
+      );
       return { accepted: true };
     }
     if (command.type === "fork") {
@@ -189,9 +197,12 @@ export class AgentService {
   private runInBackground(
     runtime: AgentRuntime,
     command: AgentCommand,
+    onSettled?: () => void,
   ): void {
-    void runtime.execute(command).catch((error) => {
-      console.error(`Agent command ${command.type} failed`, error);
-    });
+    void runtime.execute(command)
+      .catch((error) => {
+        console.error(`Agent command ${command.type} failed`, error);
+      })
+      .finally(onSettled);
   }
 }

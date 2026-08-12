@@ -1,6 +1,7 @@
 import {
   GENERATION_CAPABILITIES,
   type CreateGenerationRunRequest,
+  type ConfirmGenerationRunRequest,
   type GenerationAssetRef,
   type GenerationInputAsset,
   type RetryGenerationRunRequest,
@@ -49,6 +50,16 @@ function requiredText(object: Record<string, unknown>, key: string): string {
 export function parseRetryGenerationRun(value: unknown): RetryGenerationRunRequest {
   const object = asObject(value);
   return { idempotencyKey: requiredString(object, "idempotencyKey") };
+}
+
+export function parseConfirmGenerationRun(
+  value: unknown,
+): ConfirmGenerationRunRequest {
+  const object = asObject(value);
+  return {
+    prompt: requiredText(object, "prompt"),
+    parameters: parseJsonRecord(object.parameters, "parameters"),
+  };
 }
 
 function parseAssets(value: unknown): GenerationInputAsset[] | undefined {

@@ -2475,7 +2475,7 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。
 
-`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。
+`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
 ### 12.2 注册素材并创建或列出 Run
 
@@ -2533,6 +2533,7 @@ Content-Type: application/json
 
 ```http
 GET  /api/generation-runs/:id
+POST /api/generation-runs/:id/confirm
 POST /api/generation-runs/:id/cancel
 POST /api/generation-runs/:id/retry
 Content-Type: application/json
@@ -2541,7 +2542,8 @@ Content-Type: application/json
 Run 状态：
 
 ```text
-queued | running | succeeded | failed | cancel_requested | cancelled
+awaiting_confirmation | queued | running | succeeded | failed |
+cancel_requested | cancelled
 ```
 
 Provider Job 状态：
@@ -2552,6 +2554,8 @@ succeeded | failed | submission_unknown | cancelled
 ```
 
 `submission_unknown` 表示提交可能已到达供应商但本地未收到确认，Worker 不会自动重提，以避免重复计费。
+
+`awaiting_confirmation` 表示 Agent 已解析生成意图并持久化 Run，但尚未创建 Provider Job，也不会被 Worker 领取。确认接口只接受该状态，Body 为 `{ "prompt": "...", "parameters": { ... } }`；服务端按 Run 绑定 Route 的当前 `inputSchema` 重新校验参数，并原子切换为 `queued`、创建首个 Provider Job。重复确认返回当前 Run，不会创建第二个 Job；Run 已取消时返回 `409 GENERATION_RUN_NOT_CONFIRMABLE`。
 
 RunningHub 当前不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
 
@@ -2588,9 +2592,11 @@ cancel_generation
 
 `generate_image` 与 `generate_video` 还要求 `userAuthorized: true`。只有最新用户消息明确请求或批准本次生成时才允许设置；否则 Agent 必须先进行简短、中性的确认。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
 
+Chat Prompt 可带可选的 `generationReview: true`。该字段只作用于当前 Agent 轮次：Agent 仍自行判断是否调用生成工具；若调用，工具创建 `awaiting_confirmation` Run 并返回 Route、输入 Schema 和完整解析参数。Chat 参数卡作为助手消息中的交互内容展示全部 Route 参数，执行步骤仅保留只读状态；用户可修改 Prompt 与参数。点击确认后由确认接口直接提交最终结构化值，不再经过模型转述。Chat 随后按 `runId` 获取最新 Run，将已确认、生成中、下载中和完成状态同步到原执行步骤与消息卡，并在完成后展示 Artifact。轮次结束后该偏好自动清除，不会成为 Session 类型或永久 Route 绑定。
+
 `generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Pi `onUpdate` 与现有 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。前端按同一 `toolCallId` 原地更新工具步骤，不创建新的查询步骤。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；模型不得在正常生成期间自动轮询 `get_generation`。`get_generation` 仅用于用户明确查询历史 Run 或中断恢复，并与 `cancel_generation` 一样只能访问当前 Session 的 Run。
 
-生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`providerId`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、`artifacts` 和可选错误。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现对应其响应中的 `taskId`。Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
+生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`providerId`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、`artifacts` 和可选错误。待确认结果还包含 `review.route` 与 `review.input`，供客户端按服务端 Route Schema 渲染参数卡。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现对应其响应中的 `taskId`。Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
 
 ## 13. SSE 通用行为
 

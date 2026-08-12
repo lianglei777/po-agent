@@ -166,7 +166,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
 
   async createRun(
     run: GenerationRun,
-    job: ProviderJob,
+    job?: ProviderJob,
   ): Promise<CreateGenerationRunResult> {
     return this.database.transaction(() => {
       const existingRow = this.database
@@ -180,17 +180,25 @@ export class SqliteGenerationRepository implements GenerationRepository {
           ORDER BY attempt
           LIMIT 1
         `).get(existingRun.id);
-        if (!existingJobRow) {
-          throw new Error(`Generation run ${existingRun.id} has no provider job`);
-        }
         return {
           created: false,
           run: existingRun,
-          job: jobFromRow(existingJobRow),
+          job: existingJobRow ? jobFromRow(existingJobRow) : undefined,
         };
       }
 
       this.insertRun(run);
+      if (job) this.insertJob(job);
+      return { created: true, run, job };
+    });
+  }
+
+  async confirmRun(
+    run: GenerationRun,
+    job: ProviderJob,
+  ): Promise<CreateGenerationRunResult | null> {
+    return this.database.transaction(() => {
+      if (!this.updateRunSync(run, ["awaiting_confirmation"])) return null;
       this.insertJob(job);
       return { created: true, run, job };
     });
@@ -213,7 +221,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         if (!existingRunRow) throw new Error(`Generation run ${existingJob.runId} was not found`);
         return { created: false, run: runFromRow(existingRunRow), job: existingJob };
       }
-      if (!this.updateRun(run, ["failed", "cancelled"])) return null;
+      if (!this.updateRunSync(run, ["failed", "cancelled"])) return null;
       this.insertJob(job);
       return { created: true, run, job };
     });
@@ -238,6 +246,14 @@ export class SqliteGenerationRepository implements GenerationRepository {
     run: GenerationRun,
     expectedStatuses?: GenerationRunStatus[],
   ): Promise<boolean> {
+    return this.updateRunSync(run, expectedStatuses);
+  }
+
+  private updateRunSync(
+    run: GenerationRun,
+    expectedStatuses?: GenerationRunStatus[],
+  ): boolean {
+    // SQLite 事务回调必须同步完成状态检查，不能用 Promise 的真值替代更新结果。
     const expected = expectedStatuses?.length ? expectedStatuses : null;
     const where = expected
       ? ` AND status IN (${expected.map(() => "?").join(", ")})`

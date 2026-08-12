@@ -9,7 +9,9 @@ import type {
   GenerationArtifact,
   GenerationCapability,
   GenerationInput,
+  GenerationRoute,
   GenerationRun,
+  GenerationRunStatus,
   GenerationSession,
   GenerationSource,
   ProviderJob,
@@ -22,6 +24,19 @@ export interface GenerationRunView {
   run: GenerationRun;
   jobs: ProviderJob[];
   artifacts: GenerationArtifact[];
+}
+
+export interface CreateGenerationRunInput {
+  sessionId: string;
+  capability: GenerationCapability;
+  routeId?: string;
+  parentRunId?: string;
+  prompt: string;
+  assets?: GenerationInput["assets"];
+  parameters?: Record<string, JsonValue>;
+  source: GenerationSource;
+  sourceRef?: string;
+  idempotencyKey: string;
 }
 
 export class GenerationRunService {
@@ -61,83 +76,11 @@ export class GenerationRunService {
     return session;
   }
 
-  async createRun(input: {
-    sessionId: string;
-    capability: GenerationCapability;
-    routeId?: string;
-    parentRunId?: string;
-    prompt: string;
-    assets?: GenerationInput["assets"];
-    parameters?: Record<string, JsonValue>;
-    source: GenerationSource;
-    sourceRef?: string;
-    idempotencyKey: string;
-  }): Promise<GenerationRunView & { created: boolean }> {
+  async createRun(
+    input: CreateGenerationRunInput,
+  ): Promise<GenerationRunView & { created: boolean }> {
     await this.ready;
-    const session = await this.requireSession(input.sessionId);
-    const idempotencyKey = input.idempotencyKey.trim();
-    if (!idempotencyKey || idempotencyKey.length > 200) {
-      throw new AppError(
-        "VALIDATION_ERROR",
-        "Generation idempotency key must contain between 1 and 200 characters",
-        400,
-      );
-    }
-    const route = await this.router.resolve({
-      capability: input.capability,
-      routeId: input.routeId,
-    });
-    if (!await this.repository.isProviderEnabled(route.providerId)) {
-      throw new AppError(
-        "GENERATION_PROVIDER_DISABLED",
-        `${route.providerId} content generation is not enabled`,
-        403,
-      );
-    }
-    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
-    const parameters = validateParameters(
-      route.inputSchema.parameters ?? [],
-      route.defaults,
-      input.parameters,
-    );
-    validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
-    const timestamp = this.now().toISOString();
-    const run: GenerationRun = {
-      id: this.createId(),
-      sessionId: session.id,
-      capability: input.capability,
-      routeId: route.id,
-      parentRunId: input.parentRunId,
-      status: "queued",
-      prompt,
-      input: {
-        prompt,
-        assets: input.assets,
-        parameters,
-      },
-      source: input.source,
-      sourceRef: input.sourceRef,
-      idempotencyKey,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-    const job: ProviderJob = {
-      id: this.createId(),
-      runId: run.id,
-      attempt: 1,
-      providerId: route.providerId,
-      providerOperation: route.providerOperation,
-      routeRevision: route.revision,
-      resolvedConfigSnapshot: {
-        parameters,
-        adapterConfig: route.adapterConfig,
-      },
-      credentialRef: route.credentialRef,
-      status: "created",
-      nextPollAt: timestamp,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
+    const { job, run } = await this.buildRun(input, "queued");
     const result = await this.repository.createRun(run, job);
     if (!result.created && !sameRequest(result.run, run)) {
       throw new AppError(
@@ -154,6 +97,86 @@ export class GenerationRunService {
     };
   }
 
+  async prepareRun(
+    input: CreateGenerationRunInput,
+  ): Promise<GenerationRunView & { created: boolean }> {
+    await this.ready;
+    const { run } = await this.buildRun(input, "awaiting_confirmation");
+    const result = await this.repository.createRun(run);
+    if (!result.created && !sameRequest(result.run, run)) {
+      throw new AppError(
+        "GENERATION_IDEMPOTENCY_CONFLICT",
+        "The generation idempotency key was already used for another request",
+        409,
+      );
+    }
+    return {
+      created: result.created,
+      run: result.run,
+      jobs: await this.repository.listJobsByRun(result.run.id),
+      artifacts: await this.repository.listArtifactsByRun(result.run.id),
+    };
+  }
+
+  async confirmRun(
+    id: string,
+    input: { prompt: string; parameters?: Record<string, JsonValue> },
+  ): Promise<GenerationRunView> {
+    await this.ready;
+    const current = await this.repository.getRun(id);
+    if (!current) {
+      throw new AppError(
+        "GENERATION_RUN_NOT_FOUND",
+        "Generation run was not found",
+        404,
+      );
+    }
+    if (current.status !== "awaiting_confirmation") {
+      if (current.status !== "cancelled") {
+        return (await this.getRun(id))!;
+      }
+      throw new AppError(
+        "GENERATION_RUN_NOT_CONFIRMABLE",
+        "Generation run is no longer awaiting confirmation",
+        409,
+      );
+    }
+    const route = await this.router.resolve({
+      capability: current.capability,
+      routeId: current.routeId,
+    });
+    await this.requireProviderEnabled(route);
+    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
+    const parameters = validateParameters(
+      route.inputSchema.parameters ?? [],
+      route.defaults,
+      input.parameters,
+    );
+    validateAssets(route.inputSchema.assets ?? [], current.input.assets ?? []);
+    const timestamp = this.now().toISOString();
+    const run: GenerationRun = {
+      ...current,
+      status: "queued",
+      prompt,
+      input: { ...current.input, prompt, parameters },
+      updatedAt: timestamp,
+    };
+    const result = await this.repository.confirmRun(
+      run,
+      this.createInitialJob(run, route, parameters, timestamp),
+    );
+    if (!result) {
+      const latest = await this.getRun(id);
+      if (latest && latest.run.status !== "awaiting_confirmation") return latest;
+      throw new AppError(
+        "GENERATION_RUN_NOT_CONFIRMABLE",
+        "Generation run is no longer awaiting confirmation",
+        409,
+      );
+    }
+    return (await this.getRun(id))!;
+  }
+
   async getRun(id: string): Promise<GenerationRunView | null> {
     await this.ready;
     const run = await this.repository.getRun(id);
@@ -168,6 +191,11 @@ export class GenerationRunService {
   async listRoutes() {
     await this.ready;
     return this.repository.listRoutes();
+  }
+
+  async getRoute(id: string) {
+    await this.ready;
+    return this.repository.getRoute(id);
   }
 
   async getProviderSettings(providerId: string) {
@@ -204,7 +232,7 @@ export class GenerationRunService {
       status: "cancelled",
       updatedAt: timestamp,
       completedAt: timestamp,
-    }, ["queued", "running", "cancel_requested"]);
+    }, ["awaiting_confirmation", "queued", "running", "cancel_requested"]);
     if (!cancelled) return (await this.getRun(id))!;
     const jobs = await this.repository.listJobsByRun(id);
     for (const job of jobs) {
@@ -289,6 +317,97 @@ export class GenerationRunService {
     })));
   }
 
+  private async buildRun(
+    input: CreateGenerationRunInput,
+    status: Extract<
+      GenerationRunStatus,
+      "awaiting_confirmation" | "queued"
+    >,
+  ) {
+    const session = await this.requireSession(input.sessionId);
+    const idempotencyKey = input.idempotencyKey.trim();
+    if (!idempotencyKey || idempotencyKey.length > 200) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Generation idempotency key must contain between 1 and 200 characters",
+        400,
+      );
+    }
+    const route = await this.router.resolve({
+      capability: input.capability,
+      routeId: input.routeId,
+    });
+    await this.requireProviderEnabled(route);
+    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
+    const parameters = validateParameters(
+      route.inputSchema.parameters ?? [],
+      route.defaults,
+      input.parameters,
+    );
+    validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
+    const timestamp = this.now().toISOString();
+    const run: GenerationRun = {
+      id: this.createId(),
+      sessionId: session.id,
+      capability: input.capability,
+      routeId: route.id,
+      parentRunId: input.parentRunId,
+      status,
+      prompt,
+      input: {
+        prompt,
+        assets: input.assets,
+        parameters,
+      },
+      source: input.source,
+      sourceRef: input.sourceRef,
+      idempotencyKey,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    return {
+      run,
+      job:
+        status === "queued"
+          ? this.createInitialJob(run, route, parameters, timestamp)
+          : undefined,
+    };
+  }
+
+  private createInitialJob(
+    run: GenerationRun,
+    route: GenerationRoute,
+    parameters: Record<string, JsonValue>,
+    timestamp: string,
+  ): ProviderJob {
+    return {
+      id: this.createId(),
+      runId: run.id,
+      attempt: 1,
+      providerId: route.providerId,
+      providerOperation: route.providerOperation,
+      routeRevision: route.revision,
+      resolvedConfigSnapshot: {
+        parameters,
+        adapterConfig: route.adapterConfig,
+      },
+      credentialRef: route.credentialRef,
+      status: "created",
+      nextPollAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  private async requireProviderEnabled(route: GenerationRoute): Promise<void> {
+    if (await this.repository.isProviderEnabled(route.providerId)) return;
+    throw new AppError(
+      "GENERATION_PROVIDER_DISABLED",
+      `${route.providerId} content generation is not enabled`,
+      403,
+    );
+  }
+
   private async resolveSession(id: string): Promise<GenerationSession | null> {
     const stored = await this.repository.getSession(id);
     if (stored) return stored;
@@ -335,7 +454,13 @@ function validateParameters(
   for (const key of Object.keys(input ?? {})) {
     if (!definitions.has(key)) invalidInput(`Unknown generation parameter: ${key}`);
   }
-  const parameters = { ...defaults, ...input };
+  // 字段默认值是契约基线，Route 默认值可覆盖它，用户或 Agent 的显式输入优先级最高。
+  const fieldDefaults = Object.fromEntries(
+    fields
+      .filter((field) => field.defaultValue !== undefined)
+      .map((field) => [field.key, structuredClone(field.defaultValue) as JsonValue]),
+  );
+  const parameters = { ...fieldDefaults, ...defaults, ...input };
   for (const field of fields) {
     const value = parameters[field.key];
     if (value === undefined) {

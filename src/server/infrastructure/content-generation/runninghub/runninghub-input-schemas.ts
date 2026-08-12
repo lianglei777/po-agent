@@ -35,8 +35,8 @@ function imageSchema(): GenerationInputSchema {
     parameters: [
       selectField("resolution", "分辨率", ["1k", "2k"], "2k"),
       selectField("outputFormat", "输出格式", ["png", "jpeg"], "png"),
-      numberField("width", "宽度", 1024, 240, 8192, true),
-      numberField("height", "高度", 1024, 240, 8192, true),
+      numberField("width", "宽度", 1024, 240, 8192),
+      numberField("height", "高度", 1024, 240, 8192),
     ],
   };
 }
@@ -48,8 +48,8 @@ function textToVideoSchema(): GenerationInputSchema {
     prompt: { required: true, maxLength: 20_480 },
     parameters: [
       ...videoFields(),
-      booleanField("webSearch", "联网搜索增强", false, true),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("webSearch", "联网搜索增强", false),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
   };
@@ -60,13 +60,13 @@ function imageToVideoSchema(): GenerationInputSchema {
     prompt: { required: false, maxLength: 20_480 },
     parameters: [
       ...videoFields(),
-      booleanField("realPersonMode", "真人模式", true, true),
+      booleanField("realPersonMode", "真人模式", true),
       multiSelectField("conversionSlots", "素材资产化范围", [
         ["全部首尾帧", "all"],
         ["首帧", "firstFrameUrl"],
         ["尾帧", "lastFrameUrl"],
       ]),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
     assets: [
@@ -81,7 +81,7 @@ function multimodalVideoSchema(): GenerationInputSchema {
     prompt: { required: true, maxLength: 20_480 },
     parameters: [
       ...videoFields(),
-      booleanField("realPersonMode", "真人模式", true, true),
+      booleanField("realPersonMode", "真人模式", true),
       multiSelectField("conversionSlots", "素材资产化范围", [
         ["全部素材", "all"],
         ...Array.from({ length: 9 }, (_, index) => [
@@ -93,7 +93,7 @@ function multimodalVideoSchema(): GenerationInputSchema {
           `video${index + 1}`,
         ] as [string, string]),
       ]),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
     assets: [
@@ -113,8 +113,8 @@ function textToVideo25Schema(): GenerationInputSchema {
     prompt: { required: true, maxLength: 20_480 },
     parameters: [
       ...videoFields25(),
-      booleanField("webSearch", "联网搜索增强", false, true),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("webSearch", "联网搜索增强", false),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
   };
@@ -126,13 +126,13 @@ function imageToVideo25Schema(): GenerationInputSchema {
     parameters: [
       // 2.5 image-to-video 仅支持 adaptive 比例
       ...videoFields25(["adaptive"]),
-      booleanField("realPersonMode", "真人模式", true, true),
+      booleanField("realPersonMode", "真人模式", true),
       multiSelectField("conversionSlots", "素材资产化范围", [
         ["全部首尾帧", "all"],
         ["首帧", "firstFrameUrl"],
         ["尾帧", "lastFrameUrl"],
       ]),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
     assets: [
@@ -147,7 +147,7 @@ function multimodalVideo25Schema(): GenerationInputSchema {
     prompt: { required: true, maxLength: 20_480 },
     parameters: [
       ...videoFields25(),
-      booleanField("realPersonMode", "真人模式", true, true),
+      booleanField("realPersonMode", "真人模式", true),
       multiSelectField("conversionSlots", "素材资产化范围", [
         ["全部素材", "all"],
         ...Array.from({ length: 30 }, (_, index) => [
@@ -159,7 +159,7 @@ function multimodalVideo25Schema(): GenerationInputSchema {
           `video${index + 1}`,
         ] as [string, string]),
       ]),
-      booleanField("returnLastFrame", "返回视频尾帧", false, true),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
       seedField(),
     ],
     assets: [
@@ -230,9 +230,8 @@ function booleanField(
   key: string,
   label: string,
   defaultValue: boolean,
-  advanced = false,
 ): GenerationParameterField {
-  return { key, label, type: "boolean", defaultValue, advanced };
+  return { key, label, type: "boolean", defaultValue };
 }
 
 function multiSelectField(
@@ -245,7 +244,6 @@ function multiSelectField(
     label,
     type: "multi-select",
     defaultValue: ["all"],
-    advanced: true,
     options: options.map(([optionLabel, value]) => ({ label: optionLabel, value })),
   };
 }
@@ -259,7 +257,6 @@ function seedField(): GenerationParameterField {
     defaultValue: -1,
     min: -1,
     max: 2_147_483_647,
-    advanced: true,
   };
 }
 
@@ -269,7 +266,6 @@ function numberField(
   defaultValue: number,
   min: number,
   max: number,
-  advanced = false,
 ): GenerationParameterField {
   return {
     key,
@@ -278,7 +274,6 @@ function numberField(
     defaultValue,
     min,
     max,
-    advanced,
   };
 }
 

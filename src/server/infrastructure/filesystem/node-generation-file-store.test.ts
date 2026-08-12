@@ -56,16 +56,32 @@ describe("NodeGenerationFileStore", () => {
     const relativePath = await store.saveOutput({
       cwd,
       runId: "run-1",
+      nameHint: "雨夜上海街头: 电影感",
       index: 0,
       extension: "mp4",
       data: new Uint8Array([4, 5, 6]),
     });
 
     expect(relativePath).toBe(
-      path.join(".po-agent", "generated", "run-1", "output-1.mp4"),
+      path.join(".po-agent", "generated", "run-1", "雨夜上海街头-电影感-1.mp4"),
     );
     await expect(fs.readFile(path.join(cwd, relativePath))).resolves.toEqual(
       Buffer.from([4, 5, 6]),
+    );
+  });
+
+  it("uses a safe fallback for Windows reserved output names", async () => {
+    const relativePath = await store.saveOutput({
+      cwd,
+      runId: "run-2",
+      nameHint: "CON",
+      index: 0,
+      extension: "png",
+      data: new Uint8Array([1]),
+    });
+
+    expect(relativePath).toBe(
+      path.join(".po-agent", "generated", "run-2", "generated-1.png"),
     );
   });
 });

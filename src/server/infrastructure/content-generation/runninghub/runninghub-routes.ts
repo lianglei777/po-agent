@@ -113,7 +113,8 @@ function route(input: {
     providerOperation: input.operation,
     enabled: false,
     isDefault: true,
-    revision: 3,
+    // Schema 取消展示层级字段后需要提升版本，确保已持久化 Route 获得最新公开契约。
+    revision: 4,
     defaults: input.defaults,
     inputSchema: runningHubInputSchema(input.capability, input.operation),
     adapterConfig: {},

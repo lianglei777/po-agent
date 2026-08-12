@@ -71,6 +71,7 @@ export class NodeGenerationFileStore implements GenerationFileStore {
   async saveOutput(input: {
     cwd: string;
     runId: string;
+    nameHint: string;
     index: number;
     extension?: string;
     data: Uint8Array;
@@ -86,10 +87,27 @@ export class NodeGenerationFileStore implements GenerationFileStore {
     );
     await fs.mkdir(directory, { recursive: true });
     const extension = safeExtension(input.extension);
-    const filePath = path.join(directory, `output-${input.index + 1}.${extension}`);
+    const filePath = path.join(
+      directory,
+      `${safeOutputStem(input.nameHint)}-${input.index + 1}.${extension}`,
+    );
     await fs.writeFile(filePath, input.data);
     return path.relative(path.resolve(input.cwd), filePath);
   }
+}
+
+function safeOutputStem(value: string) {
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[. -]+|[. -]+$/g, "")
+    .slice(0, 80)
+    .replace(/[. ]+$/g, "");
+  return normalized && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(normalized)
+    ? normalized
+    : "generated";
 }
 
 function resolveInsideWorkspace(cwd: string, relativePath: string): string {

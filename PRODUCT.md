@@ -39,6 +39,7 @@ Ant Design 6 and its enterprise product patterns are the primary reference. Focu
 7. **Explicit destructive actions.** Important deletion, credential removal, and disconnect operations require confirmation with concrete action language.
 8. **Dialogs close deliberately.** Dialogs remain open on backdrop clicks and Escape; users leave through visible close, cancel, save, or confirmation actions.
 9. **Sessions are capability containers.** A persisted session can expose both Chat and content-generation views. Creating a session does not permanently assign it to one interaction mode.
+10. **Generation control is progressive.** Agent-led generation stays automatic by default. Users who need exact API parameters can request a review for the current turn, edit the Route-defined values, and explicitly confirm before provider work starts.
 
 ## Accessibility & Inclusion
 

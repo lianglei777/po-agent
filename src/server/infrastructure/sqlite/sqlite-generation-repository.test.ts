@@ -48,6 +48,23 @@ describe("SqliteGenerationRepository", () => {
     await expect(repository.listJobsByRun("run-1")).resolves.toEqual([job()]);
   });
 
+  it("creates provider work exactly once when a pending run is confirmed", async () => {
+    const pending = { ...run(), status: "awaiting_confirmation" as const };
+    await repository.createRun(pending);
+    const confirmed = { ...pending, status: "queued" as const, updatedAt: "confirmed" };
+
+    await expect(repository.confirmRun(confirmed, job())).resolves.toEqual({
+      created: true,
+      run: confirmed,
+      job: job(),
+    });
+    await expect(repository.confirmRun(confirmed, {
+      ...job(),
+      id: "job-duplicate",
+    })).resolves.toBeNull();
+    await expect(repository.listJobsByRun("run-1")).resolves.toEqual([job()]);
+  });
+
   it("keeps only one enabled default route per capability", async () => {
     await repository.upsertRoute({
       ...route(),

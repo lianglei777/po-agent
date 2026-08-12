@@ -14,6 +14,7 @@ import type {
   ProviderSubmitResult,
 } from "@/server/ports/generation-provider";
 import type { GenerationRepository } from "@/server/ports/generation-repository";
+import { generationOutputName } from "./generation-output-name";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -277,9 +278,15 @@ export class GenerationExecutionService {
         let checksum: string | undefined;
         if (output.url) {
           const downloaded = await provider.download(output.url);
+          const kind = artifactKind(
+            output.outputType,
+            downloaded.contentType,
+            output.text,
+          );
           localPath = await this.files.saveOutput({
             cwd: session.cwd,
             runId: run.id,
+            nameHint: generationOutputName(run.prompt, kind),
             index,
             extension: output.outputType,
             data: downloaded.data,

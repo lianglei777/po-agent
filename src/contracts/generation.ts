@@ -24,7 +24,6 @@ export interface GenerationParameterField {
   description?: string;
   type: GenerationParameterType;
   required?: boolean;
-  advanced?: boolean;
   defaultValue?: JsonValue;
   options?: GenerationParameterOption[];
   min?: number;
@@ -64,6 +63,7 @@ export const GENERATION_CAPABILITIES = [
 export type GenerationCapability = (typeof GENERATION_CAPABILITIES)[number];
 
 export type GenerationRunStatus =
+  | "awaiting_confirmation"
   | "queued"
   | "running"
   | "succeeded"
@@ -166,6 +166,7 @@ export interface GenerationToolDetails {
   providerTaskId?: string;
   status: GenerationRunStatus;
   phase:
+    | "awaiting_confirmation"
     | "queued"
     | "preparing"
     | "submitting"
@@ -179,6 +180,10 @@ export interface GenerationToolDetails {
   completedAt?: string;
   waitTimedOut?: boolean;
   artifacts: GenerationArtifactDto[];
+  review?: {
+    route: GenerationRouteDto;
+    input: GenerationInput;
+  };
   error?: {
     code: string;
     message: string;
@@ -239,4 +244,9 @@ export interface GenerationAssetUploadResponse {
 
 export interface RetryGenerationRunRequest {
   idempotencyKey: string;
+}
+
+export interface ConfirmGenerationRunRequest {
+  prompt: string;
+  parameters?: Record<string, JsonValue>;
 }

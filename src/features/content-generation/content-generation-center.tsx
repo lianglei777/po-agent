@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  Clock3,
   Copy,
   LoaderCircle,
   RotateCcw,
@@ -398,7 +399,7 @@ function GenerationResult({
   return (
     <article className="max-w-[92%] text-sm text-primary">
       <div className="flex items-center gap-2 font-medium">
-        {active ? <LoaderCircle className="size-4 animate-spin text-muted" /> : status === "succeeded" ? <CheckCircle2 className="size-4 text-success-text" /> : <AlertTriangle className="size-4 text-destructive-text" />}
+        {status === "awaiting_confirmation" ? <Clock3 className="size-4 text-warning" /> : active ? <LoaderCircle className="size-4 animate-spin text-muted" /> : status === "succeeded" ? <CheckCircle2 className="size-4 text-success-text" /> : <AlertTriangle className="size-4 text-destructive-text" />}
         <Tag color={statusColor(status)} variant="filled">{runStatusLabel(status, t.contentGeneration)}</Tag>
       </div>
       {job?.remoteTaskId ? (
@@ -417,7 +418,7 @@ function GenerationResult({
         }} size="small" type="text">
           {t.contentGeneration.cancelRun}
         </Button>
-      ) : status === "failed" || status === "cancelled" ? (
+      ) : job && (status === "failed" || status === "cancelled") ? (
         <Button className="mt-2" disabled={busy} htmlType="button" icon={<RotateCcw />} loading={busy} onClick={onRetry} size="small" type="text">
           {t.contentGeneration.retryRun}
         </Button>
@@ -453,6 +454,7 @@ function runStatusLabel(status: GenerationRunStatus, labels: ReturnType<typeof u
 }
 
 function statusColor(status: GenerationRunStatus) {
+  if (status === "awaiting_confirmation") return "warning";
   if (status === "succeeded") return "success";
   if (status === "failed") return "error";
   if (status === "cancelled") return "default";

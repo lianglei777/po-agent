@@ -38,7 +38,9 @@ describe("content generation conversation", () => {
       "runninghub-seedance-2-5-image-to-video",
       "runninghub-seedance-2-5-multimodal-video",
     ]);
-    expect(routes.every((route) => route.revision === 3)).toBe(true);
+    expect(routes.every((route) => route.revision === 4)).toBe(true);
+    expect(JSON.stringify(routes.map((route) => route.inputSchema)))
+      .not.toContain('"advanced"');
     expect(routes[2].inputSchema.parameters?.map((field) => field.key)).toContain("aspectRatio");
     expect(routes[1].inputSchema.assets?.map((slot) => slot.key)).toEqual(["imageUrls"]);
     expect(routes[3].inputSchema.assets).toMatchObject([

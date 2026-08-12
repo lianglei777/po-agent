@@ -19,9 +19,11 @@ describe("createRunningHubRoutes", () => {
       route.providerId === "runninghub" &&
       !route.enabled &&
       route.isDefault &&
-      route.revision === 3 &&
+      route.revision === 4 &&
       route.inputSchema.prompt.required !== undefined
     )).toBe(true);
+    expect(JSON.stringify(routes.map((route) => route.inputSchema)))
+      .not.toContain('"advanced"');
   });
 
   it("includes seedance 2.5 routes with bitrateMode and outputFormat defaults", () => {
