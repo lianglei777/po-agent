@@ -128,8 +128,8 @@ function ChatCenterContent({
     return () => onBranchState?.(null);
   }, [activeLeafId, changeLeaf, isCompacting, onBranchState, running, tree]);
 
-  // 监测 ChatInput 实际高度，让滚动容器底部留出对应空间，
-  // 避免滚动条延伸到浮动输入区下方被遮挡
+  // 监测 ChatInput 实际高度，为内容底部留出对应 padding，
+  // 使浮动输入框不会遮挡最后一条消息，同时滚动条可占满整个纵向空间
   useEffect(() => {
     if (!chatInputNode) return;
     const updateHeight = () => setChatInputHeight(chatInputNode.offsetHeight);
@@ -194,17 +194,19 @@ function ChatCenterContent({
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
             <div
-              className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
-              style={{ marginBottom: chatInputHeight || undefined }}
+              className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
               ref={(node) => {
                 controller.setScrollerNode(node);
                 setScrollerNode(node);
               }}
             >
               <div
-                className={`min-h-full w-full px-4 pt-4 pb-4 ${
+                className={`min-h-full w-full px-4 pt-4 ${
                   hasConversation ? "mx-auto max-w-[820px]" : ""
                 }`}
+                style={{
+                  paddingBottom: `${(chatInputHeight || 0) + 16}px`,
+                }}
                 ref={(node) => {
                   controller.setContentNode(node);
                 }}

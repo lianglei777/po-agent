@@ -115,10 +115,10 @@ export function ChatInput({
 
   return (
     <div
-      className="pointer-events-none absolute right-0 bottom-0 left-0 z-20 bg-canvas px-4 pt-3 pb-3"
+      className="pointer-events-none absolute right-0 bottom-0 left-0 z-20"
       ref={rootRef}
     >
-      <div className="pointer-events-auto mx-auto max-w-[820px]">
+      <div className="pointer-events-auto mx-auto max-w-[820px] bg-canvas px-4 pt-3 pb-3">
         {retryInfo ? (
           <InlineStatus tone="warning">
             {t.chat.input.retrying} {retryInfo.attempt}/{retryInfo.maxAttempts}
@@ -379,7 +379,7 @@ export function ChatInput({
                 className="size-9 rounded-full"
                 disabled={!canSubmit}
                 htmlType="button"
-                icon={<Send />}
+                icon={<Send className="rotate-[-90deg]" />}
                 onClick={() => void submit()}
                 shape="circle"
                 type="primary"
