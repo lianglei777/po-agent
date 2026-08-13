@@ -13,6 +13,7 @@ export type ContentGenerationState = {
   runs: GenerationRunViewDto[];
   selectedRouteId: string;
   centerLoading: boolean;
+  centerLoadError: string;
   submitting: boolean;
   pendingActionId: string | null;
   centerError: string;
@@ -52,6 +53,11 @@ export type ContentGenerationActions = {
     sessionId: string,
     revision: number,
     next: boolean,
+  ) => boolean;
+  setCenterLoadError: (
+    sessionId: string,
+    revision: number,
+    next: string,
   ) => boolean;
   setSubmitting: (
     sessionId: string,
@@ -96,6 +102,7 @@ export const DEFAULT_CONTENT_GENERATION_STATE: ContentGenerationState = {
   runs: [],
   selectedRouteId: "",
   centerLoading: true,
+  centerLoadError: "",
   submitting: false,
   pendingActionId: null,
   centerError: "",
@@ -137,6 +144,7 @@ export function createContentGenerationStore(
           state.selectedRouteId,
         ),
         centerError: "",
+        centerLoadError: "",
         centerLoading: false,
       })),
     activateCenterSession: (centerSessionId) => {
@@ -147,6 +155,7 @@ export function createContentGenerationStore(
         runs: [],
         selectedRouteId: "",
         centerLoading: true,
+        centerLoadError: "",
         submitting: false,
         pendingActionId: null,
         centerError: "",
@@ -162,6 +171,10 @@ export function createContentGenerationStore(
     setCenterLoading: (sessionId, revision, centerLoading) =>
       updateCenterSession(get, set, sessionId, revision, () => ({
         centerLoading,
+      })),
+    setCenterLoadError: (sessionId, revision, centerLoadError) =>
+      updateCenterSession(get, set, sessionId, revision, () => ({
+        centerLoadError,
       })),
     setSubmitting: (sessionId, revision, submitting) =>
       updateCenterSession(get, set, sessionId, revision, () => ({

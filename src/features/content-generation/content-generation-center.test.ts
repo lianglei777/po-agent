@@ -95,4 +95,12 @@ describe("content generation conversation", () => {
     expect(source).toContain("centerSessionId === session.id");
     expect(source).toContain("!ownsCenterSession || centerLoading");
   });
+
+  it("distinguishes load failures from unavailable generation routes", () => {
+    expect(source).toContain("if (centerLoadError)");
+    expect(source.indexOf("if (centerLoadError)"))
+      .toBeLessThan(source.indexOf("if (!route)"));
+    expect(source).toContain("t.contentGeneration.loadFailed");
+    expect(source).toContain("onClick={loadCenter}");
+  });
 });

@@ -13,7 +13,20 @@ import type {
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
-  const data = (await response.json()) as T | ApiErrorResponse;
+  const isJson = response.headers
+    .get("content-type")
+    ?.toLowerCase()
+    .includes("application/json");
+  if (!isJson) {
+    throw new Error(`Request failed (${response.status})`);
+  }
+
+  let data: T | ApiErrorResponse;
+  try {
+    data = (await response.json()) as T | ApiErrorResponse;
+  } catch {
+    throw new Error(`Invalid JSON response (${response.status})`);
+  }
   if (!response.ok) {
     const failure = data as ApiErrorResponse;
     throw new Error(

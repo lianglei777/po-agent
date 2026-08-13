@@ -49,6 +49,7 @@ describe("content generation store", () => {
     expect(store.getState()).toMatchObject({
       selectedRouteId: "route-a",
       centerLoading: false,
+      centerLoadError: "",
       centerError: "",
     });
   });
@@ -186,6 +187,24 @@ describe("content generation store", () => {
         .setRuns("session-a", currentRevision, [run("current", "queued")]),
     ).toBe(true);
     expect(store.getState().runs[0]?.run.id).toBe("current");
+  });
+
+  it("keeps initial load failures scoped to the owning session revision", () => {
+    const store = createContentGenerationStore();
+    const staleRevision = store.getState().activateCenterSession("session-a");
+    const currentRevision = store.getState().activateCenterSession("session-a");
+
+    expect(
+      store
+        .getState()
+        .setCenterLoadError("session-a", staleRevision, "stale failure"),
+    ).toBe(false);
+    expect(
+      store
+        .getState()
+        .setCenterLoadError("session-a", currentRevision, "current failure"),
+    ).toBe(true);
+    expect(store.getState().centerLoadError).toBe("current failure");
   });
 
   it("isolates workspace instances", () => {

@@ -207,6 +207,7 @@ export const en = {
     deleteConfirm:
       "Delete this content generation API? Existing sessions must be deleted first.",
     mode: "Content generation",
+    loadFailed: "Failed to load content generation data.",
     apiUnavailable: "The content generation API is unavailable.",
     noJobs: "No generated content yet",
     noJobsDescription: "Enter a prompt below to start the first generation.",

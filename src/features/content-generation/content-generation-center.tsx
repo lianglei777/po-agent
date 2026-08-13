@@ -10,7 +10,7 @@ import {
   RotateCcw,
   Square,
 } from "@/components/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Empty, Skeleton, Tag, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import type {
@@ -58,6 +58,7 @@ export function ContentGenerationCenter({
     activateCenterSession,
     applyCenterData,
     centerError,
+    centerLoadError,
     centerLoading,
     centerSessionId,
     pendingActionId,
@@ -66,6 +67,7 @@ export function ContentGenerationCenter({
     runs,
     selectedRouteId,
     setCenterError,
+    setCenterLoadError,
     setCenterLoading,
     setPendingActionId,
     setRuns,
@@ -78,6 +80,7 @@ export function ContentGenerationCenter({
         activateCenterSession,
         applyCenterData,
         centerError,
+        centerLoadError,
         centerLoading,
         centerSessionId,
         pendingActionId,
@@ -86,6 +89,7 @@ export function ContentGenerationCenter({
         runs,
         selectedRouteId,
         setCenterError,
+        setCenterLoadError,
         setCenterLoading,
         setPendingActionId,
         setRuns,
@@ -96,6 +100,7 @@ export function ContentGenerationCenter({
         activateCenterSession,
         applyCenterData,
         centerError,
+        centerLoadError,
         centerLoading,
         centerSessionId,
         pendingActionId,
@@ -104,6 +109,7 @@ export function ContentGenerationCenter({
         runs,
         selectedRouteId,
         setCenterError,
+        setCenterLoadError,
         setCenterLoading,
         setPendingActionId,
         setRuns,
@@ -131,7 +137,7 @@ export function ContentGenerationCenter({
     [runs],
   );
 
-  useEffect(() => {
+  const loadCenter = useCallback(() => {
     let disposed = false;
     const revision = activateCenterSession(session.id);
     centerRevisionRef.current = revision;
@@ -143,22 +149,26 @@ export function ContentGenerationCenter({
         if (disposed) return;
         applyCenterData(session.id, revision, nextRoutes, nextRuns);
       })
-      .catch(
-        (cause) =>
-          !disposed &&
-          setCenterError(session.id, revision, messageOf(cause)),
-      )
+      .catch((cause) => {
+        if (!disposed) {
+          setCenterLoadError(session.id, revision, messageOf(cause));
+        }
+      })
       .finally(
         () => !disposed && setCenterLoading(session.id, revision, false),
       );
-    return () => { disposed = true; };
+    return () => {
+      disposed = true;
+    };
   }, [
     activateCenterSession,
     applyCenterData,
     session.id,
-    setCenterError,
+    setCenterLoadError,
     setCenterLoading,
   ]);
+
+  useEffect(() => loadCenter(), [loadCenter]);
 
   useEffect(() => {
     if (!activeRun) return;
@@ -262,6 +272,19 @@ export function ContentGenerationCenter({
 
   if (!ownsCenterSession || centerLoading) {
     return <div className="flex-1 p-6"><Skeleton active paragraph={{ rows: 5 }} /></div>;
+  }
+  if (centerLoadError) {
+    return (
+      <div className="flex-1 p-6">
+        <Alert
+          action={<Button htmlType="button" onClick={loadCenter}>{t.common.retry}</Button>}
+          description={centerLoadError}
+          showIcon
+          title={t.contentGeneration.loadFailed}
+          type="error"
+        />
+      </div>
+    );
   }
   if (!route) {
     return <div className="flex-1 p-6"><Alert showIcon title={t.contentGeneration.apiUnavailable} type="warning" /></div>;

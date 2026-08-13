@@ -193,6 +193,7 @@ export const zh = {
     outputTextPath: "文本产物路径",
     deleteConfirm: "删除此内容生成 API？请先删除引用它的会话。",
     mode: "内容生成",
+    loadFailed: "内容生成数据加载失败。",
     apiUnavailable: "内容生成 API 当前不可用。",
     noJobs: "还没有生成内容",
     noJobsDescription: "在下方输入提示词，开始第一次生成。",
