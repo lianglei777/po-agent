@@ -47,6 +47,20 @@ describe("chat input visual contract", () => {
     expect(source).toContain("disabled={running}");
   });
 
+  it("keeps each attached image removable from its top-right corner", () => {
+    expect(source).toContain(
+      'className="absolute top-1 right-1 z-10 inline-flex"',
+    );
+    expect(source).toContain(
+      "aria-label={`${t.chat.input.removeImage} ${image.name}`}",
+    );
+    expect(source).toContain("onClick={() => removeImage(image.id)}");
+    expect(source).toContain(
+      'className="size-5 border border-[var(--text)] bg-[var(--text)] p-0 text-[var(--bg-panel)]',
+    );
+    expect(source).toContain('shape="circle"');
+  });
+
   it("does not expose manual context compaction controls", () => {
     expect(source).not.toContain("{t.chat.input.compact}");
     expect(source).not.toContain("compactTooltip");

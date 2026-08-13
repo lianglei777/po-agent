@@ -204,15 +204,19 @@ export function ChatInput({
                     className="size-full object-cover"
                     src={image.previewUrl}
                   />
-                  <Button
-                    aria-label={`${t.chat.input.removeImage} ${image.name}`}
-                    className="absolute top-1 right-1 size-5 rounded-full bg-[var(--text)]/70 p-0 text-[var(--bg-panel)] hover:bg-[var(--text)]/85"
-                    htmlType="button"
-                    icon={<X className="size-3" />}
-                    onClick={() => removeImage(image.id)}
-                    size="small"
-                    type="text"
-                  />
+                  {/* Ant Button 自带定位规则，外层负责锚定，避免移除按钮被缩略图裁掉。 */}
+                  <span className="absolute top-1 right-1 z-10 inline-flex">
+                    <Button
+                      aria-label={`${t.chat.input.removeImage} ${image.name}`}
+                      className="size-5 border border-[var(--text)] bg-[var(--text)] p-0 text-[var(--bg-panel)] hover:border-[var(--text)] hover:bg-[var(--text)] hover:text-[var(--bg-panel)]"
+                      htmlType="button"
+                      icon={<X className="size-3" />}
+                      onClick={() => removeImage(image.id)}
+                      shape="circle"
+                      size="small"
+                      type="text"
+                    />
+                  </span>
                 </div>
               ))}
             </div>
