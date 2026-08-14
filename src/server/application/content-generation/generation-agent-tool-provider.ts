@@ -1,8 +1,8 @@
 import type {
   GenerationArtifactDto,
   GenerationCapability,
-  GenerationInputAsset,
   GenerationRouteDto,
+  GenerationInputAsset,
   GenerationRunStatus,
   GenerationToolDetails,
   JsonValue,
@@ -37,6 +37,7 @@ type GenerateInput = {
 export class GenerationAgentToolProvider implements AgentToolProvider {
   private readonly imageWaitTimeoutMs: number;
   private readonly videoWaitTimeoutMs: number;
+  private readonly reviewWaitTimeoutMs: number;
   private readonly pollIntervalMs: number;
 
   constructor(
@@ -45,12 +46,14 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       waitTimeoutMs?: number;
       imageWaitTimeoutMs?: number;
       videoWaitTimeoutMs?: number;
+      reviewWaitTimeoutMs?: number;
       pollIntervalMs?: number;
     } = {},
     private readonly reviews?: GenerationReviewRegistry,
   ) {
     this.imageWaitTimeoutMs = options.imageWaitTimeoutMs ?? options.waitTimeoutMs ?? 5 * 60_000;
     this.videoWaitTimeoutMs = options.videoWaitTimeoutMs ?? options.waitTimeoutMs ?? 20 * 60_000;
+    this.reviewWaitTimeoutMs = options.reviewWaitTimeoutMs ?? options.waitTimeoutMs ?? 30 * 60_000;
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
   }
 
@@ -77,23 +80,34 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         : "Create a durable image generation run. The run continues if this tool call is interrupted.",
       promptSnippet: `${name}: create durable ${video ? "video" : "image"} generation work`,
       promptGuidelines: [
-        "Call this tool only after the latest user turn explicitly requested or approved this exact generation. Otherwise ask a brief, neutral confirmation such as whether to generate it now. Do not mention pricing, billing, or paid APIs unless the user asks about them.",
+        "Call this tool only when the trusted generation-turn policy says content generation is enabled and the latest user turn clearly requests this exact generation. If intent is unclear, ask a brief clarification instead. Do not mention pricing, billing, or paid APIs unless the user asks about them.",
         "The generation tool waits for completion. Do not poll get_generation automatically. Use it only when the user explicitly asks about an existing run.",
         "When referring to identifiers, distinguish the Po Agent local run ID from the provider task ID.",
         "Use workspace-relative paths or artifact IDs for generation assets.",
-        "If a generation result is awaiting_confirmation, tell the user the parameter review is ready and do not query or resubmit it.",
+        "When execution pauses for parameter review, wait for the user to confirm in the existing tool step. Do not query or resubmit the run.",
       ],
       parameters: generateSchema(video),
       execute: async ({ toolCallId, input, signal, onUpdate }) => {
         const parsed = parseGenerateInput(input, video);
-        if (input.userAuthorized !== true) {
+        const turn = this.reviews?.current(sessionId);
+        if (!turn) {
           throw new AppError(
             "GENERATION_USER_AUTHORIZATION_REQUIRED",
-            "Explicit user authorization is required before paid content generation",
+            "Content generation is not enabled for the current user turn",
             403,
           );
         }
-        const capability = generationCapability(video, parsed.assets);
+        const capability = turn.assets.length
+          ? generationCapabilityFromMedia(video, turn.assets.map((asset) => asset.mediaType))
+          : generationCapability(video, parsed.assets);
+        const service = this.getRunService();
+        const requestedRouteId = turn.mode.type === "generation-route"
+          ? turn.mode.routeId
+          : parsed.routeId;
+        const route = await resolveGenerationRoute(service, capability, requestedRouteId);
+        const assets = turn.assets.length
+          ? bindTurnAssets(turn.assets, route)
+          : parsed.assets;
         const parameters = {
           ...parsed.parameters,
           ...(parsed.durationSeconds === undefined
@@ -103,16 +117,16 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
             ? {}
             : { aspectRatio: parsed.aspectRatio }),
         };
-        const service = this.getRunService();
         const create = this.reviews?.requiresReview(sessionId)
           ? service.prepareRun.bind(service)
           : service.createRun.bind(service);
         const view = await create({
           sessionId,
           capability,
-          routeId: parsed.routeId,
+          routeId: route.id,
           prompt: parsed.prompt,
-          assets: parsed.assets,
+          originalPrompt: turn.originalPrompt,
+          assets,
           parameters,
           source: "agent-tool",
           sourceRef: toolCallId,
@@ -120,9 +134,13 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         });
         if (view.run.status === "awaiting_confirmation") {
           const route = await service.getRoute(view.run.routeId);
-          return generationToolResult(view, {
-            route: route ? generationRouteDetails(route) : undefined,
-          });
+          return this.waitForRun(
+            view,
+            video ? this.videoWaitTimeoutMs : this.imageWaitTimeoutMs,
+            signal,
+            onUpdate,
+            route ? generationRouteDetails(route) : undefined,
+          );
         }
         return this.waitForRun(
           view,
@@ -183,12 +201,16 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
     waitTimeoutMs: number,
     signal?: AbortSignal,
     onUpdate?: (result: AgentToolResult<GenerationToolDetails>) => void,
+    reviewRoute?: GenerationRouteDto,
   ): Promise<AgentToolResult<GenerationToolDetails>> {
     let current = initial;
     let lastStatus = current.run.status;
     let lastPhase = generationPhase(current);
-    onUpdate?.(generationToolResult(current));
-    const deadline = Date.now() + waitTimeoutMs;
+    let awaitingReview = current.run.status === "awaiting_confirmation";
+    onUpdate?.(generationToolResult(current, { route: reviewRoute }));
+    let deadline = Date.now() + (awaitingReview
+      ? this.reviewWaitTimeoutMs
+      : waitTimeoutMs);
     while (
       !TERMINAL_STATUSES.has(current.run.status) &&
       !signal?.aborted &&
@@ -197,16 +219,28 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       await delay(Math.min(this.pollIntervalMs, Math.max(0, deadline - Date.now())), signal);
       if (signal?.aborted) break;
       current = (await this.getRunService().getRun(current.run.id)) ?? current;
+      if (awaitingReview && current.run.status !== "awaiting_confirmation") {
+        // 用户确认后重新计算供应商执行窗口，避免审阅耗时挤占实际生成超时。
+        awaitingReview = false;
+        deadline = Date.now() + waitTimeoutMs;
+      }
       const currentPhase = generationPhase(current);
       if (current.run.status !== lastStatus || currentPhase !== lastPhase) {
         lastStatus = current.run.status;
         lastPhase = currentPhase;
-        onUpdate?.(generationToolResult(current));
+        onUpdate?.(generationToolResult(current, {
+          route: current.run.status === "awaiting_confirmation"
+            ? reviewRoute
+            : undefined,
+        }));
       }
     }
     return generationToolResult(current, {
       waitTimedOut:
         !TERMINAL_STATUSES.has(current.run.status) && !signal?.aborted,
+      route: current.run.status === "awaiting_confirmation"
+        ? reviewRoute
+        : undefined,
     });
   }
 }
@@ -216,10 +250,6 @@ function generateSchema(video: boolean) {
     type: "object" as const,
     properties: {
       prompt: { type: "string", minLength: 1, maxLength: 20_480 },
-      userAuthorized: {
-        type: "boolean",
-        description: "True only when the latest user turn explicitly requested or approved this exact generation.",
-      },
       routeId: { type: "string", minLength: 1 },
       assets: {
         type: "array",
@@ -242,7 +272,7 @@ function generateSchema(video: boolean) {
           }
         : {}),
     },
-    required: ["prompt", "userAuthorized"],
+    required: ["prompt"],
     additionalProperties: false,
   };
 }
@@ -306,6 +336,58 @@ function generationCapability(
   return assets.length === 1 ? "image-to-video" : "multimodal-to-video";
 }
 
+function generationCapabilityFromMedia(
+  video: boolean,
+  mediaTypes: Array<"image" | "video" | "audio">,
+): GenerationCapability {
+  if (!mediaTypes.length) return video ? "text-to-video" : "text-to-image";
+  if (!video) return "image-to-image";
+  return mediaTypes.length === 1 && mediaTypes[0] === "image"
+    ? "image-to-video"
+    : "multimodal-to-video";
+}
+
+async function resolveGenerationRoute(
+  service: GenerationRunService,
+  capability: GenerationCapability,
+  routeId?: string,
+): Promise<GenerationRouteDto> {
+  const routes = await service.listRoutes();
+  const route = routeId
+    ? routes.find((candidate) => candidate.id === routeId)
+    : routes.find((candidate) =>
+        candidate.enabled && candidate.capability === capability && candidate.isDefault
+      ) ?? routes.find((candidate) => candidate.enabled && candidate.capability === capability);
+  if (!route || !route.enabled || route.capability !== capability) {
+    throw new AppError(
+      "GENERATION_ROUTE_UNAVAILABLE",
+      `No enabled generation route is available for ${capability}`,
+      409,
+    );
+  }
+  return route;
+}
+
+function bindTurnAssets(
+  assets: NonNullable<ReturnType<GenerationReviewRegistry["current"]>>["assets"],
+  route: GenerationRouteDto,
+): GenerationInputAsset[] {
+  return assets.map((asset) => {
+    if (!asset.slot.startsWith("auto-")) return { slot: asset.slot, ref: asset.ref };
+    const candidates = (route.inputSchema.assets ?? []).filter(
+      (slot) => slot.mediaType === asset.mediaType,
+    );
+    if (candidates.length !== 1) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        `The selected generation API cannot unambiguously bind ${asset.name}`,
+        400,
+      );
+    }
+    return { slot: candidates[0]!.key, ref: asset.ref };
+  });
+}
+
 function generationToolResult(
   view: GenerationRunView,
   options: {
@@ -316,7 +398,9 @@ function generationToolResult(
   const providerJob = view.jobs.at(-1);
   const details: GenerationToolDetails = {
     runId: view.run.id,
+    routeId: view.run.routeId,
     providerId: providerJob?.providerId,
+    providerOperation: providerJob?.providerOperation,
     providerTaskId: providerJob?.remoteTaskId,
     status: view.run.status,
     phase: generationPhase(view),
@@ -324,6 +408,9 @@ function generationToolResult(
     updatedAt: view.run.updatedAt,
     completedAt: view.run.completedAt,
     waitTimedOut: options.waitTimedOut || undefined,
+    input: view.run.input,
+    requestSnapshot: providerJob?.requestSnapshot,
+    responseSnapshot: providerJob?.responseSnapshot,
     artifacts: view.artifacts.map((artifact): GenerationArtifactDto => ({
       ...artifact,
     })),

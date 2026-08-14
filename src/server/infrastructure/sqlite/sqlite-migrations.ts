@@ -152,4 +152,12 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         DEFAULT '';
     `,
   },
+  {
+    version: 6,
+    name: "generation_provider_audit_snapshots",
+    sql: `
+      ALTER TABLE provider_jobs ADD COLUMN request_snapshot_json TEXT;
+      ALTER TABLE provider_jobs ADD COLUMN response_snapshot_json TEXT;
+    `,
+  },
 ];

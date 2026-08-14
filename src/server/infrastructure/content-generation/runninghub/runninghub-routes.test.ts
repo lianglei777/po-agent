@@ -19,7 +19,7 @@ describe("createRunningHubRoutes", () => {
       route.providerId === "runninghub" &&
       !route.enabled &&
       route.isDefault &&
-      route.revision === 4 &&
+      route.revision === 5 &&
       route.inputSchema.prompt.required !== undefined
     )).toBe(true);
     expect(JSON.stringify(routes.map((route) => route.inputSchema)))

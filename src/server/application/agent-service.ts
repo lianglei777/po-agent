@@ -14,6 +14,7 @@ import type {
   AgentRuntimeRegistry,
 } from "@/server/ports/agent-runtime";
 import type { AgentToolProvider } from "@/server/ports/agent-tool";
+import type { AgentPromptContextProvider } from "@/server/ports/agent-prompt-context-provider";
 import type { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import type { SessionRepository } from "@/server/ports/session-repository";
@@ -38,6 +39,7 @@ export class AgentService {
     private readonly roots: WorkspaceRootProvider,
     private readonly tools?: AgentToolProvider,
     private readonly generationReviews?: GenerationReviewRegistry,
+    private readonly promptContextProvider?: AgentPromptContextProvider,
   ) {}
 
   /**
@@ -103,11 +105,29 @@ export class AgentService {
     this.runtimes.touch(sessionId);
 
     if (command.type === "prompt") {
-      this.generationReviews?.begin(
-        sessionId,
-        command.generationReview === true,
-      );
-      this.runInBackground(runtime, command, () =>
+      const generation = command.generation
+        ? { ...command.generation, originalPrompt: command.message }
+        : command.generationReview
+          ? {
+              mode: { type: "generation-auto" } as const,
+              reviewFirst: true,
+              assets: [],
+              originalPrompt: command.message,
+            }
+          : undefined;
+      this.generationReviews?.begin(sessionId, generation);
+      let generationContext: string | undefined;
+      try {
+        generationContext = await this.promptContextProvider?.getPromptContext(
+          sessionId,
+          generation,
+        );
+      } catch (error) {
+        // 上下文构建失败时必须释放本轮策略，避免后续普通对话继承错误的生成授权。
+        this.generationReviews?.end(sessionId);
+        throw error;
+      }
+      this.runInBackground(runtime, { ...command, generationContext }, () =>
         this.generationReviews?.end(sessionId),
       );
       return { accepted: true };

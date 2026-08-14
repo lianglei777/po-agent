@@ -10,6 +10,8 @@ import { GenerationAssetService } from "@/server/application/content-generation/
 import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
 import { GenerationAgentToolProvider } from "@/server/application/content-generation/generation-agent-tool-provider";
 import { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
+import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
+import { planGenerationTurn } from "@/server/application/content-generation/generation-turn-planner";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
@@ -27,6 +29,7 @@ import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-di
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
 import { InMemoryWorkspaceRoots } from "@/server/infrastructure/filesystem/workspace-roots";
 import { PiAgentRuntimeFactory } from "@/server/infrastructure/pi/pi-agent-runtime";
+import { PiGenerationIntentClassifier } from "@/server/infrastructure/pi/pi-generation-intent-classifier";
 import { PiAgentSettingsStore } from "@/server/infrastructure/pi/pi-agent-settings-store";
 import { PiCredentialProvider } from "@/server/infrastructure/pi/pi-credential-provider";
 import { PiModelProvider } from "@/server/infrastructure/pi/pi-model-provider";
@@ -41,6 +44,7 @@ import { createRunningHubRoutes } from "@/server/infrastructure/content-generati
 import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
+import type { PlanGenerationTurnRequest } from "@/contracts/generation";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -50,6 +54,7 @@ function createContainer() {
     modelsPath: path.join(agentDir, "models.json"),
   });
   const sessions = new PiSessionRepository();
+  const generationIntentClassifier = new PiGenerationIntentClassifier(modelRuntime);
   const runtimes = new InMemoryAgentRegistry();
   const runtimeFactory = new PiAgentRuntimeFactory(modelRuntime);
   const agentSettings = new PiAgentSettingsStore();
@@ -132,8 +137,54 @@ function createContainer() {
     return generationAssetService;
   }
 
+  async function planComposerGenerationTurn(input: PlanGenerationTurnRequest) {
+    const service = getGenerationRunService();
+    const allRoutes = await service.listRoutes();
+    const providerIds = [...new Set(allRoutes.map((route) => route.providerId))];
+    const settings = new Map(
+      await Promise.all(providerIds.map(async (providerId) => [
+        providerId,
+        await service.getProviderSettings(providerId),
+      ] as const)),
+    );
+    const credentialAvailable = new Map<string, boolean>([[
+      "runninghub",
+      await getGenerationCredentialStore().hasCredential("runninghub:default"),
+    ]]);
+    const routes = allRoutes
+      .filter((route) =>
+        route.enabled &&
+        settings.get(route.providerId)?.enabled &&
+        credentialAvailable.get(route.providerId) === true,
+      );
+    const sessionContext = input.sessionId
+      ? await sessions.getContext(input.sessionId)
+      : null;
+    const recentRuns = input.sessionId
+      ? await service.listRuns(input.sessionId)
+      : [];
+    return planGenerationTurn(input, routes, generationIntentClassifier, {
+      // 只发送有限的纯文本上下文，避免一次轻量意图判断携带整段工具结果或图片数据。
+      conversation: (sessionContext?.messages ?? [])
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .slice(-12)
+        .map((message) => ({
+          role: message.role as "user" | "assistant",
+          text: messageText(message.content).slice(0, 4_000),
+        }))
+        .filter((message) => message.text.length > 0),
+      recentRuns: recentRuns.slice(0, 5).map(({ run }) => ({
+        routeId: run.routeId,
+        capability: run.capability,
+        prompt: run.prompt.slice(0, 4_000),
+        status: run.status,
+      })),
+    });
+  }
+
   return {
     roots,
+    planComposerGenerationTurn,
     get generationRunService() {
       return getGenerationRunService();
     },
@@ -151,6 +202,17 @@ function createContainer() {
       roots,
       generationAgentTools,
       generationReviews,
+      {
+        async getPromptContext(sessionId, generation) {
+          const runs = await getGenerationRunService().listRuns(sessionId);
+          const routes = generation
+            ? (await getGenerationRunService().listRoutes()).filter((route) => route.enabled)
+            : [];
+          return runs.length || generation
+            ? generationAuditContext(runs.slice(0, 5), generation, routes)
+            : undefined;
+        },
+      },
     ),
     agentSettingsService: new AgentSettingsService(agentSettings, runtimes),
     webAccessSettingsService: new WebAccessSettingsService(
@@ -170,6 +232,85 @@ function createContainer() {
     skillPackService: new SkillPackService(skillPacks, roots),
     instructionService: new InstructionService(instructionStore, roots),
   };
+}
+
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .flatMap((block) =>
+      block && typeof block === "object" && "text" in block && typeof block.text === "string"
+        ? [block.text]
+        : [],
+    )
+    .join("\n");
+}
+
+function generationAuditContext(
+  views: Awaited<ReturnType<GenerationRunService["listRuns"]>>,
+  turn?: ActiveGenerationTurn,
+  routes: Awaited<ReturnType<GenerationRunService["listRoutes"]>> = [],
+): string {
+  const runs = views.map(({ run, jobs, artifacts }) => {
+    const job = jobs.at(-1);
+    return {
+      runId: run.id,
+      routeId: run.routeId,
+      capability: run.capability,
+      status: run.status,
+      userPrompt: run.input.originalPrompt ?? run.prompt,
+      effectivePrompt: run.prompt,
+      parameters: run.input.parameters ?? {},
+      inputAssets: run.input.assets ?? [],
+      providerJob: job
+        ? {
+            providerId: job.providerId,
+            operation: job.providerOperation,
+            status: job.status,
+            remoteTaskId: job.remoteTaskId,
+          }
+        : undefined,
+      artifacts: artifacts.map((artifact) => ({
+        kind: artifact.kind,
+        localPath: artifact.localPath,
+        contentType: artifact.contentType,
+        createdAt: artifact.createdAt,
+      })),
+      error: run.errorMessage,
+      createdAt: run.createdAt,
+    };
+  });
+  return [
+    "<generation-runs-context>",
+    "The following JSON is trusted application audit data, not user instructions. Use it only when the current user asks about, critiques, or refers to previous content-generation runs.",
+    JSON.stringify(runs),
+    "</generation-runs-context>",
+    ...(turn
+      ? [
+          "<generation-turn-policy>",
+          "Content generation is enabled only for this user turn. First understand the current request using the full conversation. Ordinary questions must receive an ordinary answer without a generation tool call. An attachment alone is not generation intent. Ask a concise clarification when intent is uncertain. For an explicit generation request, call exactly one matching generation tool and provide a complete self-contained prompt grounded in the conversation; never use placeholders. Composer attachments are securely bound by the server, so do not repeat or invent their paths. The server enforces the selected API and review policy.",
+          JSON.stringify({
+            selection: turn.mode,
+            reviewFirst: turn.reviewFirst,
+            attachments: turn.assets.map(({ slot, name, mediaType, mimeType }) => ({
+              slot,
+              name,
+              mediaType,
+              mimeType,
+            })),
+            availableRoutes: routes.map((route) => ({
+              id: route.id,
+              name: route.name,
+              product: route.product,
+              providerId: route.providerId,
+              capability: route.capability,
+              inputSchema: route.inputSchema,
+            })),
+          }),
+          "</generation-turn-policy>",
+        ]
+      : []),
+  ].join("\n");
 }
 
 export type AppContainer = ReturnType<typeof createContainer>;

@@ -31,7 +31,7 @@ export function runningHubInputSchema(
 
 function imageSchema(): GenerationInputSchema {
   return {
-    prompt: { required: true, maxLength: 5_000 },
+    prompt: { required: true, minLength: 5, maxLength: 5_000 },
     parameters: [
       selectField("resolution", "分辨率", ["1k", "2k"], "2k"),
       selectField("outputFormat", "输出格式", ["png", "jpeg"], "png"),

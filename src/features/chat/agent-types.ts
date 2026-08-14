@@ -1,4 +1,5 @@
 import type {
+  AgentGenerationAsset,
   AgentMessage as ApiAgentMessage,
   AgentRuntimeState,
   UserMessage as ApiUserMessage,
@@ -7,6 +8,8 @@ import type { SessionDetailResponse } from "@/contracts/sessions";
 
 export type {
   AgentCommand,
+  AgentGenerationAsset,
+  AgentGenerationPolicy,
   AgentEvent,
   AgentFailure,
   AgentRuntimeState,
@@ -28,6 +31,8 @@ export type { ModelInfo } from "@/contracts/models";
 export type UserMessage = ApiUserMessage & {
   clientId?: string;
   status?: "pending" | "failed";
+  /** 仅用于对话呈现；素材本体仍由内容生成工具按服务端绑定的引用读取。 */
+  generationAssets?: AgentGenerationAsset[];
 };
 
 export type AgentMessage =

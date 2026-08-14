@@ -24,6 +24,7 @@ export interface ProviderSubmitResult {
   outputs: ProviderOutput[];
   errorCode?: string;
   errorMessage?: string;
+  requestSnapshot?: JsonValue;
   rawSnapshot?: JsonValue;
 }
 

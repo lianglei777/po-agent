@@ -3,8 +3,14 @@ import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+const allowedDevOrigins = process.env.PO_AGENT_ALLOWED_DEV_ORIGINS
+  ?.split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const nextConfig: NextConfig = {
+  // 开发环境如需局域网访问，由使用者显式配置，避免固化单台机器的 IP。
+  ...(allowedDevOrigins?.length ? { allowedDevOrigins } : {}),
   // 生成最小化生产产物到 .next/standalone，供 Docker 直接 `node server.js` 运行。
   output: "standalone",
   serverExternalPackages: [

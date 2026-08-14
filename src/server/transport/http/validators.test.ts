@@ -66,6 +66,45 @@ describe("agent HTTP validation", () => {
     ).not.toHaveProperty("generationReview");
   });
 
+  it("validates the per-turn generation policy and uploaded asset references", () => {
+    expect(parseAgentCommand({
+      type: "prompt",
+      message: "Create a new poster",
+      generation: {
+        mode: { type: "generation-route", routeId: "route-1" },
+        reviewFirst: true,
+        assets: [{
+          slot: "imageUrls",
+          name: "reference.png",
+          mediaType: "image",
+          mimeType: "image/png",
+          ref: { type: "workspace-file", relativePath: ".po-agent/generation-inputs/reference.png" },
+        }],
+      },
+    })).toMatchObject({
+      generation: {
+        mode: { type: "generation-route", routeId: "route-1" },
+        reviewFirst: true,
+        assets: [{ mediaType: "image" }],
+      },
+    });
+    expect(() => parseAgentCommand({
+      type: "prompt",
+      message: "Create",
+      generation: {
+        mode: { type: "generation-auto" },
+        reviewFirst: false,
+        assets: [{
+          slot: "imageUrls",
+          name: "bad.exe",
+          mediaType: "binary",
+          mimeType: "application/octet-stream",
+          ref: { type: "workspace-file", relativePath: "bad.exe" },
+        }],
+      },
+    })).toThrow("generation asset mediaType is unsupported");
+  });
+
   it("parses the auto-retry command", () => {
     expect(
       parseAgentCommand({ type: "set_auto_retry", enabled: true }),

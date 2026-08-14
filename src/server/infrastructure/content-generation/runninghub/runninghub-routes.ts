@@ -113,8 +113,8 @@ function route(input: {
     providerOperation: input.operation,
     enabled: false,
     isDefault: true,
-    // Schema 取消展示层级字段后需要提升版本，确保已持久化 Route 获得最新公开契约。
-    revision: 4,
+    // Prompt 最小长度属于付费执行前校验契约，提升版本以更新已持久化 Route，同时保留用户启用状态。
+    revision: 5,
     defaults: input.defaults,
     inputSchema: runningHubInputSchema(input.capability, input.operation),
     adapterConfig: {},

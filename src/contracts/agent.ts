@@ -1,4 +1,8 @@
 import type { SseErrorEvent, SuccessResponse } from "./common";
+import type {
+  ComposerGenerationMode,
+  GenerationAssetRef,
+} from "./generation";
 
 export const THINKING_LEVELS = [
   "auto",
@@ -19,12 +23,29 @@ export interface ImageInput {
   mimeType: string;
 }
 
+export interface AgentGenerationAsset {
+  slot: string;
+  name: string;
+  mediaType: "image" | "video" | "audio";
+  mimeType: string;
+  ref: GenerationAssetRef;
+}
+
+export interface AgentGenerationPolicy {
+  mode: Exclude<ComposerGenerationMode, { type: "chat" }>;
+  reviewFirst: boolean;
+  assets: AgentGenerationAsset[];
+}
+
 export type AgentCommand =
   | {
       type: "prompt";
       message: string;
       images?: ImageInput[];
+      generation?: AgentGenerationPolicy;
       generationReview?: boolean;
+      /** 服务端注入的生成审计上下文；传输层不会接受客户端提供该字段。 */
+      generationContext?: string;
     }
   | { type: "abort" }
   | { type: "get_state" }

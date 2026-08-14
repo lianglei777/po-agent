@@ -18,14 +18,17 @@ import {
 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { ChatInput } from "./chat-input";
+import { ChatGenerationRunCard } from "./chat-generation-run-card";
 import { createConversationNavigatorEntries } from "./conversation-navigator/conversation-navigator-adapter";
 import { ConversationNavigator } from "./conversation-navigator/conversation-navigator";
 import { MessageList } from "./message-view";
 import styles from "./welcome.module.css";
 import type {
+  AgentMessage,
   ContextUsage,
   SessionStats,
 } from "./agent-types";
+import type { GenerationRunViewDto } from "@/contracts/generation";
 import type { BranchState } from "./branch-state";
 import { ChatStoreProvider } from "./state/chat-store-provider";
 import { type ChatSession, useChatController } from "./use-chat-controller";
@@ -154,8 +157,17 @@ function ChatCenterContent({
 
   const hasConversation =
     controller.messages.length > 0 ||
+    controller.generationRuns.length > 0 ||
     controller.stream.streamingMessage ||
     controller.running;
+  const timeline = useMemo(
+    () => buildChatTimeline(
+      controller.messages,
+      controller.entryIds,
+      controller.generationRuns,
+    ),
+    [controller.entryIds, controller.generationRuns, controller.messages],
+  );
 
   return (
     <main
@@ -222,22 +234,39 @@ function ChatCenterContent({
                   />
                 ) : null}
 
-                <MessageList
-                  cwd={session?.cwd ?? newSessionCwd ?? undefined}
-                  entryIds={controller.entryIds}
-                  forkingEntryId={controller.forkingEntryId}
-                  lastUserRef={controller.lastUserRef}
-                  messages={controller.messages}
-                  partialToolResults={controller.partialToolResults}
-                  onEdit={(targetId, text) =>
-                    void controller.editFromHere(targetId, text)
-                  }
-                  onFork={(entryId) => void controller.fork(entryId)}
-                  highlightedMessageId={highlightedMessageId}
-                  onMessageElement={handleMessageElement}
-                  running={controller.running}
-                  streamingMessage={controller.stream.streamingMessage}
-                />
+                {timeline.map((item, index) => item.type === "messages" ? (
+                  <MessageList
+                    cwd={session?.cwd ?? newSessionCwd ?? undefined}
+                    entryIds={item.entryIds}
+                    forkingEntryId={controller.forkingEntryId}
+                    key={item.key}
+                    lastUserRef={controller.lastUserRef}
+                    messages={item.messages}
+                    partialToolResults={controller.partialToolResults}
+                    onEdit={(targetId, text) =>
+                      void controller.editFromHere(targetId, text)
+                    }
+                    onFork={(entryId) => void controller.fork(entryId)}
+                    highlightedMessageId={highlightedMessageId}
+                    onMessageElement={handleMessageElement}
+                    running={controller.running && index === timeline.length - 1}
+                    streamingMessage={index === timeline.length - 1
+                      ? controller.stream.streamingMessage
+                      : null}
+                  />
+                ) : (
+                  <ChatGenerationRunCard
+                    busy={controller.generationBusy}
+                    cwd={session?.cwd ?? newSessionCwd ?? undefined}
+                    key={item.view.run.id}
+                    onCancel={() => controller.cancelGeneration(item.view.run.id)}
+                    onConfirm={(prompt, parameters) =>
+                      controller.confirmGeneration(item.view.run.id, prompt, parameters)
+                    }
+                    routes={controller.generationRoutes}
+                    view={item.view}
+                  />
+                ))}
 
                 {controller.running ? <div className="h-[80vh]" /> : null}
               </div>
@@ -256,6 +285,54 @@ function ChatCenterContent({
       )}
     </main>
   );
+}
+
+type ChatTimelineItem =
+  | {
+      type: "messages";
+      key: string;
+      messages: AgentMessage[];
+      entryIds: string[];
+    }
+  | { type: "generation"; view: GenerationRunViewDto };
+
+function buildChatTimeline(
+  messages: AgentMessage[],
+  entryIds: string[],
+  generationRuns: GenerationRunViewDto[],
+): ChatTimelineItem[] {
+  // Agent 工具 Run 已绑定在对应 Tool Call 内；这里只保留旧版 direct-ui 记录，避免同一生成过程重复展示。
+  const runs = generationRuns.filter(({ run }) => run.source === "direct-ui").sort((left, right) =>
+    left.run.createdAt.localeCompare(right.run.createdAt),
+  );
+  const result: ChatTimelineItem[] = [];
+  let messageIndex = 0;
+  for (const view of runs) {
+    const runTime = Date.parse(view.run.createdAt);
+    const start = messageIndex;
+    while (messageIndex < messages.length) {
+      const timestamp = messages[messageIndex]?.timestamp;
+      if (typeof timestamp === "number" && timestamp > runTime) break;
+      messageIndex += 1;
+    }
+    if (messageIndex > start) {
+      result.push({
+        type: "messages",
+        key: `messages-${start}-${messageIndex}`,
+        messages: messages.slice(start, messageIndex),
+        entryIds: entryIds.slice(start, messageIndex),
+      });
+    }
+    result.push({ type: "generation", view });
+  }
+  // 即使最后没有持久化消息，也保留尾段来承载当前流式 Assistant 输出。
+  result.push({
+    type: "messages",
+    key: `messages-${messageIndex}-end`,
+    messages: messages.slice(messageIndex),
+    entryIds: entryIds.slice(messageIndex),
+  });
+  return result;
 }
 
 function Welcome({

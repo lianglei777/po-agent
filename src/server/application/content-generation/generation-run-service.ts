@@ -32,6 +32,7 @@ export interface CreateGenerationRunInput {
   routeId?: string;
   parentRunId?: string;
   prompt: string;
+  originalPrompt?: string;
   assets?: GenerationInput["assets"];
   parameters?: Record<string, JsonValue>;
   source: GenerationSource;
@@ -263,6 +264,19 @@ export class GenerationRunService {
         400,
       );
     }
+    const route = await this.router.resolve({
+      capability: run.capability,
+      routeId: run.routeId,
+    });
+    await this.requireProviderEnabled(route);
+    // 重试仍可能产生新费用；旧 Run 也必须通过当前 Route 契约，避免重新提交历史上的无效输入。
+    validatePrompt(run.prompt, route.inputSchema.prompt);
+    validateParameters(
+      route.inputSchema.parameters ?? [],
+      route.defaults,
+      run.input.parameters,
+    );
+    validateAssets(route.inputSchema.assets ?? [], run.input.assets ?? []);
     const jobs = await this.repository.listJobsByRun(id);
     const previous = jobs.at(-1);
     if (!previous) throw new Error(`Generation run ${id} has no provider job`);
@@ -356,6 +370,7 @@ export class GenerationRunService {
       prompt,
       input: {
         prompt,
+        originalPrompt: input.originalPrompt?.trim() || undefined,
         assets: input.assets,
         parameters,
       },
@@ -429,15 +444,16 @@ export class GenerationRunService {
 
 function validatePrompt(
   value: string,
-  rule: { required: boolean; maxLength?: number },
+  rule: { required: boolean; minLength?: number; maxLength?: number },
 ) {
   const prompt = value.trim();
+  const minLength = rule.minLength ?? (rule.required ? 1 : 0);
   const maxLength = rule.maxLength ?? 20_480;
-  if ((rule.required && !prompt) || prompt.length > maxLength) {
+  if (prompt.length < minLength || prompt.length > maxLength) {
     throw new AppError(
       "VALIDATION_ERROR",
-      rule.required
-        ? `Generation prompt must contain between 1 and ${maxLength} characters`
+      minLength > 0
+        ? `Generation prompt must contain between ${minLength} and ${maxLength} characters`
         : `Generation prompt must not exceed ${maxLength} characters`,
       400,
     );

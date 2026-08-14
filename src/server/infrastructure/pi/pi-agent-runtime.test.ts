@@ -130,6 +130,49 @@ describe("PiAgentRuntime model config refresh", () => {
     expect(prompt).toHaveBeenCalledTimes(2);
   });
 
+  it("persists generation audit context as a hidden model-context message", async () => {
+    const manager = SessionManager.inMemory("C:\\workspace");
+    const prompt = vi.fn(async () => {});
+    const runtime = new PiAgentRuntime({
+      sessionId: "session-1",
+      sessionFile: "session-1.jsonl",
+      sessionManager: manager,
+      prompt,
+      modelRuntime: { refresh: vi.fn() },
+    } as unknown as AgentSession);
+
+    await runtime.execute({
+      type: "prompt",
+      message: "analyze the result",
+      generationContext: "trusted run audit",
+      generation: {
+        mode: { type: "generation-auto" },
+        reviewFirst: false,
+        assets: [{
+          slot: "imageUrls",
+          name: "reference.png",
+          mediaType: "image",
+          mimeType: "image/png",
+          ref: {
+            type: "workspace-file",
+            relativePath: ".po-agent/generation-inputs/reference.png",
+          },
+        }],
+      },
+    });
+
+    expect(manager.getEntries()).toContainEqual(expect.objectContaining({
+      type: "custom_message",
+      customType: "po-agent-generation-context",
+      content: "trusted run audit",
+      display: false,
+      details: {
+        assets: [expect.objectContaining({ name: "reference.png" })],
+      },
+    }));
+    expect(prompt).toHaveBeenCalledWith("analyze the result", { images: undefined });
+  });
+
   it("refreshes and rebinds the current model before the next prompt", async () => {
     const previousModel = {
       provider: "custom",

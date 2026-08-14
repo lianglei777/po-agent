@@ -46,6 +46,45 @@ const toolResult: ToolResultMessage = {
 };
 
 describe("chat message presentation", () => {
+  it("attaches persisted generation assets to the following user message", () => {
+    const items = buildMessagePresentation(
+      [
+        {
+          role: "custom",
+          customType: "po-agent-generation-context",
+          content: "trusted policy",
+          display: false,
+          details: {
+            assets: [{
+              slot: "imageUrls",
+              name: "reference.png",
+              mediaType: "image",
+              mimeType: "image/png",
+              ref: {
+                type: "workspace-file",
+                relativePath: ".po-agent/generation-inputs/reference.png",
+              },
+            }],
+          },
+        },
+        { role: "user", content: "Create a new poster" },
+      ],
+      ["generation-context-1", "user-1"],
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "user",
+      entryId: "user-1",
+      message: {
+        generationAssets: [{
+          name: "reference.png",
+          ref: { relativePath: ".po-agent/generation-inputs/reference.png" },
+        }],
+      },
+    });
+  });
+
   it("collapses repeated generation status queries to the latest step", () => {
     const query = (id: string): AssistantMessage => ({
       role: "assistant",

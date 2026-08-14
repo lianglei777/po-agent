@@ -46,6 +46,7 @@ export interface GenerationAssetSlot {
 export interface GenerationInputSchema {
   prompt: {
     required: boolean;
+    minLength?: number;
     maxLength?: number;
   };
   parameters?: GenerationParameterField[];
@@ -96,6 +97,8 @@ export interface GenerationInputAsset {
 
 export interface GenerationInput {
   prompt: string;
+  /** 用户在 Chat 中提交的原始文字；prompt 可以是结合上下文后的有效生成提示词。 */
+  originalPrompt?: string;
   assets?: GenerationInputAsset[];
   parameters?: Record<string, JsonValue>;
 }
@@ -105,11 +108,13 @@ export interface CreateGenerationRunRequest {
   routeId?: string;
   parentRunId?: string;
   prompt: string;
+  originalPrompt?: string;
   assets?: GenerationInputAsset[];
   parameters?: Record<string, JsonValue>;
   source?: "direct-ui" | "api";
   sourceRef?: string;
   idempotencyKey: string;
+  reviewFirst?: boolean;
 }
 
 export interface GenerationRunDto {
@@ -142,6 +147,8 @@ export interface ProviderJobDto {
   nextPollAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  requestSnapshot?: JsonValue;
+  responseSnapshot?: JsonValue;
   createdAt: string;
   updatedAt: string;
 }
@@ -162,7 +169,9 @@ export interface GenerationArtifactDto {
 
 export interface GenerationToolDetails {
   runId: string;
+  routeId?: string;
   providerId?: string;
+  providerOperation?: string;
   providerTaskId?: string;
   status: GenerationRunStatus;
   phase:
@@ -179,6 +188,9 @@ export interface GenerationToolDetails {
   updatedAt?: string;
   completedAt?: string;
   waitTimedOut?: boolean;
+  input?: GenerationInput;
+  requestSnapshot?: JsonValue;
+  responseSnapshot?: JsonValue;
   artifacts: GenerationArtifactDto[];
   review?: {
     route: GenerationRouteDto;
@@ -234,6 +246,46 @@ export interface GenerationRouteDto {
 }
 
 export type ListGenerationRoutesResponse = GenerationRouteDto[];
+
+export interface GenerationComposerOptionsResponse {
+  routes: GenerationRouteDto[];
+}
+
+export type ComposerGenerationMode =
+  | { type: "chat" }
+  | { type: "generation-auto" }
+  | { type: "generation-route"; routeId: string };
+
+export type GenerationExecutionPolicy = "direct" | "review-first";
+
+export interface PlanGenerationTurnRequest {
+  message: string;
+  sessionId?: string;
+  model: {
+    provider: string;
+    modelId: string;
+  };
+  mode:
+    | { type: "generation-auto" }
+    | { type: "generation-route"; routeId: string };
+  assets: Array<{ mediaType: "image" | "video" | "audio"; mimeType: string }>;
+}
+
+export type PlanGenerationTurnResponse =
+  | { type: "chat" }
+  | {
+      type: "generation";
+      route: GenerationRouteDto;
+      effectivePrompt: string;
+      parameters: Record<string, JsonValue>;
+    }
+  | {
+      type: "clarification";
+      reason: "AMBIGUOUS_INTENT" | "GENERATION_ROUTE_MISMATCH";
+      question?: string;
+      suggestedRoute?: GenerationRouteDto;
+    }
+  | { type: "invalid"; message: string };
 
 export interface GenerationAssetUploadResponse {
   name: string;

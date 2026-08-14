@@ -179,15 +179,24 @@ export function createWorkspaceStore(
         instructionsNeedApply: false,
       })),
     selectSession: (session) =>
-      set((state) => ({
-        activeCwd: session.cwd,
-        selectedSession: session,
-        newSessionCwd: null,
-        draftSession: null,
-        activeView: "chat",
-        sessionSurface: "chat",
-        chatInstanceKey: state.chatInstanceKey + 1,
-      })),
+      set((state) => {
+        const keepsCurrentChatMounted =
+          state.selectedSession?.id === session.id &&
+          state.selectedSession.cwd === session.cwd;
+
+        return {
+          activeCwd: session.cwd,
+          selectedSession: session,
+          newSessionCwd: null,
+          draftSession: null,
+          activeView: "chat",
+          sessionSurface: "chat",
+          // 重复点击当前会话时保留 Chat 实例，避免消息区卸载重建产生闪烁。
+          chatInstanceKey: keepsCurrentChatMounted
+            ? state.chatInstanceKey
+            : state.chatInstanceKey + 1,
+        };
+      }),
     startDraftSession: (draftSession) =>
       set((state) => ({
         activeCwd: draftSession.cwd,

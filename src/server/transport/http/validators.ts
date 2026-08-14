@@ -1,5 +1,6 @@
 import {
   THINKING_LEVELS,
+  type AgentGenerationAsset,
   type AgentCommand,
   type CreateAgentRequest,
   type ImageInput,
@@ -153,7 +154,20 @@ export function parseAgentCommand(value: unknown): AgentCommand {
   const object = asObject(value);
   const type = requiredString(object, "type");
   switch (type) {
-    case "prompt":
+    case "prompt": {
+      const images = parseImages(object.images);
+      return {
+        type,
+        message: messageOrImages(object, images),
+        images,
+        ...(object.generationReview !== undefined
+          ? { generationReview: requiredBoolean(object, "generationReview") }
+          : {}),
+        ...(object.generation !== undefined
+          ? { generation: parseAgentGenerationPolicy(object.generation) }
+          : {}),
+      };
+    }
     case "steer":
     case "follow_up": {
       const images = parseImages(object.images);
@@ -161,9 +175,6 @@ export function parseAgentCommand(value: unknown): AgentCommand {
         type,
         message: messageOrImages(object, images),
         images,
-        ...(type === "prompt" && object.generationReview !== undefined
-          ? { generationReview: requiredBoolean(object, "generationReview") }
-          : {}),
       };
     }
     case "abort":
@@ -198,6 +209,48 @@ export function parseAgentCommand(value: unknown): AgentCommand {
         400,
       );
   }
+}
+
+function parseAgentGenerationPolicy(value: unknown) {
+  const object = asObject(value);
+  const modeValue = asObject(object.mode);
+  const modeType = requiredString(modeValue, "type");
+  const mode = modeType === "generation-auto"
+    ? { type: modeType } as const
+    : modeType === "generation-route"
+      ? { type: modeType, routeId: requiredString(modeValue, "routeId") } as const
+      : invalid("generation.mode contains an unsupported type");
+  const assetsValue = object.assets;
+  if (!Array.isArray(assetsValue) || assetsValue.length > 30) {
+    invalid("generation.assets must be an array with at most 30 items");
+  }
+  const assets = assetsValue.map((item) => {
+    const asset = asObject(item);
+    const mediaTypeValue = requiredString(asset, "mediaType");
+    if (mediaTypeValue !== "image" && mediaTypeValue !== "video" && mediaTypeValue !== "audio") {
+      invalid("generation asset mediaType is unsupported");
+    }
+    const mediaType = mediaTypeValue as AgentGenerationAsset["mediaType"];
+    const refValue = asObject(asset.ref);
+    const refType = requiredString(refValue, "type");
+    const ref = refType === "workspace-file"
+      ? { type: refType, relativePath: requiredString(refValue, "relativePath") } as const
+      : refType === "artifact"
+        ? { type: refType, artifactId: requiredString(refValue, "artifactId") } as const
+        : invalid("generation asset ref type is unsupported");
+    return {
+      slot: requiredString(asset, "slot"),
+      name: requiredString(asset, "name"),
+      mediaType,
+      mimeType: requiredString(asset, "mimeType"),
+      ref,
+    };
+  });
+  return {
+    mode,
+    reviewFirst: requiredBoolean(object, "reviewFirst"),
+    assets,
+  };
 }
 
 export function parseModelTest(value: unknown): ModelTestRequest {

@@ -47,6 +47,7 @@ import {
   PaperClipOutlined,
   PictureOutlined,
   PlusOutlined,
+  QuestionCircleOutlined,
   RedoOutlined,
   ReloadOutlined,
   RightOutlined,
@@ -119,6 +120,7 @@ export const Pencil = EditOutlined;
 export const PencilLine = FormOutlined;
 export const Plus = PlusOutlined;
 export const Puzzle = AppstoreAddOutlined;
+export const QuestionCircle = QuestionCircleOutlined;
 export const RefreshCw = ReloadOutlined;
 export const RotateCcw = UndoOutlined;
 export const RotateCw = RedoOutlined;

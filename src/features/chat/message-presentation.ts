@@ -1,4 +1,5 @@
 import type {
+  AgentGenerationAsset,
   AgentMessage,
   AssistantMessage,
   ImageContent,
@@ -60,17 +61,28 @@ export function buildMessagePresentation(
 ): MessagePresentationItem[] {
   const items: MessagePresentationItem[] = [];
   let activeTurn: AssistantTurnPresentationItem | null = null;
+  let pendingGenerationAssets: AgentGenerationAsset[] | undefined;
 
   messages.forEach((message, index) => {
     const entryId = entryIds[index];
+    if (
+      message.role === "custom" &&
+      message.customType === "po-agent-generation-context"
+    ) {
+      pendingGenerationAssets = generationAssetsFromDetails(message.details);
+      return;
+    }
     if (message.role === "user") {
       activeTurn = null;
       items.push({
         kind: "user",
         entryId,
-        message,
+        message: pendingGenerationAssets?.length
+          ? { ...message, generationAssets: pendingGenerationAssets }
+          : message,
         originalIndex: index,
       });
+      pendingGenerationAssets = undefined;
       return;
     }
     if (message.role === "compactionSummary") {
@@ -114,6 +126,30 @@ export function buildMessagePresentation(
   }
 
   return items;
+}
+
+function generationAssetsFromDetails(
+  details: unknown,
+): AgentGenerationAsset[] | undefined {
+  if (!details || typeof details !== "object" || !("assets" in details)) {
+    return undefined;
+  }
+  const { assets } = details as { assets?: unknown };
+  if (!Array.isArray(assets)) return undefined;
+  return assets.filter((asset): asset is AgentGenerationAsset => {
+    if (!asset || typeof asset !== "object") return false;
+    const value = asset as Partial<AgentGenerationAsset>;
+    return (
+      typeof value.slot === "string" &&
+      typeof value.name === "string" &&
+      typeof value.mimeType === "string" &&
+      (value.mediaType === "image" ||
+        value.mediaType === "video" ||
+        value.mediaType === "audio") &&
+      typeof value.ref === "object" &&
+      value.ref !== null
+    );
+  });
 }
 
 export function partitionAssistantTurn(turn: AssistantTurnPresentationItem) {

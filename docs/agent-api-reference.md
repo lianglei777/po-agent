@@ -2475,6 +2475,32 @@ GET /api/generation/routes
 
 返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
 
+Chat Composer 只读取当前可用的 Route。`plan` 保留给 Generate 视图和兼容客户端；Chat 主对话提交标准 Agent Prompt，由模型在同一对话回合中结合上下文决定是否调用生成工具：
+
+```http
+GET  /api/generation/composer-options
+POST /api/generation/plan
+Content-Type: application/json
+```
+
+`plan` 必须携带当前 Chat 模型，并可携带已存在的 Session。服务端使用该模型结合最近对话和 Generation Run 做语义规划；不使用关键词或正则表达式判断用户意图。模型输出只作为候选，Route 可用性、Capability、参数字段和素材槽位仍由服务端确定性校验。
+
+```json
+{
+  "message": "让她的衣摆轻微飘动，生成 8 秒视频",
+  "sessionId": "session-id",
+  "model": { "provider": "anthropic", "modelId": "claude-sonnet" },
+  "mode": { "type": "generation-auto" },
+  "assets": [{ "mediaType": "image", "mimeType": "image/png" }]
+}
+```
+
+`generation` 结果额外返回 `effectivePrompt`。它是 AI 结合上下文整理后真正发送给生成 API 的自包含提示词；Chat UI 必须同时保留并展示用户原文，以便审计实际输入是否准确。服务端会拒绝省略号、Schema 示例值等占位 Prompt，并要求模型纠正一次；纠正后仍不合格时返回 `clarification`，不得创建付费 Run。
+
+Session 存在 Generation Run 后，普通 Agent Prompt 会由服务端附加一份隐藏的最近 Run 审计快照，包括 Route、Capability、用户原文、有效 Prompt、参数、输入素材、Provider Job、产物与错误。该快照参与模型上下文但不作为用户消息展示，使“为什么上一张图没有变化”等追问可以基于真实执行数据回答；相同快照不会重复持久化。
+
+`composer-options` 只返回 Route、Provider 和凭证均已启用的 API。`plan` 接收文字、生成模式以及附件媒体类型，返回 `chat`、`generation`、`clarification` 或 `invalid`；它只规划 Route 和结构化参数，不上传素材或创建 Run。
+
 ```http
 PATCH /api/generation/routes/:id
 Content-Type: application/json
@@ -2494,7 +2520,7 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。
 
-`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
 ### 12.2 注册素材并创建或列出 Run
 
@@ -2521,9 +2547,11 @@ Content-Type: application/json
 {
   "capability": "image-to-video",
   "routeId": "runninghub-seedance-2-image-to-video",
+  "originalPrompt": "让她动起来，8 秒",
   "prompt": "镜头缓慢推进人物",
   "idempotencyKey": "client-request-019f...",
   "source": "direct-ui",
+  "reviewFirst": false,
   "parameters": {
     "durationSeconds": 5,
     "aspectRatio": "16:9"
@@ -2545,8 +2573,9 @@ Content-Type: application/json
 - `assets[].slot` 使用 `firstFrameUrl`、`imageUrls` 等语义槽位。
 - `assets[].ref` 支持同 Session Artifact 或 workspace-relative 文件。
 - HTTP 来源只允许 `direct-ui` 或 `api`。
+- `reviewFirst: true` 时 Run 以 `awaiting_confirmation` 创建，不创建 Provider Job；确认后才进入队列。省略或为 `false` 时直接排队。
 
-只有已经持久化的 Pi Session 可以创建 Run。首次创建时，服务端把 Session 元数据投影到 SQLite；Pi 消息树仍由 Pi Session 文件保存。响应为 `{ created, run, jobs, artifacts }`，不包含凭证、lease 或 adapter 快照。
+只有已经持久化的 Pi Session 可以创建 Run。首次创建时，服务端把 Session 元数据投影到 SQLite；Pi 消息树仍由 Pi Session 文件保存。响应为 `{ created, run, jobs, artifacts }`，不包含凭证或 lease；`jobs` 可包含 adapter 在凭据脱敏后的 `requestSnapshot` 与 `responseSnapshot`，用于执行审计。
 
 ### 12.3 查询、取消和重试 Run
 
@@ -2609,13 +2638,36 @@ cancel_generation
 
 生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
 
-`generate_image` 与 `generate_video` 还要求 `userAuthorized: true`。只有最新用户消息明确请求或批准本次生成时才允许设置；否则 Agent 必须先进行简短、中性的确认。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
+`generate_image` 与 `generate_video` 不接受模型声明的 `userAuthorized`。Chat 只有在当前 Prompt 携带服务端校验过的 `generation` turn policy 时才允许执行生成工具；普通 Chat 回合即使模型构造了工具调用，也会被 application 层拒绝。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
 
-Chat Prompt 可带可选的 `generationReview: true`。该字段只作用于当前 Agent 轮次：Agent 仍自行判断是否调用生成工具；若调用，工具创建 `awaiting_confirmation` Run 并返回 Route、输入 Schema 和完整解析参数。Chat 参数卡作为助手消息中的交互内容展示全部 Route 参数，执行步骤仅保留只读状态；用户可修改 Prompt 与参数。点击确认后由确认接口直接提交最终结构化值，不再经过模型转述。Chat 随后按 `runId` 获取最新 Run，将已确认、生成中、下载中和完成状态同步到原执行步骤与消息卡，并在完成后展示 Artifact。轮次结束后该偏好自动清除，不会成为 Session 类型或永久 Route 绑定。
+Chat Prompt 可带可选的 `generation`：
+
+```json
+{
+  "type": "prompt",
+  "message": "结合上下文和参考图生成一张全新人物海报",
+  "generation": {
+    "mode": { "type": "generation-auto" },
+    "reviewFirst": false,
+    "assets": [{
+      "slot": "imageUrls",
+      "name": "reference.png",
+      "mediaType": "image",
+      "mimeType": "image/png",
+      "ref": {
+        "type": "workspace-file",
+        "relativePath": ".po-agent/generation-inputs/reference.png"
+      }
+    }]
+  }
+}
+```
+
+`generation.mode` 支持 `generation-auto` 或带 `routeId` 的 `generation-route`。该策略只作用于当前 Agent 轮次：无明确生成意图时模型照常回答；意图不明确时模型结合上下文追问；明确生成时调用生成工具。指定 Route 会覆盖模型工具入参中的 Route，Composer 上传素材也由服务端绑定到最终 Route Schema 槽位，不能被模型虚构的路径替换。`reviewFirst: true` 时工具创建 `awaiting_confirmation` Run，并通过同一工具调用的增量结果返回 Route、输入 Schema 和完整解析参数；确认后原工具继续等待 Run，完成后模型再输出本轮最终回复。轮次结束后策略自动清除，不会成为 Session 类型或永久 Route 绑定。`generationReview` 仅作为旧客户端兼容字段保留。
 
 `generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Pi `onUpdate` 与现有 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。前端按同一 `toolCallId` 原地更新工具步骤，不创建新的查询步骤。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；模型不得在正常生成期间自动轮询 `get_generation`。`get_generation` 仅用于用户明确查询历史 Run 或中断恢复，并与 `cancel_generation` 一样只能访问当前 Session 的 Run。
 
-生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`providerId`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、`artifacts` 和可选错误。待确认结果还包含 `review.route` 与 `review.input`，供客户端按服务端 Route Schema 渲染参数卡。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现对应其响应中的 `taskId`。Chat UI 直接渲染这些结构化数据，不解析供应商 JSON 或工具文本。
+生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`routeId`、`providerId`、`providerOperation`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、最终 `input`、脱敏且有大小上限的 `requestSnapshot`、`responseSnapshot`、`artifacts` 和可选错误。超限快照返回 `truncated`、`originalSizeBytes` 和 `preview`。待确认结果还包含 `review.route` 与 `review.input`，供客户端按服务端 Route Schema 渲染参数卡。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现兼容顶层 `taskId` 与 `data.taskId`。HTTP 200 中携带的供应商业务错误仍按失败处理并保留其错误码和消息，不会误报为缺少任务 ID。Chat UI 在同一执行步骤中展示模型工具入参、服务端最终输入与 Provider 审计快照；API Key、token、secret、authorization、credential、password、Cookie 和签名类字段会在 adapter 边界脱敏。
 
 ## 13. SSE 通用行为
 

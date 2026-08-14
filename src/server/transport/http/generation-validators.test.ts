@@ -10,7 +10,9 @@ describe("parseCreateGenerationRun", () => {
     expect(parseCreateGenerationRun({
       capability: "image-to-video",
       prompt: "camera pushes in",
+      originalPrompt: "make it move",
       idempotencyKey: "request-1",
+      reviewFirst: true,
       assets: [
         {
           slot: "firstFrameUrl",
@@ -25,7 +27,9 @@ describe("parseCreateGenerationRun", () => {
     })).toEqual({
       capability: "image-to-video",
       prompt: "camera pushes in",
+      originalPrompt: "make it move",
       idempotencyKey: "request-1",
+      reviewFirst: true,
       assets: [
         {
           slot: "firstFrameUrl",

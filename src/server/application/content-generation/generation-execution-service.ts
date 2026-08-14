@@ -207,6 +207,11 @@ export class GenerationExecutionService {
     provider: GenerationProvider,
     result: ProviderSubmitResult,
   ): Promise<void> {
+    job = {
+      ...job,
+      requestSnapshot: result.requestSnapshot ?? job.requestSnapshot,
+      responseSnapshot: result.rawSnapshot ?? job.responseSnapshot,
+    };
     if (result.state === "failed") {
       await this.fail(
         job,
@@ -222,8 +227,8 @@ export class GenerationExecutionService {
         await this.fail(
           job,
           run,
-          "GENERATION_PROVIDER_PROTOCOL_ERROR",
-          "Generation provider did not return a task ID",
+          result.errorCode || "GENERATION_PROVIDER_PROTOCOL_ERROR",
+          result.errorMessage || "Generation provider did not return a task ID",
         );
         return;
       }

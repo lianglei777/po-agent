@@ -38,6 +38,7 @@ describe("GenerationRunService", () => {
       capability: "text-to-video",
       routeId: "runninghub-seedance-2-text-to-video",
       prompt: " rainy bamboo forest ",
+      originalPrompt: " make a video ",
       parameters: { durationSeconds: 10 },
       source: "agent-tool",
       sourceRef: "tool-call-1",
@@ -52,6 +53,7 @@ describe("GenerationRunService", () => {
         prompt: "rainy bamboo forest",
         status: "queued",
         input: {
+          originalPrompt: "make a video",
           parameters: {
             resolution: "720p",
             durationSeconds: 10,
@@ -237,6 +239,14 @@ describe("GenerationRunService", () => {
       source: "api",
       idempotencyKey: "missing-asset",
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+
+    await expect(service.createRun({
+      sessionId: "session-1",
+      capability: "text-to-image",
+      prompt: "...",
+      source: "api",
+      idempotencyKey: "short-image-prompt",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
   });
 
   it("accepts an empty prompt when the selected route marks it optional", async () => {
@@ -293,6 +303,27 @@ describe("GenerationRunService", () => {
     const repeated = await service.retryRun(created.run.id, "idem-retry");
     expect(repeated.created).toBe(false);
     expect(repeated.jobs).toHaveLength(2);
+  });
+
+  it("rejects retrying a legacy run that violates the current route contract", async () => {
+    const created = await service.createRun({
+      sessionId: "session-1",
+      capability: "text-to-image",
+      prompt: "valid prompt",
+      source: "direct-ui",
+      idempotencyKey: "legacy-original",
+    });
+    await repository.updateRun({
+      ...created.run,
+      status: "failed",
+      prompt: "...",
+      input: { ...created.run.input, prompt: "..." },
+      updatedAt: NOW,
+    }, ["queued"]);
+
+    await expect(service.retryRun(created.run.id, "legacy-retry"))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+    expect(await repository.listJobsByRun(created.run.id)).toHaveLength(1);
   });
 });
 

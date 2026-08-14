@@ -254,6 +254,8 @@ function job(): ProviderJob {
     credentialRef: "runninghub:default",
     status: "created",
     nextPollAt: NOW,
+    requestSnapshot: { prompt: "rainy bamboo forest" },
+    responseSnapshot: { taskId: "remote-1", status: "RUNNING" },
     createdAt: NOW,
     updatedAt: NOW,
   };

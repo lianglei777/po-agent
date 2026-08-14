@@ -43,6 +43,9 @@ npm run dev
 
 在浏览器打开 [http://localhost:3000](http://localhost:3000) 即可使用。
 
+如需从局域网或 WSL 宿主地址访问开发服务器，可在启动前设置逗号分隔的
+`PO_AGENT_ALLOWED_DEV_ORIGINS`；默认不额外放行任何开发来源。
+
 
 ## 项目结构
 

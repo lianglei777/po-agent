@@ -14,13 +14,20 @@ import {
   Cpu,
   Paperclip,
   Send,
-  Settings2,
   Square,
   X,
 } from "@/components/icons";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n/use-i18n";
 import type { AttachedImage, ModelInfo } from "./agent-types";
+import type {
+  ComposerGenerationMode,
+  GenerationAssetSlot,
+  GenerationRouteDto,
+} from "@/contracts/generation";
+import type { ChatGenerationAsset } from "./chat-generation-types";
+import { ChatGenerationInputs } from "./chat-generation-inputs";
+import { ChatGenerationControl } from "./chat-generation-control";
 import {
   resolveThinkingLevelForMode,
   type ThinkingMode,
@@ -38,6 +45,12 @@ export function ChatInput({
   canAttachImages,
   thinkingMode,
   generationReview,
+  generationMode,
+  generationRoutes,
+  generationSlots,
+  generationAssets,
+  generationBusy,
+  generationActive,
   isCompacting,
   actionError,
   undoable,
@@ -55,6 +68,9 @@ export function ChatInput({
   changeModel,
   changeThinkingMode,
   setGenerationReview,
+  changeGenerationMode,
+  addGenerationAssets,
+  removeGenerationAsset,
   handleKeyDown,
   handlePaste,
   setActionError,
@@ -71,6 +87,12 @@ export function ChatInput({
   canAttachImages: boolean;
   thinkingMode: ThinkingMode;
   generationReview: boolean;
+  generationMode: ComposerGenerationMode;
+  generationRoutes: GenerationRouteDto[];
+  generationSlots: GenerationAssetSlot[];
+  generationAssets: ChatGenerationAsset[];
+  generationBusy: boolean;
+  generationActive: boolean;
   isCompacting: boolean;
   actionError: string;
   undoable: { leafId: string } | null;
@@ -92,6 +114,9 @@ export function ChatInput({
   changeModel: (value: string) => Promise<void>;
   changeThinkingMode: (value: ThinkingMode) => Promise<void>;
   setGenerationReview: (value: boolean) => void;
+  changeGenerationMode: (value: ComposerGenerationMode) => void;
+  addGenerationAssets: (slot: GenerationAssetSlot, files: File[]) => void;
+  removeGenerationAsset: (id: string) => void;
   handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   handlePaste: ClipboardEventHandler<HTMLTextAreaElement>;
   setActionError: (value: string) => void;
@@ -112,6 +137,7 @@ export function ChatInput({
       ? [{ label: t.chat.input.thinkingOn, value: "on" as const }]
       : []),
   ];
+  const composerBusy = running || generationBusy || generationActive;
 
   return (
     <div
@@ -222,6 +248,16 @@ export function ChatInput({
             </div>
           ) : null}
 
+          {generationMode.type !== "chat" ? (
+            <ChatGenerationInputs
+              assets={generationAssets}
+              disabled={composerBusy}
+              onAdd={addGenerationAssets}
+              onRemove={removeGenerationAsset}
+              slots={generationSlots}
+            />
+          ) : null}
+
           {/* Ant borderless textarea 仍会绘制内部焦点线；由 Composer 统一承载可见焦点。 */}
           <Textarea
             aria-label={t.chat.input.messageLabel}
@@ -231,7 +267,7 @@ export function ChatInput({
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={
-              running
+              composerBusy
                 ? t.chat.input.placeholderRunning
                 : t.chat.input.placeholderIdle
             }
@@ -254,7 +290,7 @@ export function ChatInput({
             />
             {/* attachment */}
             <IconButton
-              disabled={!canAttachImages}
+              disabled={generationMode.type !== "chat" || !canAttachImages}
               label={
                 canAttachImages
                   ? t.chat.input.attachImages
@@ -269,7 +305,7 @@ export function ChatInput({
             <Select
               aria-label={t.chat.input.model}
               className="max-w-52"
-              disabled={running}
+              disabled={composerBusy}
               labelRender={() =>
                 currentModel?.name ?? t.chat.input.chooseModel
               }
@@ -297,24 +333,13 @@ export function ChatInput({
               value={thinkingMode}
             />
 
-            <CompactSelect
-              disabled={running}
-              icon={<Settings2 />}
-              label={t.chat.input.generationControl}
-              onValueChange={(value) =>
-                setGenerationReview(value === "review")
-              }
-              options={[
-                {
-                  label: t.chat.input.generationAutomatic,
-                  value: "automatic",
-                },
-                {
-                  label: t.chat.input.generationReview,
-                  value: "review",
-                },
-              ]}
-              value={generationReview ? "review" : "automatic"}
+            <ChatGenerationControl
+              disabled={composerBusy}
+              generationReview={generationReview}
+              mode={generationMode}
+              onModeChange={changeGenerationMode}
+              onReviewChange={setGenerationReview}
+              routes={generationRoutes}
             />
 
             <div className="flex-1" />

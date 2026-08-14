@@ -15,6 +15,7 @@ const API_ORIGIN = "https://www.runninghub.cn";
 const UPLOAD_URL = `${API_ORIGIN}/openapi/v2/media/upload/binary`;
 const QUERY_URL = `${API_ORIGIN}/openapi/v2/query`;
 const SNAPSHOT_LIMIT_BYTES = 64 * 1024;
+const SNAPSHOT_PREVIEW_BYTES = 60 * 1024;
 
 const OPERATION_PATHS: Record<string, string> = {
   "seedream-v5-pro-text-to-image": "/openapi/v2/seedream-v5-pro/text-to-image",
@@ -98,7 +99,10 @@ export class RunningHubAdapter implements GenerationProvider {
       input.credential,
       body,
     );
-    return normalizeResponse(response);
+    return {
+      ...normalizeResponse(response),
+      requestSnapshot: snapshot(body),
+    };
   }
 
   async poll(input: {
@@ -321,23 +325,64 @@ function firstUrlForSlot(
 }
 
 function normalizeResponse(value: unknown): ProviderSubmitResult {
-  const record = objectValue(value);
-  const status = stringValue(record.status) ?? "UNKNOWN";
+  const root = objectValue(value);
+  const nested = objectValue(root.data);
+  // RunningHub 的不同网关可能直接返回任务字段，也可能包在 data 中；适配器在此统一协议差异。
+  const record = hasProviderResultFields(nested) ? nested : root;
+  const remoteTaskId = stringValue(record.taskId) ?? stringValue(root.taskId);
+  const status = (stringValue(record.status) ?? stringValue(root.status) ?? "UNKNOWN").toUpperCase();
+  const providerCode = nonSuccessCode(record.errorCode) ??
+    nonSuccessCode(root.errorCode) ??
+    nonSuccessCode(root.code);
+  const providerMessage = firstMeaningfulMessage(
+    record.errorMessage,
+    record.message,
+    record.msg,
+    root.errorMessage,
+    root.message,
+    root.msg,
+  );
+  const outputs = outputsFrom(record.results ?? root.results);
+  const explicitlyFailed = status === "FAILED" || status === "FAIL" ||
+    Boolean(providerCode) || Boolean(providerMessage && !remoteTaskId);
   const state = status === "SUCCESS"
     ? "succeeded"
-    : status === "FAILED"
+    : explicitlyFailed || (!remoteTaskId && outputs.length === 0)
       ? "failed"
       : "pending";
   return {
     state,
-    remoteTaskId: stringValue(record.taskId),
+    remoteTaskId,
     remoteStatus: status,
-    outputs: outputsFrom(record.results),
-    errorCode: stringValue(record.errorCode),
-    errorMessage:
-      stringValue(record.errorMessage) ?? stringValue(record.message),
+    outputs,
+    errorCode: providerCode ?? (state === "failed" && !remoteTaskId
+      ? "GENERATION_PROVIDER_PROTOCOL_ERROR"
+      : undefined),
+    errorMessage: providerMessage ?? (state === "failed" && !remoteTaskId
+      ? "RunningHub response did not include a task ID"
+      : undefined),
     rawSnapshot: snapshot(value),
   };
+}
+
+function hasProviderResultFields(value: Record<string, unknown>): boolean {
+  return ["taskId", "status", "results", "errorCode", "errorMessage"]
+    .some((key) => key in value);
+}
+
+function nonSuccessCode(value: unknown): string | undefined {
+  if (typeof value === "number") return value === 0 ? undefined : String(value);
+  if (typeof value !== "string") return undefined;
+  const code = value.trim();
+  return !code || code === "0" || code.toLowerCase() === "success" ? undefined : code;
+}
+
+function firstMeaningfulMessage(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const message = stringValue(value)?.trim();
+    if (message && !/^(ok|success|successful)$/i.test(message)) return message;
+  }
+  return undefined;
 }
 
 function outputsFrom(value: unknown): ProviderOutput[] {
@@ -353,37 +398,60 @@ function outputsFrom(value: unknown): ProviderOutput[] {
 }
 
 function snapshot(value: unknown): JsonValue {
-  const json = JSON.stringify(toJsonValue(value));
-  if (Buffer.byteLength(json, "utf8") <= SNAPSHOT_LIMIT_BYTES) {
-    return JSON.parse(json) as JsonValue;
-  }
+  const sanitized = toJsonValue(value);
+  const json = JSON.stringify(sanitized);
+  const sizeBytes = Buffer.byteLength(json, "utf8");
+  if (sizeBytes <= SNAPSHOT_LIMIT_BYTES) return sanitized;
+  // 快照会经轮询反复写入 SQLite 并回传 UI，必须有硬上限防止大响应放大资源占用。
   return {
     truncated: true,
-    preview: json.slice(0, SNAPSHOT_LIMIT_BYTES),
+    originalSizeBytes: sizeBytes,
+    preview: Buffer.from(json, "utf8")
+      .subarray(0, SNAPSHOT_PREVIEW_BYTES)
+      .toString("utf8"),
   };
 }
 
 function toJsonValue(value: unknown): JsonValue {
   if (
     value === null ||
-    typeof value === "string" ||
     typeof value === "number" ||
     typeof value === "boolean"
   ) {
     return value;
   }
+  if (typeof value === "string") return sanitizeSnapshotString(value);
   if (Array.isArray(value)) return value.map(toJsonValue);
   if (typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,
-        /api[-_]?key|authorization|token|secret/i.test(key)
+        isSensitiveSnapshotKey(key)
           ? "[REDACTED]"
           : toJsonValue(item),
       ]),
     );
   }
   return String(value);
+}
+
+function sanitizeSnapshotString(value: string): string {
+  if (!/^https?:\/\//i.test(value)) return value;
+  try {
+    const url = new URL(value);
+    for (const key of [...url.searchParams.keys()]) {
+      if (isSensitiveSnapshotKey(key)) {
+        url.searchParams.set(key, "[REDACTED]");
+      }
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function isSensitiveSnapshotKey(key: string): boolean {
+  return /api[-_]?key|authorization|auth|token|secret|sign|identify|credential|password|passwd|cookie/i.test(key);
 }
 
 function allowedDownloadUrl(value: string): string {

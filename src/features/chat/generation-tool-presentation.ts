@@ -40,13 +40,18 @@ export function generationDetailsWithView(
   const job = view.jobs.at(-1);
   return {
     ...details,
+    routeId: view.run.routeId,
     providerId: job?.providerId ?? details.providerId,
+    providerOperation: job?.providerOperation ?? details.providerOperation,
     providerTaskId: job?.remoteTaskId ?? details.providerTaskId,
     status: view.run.status,
     phase: phaseFromView(view),
     updatedAt: view.run.updatedAt,
     completedAt: view.run.completedAt,
     artifacts: view.artifacts,
+    input: view.run.input,
+    requestSnapshot: job?.requestSnapshot ?? details.requestSnapshot,
+    responseSnapshot: job?.responseSnapshot ?? details.responseSnapshot,
     // 确认配置只属于待确认阶段；完成后必须让产物进入普通对话媒体展示链路。
     review: view.run.status === "awaiting_confirmation" ? details.review : undefined,
     error: view.run.errorCode || view.run.errorMessage

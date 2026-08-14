@@ -16,6 +16,7 @@ describe("GenerationAgentToolProvider", () => {
   let repository: SqliteGenerationRepository;
   let service: GenerationRunService;
   let provider: GenerationAgentToolProvider;
+  let reviews: GenerationReviewRegistry;
   let sequence: number;
 
   beforeEach(async () => {
@@ -29,15 +30,18 @@ describe("GenerationAgentToolProvider", () => {
       createId: () => `id-${++sequence}`,
       now: () => new Date(NOW),
     });
+    reviews = new GenerationReviewRegistry();
+    reviews.begin("session-1", generationTurn(false));
     provider = new GenerationAgentToolProvider(() => service, {
       waitTimeoutMs: 0,
       pollIntervalMs: 0,
-    });
+    }, reviews);
   });
 
   afterEach(() => database.close());
 
   it("rejects paid generation without explicit user authorization", async () => {
+    reviews.end("session-1");
     const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
     await expect(generate.execute({
       toolCallId: "call-without-approval",
@@ -116,20 +120,21 @@ describe("GenerationAgentToolProvider", () => {
   });
 
   it("returns a route-aware parameter review without creating provider work", async () => {
-    const reviews = new GenerationReviewRegistry();
-    reviews.begin("session-1", true);
+    reviews.begin("session-1", generationTurn(true));
     provider = new GenerationAgentToolProvider(
       () => service,
       { waitTimeoutMs: 0, pollIntervalMs: 0 },
       reviews,
     );
 
+    const updates = vi.fn();
     const result = await provider.getTools({
       sessionId: "session-1",
       cwd: "D:\\project",
     })[0]!.execute({
       toolCallId: "call-review",
       input: { prompt: "A quiet lake", userAuthorized: true },
+      onUpdate: updates,
     });
 
     expect(result.details).toMatchObject({
@@ -143,6 +148,16 @@ describe("GenerationAgentToolProvider", () => {
     await expect(service.getRun(
       (result.details as GenerationToolDetails).runId,
     )).resolves.toMatchObject({ jobs: [] });
+    expect(updates).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.objectContaining({
+        status: "awaiting_confirmation",
+        review: expect.objectContaining({
+          route: expect.objectContaining({
+            id: "runninghub-seedream-v5-pro-text-to-image",
+          }),
+        }),
+      }),
+    }));
   });
 
   it("maps assets to a multimodal video run without exposing provider fields", async () => {
@@ -174,11 +189,62 @@ describe("GenerationAgentToolProvider", () => {
     });
   });
 
+  it("forces the selected API and binds composer assets without trusting model paths", async () => {
+    reviews.begin("session-1", {
+      mode: {
+        type: "generation-route",
+        routeId: "runninghub-seedream-v5-pro-image-to-image",
+      },
+      reviewFirst: false,
+      originalPrompt: "Use my uploaded reference to create a new poster",
+      assets: [{
+        slot: "auto-image",
+        name: "reference.png",
+        mediaType: "image",
+        mimeType: "image/png",
+        ref: {
+          type: "workspace-file",
+          relativePath: ".po-agent/generation-inputs/reference.png",
+        },
+      }],
+    });
+    const generate = provider.getTools({
+      sessionId: "session-1",
+      cwd: "D:\\project",
+    })[0]!;
+
+    const result = await generate.execute({
+      toolCallId: "call-policy-image",
+      input: {
+        prompt: "A complete new character poster inspired by the reference style",
+        routeId: "runninghub-seedream-v5-pro-text-to-image",
+        assets: [{ slot: "imageUrls", relativePath: "model-invented.png" }],
+      },
+    });
+    const stored = await service.getRun(
+      (result.details as GenerationToolDetails).runId,
+    );
+
+    expect(stored?.run).toMatchObject({
+      routeId: "runninghub-seedream-v5-pro-image-to-image",
+      input: {
+        originalPrompt: "Use my uploaded reference to create a new poster",
+        assets: [{
+          slot: "imageUrls",
+          ref: {
+            type: "workspace-file",
+            relativePath: ".po-agent/generation-inputs/reference.png",
+          },
+        }],
+      },
+    });
+  });
+
   it("stops waiting on abort without cancelling the durable run", async () => {
     provider = new GenerationAgentToolProvider(() => service, {
       waitTimeoutMs: 10_000,
       pollIntervalMs: 10_000,
-    });
+    }, reviews);
     const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
     const controller = new AbortController();
     const updates = vi.fn();
@@ -217,6 +283,15 @@ describe("GenerationAgentToolProvider", () => {
     })).rejects.toMatchObject({ code: "GENERATION_RUN_NOT_FOUND" });
   });
 });
+
+function generationTurn(reviewFirst: boolean) {
+  return {
+    mode: { type: "generation-auto" } as const,
+    reviewFirst,
+    assets: [],
+    originalPrompt: "Generate an image",
+  };
+}
 
 function session(): GenerationSession {
   return {

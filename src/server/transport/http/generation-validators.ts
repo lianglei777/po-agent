@@ -4,6 +4,7 @@ import {
   type ConfirmGenerationRunRequest,
   type GenerationAssetRef,
   type GenerationInputAsset,
+  type PlanGenerationTurnRequest,
   type RetryGenerationRunRequest,
 } from "@/contracts/generation";
 import type { JsonValue } from "@/contracts/generation";
@@ -33,11 +34,61 @@ export function parseCreateGenerationRun(
     routeId: optionalString(object, "routeId"),
     parentRunId: optionalString(object, "parentRunId"),
     prompt: requiredText(object, "prompt"),
+    originalPrompt: optionalString(object, "originalPrompt"),
     assets: parseAssets(object.assets),
     parameters: parseJsonRecord(object.parameters, "parameters"),
     source,
     sourceRef: optionalString(object, "sourceRef"),
     idempotencyKey: requiredString(object, "idempotencyKey"),
+    reviewFirst: optionalBoolean(object, "reviewFirst"),
+  };
+}
+
+function optionalBoolean(
+  object: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
+  const value = object[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") invalid(`${key} must be a boolean`);
+  return value;
+}
+
+export function parsePlanGenerationTurnRequest(
+  value: unknown,
+): PlanGenerationTurnRequest {
+  const object = asObject(value);
+  const modeValue = asObject(object.mode, "mode");
+  const modeType = requiredString(modeValue, "type");
+  const mode = modeType === "generation-auto"
+    ? { type: modeType } as const
+    : modeType === "generation-route"
+      ? { type: modeType, routeId: requiredString(modeValue, "routeId") } as const
+      : invalid("mode.type must be generation-auto or generation-route");
+  if (!Array.isArray(object.assets)) invalid("assets must be an array");
+  const assets = object.assets.map((value, index) => {
+    const asset = asObject(value, `assets[${index}]`);
+    const mediaType = requiredString(asset, "mediaType");
+    if (mediaType !== "image" && mediaType !== "video" && mediaType !== "audio") {
+      invalid(`assets[${index}].mediaType is not supported`);
+    }
+    const supportedMediaType: "image" | "video" | "audio" = mediaType;
+    const mimeType = requiredString(asset, "mimeType");
+    if (!mimeType.startsWith(`${supportedMediaType}/`)) {
+      invalid(`assets[${index}].mimeType does not match mediaType`);
+    }
+    return { mediaType: supportedMediaType, mimeType };
+  });
+  const modelValue = asObject(object.model, "model");
+  return {
+    message: requiredText(object, "message"),
+    sessionId: optionalString(object, "sessionId"),
+    model: {
+      provider: requiredString(modelValue, "provider"),
+      modelId: requiredString(modelValue, "modelId"),
+    },
+    mode,
+    assets,
   };
 }
 

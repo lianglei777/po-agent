@@ -149,6 +149,7 @@ export function MessageList({
                 entryId={entryId}
                 forking={forkingEntryId === entryId}
                 message={message}
+                cwd={cwd}
                 onEdit={() =>
                   previousEntryId &&
                   onEdit(previousEntryId, messageText(message))
@@ -207,6 +208,7 @@ export function MessageList({
 
 function UserMessageView({
   message,
+  cwd,
   entryId,
   running,
   canEdit,
@@ -216,6 +218,7 @@ function UserMessageView({
   onFork,
 }: {
   message: UserMessage;
+  cwd?: string;
   entryId?: string;
   running: boolean;
   canEdit: boolean;
@@ -240,6 +243,35 @@ function UserMessageView({
   return (
     <div className="flex flex-col items-end">
       <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] break-words whitespace-pre-wrap">
+        {message.generationAssets?.length ? (
+          <div className="mb-2 grid max-w-xl grid-cols-2 gap-2 first:mb-0">
+            {message.generationAssets.map((asset, index) => {
+              const source = asset.ref.type === "workspace-file" && cwd
+                ? rawFileUrl(generationArtifactPath(cwd, asset.ref.relativePath))
+                : undefined;
+              return source ? (
+                <div
+                  className="min-h-24 overflow-hidden rounded-lg border border-line-subtle bg-[var(--tool-bg)]"
+                  key={`${asset.slot}-${asset.name}-${index}`}
+                >
+                  <MediaPreview
+                    className="max-h-60"
+                    contentType={asset.mimeType}
+                    name={asset.name}
+                    src={source}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="rounded-lg border border-line-subtle px-3 py-2 text-xs text-muted"
+                  key={`${asset.slot}-${asset.name}-${index}`}
+                >
+                  {asset.name}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         {imageBlocks.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {/* image content */}
@@ -731,7 +763,7 @@ function ExecutionStep({
           <ChevronRight className={styles.stepChevron} />
         </summary>
         {generation ? (
-          <GenerationToolResult cwd={cwd} details={generation} />
+          <GenerationToolResult cwd={cwd} details={generation} toolInput={block.input} />
         ) : (
           <pre className="max-h-[400px] overflow-auto border-t border-line-subtle bg-[var(--tool-bg)] px-3 py-2.5 font-ui-mono text-meta leading-[1.65] whitespace-pre-wrap text-muted">
             {JSON.stringify(block.input, null, 2)}
@@ -774,9 +806,11 @@ function FinalAssistantBlock({ block }: { block: TextContent | ImageContent }) {
 function GenerationToolResult({
   details,
   cwd,
+  toolInput,
 }: {
   details: GenerationToolDetails;
   cwd?: string;
+  toolInput: Record<string, unknown>;
 }) {
   const { t } = useI18n();
   const elapsedMs = useElapsedMs(details.createdAt, details.completedAt);
@@ -825,6 +859,35 @@ function GenerationToolResult({
           {details.waitTimedOut ? ` · ${t.chat.message.generationContinuesInBackground}` : ""}
         </p>
       ) : null}
+      <div className="grid gap-2 text-xs">
+        <GenerationAuditSection
+          label={t.chat.message.generationToolInput}
+          value={toolInput}
+        />
+        {details.input ? (
+          <GenerationAuditSection
+            label={t.chat.message.generationResolvedInput}
+            value={{
+              routeId: details.routeId,
+              providerId: details.providerId,
+              providerOperation: details.providerOperation,
+              ...details.input,
+            }}
+          />
+        ) : null}
+        {details.requestSnapshot !== undefined ? (
+          <GenerationAuditSection
+            label={t.chat.message.generationProviderRequest}
+            value={details.requestSnapshot}
+          />
+        ) : null}
+        {details.responseSnapshot !== undefined ? (
+          <GenerationAuditSection
+            label={t.chat.message.generationProviderResponse}
+            value={details.responseSnapshot}
+          />
+        ) : null}
+      </div>
       {details.error ? (
         <p className="text-xs text-destructive-text">
           {details.error.code}: {details.error.message}
@@ -865,6 +928,25 @@ function GenerationToolResult({
         );
       })}
     </div>
+  );
+}
+
+function GenerationAuditSection({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}) {
+  return (
+    <details className="rounded-md border border-line-subtle bg-canvas">
+      <summary className="cursor-pointer select-none px-3 py-2 text-muted">
+        {label}
+      </summary>
+      <pre className="max-h-80 overflow-auto border-t border-line-subtle px-3 py-2.5 font-ui-mono text-caption leading-[1.6] whitespace-pre-wrap text-primary">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    </details>
   );
 }
 

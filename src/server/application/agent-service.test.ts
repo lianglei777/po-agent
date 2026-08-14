@@ -153,6 +153,37 @@ describe("AgentService", () => {
       expect(reviews.requiresReview("session-1")).toBe(false),
     );
   });
+
+  it("adds server-owned generation audit context to a prompt", async () => {
+    const commands: unknown[] = [];
+    const execute = async <T,>(command: unknown) => {
+      commands.push(command);
+      return undefined as T;
+    };
+    const runtime = runtimeStub({ execute });
+    const runtimes = new InMemoryAgentRegistry();
+    runtimes.register("session-1", runtime);
+    const service = new AgentService(
+      {} as SessionRepository,
+      runtimes,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      undefined,
+      { getPromptContext: vi.fn(async () => "trusted run audit") },
+    );
+
+    await service.execute("session-1", {
+      type: "prompt",
+      message: "Why did the previous image look unchanged?",
+    });
+
+    await vi.waitFor(() => expect(commands).toContainEqual({
+      type: "prompt",
+      message: "Why did the previous image look unchanged?",
+      generationContext: "trusted run audit",
+    }));
+  });
 });
 
 function runtimeStub(

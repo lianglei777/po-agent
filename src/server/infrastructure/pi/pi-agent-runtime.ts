@@ -115,6 +115,29 @@ export class PiAgentRuntime implements AgentRuntime {
       case "prompt":
         await this.refreshWebAccessConfigIfNeeded();
         await this.refreshModelConfigIfNeeded();
+        if (command.generationContext) {
+          const latestContext = [...this.session.sessionManager.getBranch()]
+            .reverse()
+            .find((entry) =>
+              entry.type === "custom_message" &&
+              entry.customType === "po-agent-generation-context"
+            );
+          if (
+            command.generation ||
+            latestContext?.type !== "custom_message" ||
+            latestContext.content !== command.generationContext
+          ) {
+            // 每个生成回合都要保留素材呈现元数据；仅普通历史快照允许去重，避免后续追问不断堆叠上下文。
+            this.session.sessionManager.appendCustomMessageEntry(
+              "po-agent-generation-context",
+              command.generationContext,
+              false,
+              command.generation?.assets.length
+                ? { assets: command.generation.assets }
+                : undefined,
+            );
+          }
+        }
         await this.session.prompt(command.message, {
           images: mapImages(command.images),
         });

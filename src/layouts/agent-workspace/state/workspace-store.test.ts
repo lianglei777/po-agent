@@ -34,6 +34,26 @@ describe("agent workspace store", () => {
     });
   });
 
+  it("keeps the chat mounted when the selected session is selected again", () => {
+    const refreshedSession = { ...session, messageCount: 3 };
+    const store = createWorkspaceStore({
+      activeView: "model-provider",
+      selectedSession: session,
+      activeCwd: session.cwd,
+      sessionSurface: "generation",
+      chatInstanceKey: 3,
+    });
+
+    store.getState().selectSession(refreshedSession);
+
+    expect(store.getState()).toMatchObject({
+      activeView: "chat",
+      selectedSession: refreshedSession,
+      sessionSurface: "chat",
+      chatInstanceKey: 3,
+    });
+  });
+
   it("resets session-scoped state when the workspace changes", () => {
     const store = createWorkspaceStore({
       selectedSession: session,
