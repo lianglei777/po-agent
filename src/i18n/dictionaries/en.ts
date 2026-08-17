@@ -434,7 +434,6 @@ export const en = {
       generationResolvedInput: "Fully resolved generation input",
       generationProviderRequest: "Request sent to the generation API",
       generationProviderResponse: "Full response from the generation API",
-      generationPreview: "Preview",
       generationElapsed: "Elapsed",
       generationDuration: "Duration",
       generationContinuesInBackground: "Task continues in the background",

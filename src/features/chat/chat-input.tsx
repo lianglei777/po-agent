@@ -7,7 +7,7 @@ import type {
   Ref,
   RefObject,
 } from "react";
-import { Button, Select, Tooltip } from "antd";
+import { Button, Image, Select, Tooltip } from "antd";
 import {
   Brain,
   Clock3,
@@ -224,11 +224,13 @@ export function ChatInput({
                   className="relative size-16 flex-none overflow-hidden rounded-lg border border-line-subtle bg-panel"
                   key={image.id}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  {/* 附件缩略图统一用 antd Image，点击可直接放大预览；宽高固定 64px 以维持方形裁切。 */}
+                  <Image
                     alt={image.name}
                     className="size-full object-cover"
+                    height={64}
                     src={image.previewUrl}
+                    width={64}
                   />
                   {/* Ant Button 自带定位规则，外层负责锚定，避免移除按钮被缩略图裁掉。 */}
                   <span className="absolute top-1 right-1 z-10 inline-flex">

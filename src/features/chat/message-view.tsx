@@ -13,7 +13,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import dynamic from "next/dynamic";
 import remarkGfm from "remark-gfm";
-import { Button, Collapse, Tag } from "antd";
+import { Button, Collapse, Image, Tag } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -254,12 +254,25 @@ function UserMessageView({
                   className="min-h-24 overflow-hidden rounded-lg border border-line-subtle bg-[var(--tool-bg)]"
                   key={`${asset.slot}-${asset.name}-${index}`}
                 >
-                  <MediaPreview
-                    className="max-h-60"
-                    contentType={asset.mimeType}
-                    name={asset.name}
-                    src={source}
-                  />
+                  {/* 生成素材图同样用固定 160x112 磁贴；MediaPreview 的图片分支是弹性尺寸 + overflow-auto，长图会出滚动条。 */}
+                  {asset.mimeType.startsWith("image/") ? (
+                    <div className="p-3">
+                      <Image
+                        alt={asset.name}
+                        className="size-full object-contain"
+                        height={112}
+                        src={source}
+                        width={160}
+                      />
+                    </div>
+                  ) : (
+                    <MediaPreview
+                      className="max-h-60"
+                      contentType={asset.mimeType}
+                      name={asset.name}
+                      src={source}
+                    />
+                  )}
                 </div>
               ) : (
                 <div
@@ -275,16 +288,19 @@ function UserMessageView({
         {imageBlocks.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {/* image content */}
+            {/* 固定 160x112 缩略磁贴 + object-contain 自适应；antd Image 的 className 只作用于内层 img
+                （自带 width:100%），百分比/最大尺寸约束在 flex 布局中解析不稳定，因此用 width/height props 固定盒子尺寸。 */}
             {imageBlocks.map((block, index) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 alt={t.chat.message.attachedImage}
-                className="max-h-60 max-w-60 rounded-lg object-contain"
+                className="size-full rounded-lg object-contain"
+                height={112}
                 key={index}
                 src={
                   block.source.url ??
                   `data:${block.source.mediaType};base64,${block.source.data}`
                 }
+                width={160}
               />
             ))}
           </div>
@@ -907,12 +923,25 @@ function GenerationToolResult({
             {absolutePath &&
             artifact.contentType &&
             artifact.kind !== "text" ? (
-              <MediaPreview
-                className="max-h-72 min-h-36"
-                contentType={artifact.contentType}
-                name={`${t.chat.message.generationArtifact} ${index + 1}`}
-                src={rawFileUrl(absolutePath)}
-              />
+              // 执行过程处于限高滚动容器内：图片固定 160x112 缩略磁贴避免长图撑出滚动条；视频/音频保留原展示。
+              artifact.contentType.startsWith("image/") ? (
+                <div className="p-3">
+                  <Image
+                    alt={`${t.chat.message.generationArtifact} ${index + 1}`}
+                    className="size-full object-contain"
+                    height={112}
+                    src={rawFileUrl(absolutePath)}
+                    width={160}
+                  />
+                </div>
+              ) : (
+                <MediaPreview
+                  className="max-h-72 min-h-36"
+                  contentType={artifact.contentType}
+                  name={`${t.chat.message.generationArtifact} ${index + 1}`}
+                  src={rawFileUrl(absolutePath)}
+                />
+              )
             ) : null}
             {artifact.text ? (
               <p className="whitespace-pre-wrap p-3 text-sm">
@@ -987,6 +1016,19 @@ function GenerationArtifactGallery({
             : null;
           const src = absolutePath ? rawFileUrl(absolutePath) : artifact.remoteUrl;
           if (!src || !artifact.contentType) return null;
+          // 图片产物直接用 antd Image 内置预览；antd 预览不支持视频，视频保留按钮 + 弹窗。
+          if (artifact.kind === "image") {
+            return (
+              <Image
+                alt={`${t.chat.message.generationArtifact} ${index + 1}`}
+                className="size-full rounded-md border border-line-subtle bg-subtle object-cover"
+                height={112}
+                key={artifact.id}
+                src={src}
+                width={160}
+              />
+            );
+          }
           return (
             <button
               aria-label={`${t.chat.message.openGenerationArtifact} ${index + 1}`}
@@ -995,12 +1037,7 @@ function GenerationArtifactGallery({
               onClick={() => setSelectedId(artifact.id)}
               type="button"
             >
-              {artifact.kind === "video" ? (
-                <video className="size-full object-cover" muted playsInline preload="metadata" src={src} />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img alt="" className="size-full object-cover" src={src} />
-              )}
+              <video className="size-full object-cover" muted playsInline preload="metadata" src={src} />
             </button>
           );
         })}
@@ -1035,15 +1072,17 @@ function GenerationArtifactGallery({
 }
 function AssistantImage({ block }: { block: ImageContent }) {
   const { t } = useI18n();
+  // 执行过程/最终回复统一渲染为固定 160x112 缩略磁贴，长图不再撑出滚动条，点击放大看全图。
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       alt={t.chat.message.assistantImage}
-      className="my-2 max-h-80 max-w-full rounded-lg object-contain"
+      className="my-2 size-full rounded-lg object-contain"
+      height={112}
       src={
         block.source.url ??
         `data:${block.source.mediaType};base64,${block.source.data}`
       }
+      width={160}
     />
   );
 }

@@ -62,7 +62,6 @@ export function ChatGenerationRunCard({
                   className="rounded-md object-cover"
                   height={112}
                   key={`${asset.slot}-${asset.ref.relativePath}`}
-                  preview={{ mask: t.chat.message.generationPreview }}
                   src={src}
                   width={112}
                 />
@@ -118,7 +117,6 @@ export function ChatGenerationRunCard({
             <Image
               alt={`${t.chat.message.generationArtifact} ${index + 1}`}
               className="max-h-[66vh] max-w-full object-contain"
-              preview={{ mask: t.chat.message.generationPreview }}
               src={src}
             />
           </div>

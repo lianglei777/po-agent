@@ -418,7 +418,6 @@ export const zh = {
       generationResolvedInput: "服务端解析后的完整生成入参",
       generationProviderRequest: "发送给内容生成 API 的请求",
       generationProviderResponse: "内容生成 API 的完整回复",
-      generationPreview: "预览",
       generationElapsed: "已等待",
       generationDuration: "用时",
       generationContinuesInBackground: "任务仍在后台运行",

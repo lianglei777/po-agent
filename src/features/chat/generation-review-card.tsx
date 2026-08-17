@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Input, Tag } from "antd";
+import { Alert, Button, Image, Input, Tag } from "antd";
 import { CheckCircle2, LoaderCircle, Square } from "@/components/icons";
 import {
   GenerationParameterEditor,
@@ -201,13 +201,29 @@ function GenerationReviewProgress({
             ? generationArtifactPath(cwd, artifact.localPath)
             : null;
         return path && artifact.contentType ? (
-          <MediaPreview
-            className="max-h-72 min-h-36 overflow-hidden rounded-md border border-line-subtle bg-canvas"
-            contentType={artifact.contentType}
-            key={artifact.id}
-            name={`${t.chat.message.generationArtifact} ${index + 1}`}
-            src={rawFileUrl(path)}
-          />
+          // 图片产物统一固定 160x112 磁贴，避免 MediaPreview 弹性尺寸在长图时出滚动条；视频/音频保留原展示。
+          artifact.contentType.startsWith("image/") ? (
+            <div
+              className="min-h-36 overflow-hidden rounded-md border border-line-subtle bg-canvas p-3"
+              key={artifact.id}
+            >
+              <Image
+                alt={`${t.chat.message.generationArtifact} ${index + 1}`}
+                className="size-full object-contain"
+                height={112}
+                src={rawFileUrl(path)}
+                width={160}
+              />
+            </div>
+          ) : (
+            <MediaPreview
+              className="max-h-72 min-h-36 overflow-hidden rounded-md border border-line-subtle bg-canvas"
+              contentType={artifact.contentType}
+              key={artifact.id}
+              name={`${t.chat.message.generationArtifact} ${index + 1}`}
+              src={rawFileUrl(path)}
+            />
+          )
         ) : null;
       })}
     </section>

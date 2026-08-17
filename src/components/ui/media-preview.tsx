@@ -1,3 +1,5 @@
+import { Image } from "antd";
+
 export function MediaPreview({
   className,
   contentType,
@@ -30,10 +32,10 @@ export function MediaPreview({
       </div>
     );
   }
+  // 图片统一走 antd Image 内置预览（hover 遮罩、点击/回车放大），与聊天内其它图片行为保持一致。
   return (
     <div className={`grid min-h-0 flex-1 place-items-center overflow-auto p-3 ${className ?? ""}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img alt={name} className="max-h-full max-w-full object-contain" src={src} />
+      <Image alt={name} className="max-h-full max-w-full object-contain" src={src} />
     </div>
   );
 }

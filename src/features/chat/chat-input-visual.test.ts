@@ -98,7 +98,7 @@ describe("chat input visual contract", () => {
   });
 
   it("uses Ant controls while preserving the native textarea bridge", () => {
-    expect(source).toContain('import { Button, Select, Tooltip } from "antd"');
+    expect(source).toContain('import { Button, Image, Select, Tooltip } from "antd"');
     expect(source).toContain('import { Textarea } from "@/components/ui/textarea"');
     expect(source).toContain('ref={textareaRef}');
     expect(source).toContain('autoSize={{ minRows: 2, maxRows: 8 }}');
