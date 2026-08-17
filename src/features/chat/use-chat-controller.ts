@@ -903,12 +903,27 @@ export function useChatController(options: ChatControllerOptions) {
           setActionError(result.message || t.chat.input.generationPlanFailed);
           return;
         }
-        turnAlreadySubmitted = true;
-        if (result.intent === "generation") {
-          closeSource();
-          // 服务端已持久化 user/toolCall/toolResult；立即以会话事实替换本地草稿，避免重复消息和刷新前后结构漂移。
-          await reloadHistory();
-          generationTurnPersisted = true;
+       turnAlreadySubmitted = true;
+       if (result.intent === "generation") {
+         closeSource();
+         // 先乐观插入用户消息，让用户立即看到自己的输入；
+         // reloadHistory 返回后由服务端事实整体替换，不会产生重复或结构漂移。
+         const optimisticImageInputs: ImageInput[] = images.map(
+           ({ data, mimeType }) => ({ type: "image" as const, data, mimeType }),
+         );
+         setMessages((current) => [
+           ...current,
+           {
+             role: "user" as const,
+             content: createUserContent(text, optimisticImageInputs),
+             timestamp: turnStartedAt,
+             clientId: turnId,
+             status: "pending" as const,
+             generationAssets: submittedGenerationAssets,
+           },
+         ]);
+         await reloadHistory();
+         generationTurnPersisted = true;
           setGenerationRuns((current) => [
             ...current.filter(({ run }) => run.id !== result.run.run.id),
             result.run,
