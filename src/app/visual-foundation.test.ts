@@ -40,6 +40,31 @@ describe("Ant Design visual foundation", () => {
     expect(css).toContain("animation-duration: 0.01ms");
   });
 
+  test("aligns font tokens with the Ant Design v6 typography scale", () => {
+    // 字号变量基于 Ant Design v6 字体刻度整体 +2px
+    expect(css).toContain("--fs-caption: 13px");
+    expect(css).toContain("--fs-meta: 14px");
+    expect(css).toContain("--fs-xs: 15px");
+    expect(css).toContain("--fs-sm: 16px");
+    expect(css).toContain("--fs-body-sm: 16px");
+    expect(css).toContain("--fs-prose: 18px");
+    expect(css).toContain("--fs-base: 18px");
+    expect(css).toContain("--fs-lg: 22px");
+    // @theme inline 全部引用变量，不使用硬编码值
+    expect(css).toContain("--text-xs: var(--fs-xs)");
+    expect(css).toContain("--text-sm: var(--fs-sm)");
+    expect(css).toContain("--text-base: var(--fs-base)");
+    expect(css).toContain("--text-lg: var(--fs-lg)");
+    // body 字号引用变量
+    expect(css).toContain("font-size: var(--fs-sm)");
+    // Ant Design ConfigProvider 设置了字体 token
+    const provider = read("src/components/providers/ant-design-provider.tsx");
+    expect(provider).toContain("fontSize: 16");
+    expect(provider).toContain("fontSizeSM: 14");
+    expect(provider).toContain("fontSizeLG: 18");
+    expect(provider).toContain("fontWeightStrong: 600");
+  });
+
   test("keeps unsized Ant icons visible", () => {
     const iconRule = css.slice(
       css.indexOf(".anticon > svg"),

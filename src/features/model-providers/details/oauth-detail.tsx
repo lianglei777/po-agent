@@ -266,7 +266,7 @@ function OAuthState({
     return (
       <div className="flex flex-col gap-2 text-body-sm text-muted">
         <p>{t.models.enterCode}</p>
-        <code className="self-start rounded border border-line px-4 py-2 text-[16px] font-bold">
+        <code className="self-start rounded border border-line px-4 py-2 text-base font-bold">
           {state.userCode}
         </code>
         <Typography.Link href={state.verificationUri} target="_blank" rel="noreferrer">

@@ -251,7 +251,7 @@ export function ConversationNavigator({
               top: "var(--conversation-preview-y)",
             }}
           >
-            <p className="line-clamp-1 text-[13px] leading-5 font-semibold text-primary">
+            <p className="line-clamp-1 text-xs leading-5 font-semibold text-primary">
               {hoveredEntry.title}
             </p>
             {hoveredEntry.summary ? (

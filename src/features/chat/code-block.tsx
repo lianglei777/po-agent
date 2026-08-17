@@ -33,7 +33,7 @@ export function CodeBlock({ code, language }: { code: string; language: string }
         </Button>
       </div>
       <SyntaxHighlighter
-        customStyle={{ margin: 0, background: "transparent", fontSize: "12.5px" }}
+        customStyle={{ margin: 0, background: "transparent", fontSize: "var(--fs-xs)" }}
         language={language}
         showLineNumbers
         style={dark ? vscDarkPlus : vs}

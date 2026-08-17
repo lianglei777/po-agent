@@ -48,24 +48,23 @@
   --font-ui-mono:
     var(--font-noto-mono), "JetBrains Mono", "Fira Code", Consolas,
     ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
-  /* 字号 token — 生成 text-caption / text-meta / text-body-sm / text-prose 工具类 */
+  /* 字号 token — 基于 Ant Design v6 字体规范整体 +2px，全部引用 CSS 变量统一管理 */
   --text-caption: var(--fs-caption);
-  --text-caption--line-height: 1.2;
+  --text-caption--line-height: 1.25;
   --text-meta: var(--fs-meta);
-  --text-meta--line-height: 1.25;
+  --text-meta--line-height: 1.5;
+  --text-xs: var(--fs-xs);
+  --text-xs--line-height: 1.5;
   --text-body-sm: var(--fs-body-sm);
-  --text-body-sm--line-height: 1.4;
+  --text-body-sm--line-height: 1.5;
+  --text-sm: var(--fs-sm);
+  --text-sm--line-height: 1.5;
   --text-prose: var(--fs-prose);
-  --text-prose--line-height: 1.5;
-  /* 在 Ant Design 默认字号上补充开发工具需要的紧凑刻度。 */
-  --text-xs: 12px;
-  --text-xs--line-height: 1rem;
-  --text-sm: 14px;
-  --text-sm--line-height: 1.25rem;
-  --text-base: 16px;
-  --text-base--line-height: 1.5rem;
-  --text-lg: 18px;
-  --text-lg--line-height: 1.75rem;
+  --text-prose--line-height: 1.55;
+  --text-base: var(--fs-base);
+  --text-base--line-height: 1.55;
+  --text-lg: var(--fs-lg);
+  --text-lg--line-height: 1.4;
 }
 
 :root {
@@ -86,11 +85,15 @@
   --text: #1f1f1f;
   --text-muted: #595959;
   --text-dim: #8c8c8c;
-  /* 字号 token — 扩展 Tailwind 默认刻度，补充项目所需的中间值 */
-  --fs-caption: 11px;
-  --fs-meta: 12px;
-  --fs-body-sm: 13px;
-  --fs-prose: 15px;
+  /* 字号 token — 基于 Ant Design v6 字体刻度整体 +2px，提升阅读舒适度 */
+  --fs-caption: 13px;  /* 徽章、时间戳、微型标签 */
+  --fs-meta: 14px;     /* 技术元数据、标签 */
+  --fs-xs: 15px;       /* 代码、紧凑技术值 */
+  --fs-sm: 16px;       /* 默认 UI 文本（基准字号） */
+  --fs-body-sm: 16px;  /* 描述文本、次要信息 */
+  --fs-prose: 18px;    /* 聊天正文 */
+  --fs-base: 18px;     /* 正文段落 */
+  --fs-lg: 22px;       /* 区块标题 */
   --accent: #1677ff;
   --accent-hover: #4096ff;
   --accent-deep: #0958d9;
@@ -170,9 +173,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, ui-sans-serif,
-    "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 14px;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: var(--fs-sm);
   font-synthesis: none;
   overflow-x: auto;
   overflow-y: hidden;

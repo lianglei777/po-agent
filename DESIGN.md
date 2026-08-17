@@ -87,16 +87,17 @@ Ant Design seed and alias tokens are the upstream source. `ConfigProvider` appli
 - Use the native system sans stack for all interface text, headings, navigation, forms, and chat prose.
 - Paths, code, compact metadata, model identifiers, and technical values use the mono stack.
 - Headings use weight 600 with restrained negative tracking; there is no decorative display serif.
-- Font sizes use a semantic token scale — do not use arbitrary `text-[Npx]` values:
-  - `text-caption` (11px, lh 1.2) — badges, timestamps, micro labels
-  - `text-meta` (12px, lh 1.25) — technical metadata, section labels
-  - `text-xs` (13px) — sidebar items, compact values
-  - `text-body-sm` (14px, lh 1.4) — descriptions, secondary text
-  - `text-sm` (15px) — default UI text
-  - `text-prose` (16px, lh 1.5) — chat composer body
-  - `text-base` (17px) — body prose
-  - `text-lg` (19px) — section headings
-- Default UI text is 14px (`text-sm`); compact code and technical metadata use 11–12px (`text-caption`, `text-meta`, `text-xs`).
+- Font sizes are based on the Ant Design v6 typography scale with a +2px comfort offset — do not use arbitrary `text-[Npx]` values:
+  - `text-caption` (13px, lh 1.25) — badges, timestamps, micro labels
+  - `text-meta` (14px, lh 1.5) — technical metadata, section labels
+  - `text-xs` (15px, lh 1.5) — code, compact technical values
+  - `text-sm` (16px, lh 1.5) — default UI text (base size)
+  - `text-body-sm` (16px, lh 1.5) — descriptions, secondary text
+  - `text-prose` (18px, lh 1.55) — chat composer body
+  - `text-base` (18px, lh 1.55) — body prose
+  - `text-lg` (22px, lh 1.4) — section headings
+- Ant Design `ConfigProvider` sets `token.fontSize` to 16 and heading sizes proportionally; project CSS variables (`--fs-*`) mirror these values so Tailwind utilities and Ant components stay in sync.
+- Default UI text is 16px (`text-sm`); compact code and technical metadata use 13–15px (`text-caption`, `text-meta`, `text-xs`).
 - Body prose should generally remain within 65–75 characters per line.
 
 ## Boundaries, shape, and elevation
