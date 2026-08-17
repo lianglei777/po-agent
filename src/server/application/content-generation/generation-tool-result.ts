@@ -2,9 +2,16 @@ import type {
   GenerationArtifactDto,
   GenerationRouteDto,
   GenerationToolDetails,
+  GenerationRunStatus,
 } from "@/contracts/generation";
 import type { AgentToolResult } from "@/server/ports/agent-tool";
 import type { GenerationRunView } from "./generation-run-service";
+
+const TERMINAL_STATUSES = new Set<GenerationRunStatus>([
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
 
 /** 将持久化 Run 映射为 Agent 工具协议，供真实工具调用和 Chat 编排共同复用。 */
 export function generationToolResult(
@@ -51,10 +58,16 @@ export function generationToolResult(
   const providerTask = details.providerTaskId
     ? `; ${details.providerId === "runninghub" ? "RunningHub" : "provider"} task ID: ${details.providerTaskId}`
     : "";
+  // 非终态或超时时的过时提示，引导 AI 在用户询问时主动调用 get_generation 刷新。
+  const staleHint = details.waitTimedOut
+    ? " (wait timed out, call get_generation to refresh)"
+    : !TERMINAL_STATUSES.has(details.status)
+      ? " (snapshot, may be stale)"
+      : "";
   return {
     content: [{
       type: "text",
-      text: `Local generation run ID: ${details.runId}${providerTask}; status: ${details.status}${suffix}.`,
+      text: `Local generation run ID: ${details.runId}${providerTask}; status: ${details.status}${suffix}${staleHint}.`,
     }],
     details,
   };

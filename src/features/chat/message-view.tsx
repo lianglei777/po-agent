@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronDown,
   Copy,
+  FileMusic,
   GitBranch,
   GitFork,
   PencilLine,
@@ -229,6 +230,7 @@ function UserMessageView({
   onFork: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [selectedAssetIndex, setSelectedAssetIndex] = useState<number | null>(null);
   const { t } = useI18n();
   const blocks =
     typeof message.content === "string"
@@ -241,6 +243,12 @@ function UserMessageView({
   const textBlocks = blocks.filter(
     (block): block is TextContent => block.type === "text",
   );
+  const selectedAsset = selectedAssetIndex !== null
+    ? message.generationAssets?.[selectedAssetIndex]
+    : undefined;
+  const selectedAssetSource = selectedAsset?.ref.type === "workspace-file" && cwd
+    ? rawFileUrl(generationArtifactPath(cwd, selectedAsset.ref.relativePath))
+    : undefined;
   return (
     <div className="flex flex-col items-end">
       <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] break-words whitespace-pre-wrap">
@@ -251,29 +259,42 @@ function UserMessageView({
                ? rawFileUrl(generationArtifactPath(cwd, asset.ref.relativePath))
                : undefined;
              return source ? (
-                asset.mimeType.startsWith("image/") ? (
-                  // 图片素材与产物画廊统一：固定 160x112 磁贴 + object-cover + 边框/背景/圆角
-                  <Image
-                    alt={asset.name}
-                    className="size-full rounded-md border border-line-subtle bg-subtle object-cover"
-                    height={112}
-                    key={`${asset.slot}-${asset.name}-${index}`}
-                    src={source}
-                    width={160}
-                  />
-                ) : (
-                  <div
-                    className="min-h-24 overflow-hidden rounded-lg border border-line-subtle bg-[var(--tool-bg)]"
-                    key={`${asset.slot}-${asset.name}-${index}`}
-                  >
-                    <MediaPreview
-                      className="max-h-60"
-                      contentType={asset.mimeType}
-                      name={asset.name}
-                      src={source}
-                    />
-                  </div>
-                )
+               asset.mimeType.startsWith("image/") ? (
+                 // 图片素材与产物画廊统一：固定 160x112 磁贴 + object-cover + 边框/背景/圆角
+                 <Image
+                   alt={asset.name}
+                   className="size-full rounded-md border border-line-subtle bg-subtle object-cover"
+                   height={112}
+                   key={`${asset.slot}-${asset.name}-${index}`}
+                   src={source}
+                   width={160}
+                 />
+               ) : (
+                  // 非图片素材与产物画廊统一：固定 160x112 磁贴 + 点击弹窗预览
+                 <button
+                   aria-label={asset.name}
+                    className="relative h-28 w-40 overflow-hidden rounded-md border border-line-subtle bg-subtle outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
+                   key={`${asset.slot}-${asset.name}-${index}`}
+                   onClick={() => setSelectedAssetIndex(index)}
+                   type="button"
+                 >
+                  {asset.mimeType.startsWith("video/") ? (
+                      <>
+                      <video className="size-full object-cover" muted playsInline preload="metadata" src={source} />
+                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+                        {asset.mimeType.split("/")[1]?.toUpperCase()}
+                      </span>
+                      </>
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-muted">
+                      <FileMusic className="size-7" />
+                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+                        {asset.mimeType.split("/")[1]?.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                 </button>
+               )
              ) : (
                <div
                  className="rounded-lg border border-line-subtle px-3 py-2 text-xs text-muted"
@@ -354,6 +375,27 @@ function UserMessageView({
         {/* time */}
         {message.timestamp ? <MessageTime value={message.timestamp} /> : null}
       </div>
+      <Dialog
+        open={selectedAsset !== undefined}
+        onOpenChange={(open) => !open && setSelectedAssetIndex(null)}
+      >
+        {selectedAsset && selectedAssetSource ? (
+          <DialogContent
+            className="max-h-[90vh] max-w-5xl grid-rows-[auto,minmax(0,1fr),auto]"
+            closeLabel={t.common.close}
+          >
+            <DialogHeader>
+              <DialogTitle>{selectedAsset.name}</DialogTitle>
+            </DialogHeader>
+            <MediaPreview
+              className="min-h-64 max-h-[70vh]"
+              contentType={selectedAsset.mimeType}
+              name={selectedAsset.name}
+              src={selectedAssetSource}
+            />
+          </DialogContent>
+        ) : null}
+      </Dialog>
     </div>
   );
 }
@@ -1088,16 +1130,19 @@ function GenerationArtifactGallery({
               />
             );
           }
-          return (
-            <button
-              aria-label={`${t.chat.message.openGenerationArtifact} ${index + 1}`}
-              className="h-28 w-40 overflow-hidden rounded-md border border-line-subtle bg-subtle outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
-              key={artifact.id}
-              onClick={() => setSelectedId(artifact.id)}
-              type="button"
-            >
+         return (
+           <button
+             aria-label={`${t.chat.message.openGenerationArtifact} ${index + 1}`}
+              className="relative h-28 w-40 overflow-hidden rounded-md border border-line-subtle bg-subtle outline-none hover:border-line-strong focus-visible:ring-2 focus-visible:ring-ring"
+             key={artifact.id}
+             onClick={() => setSelectedId(artifact.id)}
+             type="button"
+          >
               <video className="size-full object-cover" muted playsInline preload="metadata" src={src} />
-            </button>
+              <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+                {artifact.contentType?.split("/")[1]?.toUpperCase()}
+              </span>
+          </button>
           );
         })}
       </div>

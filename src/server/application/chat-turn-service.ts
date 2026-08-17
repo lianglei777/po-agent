@@ -24,6 +24,11 @@ const ACTIVE_GENERATION_STATUSES = new Set([
   "running",
   "cancel_requested",
 ]);
+const TERMINAL_GENERATION_STATUSES = new Set([
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
 
 export class ChatTurnService {
   private readonly activeTurns = new Set<string>();
@@ -100,6 +105,9 @@ export class ChatTurnService {
         409,
       );
     }
+    // 兜底：补录已终态但尚未同步 toolResult 的 chat-workflow 生成 Run，
+    // 防止客户端关闭期间 Run 完成后 AI 上下文仍停留在初始状态。
+    await this.syncTerminalGenerationTurns(sessionId, recentRuns);
     if (!input.generation) {
       await this.agents.execute(sessionId, {
         type: "prompt",
@@ -183,7 +191,7 @@ export class ChatTurnService {
         plan,
       });
     } catch (error) {
-      // 即使 Run 创建前失败，也闭合工具调用，避免会话刷新后永久显示为“执行中”。
+      // 即使 Run 创建前失败，也闭合工具调用，避免会话刷新后永久显示为"执行中"。
       await this.agents.recordGenerationTurnResult(sessionId, {
         turnId: input.turnId,
         toolName: plan.toolName,
@@ -205,12 +213,8 @@ export class ChatTurnService {
       });
       throw error;
     }
-    const result = generationToolResult(view, { route: planned.route });
-    await this.agents.recordGenerationTurnResult(sessionId, {
-      turnId: input.turnId,
-      toolName: plan.toolName,
-      result: { ...result, isError: view.run.status === "failed" },
-    });
+    // 成功路径不立即记录 toolResult；Run 到达终态后由客户端 sync 或下次 submit 兜底补录，
+    // 避免 AI 上下文停留在 queued 等初始状态。
     return {
       type: "accepted",
       intent: "generation",
@@ -227,5 +231,36 @@ export class ChatTurnService {
       this.runs.listRunsForContext(sessionId),
     ]);
     return { agent, generationRuns };
+  }
+
+  /** 同步已终态的 chat-workflow 生成 Run 的 toolResult 到会话历史。 */
+  async syncGenerationTurnResult(runId: string): Promise<void> {
+    const view = await this.runs.getRun(runId);
+    if (!view) return;
+    if (view.run.source !== "chat-workflow" || !view.run.sourceRef) return;
+    if (!TERMINAL_GENERATION_STATUSES.has(view.run.status)) return;
+    const toolName = view.run.capability.endsWith("-video")
+      ? "generate_video" as const
+      : "generate_image" as const;
+    const result = generationToolResult(view);
+    await this.agents.recordGenerationTurnResult(view.run.sessionId, {
+      turnId: view.run.sourceRef,
+      toolName,
+      result: { ...result, isError: view.run.status === "failed" },
+    });
+  }
+
+  private async syncTerminalGenerationTurns(
+    sessionId: string,
+    recentRuns: Awaited<ReturnType<GenerationRunService["listRunsForContext"]>>,
+  ): Promise<void> {
+    for (const { run } of recentRuns) {
+      if (
+        run.source !== "chat-workflow" ||
+        !run.sourceRef ||
+        !TERMINAL_GENERATION_STATUSES.has(run.status)
+      ) continue;
+      await this.syncGenerationTurnResult(run.id);
+    }
   }
 }

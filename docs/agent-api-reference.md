@@ -2623,6 +2623,7 @@ GET  /api/generation-runs/:id
 POST /api/generation-runs/:id/confirm
 POST /api/generation-runs/:id/cancel
 POST /api/generation-runs/:id/retry
+POST /api/generation-runs/:id/sync
 Content-Type: application/json
 ```
 

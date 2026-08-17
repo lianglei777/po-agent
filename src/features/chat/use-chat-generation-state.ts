@@ -14,6 +14,7 @@ import {
   confirmChatGenerationRun,
   loadChatGenerationRun,
   loadGenerationComposerOptions,
+  syncGenerationRunResult,
 } from "./generation-api";
 import { composerGenerationSlots } from "./chat-generation-logic";
 import type { ChatGenerationAsset } from "./chat-generation-types";
@@ -97,12 +98,22 @@ export function useChatGenerationState({
     let owned = true;
     const timer = window.setInterval(() => {
       void Promise.all(activeRuns.map(({ run }) => loadChatGenerationRun(run.id)))
-        .then((views) => {
+        .then(async (views) => {
           if (!owned) return;
           setRuns((current) => current.map((item) =>
             views.find((view) => view.run.id === item.run.id) ?? item,
           ));
-          if (views.some((view) => !ACTIVE_STATUSES.has(view.run.status))) {
+         if (views.some((view) => !ACTIVE_STATUSES.has(view.run.status))) {
+            // Run 到达终态后，将最终状态同步到会话历史的 toolResult，
+            // 确保 AI 上下文不再停留在 queued 等初始状态。
+            await Promise.allSettled(
+              views
+                .filter((view) =>
+                  !ACTIVE_STATUSES.has(view.run.status) &&
+                  view.run.source === "chat-workflow"
+                )
+                .map((view) => syncGenerationRunResult(view.run.id)),
+            );
             onChanged?.();
           }
         })

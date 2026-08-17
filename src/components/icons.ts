@@ -44,12 +44,13 @@ import {
   MenuUnfoldOutlined,
   MessageOutlined,
   MoreOutlined,
-  PaperClipOutlined,
-  PictureOutlined,
-  PlusOutlined,
-  QuestionCircleOutlined,
-  RedoOutlined,
-  ReloadOutlined,
+ PaperClipOutlined,
+ PictureOutlined,
+ PlusOutlined,
+  PlayCircleOutlined,
+ QuestionCircleOutlined,
+ RedoOutlined,
+ ReloadOutlined,
   RightOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
@@ -119,6 +120,7 @@ export const Paperclip = PaperClipOutlined;
 export const Pencil = EditOutlined;
 export const PencilLine = FormOutlined;
 export const Plus = PlusOutlined;
+export const PlayCircle = PlayCircleOutlined;
 export const Puzzle = AppstoreAddOutlined;
 export const QuestionCircle = QuestionCircleOutlined;
 export const RefreshCw = ReloadOutlined;

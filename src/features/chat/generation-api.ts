@@ -67,6 +67,10 @@ export function cancelChatGenerationRun(runId: string) {
   return requestJson<GenerationRunViewDto>(`/api/generation-runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
 }
 
+export function syncGenerationRunResult(runId: string) {
+  return requestJson<{ synced: boolean }>(`/api/generation-runs/${encodeURIComponent(runId)}/sync`, { method: "POST" });
+}
+
 export function confirmChatGenerationRun(
   runId: string,
   input: ConfirmGenerationRunRequest,

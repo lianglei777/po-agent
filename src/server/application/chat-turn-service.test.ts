@@ -137,17 +137,8 @@ describe("ChatTurnService", () => {
         parameters: { width: 1024 },
       },
     });
-    expect(agents.recordGenerationTurnResult).toHaveBeenCalledWith(
-      "session-1",
-      expect.objectContaining({
-        turnId: "turn-1",
-        toolName: "generate_image",
-        result: expect.objectContaining({
-          details: expect.objectContaining({ runId: "run-1" }),
-          isError: false,
-        }),
-      }),
-    );
+    // 成功路径不再立即记录 toolResult；Run 终态后由 sync 或下次 submit 兜底补录。
+    expect(agents.recordGenerationTurnResult).not.toHaveBeenCalled();
     expect(generationExecutor.execute).toHaveBeenCalledWith({
       sessionId: "session-1",
       turnId: "turn-1",
