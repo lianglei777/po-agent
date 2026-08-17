@@ -243,60 +243,60 @@ function UserMessageView({
   return (
     <div className="flex flex-col items-end">
       <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] break-words whitespace-pre-wrap">
-        {message.generationAssets?.length ? (
-          <div className="mb-2 grid max-w-xl grid-cols-2 gap-2 first:mb-0">
-            {message.generationAssets.map((asset, index) => {
-              const source = asset.ref.type === "workspace-file" && cwd
-                ? rawFileUrl(generationArtifactPath(cwd, asset.ref.relativePath))
-                : undefined;
-              return source ? (
-                <div
-                  className="min-h-24 overflow-hidden rounded-lg border border-line-subtle bg-[var(--tool-bg)]"
-                  key={`${asset.slot}-${asset.name}-${index}`}
-                >
-                  {/* 生成素材图同样用固定 160x112 磁贴；MediaPreview 的图片分支是弹性尺寸 + overflow-auto，长图会出滚动条。 */}
-                  {asset.mimeType.startsWith("image/") ? (
-                    <div className="p-3">
-                      <Image
-                        alt={asset.name}
-                        className="size-full object-contain"
-                        height={112}
-                        src={source}
-                        width={160}
-                      />
-                    </div>
-                  ) : (
+       {message.generationAssets?.length ? (
+          <div className="mb-2 flex flex-wrap gap-2 first:mb-0">
+           {message.generationAssets.map((asset, index) => {
+             const source = asset.ref.type === "workspace-file" && cwd
+               ? rawFileUrl(generationArtifactPath(cwd, asset.ref.relativePath))
+               : undefined;
+             return source ? (
+                asset.mimeType.startsWith("image/") ? (
+                  // 图片素材与产物画廊统一：固定 160x112 磁贴 + object-cover + 边框/背景/圆角
+                  <Image
+                    alt={asset.name}
+                    className="size-full rounded-md border border-line-subtle bg-subtle object-cover"
+                    height={112}
+                    key={`${asset.slot}-${asset.name}-${index}`}
+                    src={source}
+                    width={160}
+                  />
+                ) : (
+                  <div
+                    className="min-h-24 overflow-hidden rounded-lg border border-line-subtle bg-[var(--tool-bg)]"
+                    key={`${asset.slot}-${asset.name}-${index}`}
+                  >
                     <MediaPreview
                       className="max-h-60"
                       contentType={asset.mimeType}
                       name={asset.name}
                       src={source}
                     />
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="rounded-lg border border-line-subtle px-3 py-2 text-xs text-muted"
-                  key={`${asset.slot}-${asset.name}-${index}`}
-                >
-                  {asset.name}
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                )
+             ) : (
+               <div
+                 className="rounded-lg border border-line-subtle px-3 py-2 text-xs text-muted"
+                 key={`${asset.slot}-${asset.name}-${index}`}
+               >
+                 {asset.name}
+               </div>
+             );
+           })}
+         </div>
         ) : null}
         {imageBlocks.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {/* image content */}
-            {/* 固定 160x112 缩略磁贴 + object-contain 自适应；antd Image 的 className 只作用于内层 img
-                （自带 width:100%），百分比/最大尺寸约束在 flex 布局中解析不稳定，因此用 width/height props 固定盒子尺寸。 */}
-            {imageBlocks.map((block, index) => (
-              <Image
-                alt={t.chat.message.attachedImage}
-                className="size-full rounded-lg object-contain"
-                height={112}
-                key={index}
-                src={
+           {/* image content */}
+            {/* 固定 160x112 缩略磁贴 + object-cover 填充；与生成产物图保持一致的边框/背景/圆角。
+                antd Image 的 className 只作用于内层 img（自带 width:100%），百分比/最大尺寸约束在
+                flex 布局中解析不稳定，因此用 width/height props 固定盒子尺寸。 */}
+           {imageBlocks.map((block, index) => (
+             <Image
+               alt={t.chat.message.attachedImage}
+                className="size-full rounded-md border border-line-subtle bg-subtle object-cover"
+               height={112}
+               key={index}
+               src={
                   block.source.url ??
                   `data:${block.source.mediaType};base64,${block.source.data}`
                 }
