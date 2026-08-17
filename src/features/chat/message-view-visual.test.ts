@@ -96,4 +96,14 @@ describe("chat execution process visual contract", () => {
     expect(source).not.toContain("t.chat.message.usageIn");
     expect(source).not.toContain("t.chat.message.tokensPerSecond");
   });
+
+  it("collapses long user messages with a line-clamp and expand toggle", () => {
+    expect(source).toContain("function CollapsibleUserText");
+    expect(source).toContain("line-clamp-[8]");
+    expect(source).toContain("scrollHeight > el.clientHeight");
+    expect(source).toContain("ResizeObserver");
+    expect(source).toContain("t.chat.message.expand");
+    expect(source).toContain("t.chat.message.collapse");
+    expect(source).toContain("<CollapsibleUserText blocks={textBlocks} />");
+  });
 });

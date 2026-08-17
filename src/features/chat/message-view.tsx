@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
   ChevronRight,
+  ChevronDown,
   Copy,
   GitBranch,
   GitFork,
@@ -307,11 +308,7 @@ function UserMessageView({
         ) : null}
 
         {/* text content */}
-        {textBlocks.map((block, index) => (
-          <div className="mt-1 first:mt-0" key={index}>
-            {block.text}
-          </div>
-        ))}
+        <CollapsibleUserText blocks={textBlocks} />
       </div>
 
       <div className="mt-1 flex min-h-7 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
@@ -357,6 +354,68 @@ function UserMessageView({
         {/* time */}
         {message.timestamp ? <MessageTime value={message.timestamp} /> : null}
       </div>
+    </div>
+  );
+}
+
+// 用户消息文本过长时自动收起，点击切换展开/收起。
+// 使用 CSS line-clamp 限制收起时的可见行数，并通过 scrollHeight 与 clientHeight
+// 的差值判断是否溢出，仅在实际溢出时显示切换按钮。
+function CollapsibleUserText({ blocks }: { blocks: TextContent[] }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // 折叠态下比较 scrollHeight 与 clientHeight 判断是否被截断；
+  // 展开态直接跳过，overflowing 保留上次值以维持按钮可见。
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el || expanded) return;
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+    // 仅依赖 expanded：首次挂载和展开/收起切换时检查溢出；
+    // 视口和内容变化由下方 ResizeObserver 覆盖。
+  }, [expanded]);
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const check = () => {
+      if (expanded) return;
+      setOverflowing(el.scrollHeight > el.clientHeight + 1);
+    };
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  if (blocks.length === 0) return null;
+
+  const text = blocks.map((block) => block.text).join("\n");
+
+  return (
+    <div className="mt-1 first:mt-0">
+      <div
+        className={cn("whitespace-pre-wrap", !expanded && "line-clamp-[8]")}
+        ref={contentRef}
+      >
+        {text}
+      </div>
+      {overflowing ? (
+        <button
+          className="mt-1 flex items-center gap-0.5 text-caption text-dim transition-colors hover:text-primary"
+          onClick={() => setExpanded((value) => !value)}
+          type="button"
+        >
+          {expanded ? t.chat.message.collapse : t.chat.message.expand}
+          <ChevronDown
+            className={cn(
+              "size-3 transition-transform duration-[var(--motion-fast)]",
+              expanded && "rotate-180",
+            )}
+          />
+        </button>
+      ) : null}
     </div>
   );
 }
