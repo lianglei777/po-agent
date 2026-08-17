@@ -8,9 +8,28 @@ const source = readFileSync(
 );
 
 describe("chat runtime state synchronization", () => {
-  it("restores runtime state when an opened session is not loaded", () => {
-    expect(source).toContain('type: "get_state"');
-    expect(source).toContain("syncRuntimeState(runtimeState)");
+  it("uploads assets before submitting one server-orchestrated Agent turn", () => {
+    const uploadIndex = source.indexOf("await uploadChatGenerationAsset(");
+    const submitIndex = source.indexOf("await submitAgentTurn(");
+
+    expect(uploadIndex).toBeGreaterThan(-1);
+    expect(submitIndex).toBeGreaterThan(uploadIndex);
+    expect(source).not.toContain("await planGenerationTurn({");
+    expect(source).not.toContain("toolName: planned.route.capability");
+    expect(source).toContain("const turnId = crypto.randomUUID()");
+    expect(source).toContain("turnId,");
+  });
+
+  it("renders a server-created generation run without waiting for Agent streaming", () => {
+    expect(source).toContain('result.intent === "generation"');
+    expect(source).toContain("result.run");
+    expect(source).toContain("closeSource()");
+  });
+
+  it("restores Agent and generation state from one turn snapshot", () => {
+    expect(source).toContain("loadAgentTurnSnapshot(session.id)");
+    expect(source).toContain("syncRuntimeState(turnSnapshot.agent)");
+    expect(source).toContain("setGenerationRuns(turnSnapshot.generationRuns)");
   });
 
   it("ignores a session load after its effect loses ownership", () => {

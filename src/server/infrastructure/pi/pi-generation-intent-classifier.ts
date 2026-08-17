@@ -6,12 +6,14 @@ import type {
 } from "@/server/ports/generation-intent-classifier";
 import { AppError } from "@/server/domain/app-error";
 import { GENERATION_CAPABILITIES } from "@/contracts/generation";
+import { normalizePiModelBaseUrl } from "./pi-model-base-url";
 
 const SYSTEM_PROMPT = `You are the turn planner for a chat application that can optionally call paid content-generation APIs.
 Decide the user's CURRENT intent using the full conversation and recent generation runs.
 
 Rules:
-- "chat": questions, explanations, critique, troubleshooting, comparisons, or discussion about a previous generated result. A complaint such as "why is this identical" is chat, never a new generation request.
+- "chat": questions, explanations, critique, troubleshooting, comparisons, or discussion about a previous generated result that does not require inspecting a newly attached asset. A complaint such as "why is this identical" is chat, never a new generation request unless the user explicitly asks to inspect a new attachment.
+- "attachment-understanding": the current request asks the chat model to inspect, describe, compare, extract, or answer from a newly attached asset without creating new media.
 - "generation": only when the user clearly asks to create, transform, animate, or regenerate media now.
 - "clarification": use when generation may be intended but the desired output or transformation is genuinely unclear.
 - An attached asset alone does not prove generation intent.
@@ -22,7 +24,7 @@ Rules:
 - Return one JSON object and no markdown.
 
 Schema:
-{"intent":"chat|generation|clarification","capability":"text-to-image|image-to-image|text-to-video|image-to-video|multimodal-to-video","effectivePrompt":"string","parameters":{},"question":"string"}`;
+{"intent":"chat|attachment-understanding|generation|clarification","capability":"text-to-image|image-to-image|text-to-video|image-to-video|multimodal-to-video","effectivePrompt":"string","parameters":{},"question":"string"}`;
 
 export class PiGenerationIntentClassifier implements GenerationIntentClassifier {
   constructor(private readonly runtime: Promise<ModelRuntime>) {}
@@ -31,14 +33,18 @@ export class PiGenerationIntentClassifier implements GenerationIntentClassifier 
     input: Parameters<GenerationIntentClassifier["classify"]>[0],
   ): Promise<GenerationIntentDecision> {
     const runtime = await this.runtime;
-    const model = runtime.getModel(input.model.provider, input.model.modelId);
-    if (!model) {
+    const configuredModel = runtime.getModel(
+      input.model.provider,
+      input.model.modelId,
+    );
+    if (!configuredModel) {
       throw new AppError(
         "MODEL_NOT_FOUND",
         "The selected chat model is unavailable for intent planning",
         409,
       );
     }
+    const model = normalizePiModelBaseUrl(configuredModel);
     const payload = JSON.stringify({
       currentMessage: input.message,
       attachments: input.assets,
@@ -140,10 +146,15 @@ function decisionFromJson(value: PiJsonValue): GenerationIntentDecision | null {
     : rawIntent === "content-generation" || rawIntent === "generate" ? "generation"
     : rawIntent === "ambiguous" ? "clarification"
     : rawIntent;
-  if (intent !== "chat" && intent !== "generation" && intent !== "clarification") {
+  if (
+    intent !== "chat" &&
+    intent !== "attachment-understanding" &&
+    intent !== "generation" &&
+    intent !== "clarification"
+  ) {
     return null;
   }
-  if (intent === "chat") return { intent };
+  if (intent === "chat" || intent === "attachment-understanding") return { intent };
   const question = typeof value.question === "string" ? value.question : undefined;
   if (intent === "clarification") return { intent, question };
   const rawCapability = typeof value.capability === "string"

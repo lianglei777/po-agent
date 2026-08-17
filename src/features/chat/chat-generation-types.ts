@@ -7,6 +7,7 @@ export type ChatGenerationAsset = {
   id: string;
   slot: string;
   file: File;
+  previewUrl?: string;
 };
 
 export type ChatGenerationState = {

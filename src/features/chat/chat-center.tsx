@@ -19,6 +19,7 @@ import {
 import { useI18n } from "@/i18n/use-i18n";
 import { ChatInput } from "./chat-input";
 import { ChatGenerationRunCard } from "./chat-generation-run-card";
+import { projectChatWorkflowRuns } from "./chat-workflow-presentation";
 import { createConversationNavigatorEntries } from "./conversation-navigator/conversation-navigator-adapter";
 import { ConversationNavigator } from "./conversation-navigator/conversation-navigator";
 import { MessageList } from "./message-view";
@@ -97,16 +98,37 @@ function ChatCenterContent({
   const [chatInputHeight, setChatInputHeight] = useState(0);
   const { activeLeafId, changeLeaf, isCompacting, running, tree } = controller;
 
+  const presentedConversation = useMemo(
+    () => projectChatWorkflowRuns({
+      messages: controller.messages,
+      entryIds: controller.entryIds,
+      runs: controller.generationRuns,
+      routes: controller.generationRoutes,
+      model: controller.currentModel
+        ? {
+            provider: controller.currentModel.provider,
+            id: controller.currentModel.id,
+          }
+        : undefined,
+    }),
+    [
+      controller.currentModel,
+      controller.entryIds,
+      controller.generationRoutes,
+      controller.generationRuns,
+      controller.messages,
+    ],
+  );
   const conversationNavigatorEntries = useMemo(
     () =>
       createConversationNavigatorEntries({
-        entryIds: controller.entryIds,
-        messages: controller.messages,
+        entryIds: presentedConversation.entryIds,
+        messages: presentedConversation.messages,
         streamingMessage: controller.stream.streamingMessage,
       }),
     [
-      controller.entryIds,
-      controller.messages,
+      presentedConversation.entryIds,
+      presentedConversation.messages,
       controller.stream.streamingMessage,
     ],
   );
@@ -142,9 +164,13 @@ function ChatCenterContent({
     return () => observer.disconnect();
   }, [chatInputNode]);
 
-  function hasImages(event: DragEvent<HTMLElement>) {
+  function hasSupportedFiles(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.items).some(
-      (item) => item.kind === "file" && item.type.startsWith("image/"),
+      (item) => item.kind === "file" && (
+        item.type.startsWith("image/") ||
+        item.type.startsWith("video/") ||
+        item.type.startsWith("audio/")
+      ),
     );
   }
 
@@ -162,18 +188,22 @@ function ChatCenterContent({
     controller.running;
   const timeline = useMemo(
     () => buildChatTimeline(
-      controller.messages,
-      controller.entryIds,
+      presentedConversation.messages,
+      presentedConversation.entryIds,
       controller.generationRuns,
     ),
-    [controller.entryIds, controller.generationRuns, controller.messages],
+    [
+      controller.generationRuns,
+      presentedConversation.entryIds,
+      presentedConversation.messages,
+    ],
   );
 
   return (
     <main
       className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-canvas"
       onDragEnter={(event) => {
-        if (!hasImages(event) || !controller.canAttachImages) return;
+        if (!hasSupportedFiles(event) || !controller.canAttachImages) return;
         event.preventDefault();
         dragCounter.current += 1;
         setDragActive(true);
@@ -301,8 +331,10 @@ function buildChatTimeline(
   entryIds: string[],
   generationRuns: GenerationRunViewDto[],
 ): ChatTimelineItem[] {
-  // Agent 工具 Run 已绑定在对应 Tool Call 内；这里只保留旧版 direct-ui 记录，避免同一生成过程重复展示。
-  const runs = generationRuns.filter(({ run }) => run.source === "direct-ui").sort((left, right) =>
+  // Chat 工作流 Run 已投影为普通 Assistant Tool Call；只有 Generate 视图创建的 Run 使用独立卡片。
+  const runs = generationRuns.filter(({ run }) =>
+    run.source === "direct-ui"
+  ).sort((left, right) =>
     left.run.createdAt.localeCompare(right.run.createdAt),
   );
   const result: ChatTimelineItem[] = [];

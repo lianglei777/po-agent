@@ -371,6 +371,8 @@ export const en = {
       generationPromptRequired: "Describe what you want to generate.",
       generationRouteUnavailable: "The selected generation API is no longer available.",
       generationAssetMismatch: "One or more files do not match the selected generation API.",
+      generationAssetsPreserved: "Generation assets are preserved and will be available when content generation is enabled again.",
+      generationAttachmentUnsupported: "The selected chat model cannot inspect the attached media. Choose a vision-capable model or describe the asset in text; the files and draft are preserved.",
       generationAssetsRequired: "Add the required files: {slots}.",
       generationRouteMismatch: "This request does not match the selected API. Clarify the request or choose another API.",
       generationIntentAmbiguous: "The attachment's purpose is unclear. Say what to generate, or switch to Chat if the model should understand it.",

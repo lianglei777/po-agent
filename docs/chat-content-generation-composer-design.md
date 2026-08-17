@@ -698,12 +698,14 @@ contracts <- domain <- ports <- application <- transport
 
 ## 23. Chat 执行链路补充决策
 
-Chat 中的内容生成不是独立于 Agent 的前置规划/直接 Run 分支，而是标准 Agent 对话的一种受控工具能力：
+Chat 中的内容生成采用“语义规划 + 确定性工作流”，并由同一个服务端 Turn 用例编排：
 
-1. Composer 上传素材后，仍发送一条标准 Prompt；用户文字与素材摘要先作为正常用户消息进入同一消息树。
-2. 服务端把本轮自动/指定 Route、执行前确认和素材引用作为可信 turn policy 注入上下文。模型结合完整历史决定正常回答、澄清或调用生成工具，不使用前端正则判断意图。
-3. 普通问题即使开启内容生成也直接得到正常模型回复，不创建 Run；附件本身不等于生成意图。
-4. 指定 API 和 Composer 素材由 application 层强制绑定，不能依赖模型复述 routeId 或文件路径。
-5. 明确生成时，thinking、tool call、运行更新、tool result 和最终助手回复全部复用标准 Agent SSE 与消息呈现；Agent 工具来源的 Run 不再额外插入一张重复的独立 Chat 卡片。
-6. 生成步骤允许展开查看模型工具入参、服务端解析后的完整输入、脱敏后的 Provider 请求和完整 Provider 响应。用户原始文字保存在用户消息和 `originalPrompt`，模型整理后的自包含 Prompt 保存在 `input.prompt`，两者不得互相覆盖。
-7. 上传素材的可见元数据作为隐藏的 Session 自定义消息持久化，并与其后的用户消息关联，因此刷新、切换会话后仍显示在原用户气泡中；素材引用不会因为聊天模型缺少视觉能力而作为原生多模态输入发送给它。
+1. Composer 上传素材后，通过统一 Chat Turn endpoint 提交用户文字、模式和素材引用；客户端不能提交 Planner 结果。
+2. 服务端读取 Runtime 当前模型与完整历史完成语义规划。普通 Chat、澄清和明确生成是互斥的最终决策，不使用前端正则判断意图，也不让 Agent 在 Planner 判定 Chat 后再次获得生成授权。
+3. 只有明确生成且通过确定性校验时，服务端才把 Route、有效 Prompt、执行前确认和素材引用转换成可执行命令；聊天模型不能覆盖这些字段，也不负责再次决定是否执行。
+4. 普通问题即使开启内容生成也直接得到正常模型回复，不创建 Run；附件本身不等于生成意图。
+5. 明确生成时，服务端直接创建 Generation Run，并在同一 Pi Session 持久化用户消息、标准 Assistant Tool Call 与 Tool Result；前端对新轮次只渲染真实消息，旧会话才按 Run 做兼容投影。用户原文只显示一次，确认、运行更新、Provider Job 和最终产物复用普通对话的执行过程。该流程不依赖聊天模型实际发起 Tool Call，也不占用长时间 Agent Prompt。
+6. 生成步骤允许展开查看服务端解析后的完整输入、脱敏后的 Provider 请求和完整 Provider 响应。用户原始文字保存在用户消息和 `originalPrompt`，模型整理后的自包含 Prompt 保存在 `input.prompt`，两者不得互相覆盖。
+7. 新建 Runtime 返回前必须完成 Generation Session 投影；页面恢复通过统一 Turn Snapshot 同时获得 Agent 和 Generation Run 状态。
+8. 上传素材的可见元数据作为隐藏的 Session 自定义消息持久化，并与其后的用户消息关联，因此刷新、切换会话后仍显示在原用户气泡中；素材引用不会因为聊天模型缺少视觉能力而作为原生多模态输入发送给它。
+9. 每个 Turn 具有稳定 `turnId`；用户消息和 Run 通过该标识关联，重复提交复用相同幂等键，不得产生第二个 Provider Job。

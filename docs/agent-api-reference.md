@@ -107,6 +107,7 @@ Content-Type: text/event-stream; charset=utf-8
 | `INSTRUCTION_WRITE_FAILED`  |           500 | 写入指令文件失败                                         |
 | `INSTRUCTION_DELETE_FAILED` |           500 | 删除指令文件失败                                         |
 | `AGENT_BUSY`                |           409 | Agent 正在流式输出或压缩中，无法重载                     |
+| `GENERATION_RUN_ACTIVE`     |           409 | 当前 Session 仍有活动生成任务，不能开始新一轮消息        |
 | `INSTRUCTION_RELOAD_FAILED` |           500 | 重载指令失败                                             |
 | `INTERNAL_ERROR`            |           500 | 未归类的服务端错误                                       |
 
@@ -162,6 +163,8 @@ Content-Type: text/event-stream; charset=utf-8
 | `PATCH` | `/api/agent-settings`   | 更新全局 Agent 设置并刷新存活 Runtime |
 | `GET`   | `/api/agent/:id`        | 获取 Runtime Snapshot                 |
 | `POST`  | `/api/agent/:id`        | 执行统一 Agent Command                |
+| `GET`   | `/api/agent/:id/turns`  | 获取 Chat Turn 与生成 Run 统一快照    |
+| `POST`  | `/api/agent/:id/turns`  | 服务端规划并提交一轮 Chat 消息        |
 | `GET`   | `/api/agent/:id/events` | 订阅 Agent SSE 事件                   |
 
 ### 2.5 Models
@@ -677,9 +680,9 @@ Query：
 
 1. 调用 `POST /api/agent/new` 创建并配置 Runtime。
 2. 使用返回的 `sessionId` 订阅 `/api/agent/:id/events`。
-3. 收到 `connected` 事件后，通过 `POST /api/agent/:id` 发送首条 `prompt`。
-4. 继续通过 `POST /api/agent/:id` 发送后续命令。
-5. 页面恢复时先查询 `GET /api/agent/:id`。
+3. 收到 `connected` 事件后，通过 `POST /api/agent/:id/turns` 提交 Chat 消息。
+4. `abort`、模型切换、分支导航等控制命令继续使用 `POST /api/agent/:id`。
+5. Chat 页面恢复时查询 `GET /api/agent/:id/turns`，一次恢复 Agent 与 Generation Run 状态。
 
 ### 6.1 创建并配置 Agent Runtime
 
@@ -719,6 +722,7 @@ interface CreateAgentRequest {
 - 未提供 `toolNames` 时启用全部内置工具：`bash`、`read`、`edit`、`write`、`grep`、`find`、`ls`。
 - `toolNames: []` 表示禁用所有内置工具。项目自有的持久化生成工具始终可用，不属于这份内置工具 allowlist。
 - 此接口不会启动 Prompt。客户端必须先建立 SSE，再通过统一 command endpoint 发送首条 `prompt`。
+- 返回成功前会把同一个 `sessionId`、`cwd` 和 `sessionFile` 投影到持久化生成 Session；因此客户端可立即上传生成素材，不需要先发送一条 Prompt。
 
 成功响应：
 
@@ -770,7 +774,42 @@ Runtime 未加载：
 
 注意：该接口不会从磁盘恢复 Runtime。订阅 SSE 或发送 Command 时才会按需恢复。
 
-### 6.3 执行 Agent Command
+### 6.3 提交和恢复 Chat Turn
+
+```http
+GET  /api/agent/:id/turns
+POST /api/agent/:id/turns
+Content-Type: application/json
+```
+
+`GET` 会按需恢复 Runtime，并同时返回 `agent` 和 `generationRuns`。Chat UI 以该快照为刷新后的状态真相，SSE 和 Run 轮询只负责增量更新。
+
+每个请求必须包含客户端生成的稳定 `turnId`。普通聊天还包含 `message` 和可选 `images`；启用内容生成时可额外提交 `generation.mode`、`reviewFirst` 和已上传素材，但不能提交 Planner 结果：
+
+```json
+{
+  "turnId": "594fb5cb-d3d2-4abc-a5f1-c8e79f11c43e",
+  "message": "根据这张图生成相似风格的女性角色",
+  "generation": {
+    "mode": { "type": "generation-auto" },
+    "reviewFirst": true,
+    "assets": [{
+      "slot": "auto-image",
+      "name": "reference.png",
+      "mediaType": "image",
+      "mimeType": "image/png",
+      "ref": {
+        "type": "workspace-file",
+        "relativePath": ".po-agent/generation-inputs/reference.png"
+      }
+    }]
+  }
+}
+```
+
+服务端读取 Runtime 当前模型和 Session 上下文，完成语义规划与确定性校验。语义结果区分普通 `chat`、`attachment-understanding`、`generation` 和 `clarification`。附件理解只有在请求提供了当前视觉模型可用的原生图片输入时才启动 Agent；否则返回 `MODEL_ATTACHMENT_UNSUPPORTED` 澄清并保留草稿。`accepted/generation` 由应用层直接创建持久化 Run，并在响应的 `run` 字段返回初始视图；聊天模型不再负责输出生成 Tool Call。服务端同时在 Agent Session 中持久化对应的用户消息、Assistant Tool Call 和 Tool Result，执行失败也会以错误 Tool Result 闭合。客户端提供 `generation.plan` 会返回 `400 VALIDATION_ERROR`。同一 `turnId` 生成相同的幂等键，网络重试返回原 Run 且不会重复写入同一工具结果。Agent 正忙或存在活动 Generation Run 时返回 `409`，避免多标签页绕过 Composer 锁定。
+
+### 6.4 执行 Agent Command
 
 ```http
 POST /api/agent/:id
@@ -984,7 +1023,7 @@ Fork 成功后，原 Session Runtime 会被销毁。新 Session 在需要时重�
 }
 ```
 
-### 6.4 订阅 Agent SSE
+### 6.5 订阅 Agent SSE
 
 ```http
 GET /api/agent/:id/events
@@ -1064,7 +1103,7 @@ SSE 每 25 秒发送一次注释 Heartbeat：
 
 客户端断开时会自动取消订阅。若 Runtime 未加载，该接口会从 Session Storage 恢复。
 
-### 6.5 全局 Agent 设置
+### 6.6 全局 Agent 设置
 
 自动上下文压缩是全局 Agent 偏好，不依赖当前 Session。
 
@@ -2475,7 +2514,7 @@ GET /api/generation/routes
 
 返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
 
-Chat Composer 只读取当前可用的 Route。`plan` 保留给 Generate 视图和兼容客户端；Chat 主对话提交标准 Agent Prompt，由模型在同一对话回合中结合上下文决定是否调用生成工具：
+Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
 
 ```http
 GET  /api/generation/composer-options
@@ -2483,7 +2522,7 @@ POST /api/generation/plan
 Content-Type: application/json
 ```
 
-`plan` 必须携带当前 Chat 模型，并可携带已存在的 Session。服务端使用该模型结合最近对话和 Generation Run 做语义规划；不使用关键词或正则表达式判断用户意图。模型输出只作为候选，Route 可用性、Capability、参数字段和素材槽位仍由服务端确定性校验。
+兼容 `plan` 接口必须携带当前 Chat 模型，并可携带已存在的 Session。主 Chat Turn 不接受客户端指定模型或回传 Plan，而是读取 Runtime 当前模型。服务端结合最近对话和 Generation Run 做语义规划；不使用关键词或正则表达式判断用户意图。模型输出只作为候选，Route 可用性、Capability、参数字段和素材槽位仍由服务端确定性校验。
 
 ```json
 {
@@ -2499,7 +2538,7 @@ Content-Type: application/json
 
 Session 存在 Generation Run 后，普通 Agent Prompt 会由服务端附加一份隐藏的最近 Run 审计快照，包括 Route、Capability、用户原文、有效 Prompt、参数、输入素材、Provider Job、产物与错误。该快照参与模型上下文但不作为用户消息展示，使“为什么上一张图没有变化”等追问可以基于真实执行数据回答；相同快照不会重复持久化。
 
-`composer-options` 只返回 Route、Provider 和凭证均已启用的 API。`plan` 接收文字、生成模式以及附件媒体类型，返回 `chat`、`generation`、`clarification` 或 `invalid`；它只规划 Route 和结构化参数，不上传素材或创建 Run。
+`composer-options` 只返回 Route、Provider 和凭证均已启用的 API。`plan` 接收文字、生成模式以及附件媒体类型，返回 `chat`、`attachment-understanding`、`generation`、`clarification` 或 `invalid`；它只规划 Route 和结构化参数，不上传素材或创建 Run。
 
 ```http
 PATCH /api/generation/routes/:id
@@ -2658,12 +2697,20 @@ Chat Prompt 可带可选的 `generation`：
         "type": "workspace-file",
         "relativePath": ".po-agent/generation-inputs/reference.png"
       }
-    }]
+    }],
+    "plan": {
+      "toolName": "generate_image",
+      "routeId": "runninghub-seedream-image-to-image",
+      "prompt": "生成一张与参考图风格一致的全新女性角色海报",
+      "parameters": {}
+    }
   }
 }
 ```
 
-`generation.mode` 支持 `generation-auto` 或带 `routeId` 的 `generation-route`。该策略只作用于当前 Agent 轮次：无明确生成意图时模型照常回答；意图不明确时模型结合上下文追问；明确生成时调用生成工具。指定 Route 会覆盖模型工具入参中的 Route，Composer 上传素材也由服务端绑定到最终 Route Schema 槽位，不能被模型虚构的路径替换。`reviewFirst: true` 时工具创建 `awaiting_confirmation` Run，并通过同一工具调用的增量结果返回 Route、输入 Schema 和完整解析参数；确认后原工具继续等待 Run，完成后模型再输出本轮最终回复。轮次结束后策略自动清除，不会成为 Session 类型或永久 Route 绑定。`generationReview` 仅作为旧客户端兼容字段保留。
+旧 Agent Command 的 `generation.plan` 仅为兼容已有调用保留。统一 Chat Turn endpoint 不接受客户端 Plan；服务端 Planner 的结果会由 application 直接执行，客户端不能通过 Plan 绕过 Provider、Route、素材槽位或本轮用户授权校验。
+
+`generation.mode` 支持 `generation-auto` 或带 `routeId` 的 `generation-route`。无明确生成意图时模型照常回答；意图不明确时返回澄清；明确生成时应用层按最终 Route Schema 绑定 Composer 素材并创建 Run。`reviewFirst: true` 时创建 `awaiting_confirmation` Run，确认后由持久化状态机创建 Provider Job；直接执行则立即进入 `queued`。生成模式不会成为 Session 类型或永久 Route 绑定。`generationReview` 仅作为旧客户端兼容字段保留。
 
 `generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Pi `onUpdate` 与现有 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。前端按同一 `toolCallId` 原地更新工具步骤，不创建新的查询步骤。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；模型不得在正常生成期间自动轮询 `get_generation`。`get_generation` 仅用于用户明确查询历史 Run 或中断恢复，并与 `cancel_generation` 一样只能访问当前 Session 的 Run。
 

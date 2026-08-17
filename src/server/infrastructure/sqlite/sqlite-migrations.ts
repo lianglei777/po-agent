@@ -2,6 +2,7 @@ export interface SqliteMigration {
   version: number;
   name: string;
   sql: string;
+  disableForeignKeys?: boolean;
 }
 
 export const SQLITE_MIGRATIONS: SqliteMigration[] = [
@@ -158,6 +159,48 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
     sql: `
       ALTER TABLE provider_jobs ADD COLUMN request_snapshot_json TEXT;
       ALTER TABLE provider_jobs ADD COLUMN response_snapshot_json TEXT;
+    `,
+  },
+  {
+    version: 7,
+    name: "generation_run_chat_workflow_source",
+    // SQLite 不能直接修改 CHECK 约束；关闭外键后原位重建父表，并在迁移后统一校验引用完整性。
+    disableForeignKeys: true,
+    sql: `
+      CREATE TABLE generation_runs_v7 (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        capability TEXT NOT NULL,
+        route_id TEXT NOT NULL REFERENCES generation_routes(id),
+        parent_run_id TEXT REFERENCES generation_runs_v7(id),
+        status TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        input_json TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('agent-tool', 'chat-workflow', 'direct-ui', 'api')),
+        source_ref TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        error_code TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      ) STRICT;
+
+      INSERT INTO generation_runs_v7(
+        id, session_id, capability, route_id, parent_run_id, status, prompt,
+        input_json, source, source_ref, idempotency_key, error_code,
+        error_message, created_at, updated_at, completed_at
+      )
+      SELECT
+        id, session_id, capability, route_id, parent_run_id, status, prompt,
+        input_json, source, source_ref, idempotency_key, error_code,
+        error_message, created_at, updated_at, completed_at
+      FROM generation_runs;
+
+      DROP TABLE generation_runs;
+      ALTER TABLE generation_runs_v7 RENAME TO generation_runs;
+      CREATE INDEX generation_runs_session_created_idx
+        ON generation_runs(session_id, created_at DESC);
     `,
   },
 ];

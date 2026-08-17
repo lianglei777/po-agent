@@ -46,12 +46,44 @@ const toolResult: ToolResultMessage = {
 };
 
 describe("chat message presentation", () => {
-  it("attaches persisted generation assets to the following user message", () => {
+  it("keeps optimistic generation assets visible while the Agent is running", () => {
+    const items = buildMessagePresentation(
+      [{
+        role: "user",
+        content: "Create a matching character",
+        status: "pending",
+        generationAssets: [{
+          slot: "imageUrls",
+          name: "reference.png",
+          mediaType: "image",
+          mimeType: "image/png",
+          ref: {
+            type: "workspace-file",
+            relativePath: ".po-agent/generation-inputs/reference.png",
+          },
+        }],
+      }],
+      [],
+    );
+
+    expect(items[0]).toMatchObject({
+      kind: "user",
+      message: {
+        status: "pending",
+        generationAssets: [{ name: "reference.png" }],
+      },
+    });
+  });
+
+  it.each([
+    "po-agent-generation-context",
+    "po-agent-generation-turn",
+  ])("attaches persisted generation assets from %s to the following user message", (customType) => {
     const items = buildMessagePresentation(
       [
         {
           role: "custom",
-          customType: "po-agent-generation-context",
+          customType,
           content: "trusted policy",
           display: false,
           details: {
@@ -83,6 +115,25 @@ describe("chat message presentation", () => {
         }],
       },
     });
+  });
+
+  it("hides the internal workflow acknowledgement used to persist a generation-only session", () => {
+    const items = buildMessagePresentation([
+      { role: "user", content: "Generate an image" },
+      {
+        role: "assistant",
+        provider: "po-agent",
+        model: "content-generation-workflow",
+        stopReason: "stop",
+        content: [{
+          type: "text",
+          text: "Content generation workflow accepted this request.",
+        }],
+      },
+    ], ["user-1", "assistant-1"]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: "user", entryId: "user-1" });
   });
 
   it("collapses repeated generation status queries to the latest step", () => {

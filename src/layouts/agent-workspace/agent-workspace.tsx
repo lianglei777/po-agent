@@ -306,29 +306,34 @@ function AgentWorkspaceContent() {
   );
 
   const selectSessionById = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, promoteDraft = false) => {
       for (let attempt = 0; attempt < 4; attempt += 1) {
         const sessions = await loadSessions();
         const next = sessions.find((item) => item.id === sessionId);
         if (next) {
-          handleSelectSession(next);
+          if (promoteDraft) {
+            // 草稿转为持久化会话时保留 Chat 实例，避免 Composer 模式和附件状态被重置。
+            completeDraftSession(next);
+            updateSessionUrl(next.id);
+          } else {
+            handleSelectSession(next);
+          }
           markSessionsChanged();
           return;
         }
         await new Promise((resolve) => window.setTimeout(resolve, 150));
       }
     },
-    [handleSelectSession, markSessionsChanged],
+    [completeDraftSession, handleSelectSession, markSessionsChanged, updateSessionUrl],
   );
 
   const handleAgentEnd = markAgentEnd;
 
   const handleSessionCreated = useCallback(
     (sessionId: string) => {
-      completeDraftSession();
-      void selectSessionById(sessionId);
+      void selectSessionById(sessionId, true);
     },
-    [completeDraftSession, selectSessionById],
+    [selectSessionById],
   );
 
   const handleSessionForked = useCallback(

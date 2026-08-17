@@ -56,6 +56,19 @@ describe("planGenerationTurn", () => {
     ).resolves.toEqual({ type: "chat" });
   });
 
+  it("keeps attachment understanding distinct from ordinary chat and generation", async () => {
+    await expect(planGenerationTurn(
+      {
+        ...baseRequest,
+        message: "描述一下我刚上传的图片",
+        assets: [{ mediaType: "image", mimeType: "image/png" }],
+      },
+      routes,
+      classifier({ intent: "attachment-understanding" }),
+      context,
+    )).resolves.toEqual({ type: "attachment-understanding" });
+  });
+
   it("selects an image-to-video route and preserves the contextual effective prompt", async () => {
     const input: PlanGenerationTurnRequest = {
       ...baseRequest,

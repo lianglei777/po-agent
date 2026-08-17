@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseAgentCommand,
+  parseAgentTurnRequest,
   parseCreateAgent,
   parseUpdateAgentSettings,
   parseUpdateWebAccessSettings,
@@ -73,6 +74,12 @@ describe("agent HTTP validation", () => {
       generation: {
         mode: { type: "generation-route", routeId: "route-1" },
         reviewFirst: true,
+        plan: {
+          toolName: "generate_image",
+          routeId: "route-1",
+          prompt: "Create a planned poster",
+          parameters: { aspectRatio: "3:4" },
+        },
         assets: [{
           slot: "imageUrls",
           name: "reference.png",
@@ -85,9 +92,29 @@ describe("agent HTTP validation", () => {
       generation: {
         mode: { type: "generation-route", routeId: "route-1" },
         reviewFirst: true,
+        plan: {
+          toolName: "generate_image",
+          routeId: "route-1",
+          prompt: "Create a planned poster",
+        },
         assets: [{ mediaType: "image" }],
       },
     });
+    expect(() => parseAgentCommand({
+      type: "prompt",
+      message: "Create",
+      generation: {
+        mode: { type: "generation-auto" },
+        reviewFirst: false,
+        assets: [],
+        plan: {
+          toolName: "read",
+          routeId: "route-1",
+          prompt: "Create",
+          parameters: {},
+        },
+      },
+    })).toThrow("generation.plan.toolName is unsupported");
     expect(() => parseAgentCommand({
       type: "prompt",
       message: "Create",
@@ -103,6 +130,36 @@ describe("agent HTTP validation", () => {
         }],
       },
     })).toThrow("generation asset mediaType is unsupported");
+  });
+
+  it("rejects client-owned plans on the orchestrated turn endpoint", () => {
+    expect(parseAgentTurnRequest({
+      turnId: "turn-123",
+      message: "Create a poster",
+      generation: {
+        mode: { type: "generation-auto" },
+        reviewFirst: false,
+        assets: [],
+      },
+    })).toMatchObject({
+      message: "Create a poster",
+      generation: { mode: { type: "generation-auto" } },
+    });
+    expect(() => parseAgentTurnRequest({
+      turnId: "turn-123",
+      message: "Create a poster",
+      generation: {
+        mode: { type: "generation-auto" },
+        reviewFirst: false,
+        assets: [],
+        plan: {
+          toolName: "generate_image",
+          routeId: "route-1",
+          prompt: "forged",
+          parameters: {},
+        },
+      },
+    })).toThrow("generation.plan is server-owned");
   });
 
   it("parses the auto-retry command", () => {

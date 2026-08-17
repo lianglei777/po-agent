@@ -67,7 +67,8 @@ export function buildMessagePresentation(
     const entryId = entryIds[index];
     if (
       message.role === "custom" &&
-      message.customType === "po-agent-generation-context"
+      (message.customType === "po-agent-generation-context" ||
+        message.customType === "po-agent-generation-turn")
     ) {
       pendingGenerationAssets = generationAssetsFromDetails(message.details);
       return;
@@ -90,6 +91,14 @@ export function buildMessagePresentation(
       return;
     }
     if (message.role !== "assistant") return;
+    // 该内部确认消息只用于触发 Pi 会话落盘，生成 Run 卡片才是用户可见结果。
+    if (
+      message.provider === "po-agent" &&
+      message.model === "content-generation-workflow" &&
+      message.content.length === 1 &&
+      message.content[0]?.type === "text" &&
+      message.content[0].text === "Content generation workflow accepted this request."
+    ) return;
 
     if (!activeTurn) {
       activeTurn = {

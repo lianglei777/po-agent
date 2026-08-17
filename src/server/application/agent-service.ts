@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AgentGenerationAsset,
   AgentCommandResponse,
   CreateAgentRequest,
   CreateAgentResponse,
   ForkAgentResponse,
 } from "@/contracts/agent";
+import type { JsonValue } from "@/contracts/generation";
 import type { AgentCommand } from "@/server/domain/agent-command";
 import { AppError } from "@/server/domain/app-error";
 import type { AgentEvent } from "@/server/domain/agent-event";
@@ -18,6 +20,7 @@ import type { AgentPromptContextProvider } from "@/server/ports/agent-prompt-con
 import type { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import type { SessionRepository } from "@/server/ports/session-repository";
+import type { SessionLifecycleProjector } from "@/server/ports/session-lifecycle-projector";
 
 /**
  * Agent 会话应用服务。
@@ -26,6 +29,8 @@ import type { SessionRepository } from "@/server/ports/session-repository";
  * 是 transport 层与领域/端口之间的用例边界。
  */
 export class AgentService {
+  private readonly activePrompts = new Set<string>();
+
   /**
    * @param sessions - 会话持久化仓库
    * @param runtimes - Agent 运行时注册表（缓存与保活）
@@ -40,6 +45,7 @@ export class AgentService {
     private readonly tools?: AgentToolProvider,
     private readonly generationReviews?: GenerationReviewRegistry,
     private readonly promptContextProvider?: AgentPromptContextProvider,
+    private readonly sessionLifecycleProjector?: SessionLifecycleProjector,
   ) {}
 
   /**
@@ -67,23 +73,35 @@ export class AgentService {
         }),
       }),
     );
-    if (input.provider && input.modelId) {
-      await runtime.execute({
-        type: "set_model",
-        provider: input.provider,
-        modelId: input.modelId,
+    try {
+      if (input.provider && input.modelId) {
+        await runtime.execute({
+          type: "set_model",
+          provider: input.provider,
+          modelId: input.modelId,
+        });
+      }
+      if (input.thinkingLevel) {
+        await runtime.execute({
+          type: "set_thinking_level",
+          level: input.thinkingLevel,
+        });
+      }
+      if (input.toolNames) {
+        await runtime.execute({ type: "set_tools", toolNames: input.toolNames });
+      }
+      await this.sessionLifecycleProjector?.registerCreatedSession({
+        sessionId: runtime.sessionId,
+        cwd: input.cwd,
+        sessionFile: runtime.sessionFile,
+        createdAt: new Date().toISOString(),
       });
+      return { sessionId: runtime.sessionId };
+    } catch (error) {
+      // 创建只允许全成或全败；投影失败后不能保留一个其他模块无法识别的 Runtime。
+      this.runtimes.destroy(runtime.sessionId);
+      throw error;
     }
-    if (input.thinkingLevel) {
-      await runtime.execute({
-        type: "set_thinking_level",
-        level: input.thinkingLevel,
-      });
-    }
-    if (input.toolNames) {
-      await runtime.execute({ type: "set_tools", toolNames: input.toolNames });
-    }
-    return { sessionId: runtime.sessionId };
   }
 
   /**
@@ -105,6 +123,15 @@ export class AgentService {
     this.runtimes.touch(sessionId);
 
     if (command.type === "prompt") {
+      if (this.activePrompts.has(sessionId)) {
+        throw new AppError(
+          "AGENT_BUSY",
+          "The Agent is already processing a turn",
+          409,
+        );
+      }
+      // Runtime 的 isStreaming 要到异步 Prompt 真正启动后才更新；先占位以封闭并发提交窗口。
+      this.activePrompts.add(sessionId);
       const generation = command.generation
         ? { ...command.generation, originalPrompt: command.message }
         : command.generationReview
@@ -121,14 +148,19 @@ export class AgentService {
         generationContext = await this.promptContextProvider?.getPromptContext(
           sessionId,
           generation,
+          command.generationContextAssets,
         );
       } catch (error) {
         // 上下文构建失败时必须释放本轮策略，避免后续普通对话继承错误的生成授权。
         this.generationReviews?.end(sessionId);
+        this.activePrompts.delete(sessionId);
         throw error;
       }
       this.runInBackground(runtime, { ...command, generationContext }, () =>
-        this.generationReviews?.end(sessionId),
+        {
+          this.generationReviews?.end(sessionId);
+          this.activePrompts.delete(sessionId);
+        },
       );
       return { accepted: true };
     }
@@ -151,8 +183,87 @@ export class AgentService {
   async getSnapshot(sessionId: string) {
     const runtime = this.runtimes.get(sessionId);
     return runtime
-      ? { loaded: true as const, state: await runtime.getState() }
+      ? {
+          loaded: true as const,
+          state: this.withPendingPrompt(
+            sessionId,
+            await runtime.getState(),
+          ),
+        }
       : { loaded: false as const };
+  }
+
+  async recordGenerationTurn(
+    sessionId: string,
+    input: {
+      turnId: string;
+      message: string;
+      assets: AgentGenerationAsset[];
+      plan: {
+        toolName: "generate_image" | "generate_video";
+        routeId: string;
+        prompt: string;
+        parameters: Record<string, JsonValue>;
+      };
+    },
+  ): Promise<void> {
+    const runtime = await this.getOrRestore(sessionId);
+    this.runtimes.touch(sessionId);
+    if (this.activePrompts.has(sessionId) || (await runtime.getState()).isStreaming) {
+      throw new AppError(
+        "AGENT_BUSY",
+        "The Agent is already processing a turn",
+        409,
+      );
+    }
+    const generationContext = await this.promptContextProvider?.getPromptContext(
+      sessionId,
+      undefined,
+      input.assets,
+    );
+    await runtime.execute({
+      type: "record_user_turn",
+      turnId: input.turnId,
+      message: input.message,
+      assets: input.assets,
+      plan: input.plan,
+      generationContext,
+    });
+  }
+
+  async recordGenerationTurnResult(
+    sessionId: string,
+    input: {
+      turnId: string;
+      toolName: "generate_image" | "generate_video";
+      result: {
+        content: Array<{ type: "text"; text: string }>;
+        details?: unknown;
+        isError: boolean;
+      };
+    },
+  ): Promise<void> {
+    const runtime = await this.getOrRestore(sessionId);
+    this.runtimes.touch(sessionId);
+    await runtime.execute({
+      type: "record_generation_turn_result",
+      ...input,
+    });
+  }
+
+  async getState(sessionId: string) {
+    const runtime = await this.getOrRestore(sessionId);
+    this.runtimes.touch(sessionId);
+    return this.withPendingPrompt(sessionId, await runtime.getState());
+  }
+
+  private withPendingPrompt(
+    sessionId: string,
+    state: Awaited<ReturnType<AgentRuntime["getState"]>>,
+  ) {
+    return this.activePrompts.has(sessionId) && !state.isStreaming
+      ? { ...state, isStreaming: true }
+      : state;
   }
 
   /**

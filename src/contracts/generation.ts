@@ -84,7 +84,11 @@ export type ProviderJobStatus =
   | "submission_unknown"
   | "cancelled";
 
-export type GenerationSource = "agent-tool" | "direct-ui" | "api";
+export type GenerationSource =
+  | "agent-tool"
+  | "chat-workflow"
+  | "direct-ui"
+  | "api";
 
 export type GenerationAssetRef =
   | { type: "artifact"; artifactId: string }
@@ -273,6 +277,7 @@ export interface PlanGenerationTurnRequest {
 
 export type PlanGenerationTurnResponse =
   | { type: "chat" }
+  | { type: "attachment-understanding" }
   | {
       type: "generation";
       route: GenerationRouteDto;
@@ -281,7 +286,10 @@ export type PlanGenerationTurnResponse =
     }
   | {
       type: "clarification";
-      reason: "AMBIGUOUS_INTENT" | "GENERATION_ROUTE_MISMATCH";
+      reason:
+        | "AMBIGUOUS_INTENT"
+        | "GENERATION_ROUTE_MISMATCH"
+        | "MODEL_ATTACHMENT_UNSUPPORTED";
       question?: string;
       suggestedRoute?: GenerationRouteDto;
     }

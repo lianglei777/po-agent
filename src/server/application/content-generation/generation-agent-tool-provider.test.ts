@@ -86,6 +86,36 @@ describe("GenerationAgentToolProvider", () => {
     await expect(service.listRuns("session-1")).resolves.toHaveLength(1);
   });
 
+  it("uses the trusted planner route, prompt, and parameters instead of model arguments", async () => {
+    reviews.begin("session-1", {
+      ...generationTurn(false),
+      mode: {
+        type: "generation-route",
+        routeId: "runninghub-seedream-v5-pro-text-to-image",
+      },
+      plan: {
+        toolName: "generate_image",
+        routeId: "runninghub-seedream-v5-pro-text-to-image",
+        prompt: "A complete planner-authored portrait prompt",
+        parameters: { resolution: "1k" },
+      },
+    });
+    const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
+
+    const result = await generate.execute({
+      toolCallId: "planned-call",
+      // 即使兼容模型没有生成可用参数，可信 planner 计划仍足以执行。
+      input: {},
+    });
+    const view = await service.getRun((result.details as GenerationToolDetails).runId);
+
+    expect(view?.run).toMatchObject({
+      routeId: "runninghub-seedream-v5-pro-text-to-image",
+      prompt: "A complete planner-authored portrait prompt",
+      input: { parameters: { resolution: "1k" } },
+    });
+  });
+
   it("returns the provider task ID after the provider accepts the job", async () => {
     const tools = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" });
     const created = await service.createRun({

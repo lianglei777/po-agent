@@ -18,6 +18,7 @@ describe("SqliteDatabase", () => {
       { version: 4, name: "generation_paid_capability_settings" },
       { version: 5, name: "generation_route_product" },
       { version: 6, name: "generation_provider_audit_snapshots" },
+      { version: 7, name: "generation_run_chat_workflow_source" },
     ]);
     expect(database.prepare(`
       SELECT name FROM sqlite_master
@@ -36,6 +37,33 @@ describe("SqliteDatabase", () => {
       { name: "provider_jobs" },
       { name: "sessions" },
     ]);
+  });
+
+  it("accepts chat workflow generation runs after rebuilding the source constraint", () => {
+    database = new SqliteDatabase(":memory:");
+    database.exec(`
+      INSERT INTO sessions(id, cwd, origin, created_at, updated_at)
+      VALUES ('session-1', 'D:\\project', 'chat', 'now', 'now');
+      INSERT INTO generation_routes(
+        id, name, capability, provider_id, provider_operation, enabled,
+        is_default, revision, defaults_json, adapter_config_json,
+        input_schema_json, product, created_at, updated_at
+      ) VALUES (
+        'route-1', 'Route', 'text-to-image', 'provider', 'operation', 1,
+        1, 1, '{}', '{}', '{"prompt":{"required":true}}', '', 'now', 'now'
+      );
+      INSERT INTO generation_runs(
+        id, session_id, capability, route_id, status, prompt, input_json,
+        source, source_ref, idempotency_key, created_at, updated_at
+      ) VALUES (
+        'run-1', 'session-1', 'text-to-image', 'route-1', 'queued', 'prompt', '{}',
+        'chat-workflow', 'turn-1', 'chat-turn:session-1:turn-1', 'now', 'now'
+      );
+    `);
+
+    expect(database.prepare("SELECT source, source_ref FROM generation_runs").get())
+      .toEqual({ source: "chat-workflow", source_ref: "turn-1" });
+    expect(database.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   });
 
   it("rolls back failed transactions", () => {

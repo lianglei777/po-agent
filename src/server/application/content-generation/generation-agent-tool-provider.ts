@@ -1,5 +1,4 @@
 import type {
-  GenerationArtifactDto,
   GenerationCapability,
   GenerationRouteDto,
   GenerationInputAsset,
@@ -14,10 +13,8 @@ import type {
   AgentToolResult,
 } from "@/server/ports/agent-tool";
 import type { GenerationReviewRegistry } from "./generation-review-registry";
-import type {
-  GenerationRunService,
-  GenerationRunView,
-} from "./generation-run-service";
+import type { GenerationRunService, GenerationRunView } from "./generation-run-service";
+import { generationPhase, generationToolResult } from "./generation-tool-result";
 
 const TERMINAL_STATUSES = new Set<GenerationRunStatus>([
   "succeeded",
@@ -88,7 +85,6 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       ],
       parameters: generateSchema(video),
       execute: async ({ toolCallId, input, signal, onUpdate }) => {
-        const parsed = parseGenerateInput(input, video);
         const turn = this.reviews?.current(sessionId);
         if (!turn) {
           throw new AppError(
@@ -97,18 +93,35 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
             403,
           );
         }
+        const parsed = turn.plan
+          ? {
+              prompt: turn.plan.prompt,
+              routeId: turn.plan.routeId,
+              parameters: turn.plan.parameters,
+              assets: undefined,
+              durationSeconds: undefined,
+              aspectRatio: undefined,
+            }
+          : parseGenerateInput(input, video);
+        if (turn.plan && turn.plan.toolName !== name) {
+          throw new AppError(
+            "VALIDATION_ERROR",
+            `The planned generation tool is ${turn.plan.toolName}`,
+            409,
+          );
+        }
         const capability = turn.assets.length
           ? generationCapabilityFromMedia(video, turn.assets.map((asset) => asset.mediaType))
           : generationCapability(video, parsed.assets);
         const service = this.getRunService();
-        const requestedRouteId = turn.mode.type === "generation-route"
+        const requestedRouteId = turn.plan?.routeId ?? (turn.mode.type === "generation-route"
           ? turn.mode.routeId
-          : parsed.routeId;
+          : parsed.routeId);
         const route = await resolveGenerationRoute(service, capability, requestedRouteId);
         const assets = turn.assets.length
           ? bindTurnAssets(turn.assets, route)
           : parsed.assets;
-        const parameters = {
+        const parameters = turn.plan?.parameters ?? {
           ...parsed.parameters,
           ...(parsed.durationSeconds === undefined
             ? {}
@@ -124,7 +137,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
           sessionId,
           capability,
           routeId: route.id,
-          prompt: parsed.prompt,
+          prompt: turn.plan?.prompt ?? parsed.prompt,
           originalPrompt: turn.originalPrompt,
           assets,
           parameters,
@@ -386,87 +399,6 @@ function bindTurnAssets(
     }
     return { slot: candidates[0]!.key, ref: asset.ref };
   });
-}
-
-function generationToolResult(
-  view: GenerationRunView,
-  options: {
-    waitTimedOut?: boolean;
-    route?: GenerationRouteDto;
-  } = {},
-): AgentToolResult<GenerationToolDetails> {
-  const providerJob = view.jobs.at(-1);
-  const details: GenerationToolDetails = {
-    runId: view.run.id,
-    routeId: view.run.routeId,
-    providerId: providerJob?.providerId,
-    providerOperation: providerJob?.providerOperation,
-    providerTaskId: providerJob?.remoteTaskId,
-    status: view.run.status,
-    phase: generationPhase(view),
-    createdAt: view.run.createdAt,
-    updatedAt: view.run.updatedAt,
-    completedAt: view.run.completedAt,
-    waitTimedOut: options.waitTimedOut || undefined,
-    input: view.run.input,
-    requestSnapshot: providerJob?.requestSnapshot,
-    responseSnapshot: providerJob?.responseSnapshot,
-    artifacts: view.artifacts.map((artifact): GenerationArtifactDto => ({
-      ...artifact,
-    })),
-    ...(view.run.status === "awaiting_confirmation" && options.route
-      ? {
-          review: {
-            route: options.route,
-            input: view.run.input,
-          },
-        }
-      : {}),
-    ...(view.run.errorCode || view.run.errorMessage
-      ? {
-          error: {
-            code: view.run.errorCode ?? "GENERATION_FAILED",
-            message: view.run.errorMessage ?? "Generation failed",
-          },
-        }
-      : {}),
-  };
-  const suffix = details.artifacts.length
-    ? ` with ${details.artifacts.length} artifact(s)`
-    : "";
-  const providerTask = details.providerTaskId
-    ? `; ${details.providerId === "runninghub" ? "RunningHub" : "provider"} task ID: ${details.providerTaskId}`
-    : "";
-  return {
-    content: [{
-      type: "text",
-      text: `Local generation run ID: ${details.runId}${providerTask}; status: ${details.status}${suffix}.`,
-    }],
-    details,
-  };
-}
-
-function generationPhase(view: GenerationRunView): GenerationToolDetails["phase"] {
-  if (view.run.status === "awaiting_confirmation") {
-    return "awaiting_confirmation";
-  }
-  if (view.run.status === "succeeded") return "completed";
-  if (view.run.status === "failed") return "failed";
-  if (view.run.status === "cancelled") return "cancelled";
-  const job = view.jobs.at(-1);
-  switch (job?.status) {
-    case "uploading":
-      return "preparing";
-    case "submitting":
-      return "submitting";
-    case "submitted":
-    case "polling":
-      return "generating";
-    case "downloading":
-      return "downloading";
-    default:
-      return "queued";
-  }
 }
 
 function generationRouteDetails(

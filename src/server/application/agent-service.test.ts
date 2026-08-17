@@ -9,6 +9,45 @@ import { AgentService } from "./agent-service";
 import { GenerationReviewRegistry } from "./content-generation/generation-review-registry";
 
 describe("AgentService", () => {
+  it("forwards workflow tool results to the owning runtime", async () => {
+    const commands: unknown[] = [];
+    const runtime = runtimeStub({
+      execute: async <T,>(command: unknown) => {
+        commands.push(command);
+        return undefined as T;
+      },
+    });
+    const registry = new InMemoryAgentRegistry();
+    registry.register("session-1", runtime);
+    const service = new AgentService(
+      {} as SessionRepository,
+      registry,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+    );
+
+    await service.recordGenerationTurnResult("session-1", {
+      turnId: "turn-1",
+      toolName: "generate_image",
+      result: {
+        content: [{ type: "text", text: "run queued" }],
+        details: { runId: "run-1" },
+        isError: false,
+      },
+    });
+
+    expect(commands).toEqual([{
+      type: "record_generation_turn_result",
+      turnId: "turn-1",
+      toolName: "generate_image",
+      result: {
+        content: [{ type: "text", text: "run queued" }],
+        details: { runId: "run-1" },
+        isError: false,
+      },
+    }]);
+  });
+
   it("creates and configures a runtime without starting a prompt", async () => {
     const commands: unknown[] = [];
     const execute = async <T,>(command: unknown) => {
@@ -152,6 +191,90 @@ describe("AgentService", () => {
     await vi.waitFor(() =>
       expect(reviews.requiresReview("session-1")).toBe(false),
     );
+  });
+
+  it("reserves a session before the runtime reports streaming", async () => {
+    let finishPrompt: (() => void) | undefined;
+    const runtime = runtimeStub({
+      execute: async <T,>() =>
+        new Promise<T>((resolve) => {
+          finishPrompt = () => resolve(undefined as T);
+        }),
+    });
+    const runtimes = new InMemoryAgentRegistry();
+    runtimes.register("session-1", runtime);
+    const service = new AgentService(
+      {} as SessionRepository,
+      runtimes,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+    );
+
+    await service.execute("session-1", { type: "prompt", message: "first" });
+    await expect(service.getState("session-1")).resolves.toMatchObject({
+      isStreaming: true,
+    });
+    await expect(
+      service.execute("session-1", { type: "prompt", message: "second" }),
+    ).rejects.toMatchObject({ code: "AGENT_BUSY", status: 409 });
+
+    finishPrompt?.();
+    await vi.waitFor(async () =>
+      expect(await service.getState("session-1")).toMatchObject({
+        isStreaming: false,
+      }),
+    );
+  });
+
+  it("projects a new runtime before returning it to dependent session APIs", async () => {
+    const runtime = runtimeStub();
+    const registerCreatedSession = vi.fn(async () => {});
+    const service = new AgentService(
+      {} as SessionRepository,
+      new InMemoryAgentRegistry(),
+      { create: vi.fn(async () => runtime) },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      undefined,
+      undefined,
+      { registerCreatedSession },
+    );
+
+    await expect(service.create({ cwd: "C:\\work" })).resolves.toEqual({
+      sessionId: "created",
+    });
+    expect(registerCreatedSession).toHaveBeenCalledWith({
+      sessionId: "created",
+      cwd: "C:\\work",
+      sessionFile: "created.jsonl",
+      createdAt: expect.any(String),
+    });
+  });
+
+  it("destroys a new runtime when its persistent session projection fails", async () => {
+    const destroy = vi.fn();
+    const runtime = runtimeStub({ destroy });
+    const registry = new InMemoryAgentRegistry();
+    const service = new AgentService(
+      {} as SessionRepository,
+      registry,
+      { create: vi.fn(async () => runtime) },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      undefined,
+      undefined,
+      {
+        registerCreatedSession: vi.fn(async () => {
+          throw new Error("projection failed");
+        }),
+      },
+    );
+
+    await expect(service.create({ cwd: "C:\\work" })).rejects.toThrow(
+      "projection failed",
+    );
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(registry.get("created")).toBeUndefined();
   });
 
   it("adds server-owned generation audit context to a prompt", async () => {

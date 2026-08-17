@@ -64,10 +64,25 @@ export class SqliteDatabase {
 
     for (const migration of SQLITE_MIGRATIONS) {
       if (applied.has(migration.version)) continue;
-      this.transaction(() => {
-        this.database.exec(migration.sql);
-        insert.run(migration.version, migration.name, new Date().toISOString());
-      });
+      if (migration.disableForeignKeys) {
+        this.database.exec("PRAGMA foreign_keys = OFF");
+      }
+      try {
+        this.transaction(() => {
+          this.database.exec(migration.sql);
+          insert.run(migration.version, migration.name, new Date().toISOString());
+        });
+      } finally {
+        if (migration.disableForeignKeys) {
+          this.database.exec("PRAGMA foreign_keys = ON");
+        }
+      }
+      if (migration.disableForeignKeys) {
+        const violations = this.database.prepare("PRAGMA foreign_key_check").all();
+        if (violations.length) {
+          throw new Error(`SQLite migration ${migration.version} left invalid foreign keys`);
+        }
+      }
     }
   }
 }

@@ -220,6 +220,7 @@ describe("GenerationRunService", () => {
       code: "SESSION_NOT_FOUND",
       status: 404,
     });
+    await expect(service.listRunsForContext("missing")).resolves.toEqual([]);
   });
 
   it("validates semantic parameters and asset slots before creating billable work", async () => {

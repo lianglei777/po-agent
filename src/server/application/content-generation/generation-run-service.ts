@@ -323,6 +323,17 @@ export class GenerationRunService {
   async listRuns(sessionId: string): Promise<GenerationRunView[]> {
     await this.ready;
     await this.requireSession(sessionId);
+    return this.listRunViews(sessionId);
+  }
+
+  async listRunsForContext(sessionId: string): Promise<GenerationRunView[]> {
+    await this.ready;
+    if (!await this.resolveSession(sessionId)) return [];
+    // 新建 Pi Session 在首条 Prompt 持久化前可能尚无仓库记录；可选上下文不应因此阻断普通对话。
+    return this.listRunViews(sessionId);
+  }
+
+  private async listRunViews(sessionId: string): Promise<GenerationRunView[]> {
     const runs = await this.repository.listRunsBySession(sessionId);
     return Promise.all(runs.map(async (run) => ({
       run,

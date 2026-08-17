@@ -54,6 +54,30 @@ describe("agent workspace store", () => {
     });
   });
 
+  it("promotes a draft without remounting its chat composer", () => {
+    const store = createWorkspaceStore({
+      activeCwd: session.cwd,
+      newSessionCwd: session.cwd,
+      draftSession: {
+        id: "draft-1",
+        cwd: session.cwd,
+        created: "2026-08-06T00:59:00.000Z",
+      },
+      chatInstanceKey: 3,
+    });
+
+    store.getState().completeDraftSession(session);
+
+    expect(store.getState()).toMatchObject({
+      activeCwd: session.cwd,
+      selectedSession: session,
+      newSessionCwd: null,
+      draftSession: null,
+      sessionSurface: "chat",
+      chatInstanceKey: 3,
+    });
+  });
+
   it("resets session-scoped state when the workspace changes", () => {
     const store = createWorkspaceStore({
       selectedSession: session,

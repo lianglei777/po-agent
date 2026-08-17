@@ -27,6 +27,7 @@ import {
 import { sanitizeModelsConfig } from "@/contracts/model-compat";
 import { evaluateModelTestMessages } from "./model-test-result";
 import { mapModelDiagnostic } from "./model-diagnostic-mapper";
+import { normalizePiModelBaseUrl } from "./pi-model-base-url";
 
 export class PiModelProvider implements ModelProvider {
   constructor(private readonly modelRuntime: Promise<ModelRuntime>) {}
@@ -132,7 +133,7 @@ export class PiModelProvider implements ModelProvider {
         cwd: directory,
         sessionManager: SessionManager.inMemory(directory),
         modelRuntime: testRuntime,
-        model,
+        model: normalizePiModelBaseUrl(model),
         noTools: "all",
       }));
       session.setAutoRetryEnabled(false);

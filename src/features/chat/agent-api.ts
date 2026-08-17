@@ -2,6 +2,9 @@ import type {
   AgentCommand,
   AgentCommandResult,
   AgentRuntimeResponse,
+  AgentTurnRequest,
+  AgentTurnResponse,
+  AgentTurnSnapshotResponse,
   CreateAgentRequest,
   CreateAgentResponse,
 } from "@/contracts/agent";
@@ -70,6 +73,23 @@ export function sendCommand<C extends AgentCommand>(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(command),
     },
+  );
+}
+
+export function submitAgentTurn(id: string, input: AgentTurnRequest) {
+  return requestJson<AgentTurnResponse>(
+    `/api/agent/${encodeURIComponent(id)}/turns`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function loadAgentTurnSnapshot(id: string) {
+  return requestJson<AgentTurnSnapshotResponse>(
+    `/api/agent/${encodeURIComponent(id)}/turns`,
   );
 }
 

@@ -76,7 +76,7 @@ export type WorkspaceActions = {
   changeCwd: (cwd: string) => void;
   selectSession: (session: SessionInfo) => void;
   startDraftSession: (draft: DraftSession) => void;
-  completeDraftSession: () => void;
+  completeDraftSession: (session: SessionInfo) => void;
   replaceDeletedSession: (
     deletedSession: SessionInfo,
     replacement: DraftSession,
@@ -209,10 +209,14 @@ export function createWorkspaceStore(
         currentSystemPrompt: null,
         instructionsNeedApply: false,
       })),
-    completeDraftSession: () =>
+    completeDraftSession: (session) =>
       set({
+        activeCwd: session.cwd,
+        selectedSession: session,
         newSessionCwd: null,
         draftSession: null,
+        activeView: "chat",
+        sessionSurface: "chat",
       }),
     replaceDeletedSession: (deletedSession, replacement) => {
       if (get().selectedSession?.id !== deletedSession.id) return false;

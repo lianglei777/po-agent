@@ -27,6 +27,9 @@ export async function planGenerationTurn(
     ...context,
   });
   if (decision.intent === "chat") return { type: "chat" };
+  if (decision.intent === "attachment-understanding") {
+    return { type: "attachment-understanding" };
+  }
   if (decision.intent === "clarification" || !decision.capability) {
     return {
       type: "clarification",

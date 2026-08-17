@@ -23,6 +23,7 @@ import {
   BUILTIN_WEB_TOOL_NAMES,
   createPiResourceLoader,
 } from "./pi-resource-loader";
+import { normalizePiModelBaseUrl } from "./pi-model-base-url";
 
 const FULL_BUILTIN_TOOLS = [
   "bash",
@@ -67,6 +68,9 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
           ? "all"
           : undefined,
     });
+    if (session.model) {
+      await session.setModel(normalizePiModelBaseUrl(session.model));
+    }
     return new PiAgentRuntime(session, requiredToolNames);
   }
 }
@@ -112,6 +116,69 @@ export class PiAgentRuntime implements AgentRuntime {
     this.assertAlive();
 
     switch (command.type) {
+      case "record_user_turn": {
+        const alreadyRecorded = this.session.sessionManager.getBranch().some(
+          (entry) =>
+            entry.type === "custom_message" &&
+            entry.customType === "po-agent-generation-turn" &&
+            isGenerationTurnDetails(entry.details, command.turnId),
+        );
+        if (alreadyRecorded) return undefined as T;
+        // 附件引用只作为可信展示元数据持久化；生成 Worker 会从 Run 输入读取素材，不把本地路径交给聊天模型。
+        this.session.sessionManager.appendCustomMessageEntry(
+          "po-agent-generation-turn",
+          command.generationContext ?? "",
+          false,
+          { turnId: command.turnId, assets: command.assets },
+        );
+        this.session.sessionManager.appendMessage({
+          role: "user",
+          content: [{ type: "text", text: command.message }],
+          timestamp: Date.now(),
+        });
+        // 标准 assistant tool call 既让纯生成会话立即落盘，也让刷新和后续模型上下文保留真实执行语义。
+        this.session.sessionManager.appendMessage({
+          role: "assistant",
+          content: [{
+            type: "toolCall",
+            id: generationWorkflowToolCallId(command.turnId),
+            name: command.plan.toolName,
+            arguments: {
+              prompt: command.plan.prompt,
+              routeId: command.plan.routeId,
+              parameters: command.plan.parameters,
+            },
+          }],
+          api: this.session.model?.api ?? "openai-completions",
+          provider: this.session.model?.provider ?? "po-agent",
+          model: this.session.model?.id ?? "content-generation-workflow",
+          stopReason: "toolUse",
+          usage: emptyUsage(),
+          timestamp: Date.now(),
+        });
+        return undefined as T;
+      }
+      case "record_generation_turn_result": {
+        const toolCallId = generationWorkflowToolCallId(command.turnId);
+        const alreadyRecorded = this.session.sessionManager.getBranch().some(
+          (entry) =>
+            entry.type === "message" &&
+            entry.message.role === "toolResult" &&
+            entry.message.toolCallId === toolCallId &&
+            sameGenerationResult(entry.message.details, command.result.details),
+        );
+        if (alreadyRecorded) return undefined as T;
+        this.session.sessionManager.appendMessage({
+          role: "toolResult",
+          toolCallId,
+          toolName: command.toolName,
+          content: command.result.content,
+          details: command.result.details,
+          isError: command.result.isError,
+          timestamp: Date.now(),
+        });
+        return undefined as T;
+      }
       case "prompt":
         await this.refreshWebAccessConfigIfNeeded();
         await this.refreshModelConfigIfNeeded();
@@ -132,15 +199,13 @@ export class PiAgentRuntime implements AgentRuntime {
               "po-agent-generation-context",
               command.generationContext,
               false,
-              command.generation?.assets.length
-                ? { assets: command.generation.assets }
+              (command.generation?.assets.length || command.generationContextAssets?.length)
+                ? { assets: command.generation?.assets ?? command.generationContextAssets }
                 : undefined,
             );
           }
         }
-        await this.session.prompt(command.message, {
-          images: mapImages(command.images),
-        });
+        await this.promptWithGenerationPlan(command);
         return undefined as T;
       case "abort":
         await this.session.abort();
@@ -159,7 +224,7 @@ export class PiAgentRuntime implements AgentRuntime {
             404,
           );
         }
-        await this.session.setModel(model);
+        await this.session.setModel(normalizePiModelBaseUrl(model));
         return undefined as T;
       }
       case "fork": {
@@ -236,6 +301,51 @@ export class PiAgentRuntime implements AgentRuntime {
           "Unsupported agent command",
           400,
         );
+    }
+  }
+
+  private async promptWithGenerationPlan(
+    command: Extract<AgentCommand, { type: "prompt" }>,
+  ): Promise<void> {
+    const toolName = command.generation?.plan?.toolName;
+    if (!toolName) {
+      await this.session.prompt(command.message, { images: mapImages(command.images) });
+      return;
+    }
+
+    const activeToolNames = this.session.getActiveToolNames();
+    const originalStream = this.session.agent.streamFunction;
+    let firstProviderRequest = true;
+    // planner 已确认生成后，首个模型请求只允许并强制调用目标工具；工具结果后的最终回复恢复自动选择。
+    this.session.setActiveToolsByName([toolName]);
+    this.session.agent.streamFunction = (model, context, options) => {
+      const forceTool = firstProviderRequest;
+      firstProviderRequest = false;
+      const generationOptions = {
+        ...options,
+        // 同一工具回合必须保持推理模式一致，否则部分代理要求补传首轮并不存在的 reasoning_content。
+        reasoning: undefined,
+      };
+      const forcedOptions = {
+        ...generationOptions,
+        toolChoice: model.api === "anthropic-messages" ||
+            model.api === "bedrock-converse-stream" ||
+            model.api === "google-generative-ai" ||
+            model.api === "google-vertex"
+          ? "any" as const
+          : "required" as const,
+      } as NonNullable<typeof options> & { toolChoice: "any" | "required" };
+      return originalStream(
+        model,
+        context,
+        forceTool ? forcedOptions : generationOptions,
+      );
+    };
+    try {
+      await this.session.prompt(command.message, { images: mapImages(command.images) });
+    } finally {
+      this.session.agent.streamFunction = originalStream;
+      this.session.setActiveToolsByName(activeToolNames);
     }
   }
 
@@ -329,10 +439,52 @@ export class PiAgentRuntime implements AgentRuntime {
           404,
         );
       }
-      await this.session.setModel(refreshedModel);
+      await this.session.setModel(normalizePiModelBaseUrl(refreshedModel));
     }
     this.appliedModelConfigRevision = targetRevision;
   }
+}
+
+function isGenerationTurnDetails(value: unknown, turnId: string): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "turnId" in value &&
+    value.turnId === turnId,
+  );
+}
+
+function generationWorkflowToolCallId(turnId: string): string {
+  return `chat-workflow:${turnId}`;
+}
+
+function sameGenerationResult(previous: unknown, next: unknown): boolean {
+  const previousRunId = generationRunId(previous);
+  const nextRunId = generationRunId(next);
+  if (previousRunId || nextRunId) return previousRunId === nextRunId;
+  return JSON.stringify(previous) === JSON.stringify(next);
+}
+
+function generationRunId(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || !("runId" in value)) return undefined;
+  return typeof value.runId === "string" ? value.runId : undefined;
+}
+
+function emptyUsage() {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+  };
 }
 
 function toPiToolDefinition(definition: AgentToolDefinition): ToolDefinition {

@@ -7,16 +7,17 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   createAgent,
+  loadAgentTurnSnapshot,
   loadModels,
   loadRuntime,
   loadSession,
   loadSessionContext,
   sendCommand,
+  submitAgentTurn,
 } from "./agent-api";
 import {
   canAttachImagesToModel,
@@ -34,7 +35,6 @@ import {
 } from "./chat-logic";
 import { useI18n } from "@/i18n/use-i18n";
 import type {
-  AgentGenerationPolicy,
   AgentEvent,
   AttachedImage,
   ContextUsage,
@@ -44,28 +44,12 @@ import type {
   UserMessage,
 } from "./agent-types";
 import { useChatStore } from "./state/chat-store-provider";
-import type {
-  ComposerGenerationMode,
-  GenerationAssetSlot,
-  GenerationExecutionPolicy,
-  GenerationRouteDto,
-  GenerationRunViewDto,
-  JsonValue,
-} from "@/contracts/generation";
-import {
-  cancelChatGenerationRun,
-  confirmChatGenerationRun,
-  loadChatGenerationRun,
-  loadChatGenerationRuns,
-  loadGenerationComposerOptions,
-  uploadChatGenerationAsset,
-} from "./generation-api";
-import type { ChatGenerationAsset } from "./chat-generation-types";
+import { uploadChatGenerationAsset } from "./generation-api";
 import {
   bindGenerationAssets,
-  composerGenerationSlots,
   missingGenerationSlots,
 } from "./chat-generation-logic";
+import { useChatGenerationState } from "./use-chat-generation-state";
 
 export type ChatSession = { id: string; cwd: string };
 
@@ -228,12 +212,25 @@ export function useChatController(options: ChatControllerOptions) {
     ),
   );
   const { t } = useI18n();
-  const [generationReview, setGenerationReview] = useState(false);
-  const [generationMode, setGenerationMode] = useState<ComposerGenerationMode>({ type: "chat" });
-  const [generationRoutes, setGenerationRoutes] = useState<GenerationRouteDto[]>([]);
-  const [generationAssets, setGenerationAssets] = useState<ChatGenerationAsset[]>([]);
-  const [generationRuns, setGenerationRuns] = useState<GenerationRunViewDto[]>([]);
-  const [generationBusy, setGenerationBusy] = useState(false);
+  const generation = useChatGenerationState({
+    modelsRevision,
+    onChanged: onAgentEnd,
+    sessionId: session?.id,
+    setActionError,
+  });
+  const {
+    active: generationActive,
+    assets: generationAssets,
+    busy: generationBusy,
+    executionPolicy: generationExecutionPolicy,
+    mode: generationMode,
+    routes: generationRoutes,
+    runs: generationRunsForSession,
+    setAssets: setGenerationAssets,
+    setBusy: setGenerationBusy,
+    setRuns: setGenerationRuns,
+    slots: generationSlots,
+  } = generation;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -245,6 +242,7 @@ export function useChatController(options: ChatControllerOptions) {
   const connectSseRef = useRef<(id: string) => void>(() => {});
   const runningRef = useRef(false);
   const sessionIdRef = useRef(session?.id ?? null);
+  const provisionalSessionRef = useRef(false);
   const imagesRef = useRef<AttachedImage[]>([]);
   const firstHistoryRef = useRef(true);
   const lastUserRef = useRef<HTMLElement | null>(null);
@@ -258,22 +256,6 @@ export function useChatController(options: ChatControllerOptions) {
   const thinkingMode = useMemo(
     () => thinkingModeFromLevel(thinkingLevel),
     [thinkingLevel],
-  );
-  const generationExecutionPolicy: GenerationExecutionPolicy = generationReview ? "review-first" : "direct";
-  const generationRunsForSession = useMemo(() => {
-    if (!session?.id) return generationRuns;
-    return generationRuns.filter(({ run }) => run.sessionId === session.id);
-  }, [generationRuns, session]);
-  const generationSlots = useMemo(
-    () => composerGenerationSlots(generationMode, generationRoutes, {
-      image: t.chat.input.generationImage,
-      video: t.chat.input.generationVideo,
-      audio: t.chat.input.generationAudio,
-    }),
-    [generationMode, generationRoutes, t],
-  );
-  const generationActive = generationRunsForSession.some(({ run }) =>
-    ["awaiting_confirmation", "queued", "running", "cancel_requested"].includes(run.status),
   );
   const stats = useMemo(() => sessionStats(messages), [messages]);
   const agentPhase = phaseLabel(runningTools, running);
@@ -356,8 +338,9 @@ export function useChatController(options: ChatControllerOptions) {
       await reloadHistory();
       const id = sessionIdRef.current;
       if (id) {
-        const snapshot = await loadRuntime(id);
-        syncRuntimeState(snapshot.state);
+        const snapshot = await loadAgentTurnSnapshot(id);
+        syncRuntimeState(snapshot.agent);
+        setGenerationRuns(snapshot.generationRuns);
       }
     } catch (cause) {
       setActionError(
@@ -372,6 +355,7 @@ export function useChatController(options: ChatControllerOptions) {
     reloadHistory,
     setActionError,
     setRetryInfo,
+    setGenerationRuns,
     setRunning,
     setRunningTools,
     setStopping,
@@ -548,64 +532,6 @@ export function useChatController(options: ChatControllerOptions) {
   }, [modelsRevision, setActionError, setModelKey, setModels]);
 
   useEffect(() => {
-    let active = true;
-    void loadGenerationComposerOptions()
-      .then((result) => {
-        if (active) setGenerationRoutes(result.routes);
-      })
-      .catch((cause) => {
-        if (active) {
-          setActionError(
-            cause instanceof Error
-              ? cause.message
-              : t.chat.input.generationOptionsFailed,
-          );
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [modelsRevision, setActionError, t]);
-
-  useEffect(() => {
-    if (!session?.id) return;
-    let active = true;
-    void loadChatGenerationRuns(session.id)
-      .then((runs) => {
-        if (active) setGenerationRuns(runs);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [session?.id]);
-
-  useEffect(() => {
-    const activeRuns = generationRunsForSession.filter(({ run }) =>
-      ["awaiting_confirmation", "queued", "running", "cancel_requested"].includes(run.status),
-    );
-    if (!activeRuns.length) return;
-    let active = true;
-    const timer = window.setInterval(() => {
-      void Promise.all(activeRuns.map(({ run }) => loadChatGenerationRun(run.id)))
-        .then((views) => {
-          if (!active) return;
-          setGenerationRuns((current) => current.map((item) =>
-            views.find((view) => view.run.id === item.run.id) ?? item,
-          ));
-          if (views.some((view) => !["awaiting_confirmation", "queued", "running", "cancel_requested"].includes(view.run.status))) {
-            onAgentEnd?.();
-          }
-        })
-        .catch(() => undefined);
-    }, 2_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [generationActive, generationRunsForSession, onAgentEnd]);
-
-  useEffect(() => {
     if (!session) return;
     let active = true;
     const timer = window.setTimeout(async () => {
@@ -613,19 +539,17 @@ export function useChatController(options: ChatControllerOptions) {
       setPartialToolResults(new Map());
       setLoading(true);
       try {
-        const detail = await loadSession(session.id);
+        const [detail, turnSnapshot] = await Promise.all([
+          loadSession(session.id),
+          loadAgentTurnSnapshot(session.id),
+        ]);
         // 会话切换后，旧请求不得再同步 Workspace 状态或重新建立旧 SSE。
         if (!active) return;
         applyDetail(detail);
-        if (!detail.agentState?.state) {
-          const runtimeState = await sendCommand(session.id, {
-            type: "get_state",
-          });
-          if (!active) return;
-          syncRuntimeState(runtimeState);
-        }
+        syncRuntimeState(turnSnapshot.agent);
+        setGenerationRuns(turnSnapshot.generationRuns);
         setError("");
-        if (detail.agentState?.running && detail.agentState.state?.isStreaming) {
+        if (turnSnapshot.agent.isStreaming) {
           setRunning(true);
           runningRef.current = true;
           dispatchStream({ type: "start" });
@@ -654,6 +578,7 @@ export function useChatController(options: ChatControllerOptions) {
     setLoading,
     setPartialToolResults,
     setRunning,
+    setGenerationRuns,
     syncRuntimeState,
   ]);
 
@@ -782,6 +707,22 @@ export function useChatController(options: ChatControllerOptions) {
   }
 
   async function addFiles(files: File[]) {
+    if (generationMode.type !== "chat") {
+      let rejected = false;
+      for (const file of files) {
+        const mediaType = file.type.split("/", 1)[0];
+        const candidates = generationSlots.filter((slot) =>
+          slot.mediaType === mediaType
+        );
+        if (candidates.length !== 1) {
+          rejected = true;
+          continue;
+        }
+        generation.addAssets(candidates[0]!, [file]);
+      }
+      if (rejected) setActionError(t.chat.input.generationAssetMismatch);
+      return;
+    }
     if (!canAttachImages) {
       setActionError(t.chat.input.imageUnsupported);
       return;
@@ -808,34 +749,22 @@ export function useChatController(options: ChatControllerOptions) {
     });
   }
 
-  function clearComposer() {
+  function clearComposer(revokePreviews = true) {
     setDraft("");
     setImages((current) => {
-      current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      if (revokePreviews) {
+        current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      }
       return [];
     });
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
-  function changeGenerationMode(next: ComposerGenerationMode) {
-    setGenerationMode(next);
-    setGenerationAssets([]);
-    setActionError("");
-  }
-
-  function addGenerationAssets(slot: GenerationAssetSlot, files: File[]) {
-    setGenerationAssets((current) => [
-      ...current,
-      ...files.map((file) => ({ id: crypto.randomUUID(), slot: slot.key, file })),
-    ]);
-  }
-
-  function removeGenerationAsset(id: string) {
-    setGenerationAssets((current) => current.filter((asset) => asset.id !== id));
-  }
-
   async function resolveGenerationSession(target: Exclude<ReturnType<typeof resolveSubmitTarget>, { type: "blocked" }>) {
     if (target.type !== "new") return { sessionId: target.sessionId, created: false };
+    if (sessionIdRef.current && provisionalSessionRef.current) {
+      return { sessionId: sessionIdRef.current, created: true };
+    }
     const selected = currentModel;
     const created = await createAgent({
       cwd: target.cwd,
@@ -844,12 +773,18 @@ export function useChatController(options: ChatControllerOptions) {
       thinkingLevel: thinkingLevel === "auto" ? undefined : thinkingLevel,
     });
     sessionIdRef.current = created.sessionId;
+    provisionalSessionRef.current = true;
     return { sessionId: created.sessionId, created: true };
   }
 
   async function submit(mode: SubmitMode = "prompt") {
     const text = draft.trim();
-    if (!text && images.length === 0 && generationAssets.length === 0) return;
+    const turnId = crypto.randomUUID();
+    const turnStartedAt = Date.now();
+    const activeGenerationAssets = generationMode.type === "chat"
+      ? []
+      : generationAssets;
+    if (!text && images.length === 0 && activeGenerationAssets.length === 0) return;
     const target = resolveSubmitTarget({
       isNew,
       mode,
@@ -862,26 +797,33 @@ export function useChatController(options: ChatControllerOptions) {
     }
     let commandTarget = target;
     let createdGenerationSession = false;
-    let generation: AgentGenerationPolicy | undefined;
+    let submittedGenerationAssets: UserMessage["generationAssets"];
+    let turnAlreadySubmitted = false;
+    let generationTurnPersisted = false;
     if (mode === "prompt" && generationMode.type !== "chat") {
       if (!text) {
         setActionError(t.chat.input.generationPromptRequired);
         return;
       }
-      if (generationMode.type === "generation-route") {
-        const route = generationRoutes.find(
-          (candidate) => candidate.id === generationMode.routeId,
-        );
-        if (!route) {
-          setActionError(t.chat.input.generationRouteUnavailable);
-          return;
-        }
-        const bindings = bindGenerationAssets(generationAssets, route);
-        const missingSlots = missingGenerationSlots(route, bindings);
+      if (!currentModel) {
+        setActionError(t.chat.input.generationPlanFailed);
+        return;
+      }
+      setGenerationBusy(true);
+      try {
+        const selectedRoute = generationMode.type === "generation-route"
+          ? generationRoutes.find((route) => route.id === generationMode.routeId)
+          : undefined;
+        const bindings = selectedRoute
+          ? bindGenerationAssets(generationAssets, selectedRoute)
+          : generationAssets.map((asset) => ({ asset, slot: asset.slot }));
         if (bindings.some((binding) => binding.slot === null)) {
           setActionError(t.chat.input.generationAssetMismatch);
           return;
         }
+        const missingSlots = selectedRoute
+          ? missingGenerationSlots(selectedRoute, bindings)
+          : [];
         if (missingSlots.length) {
           setActionError(
             t.chat.input.generationAssetsRequired.replace(
@@ -891,16 +833,13 @@ export function useChatController(options: ChatControllerOptions) {
           );
           return;
         }
-      }
-      setGenerationBusy(true);
-      try {
         const resolved = await resolveGenerationSession(target);
         commandTarget = { type: "existing", sessionId: resolved.sessionId };
         createdGenerationSession = resolved.created;
-        const assets = await Promise.all(generationAssets.map(async (asset) => {
+        const assets = await Promise.all(bindings.map(async ({ asset, slot }) => {
           const uploaded = await uploadChatGenerationAsset(resolved.sessionId, asset.file);
           return {
-            slot: asset.slot,
+            slot: slot!,
             name: uploaded.name,
             mediaType: asset.file.type.startsWith("video/")
               ? "video" as const
@@ -911,12 +850,87 @@ export function useChatController(options: ChatControllerOptions) {
             ref: uploaded.ref,
           };
         }));
-        generation = {
-          mode: generationMode,
-          reviewFirst: generationExecutionPolicy === "review-first",
-          assets,
-        };
+        submittedGenerationAssets = assets;
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const timeout = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            closeSource();
+            reject(new Error(t.chat.input.eventStreamFailed));
+          }, 10_000);
+          const finish = (callback: () => void) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            callback();
+          };
+          connectSse(
+            resolved.sessionId,
+            () => finish(resolve),
+            () => finish(() => reject(new Error(t.chat.input.eventStreamFailed))),
+          );
+        });
+        const attachmentImages = canAttachImages
+          ? await Promise.all(
+              generationAssets
+                .filter(({ file }) => file.type.startsWith("image/"))
+                .map(({ file }) => readImageInput(file)),
+            )
+          : [];
+        const result = await submitAgentTurn(resolved.sessionId, {
+          turnId,
+          message: text,
+          images: attachmentImages.length ? attachmentImages : undefined,
+          generation: {
+            mode: generationMode,
+            reviewFirst: generationExecutionPolicy === "review-first",
+            assets,
+          },
+        });
+        if (result.type === "clarification") {
+          closeSource();
+          setActionError(
+            result.reason === "MODEL_ATTACHMENT_UNSUPPORTED"
+              ? t.chat.input.generationAttachmentUnsupported
+              : result.question ?? t.chat.input.generationIntentAmbiguous,
+          );
+          return;
+        }
+        if (result.type === "invalid") {
+          closeSource();
+          setActionError(result.message || t.chat.input.generationPlanFailed);
+          return;
+        }
+        turnAlreadySubmitted = true;
+        if (result.intent === "generation") {
+          closeSource();
+          // 服务端已持久化 user/toolCall/toolResult；立即以会话事实替换本地草稿，避免重复消息和刷新前后结构漂移。
+          await reloadHistory();
+          generationTurnPersisted = true;
+          setGenerationRuns((current) => [
+            ...current.filter(({ run }) => run.id !== result.run.run.id),
+            result.run,
+          ]);
+        } else {
+          setRunning(true);
+          runningRef.current = true;
+          dispatchStream({ type: "start" });
+        }
       } catch (cause) {
+        closeSource();
+        // 执行器失败时服务端也会写入错误 Tool Result，尽量把完整失败过程呈现给用户。
+        if (sessionIdRef.current) {
+          try {
+            await reloadHistory();
+            const snapshot = await loadAgentTurnSnapshot(sessionIdRef.current);
+            syncRuntimeState(snapshot.agent);
+            setGenerationRuns(snapshot.generationRuns);
+            if (createdGenerationSession) onSessionCreated?.(sessionIdRef.current);
+          } catch {
+            // 保留原始提交错误；历史同步失败不应覆盖真正的生成失败原因。
+          }
+        }
         setActionError(
           cause instanceof Error ? cause.message : t.chat.input.generationSubmitFailed,
         );
@@ -932,20 +946,24 @@ export function useChatController(options: ChatControllerOptions) {
         mimeType,
       })),
     ];
+    const submittedImages = images;
+    const submittedLocalGenerationAssets = activeGenerationAssets;
     const userMessage: UserMessage = {
       role: "user",
       content: createUserContent(text, imageInputs),
-      timestamp: Date.now(),
-      clientId: crypto.randomUUID(),
+      timestamp: turnStartedAt,
+      clientId: turnId,
       status: "pending",
-      generationAssets: generation?.assets,
+      generationAssets: submittedGenerationAssets,
     };
     if (mode === "steer" && typeof userMessage.content === "string") {
       userMessage.content = `[steer] ${userMessage.content}`;
     }
-    setMessages((current) => [...current, userMessage]);
-    clearComposer();
-    setGenerationAssets([]);
+    if (!generationTurnPersisted) {
+      setMessages((current) => [...current, userMessage]);
+    }
+    clearComposer(false);
+    if (generationMode.type !== "chat") setGenerationAssets([]);
     setActionError("");
 
     try {
@@ -989,31 +1007,37 @@ export function useChatController(options: ChatControllerOptions) {
           type: "prompt",
           message: text,
           images: imageInputs.length ? imageInputs : undefined,
-          generation,
         });
         onSessionCreated?.(created.sessionId);
       } else {
-        if (mode === "prompt") {
+        if (mode === "prompt" && !turnAlreadySubmitted) {
           setRunning(true);
           runningRef.current = true;
           dispatchStream({ type: "start" });
           connectSse(commandTarget.sessionId);
         }
-        await sendCommand(commandTarget.sessionId, {
-          type: mode,
-          message: text,
-          images: imageInputs.length ? imageInputs : undefined,
-          ...(mode === "prompt" && generation ? { generation } : {}),
-        });
+        if (!turnAlreadySubmitted) {
+          await sendCommand(commandTarget.sessionId, {
+            type: mode,
+            message: text,
+            images: imageInputs.length ? imageInputs : undefined,
+          });
+        }
         if (createdGenerationSession) onSessionCreated?.(commandTarget.sessionId);
       }
-      setMessages((current) =>
-        current.map((message) =>
-          message.role === "user" && message.clientId === userMessage.clientId
-            ? { ...message, status: undefined }
-            : message,
-        ),
-      );
+      if (!generationTurnPersisted) {
+        setMessages((current) =>
+          current.map((message) =>
+            message.role === "user" && message.clientId === userMessage.clientId
+              ? { ...message, status: undefined }
+              : message,
+          ),
+        );
+      }
+      submittedImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+      submittedLocalGenerationAssets.forEach((asset) => {
+        if (asset.previewUrl) URL.revokeObjectURL(asset.previewUrl);
+      });
       window.requestAnimationFrame(() =>
         lastUserRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }),
       );
@@ -1031,6 +1055,9 @@ export function useChatController(options: ChatControllerOptions) {
             : message,
         ),
       );
+      setDraft(text);
+      setImages(submittedImages);
+      setGenerationAssets(submittedLocalGenerationAssets);
       setActionError(cause instanceof Error ? cause.message : "Message failed");
     }
   }
@@ -1050,46 +1077,6 @@ export function useChatController(options: ChatControllerOptions) {
     } catch (cause) {
       setStopping(false);
       setActionError(cause instanceof Error ? cause.message : "Stop failed");
-    }
-  }
-
-  async function confirmGeneration(
-    runId: string,
-    prompt: string,
-    parameters: Record<string, JsonValue>,
-  ) {
-    if (generationBusy) return;
-    setGenerationBusy(true);
-    try {
-      const view = await confirmChatGenerationRun(runId, { prompt, parameters });
-      setGenerationRuns((current) => current.map((item) =>
-        item.run.id === runId ? view : item,
-      ));
-      onAgentEnd?.();
-    } catch (cause) {
-      setActionError(
-        cause instanceof Error ? cause.message : t.chat.input.generationSubmitFailed,
-      );
-    } finally {
-      setGenerationBusy(false);
-    }
-  }
-
-  async function cancelGeneration(runId: string) {
-    if (generationBusy) return;
-    setGenerationBusy(true);
-    try {
-      const view = await cancelChatGenerationRun(runId);
-      setGenerationRuns((current) => current.map((item) =>
-        item.run.id === runId ? view : item,
-      ));
-      onAgentEnd?.();
-    } catch (cause) {
-      setActionError(
-        cause instanceof Error ? cause.message : t.chat.input.generationSubmitFailed,
-      );
-    } finally {
-      setGenerationBusy(false);
     }
   }
 
@@ -1187,7 +1174,7 @@ export function useChatController(options: ChatControllerOptions) {
 
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files);
-    if (files.some((file) => file.type.startsWith("image/"))) void addFiles(files);
+    if (files.length) void addFiles(files);
   }
 
   return {
@@ -1210,11 +1197,11 @@ export function useChatController(options: ChatControllerOptions) {
     models,
     modelKey,
     currentModel,
-    canAttachImages,
+    canAttachImages: generationMode.type !== "chat" || canAttachImages,
     thinkingLevel,
     thinkingMode,
-    generationReview,
-    setGenerationReview,
+    generationReview: generation.reviewFirst,
+    setGenerationReview: generation.setReviewFirst,
     generationMode,
     generationRoutes,
     generationSlots,
@@ -1223,11 +1210,11 @@ export function useChatController(options: ChatControllerOptions) {
     generationBusy,
     generationActive,
     generationExecutionPolicy,
-    changeGenerationMode,
-    addGenerationAssets,
-    removeGenerationAsset,
-    confirmGeneration,
-    cancelGeneration,
+    changeGenerationMode: generation.changeMode,
+    addGenerationAssets: generation.addAssets,
+    removeGenerationAsset: generation.removeAsset,
+    confirmGeneration: generation.confirm,
+    cancelGeneration: generation.cancel,
     forkingEntryId,
     undoable,
     undoEdit,
@@ -1246,7 +1233,11 @@ export function useChatController(options: ChatControllerOptions) {
     setContentNode(node: HTMLDivElement | null) {
       contentRef.current = node;
     },
-    canSubmit: Boolean(draft.trim() || images.length || generationAssets.length)
+    canSubmit: Boolean(
+      draft.trim() ||
+      images.length ||
+      (generationMode.type !== "chat" && generationAssets.length)
+    )
       && !generationBusy
       && !generationActive,
     isNew,
@@ -1283,6 +1274,23 @@ function readImage(file: File): Promise<AttachedImage> {
         previewUrl: URL.createObjectURL(file),
         type: "image",
       });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function readImageInput(file: File): Promise<ImageInput> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("Image read failed"));
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      if (comma < 0) {
+        reject(new Error("Invalid image data"));
+        return;
+      }
+      resolve({ type: "image", data: result.slice(comma + 1), mimeType: file.type });
     };
     reader.readAsDataURL(file);
   });

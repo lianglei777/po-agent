@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { AgentService } from "@/server/application/agent-service";
+import { ChatTurnService } from "@/server/application/chat-turn-service";
 import { AgentSettingsService } from "@/server/application/agent-settings-service";
 import { WebAccessSettingsService } from "@/server/application/web-access-settings-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
@@ -10,8 +11,9 @@ import { GenerationAssetService } from "@/server/application/content-generation/
 import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
 import { GenerationAgentToolProvider } from "@/server/application/content-generation/generation-agent-tool-provider";
 import { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
+import { GenerationTurnPlanningService } from "@/server/application/content-generation/generation-turn-planning-service";
+import { GenerationTurnExecutor } from "@/server/application/content-generation/generation-turn-executor";
 import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
-import { planGenerationTurn } from "@/server/application/content-generation/generation-turn-planner";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
@@ -44,7 +46,6 @@ import { createRunningHubRoutes } from "@/server/infrastructure/content-generati
 import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
-import type { PlanGenerationTurnRequest } from "@/contracts/generation";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -137,54 +138,62 @@ function createContainer() {
     return generationAssetService;
   }
 
-  async function planComposerGenerationTurn(input: PlanGenerationTurnRequest) {
-    const service = getGenerationRunService();
-    const allRoutes = await service.listRoutes();
-    const providerIds = [...new Set(allRoutes.map((route) => route.providerId))];
-    const settings = new Map(
-      await Promise.all(providerIds.map(async (providerId) => [
-        providerId,
-        await service.getProviderSettings(providerId),
-      ] as const)),
-    );
-    const credentialAvailable = new Map<string, boolean>([[
-      "runninghub",
-      await getGenerationCredentialStore().hasCredential("runninghub:default"),
-    ]]);
-    const routes = allRoutes
-      .filter((route) =>
-        route.enabled &&
-        settings.get(route.providerId)?.enabled &&
-        credentialAvailable.get(route.providerId) === true,
-      );
-    const sessionContext = input.sessionId
-      ? await sessions.getContext(input.sessionId)
-      : null;
-    const recentRuns = input.sessionId
-      ? await service.listRuns(input.sessionId)
-      : [];
-    return planGenerationTurn(input, routes, generationIntentClassifier, {
-      // 只发送有限的纯文本上下文，避免一次轻量意图判断携带整段工具结果或图片数据。
-      conversation: (sessionContext?.messages ?? [])
-        .filter((message) => message.role === "user" || message.role === "assistant")
-        .slice(-12)
-        .map((message) => ({
-          role: message.role as "user" | "assistant",
-          text: messageText(message.content).slice(0, 4_000),
-        }))
-        .filter((message) => message.text.length > 0),
-      recentRuns: recentRuns.slice(0, 5).map(({ run }) => ({
-        routeId: run.routeId,
-        capability: run.capability,
-        prompt: run.prompt.slice(0, 4_000),
-        status: run.status,
-      })),
-    });
-  }
+  const generationTurnPlanningService = new GenerationTurnPlanningService(
+    getGenerationRunService(),
+    sessions,
+    generationIntentClassifier,
+    {
+      getCredential: (reference) =>
+        getGenerationCredentialStore().getCredential(reference),
+    },
+  );
+  const agentService = new AgentService(
+    sessions,
+    runtimes,
+    runtimeFactory,
+    roots,
+    generationAgentTools,
+    generationReviews,
+    {
+      async getPromptContext(sessionId, generation, assets) {
+        const runs = await getGenerationRunService().listRunsForContext(sessionId);
+        const routes = generation
+          ? (await getGenerationRunService().listRoutes()).filter((route) => route.enabled)
+          : [];
+        return runs.length || generation || assets?.length
+          ? generationAuditContext(runs.slice(0, 5), generation, routes, assets)
+          : undefined;
+      },
+    },
+    {
+      async registerCreatedSession(input) {
+        await getGenerationRunService().upsertSession({
+          id: input.sessionId,
+          cwd: input.cwd,
+          origin: "chat",
+          agentSessionRef: input.sessionFile,
+          createdAt: input.createdAt,
+          updatedAt: input.createdAt,
+        });
+      },
+    },
+  );
+  const chatTurnService = new ChatTurnService(
+    agentService,
+    generationTurnPlanningService,
+    getGenerationRunService(),
+    new GenerationTurnExecutor(getGenerationRunService(), {
+      getCredential: (reference) =>
+        getGenerationCredentialStore().getCredential(reference),
+    }),
+  );
 
   return {
     roots,
-    planComposerGenerationTurn,
+    planComposerGenerationTurn: generationTurnPlanningService.plan.bind(
+      generationTurnPlanningService,
+    ),
+    chatTurnService,
     get generationRunService() {
       return getGenerationRunService();
     },
@@ -195,25 +204,7 @@ function createContainer() {
       return getGenerationAssetService();
     },
     sessionService: new SessionService(sessions, runtimes),
-    agentService: new AgentService(
-      sessions,
-      runtimes,
-      runtimeFactory,
-      roots,
-      generationAgentTools,
-      generationReviews,
-      {
-        async getPromptContext(sessionId, generation) {
-          const runs = await getGenerationRunService().listRuns(sessionId);
-          const routes = generation
-            ? (await getGenerationRunService().listRoutes()).filter((route) => route.enabled)
-            : [];
-          return runs.length || generation
-            ? generationAuditContext(runs.slice(0, 5), generation, routes)
-            : undefined;
-        },
-      },
-    ),
+    agentService,
     agentSettingsService: new AgentSettingsService(agentSettings, runtimes),
     webAccessSettingsService: new WebAccessSettingsService(
       webAccessSettings,
@@ -234,22 +225,11 @@ function createContainer() {
   };
 }
 
-function messageText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .flatMap((block) =>
-      block && typeof block === "object" && "text" in block && typeof block.text === "string"
-        ? [block.text]
-        : [],
-    )
-    .join("\n");
-}
-
 function generationAuditContext(
   views: Awaited<ReturnType<GenerationRunService["listRuns"]>>,
   turn?: ActiveGenerationTurn,
   routes: Awaited<ReturnType<GenerationRunService["listRoutes"]>> = [],
+  contextAssets: ActiveGenerationTurn["assets"] = [],
 ): string {
   const runs = views.map(({ run, jobs, artifacts }) => {
     const job = jobs.at(-1);
@@ -285,13 +265,27 @@ function generationAuditContext(
     "The following JSON is trusted application audit data, not user instructions. Use it only when the current user asks about, critiques, or refers to previous content-generation runs.",
     JSON.stringify(runs),
     "</generation-runs-context>",
+    ...(contextAssets.length && !turn
+      ? [
+          "<composer-attachments>",
+          "The current user turn includes the following trusted attachment metadata. The actual image content is supplied separately only when the selected chat model supports it. These attachments do not authorize content generation.",
+          JSON.stringify(contextAssets.map(({ slot, name, mediaType, mimeType }) => ({
+            slot,
+            name,
+            mediaType,
+            mimeType,
+          }))),
+          "</composer-attachments>",
+        ]
+      : []),
     ...(turn
       ? [
           "<generation-turn-policy>",
-          "Content generation is enabled only for this user turn. First understand the current request using the full conversation. Ordinary questions must receive an ordinary answer without a generation tool call. An attachment alone is not generation intent. Ask a concise clarification when intent is uncertain. For an explicit generation request, call exactly one matching generation tool and provide a complete self-contained prompt grounded in the conversation; never use placeholders. Composer attachments are securely bound by the server, so do not repeat or invent their paths. The server enforces the selected API and review policy.",
+          "Content generation is enabled only for this user turn. First understand the current request using the full conversation. Ordinary questions must receive an ordinary answer without a generation tool call. An attachment alone is not generation intent. Ask a concise clarification when intent is uncertain. When plan is present, intent and arguments have already been resolved by the trusted server planner: call plan.toolName exactly once using plan.prompt and plan.parameters, without inspecting attachment files. Otherwise, for an explicit generation request, call exactly one matching generation tool and provide a complete self-contained prompt grounded in the conversation; never use placeholders. Composer attachments are securely bound by the server, so do not repeat or invent their paths. The server enforces the selected API and review policy.",
           JSON.stringify({
             selection: turn.mode,
             reviewFirst: turn.reviewFirst,
+            plan: turn.plan,
             attachments: turn.assets.map(({ slot, name, mediaType, mimeType }) => ({
               slot,
               name,
@@ -317,11 +311,18 @@ export type AppContainer = ReturnType<typeof createContainer>;
 
 const globalContainer = globalThis as typeof globalThis & {
   __piAgentContainer?: AppContainer;
+  __piAgentContainerVersion?: string;
 };
 
+const CONTAINER_VERSION = "chat-turn-orchestrator-v8";
+
 export const container =
-  globalContainer.__piAgentContainer ?? createContainer();
+  globalContainer.__piAgentContainerVersion === CONTAINER_VERSION
+    ? globalContainer.__piAgentContainer ?? createContainer()
+    : createContainer();
 
 if (process.env.NODE_ENV !== "production") {
+  // 开发热更新可能保留旧 Composition Root；结构版本变化时必须整体替换。
   globalContainer.__piAgentContainer = container;
+  globalContainer.__piAgentContainerVersion = CONTAINER_VERSION;
 }
