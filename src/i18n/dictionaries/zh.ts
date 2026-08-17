@@ -356,7 +356,6 @@ export const zh = {
       generationPromptRequired: "请描述要生成的内容。",
       generationRouteUnavailable: "所选内容生成 API 已不可用。",
       generationAssetMismatch: "一个或多个文件与所选内容生成 API 不匹配。",
-      generationAssetsPreserved: "生成素材已保留；重新启用内容生成后可继续使用。",
       generationAttachmentUnsupported: "当前聊天模型无法理解所附素材。请切换到支持图片输入的模型，或用文字描述素材；文件和草稿已保留。",
       generationAssetsRequired: "请添加必需文件：{slots}。",
       generationRouteMismatch: "当前请求与所选 API 不匹配，请补充说明或选择其他 API。",

@@ -124,17 +124,14 @@ export function useChatGenerationState({
 
   function changeMode(next: ComposerGenerationMode) {
     setMode(next);
-    if (next.type === "generation-auto") {
-      setAssets((current) => current.map((asset) => ({
-        ...asset,
-        slot: `auto-${asset.file.type.split("/", 1)[0]}`,
-      })));
-    }
-    setActionError(
-      next.type === "chat" && assets.length
-        ? t.chat.input.generationAssetsPreserved
-        : "",
-    );
+    // 任何模式切换都清空已上传素材，确保用户每次都在干净状态下重新上传
+    setAssets((current) => {
+      current.forEach((asset) => {
+        if (asset.previewUrl) URL.revokeObjectURL(asset.previewUrl);
+      });
+      return [];
+    });
+    setActionError("");
   }
 
   function addAssets(slot: GenerationAssetSlot, files: File[]) {

@@ -34,6 +34,7 @@ import {
   sessionStats,
 } from "./chat-logic";
 import { useI18n } from "@/i18n/use-i18n";
+import type { ComposerGenerationMode } from "@/contracts/generation";
 import type {
   AgentEvent,
   AttachedImage,
@@ -1102,7 +1103,18 @@ export function useChatController(options: ChatControllerOptions) {
         }
       } catch (cause) {
         setActionError(cause instanceof Error ? cause.message : "Model change failed");
-      }
+     }
+   }
+ }
+
+  function changeGenerationMode(next: ComposerGenerationMode) {
+    generation.changeMode(next);
+    if (next.type !== "chat") {
+      // 切换到内容生成模式时清除聊天模式上传的图片，避免残留图片随生成提交一起发送
+      setImages((current) => {
+        current.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+        return [];
+      });
     }
   }
 
@@ -1210,7 +1222,7 @@ export function useChatController(options: ChatControllerOptions) {
     generationBusy,
     generationActive,
     generationExecutionPolicy,
-    changeGenerationMode: generation.changeMode,
+    changeGenerationMode,
     addGenerationAssets: generation.addAssets,
     removeGenerationAsset: generation.removeAsset,
     confirmGeneration: generation.confirm,
