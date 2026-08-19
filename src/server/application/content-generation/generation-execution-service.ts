@@ -20,6 +20,7 @@ const POLL_INTERVAL_MS = 5_000;
 
 export class GenerationExecutionService {
   private readonly providers: Map<string, GenerationProvider>;
+  onComplete?: (runId: string, artifacts: GenerationArtifact[]) => void;
 
   constructor(
     private readonly repository: GenerationRepository,
@@ -334,6 +335,11 @@ export class GenerationExecutionService {
         updatedAt: completedAt,
         completedAt,
       }, ["queued", "running"]);
+      try {
+        this.onComplete?.(run.id, artifacts);
+      } catch {
+        // 回调失败不影响 Run 完成流程
+      }
     } catch (error) {
       await this.repository.updateJob({
         ...job,

@@ -30,6 +30,7 @@
     "@earendil-works/pi-coding-agent": "^0.84.1",
     "@radix-ui/react-scroll-area": "^1.2.11",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@xyflow/react": "^12.11.3",
     "antd": "^6.5.3",
     "clsx": "^2.1.1",
     "motion": "^12.42.2",

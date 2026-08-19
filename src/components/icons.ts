@@ -37,6 +37,7 @@ import {
   GlobalOutlined,
   InboxOutlined,
   KeyOutlined,
+  LockOutlined,
   LayoutOutlined,
   LoadingOutlined,
   MailOutlined,
@@ -44,9 +45,11 @@ import {
   MenuUnfoldOutlined,
   MessageOutlined,
   MoreOutlined,
- PaperClipOutlined,
- PictureOutlined,
- PlusOutlined,
+  ProjectOutlined,
+  PaperClipOutlined,
+  PictureOutlined,
+  ProfileOutlined,
+  PlusOutlined,
   PlayCircleOutlined,
  QuestionCircleOutlined,
  RedoOutlined,
@@ -76,13 +79,19 @@ export const Brain = BulbOutlined;
 export const Check = CheckOutlined;
 export const CheckCircle2 = CheckCircleOutlined;
 export const ChevronDown = DownOutlined;
+export const ChevronLeft = ArrowLeftOutlined;
 export const ChevronRight = RightOutlined;
 export const Clock3 = ClockCircleOutlined;
 export const Cloud = CloudOutlined;
 export const Copy = CopyOutlined;
 export const Cpu = ControlOutlined;
+export const Database = DatabaseOutlined;
+export const Film = VideoCameraOutlined;
 export const Download = DownloadOutlined;
+export const Grid = AppstoreAddOutlined;
+export const Layers = DeploymentUnitOutlined;
 export const ExternalLink = ExportOutlined;
+export const List = ProfileOutlined;
 export const Eye = EyeOutlined;
 export const EyeOff = EyeInvisibleOutlined;
 export const File = FileOutlined;
@@ -102,6 +111,7 @@ export const ImagePlus = FileImageOutlined;
 export const Images = PictureOutlined;
 export const Key = KeyOutlined;
 export const KeyRound = KeyOutlined;
+export const Lock = LockOutlined;
 export const Languages = TranslationOutlined;
 export const LoaderCircle = LoadingOutlined;
 export const MessageSquare = MessageOutlined;
@@ -121,6 +131,7 @@ export const Pencil = EditOutlined;
 export const PencilLine = FormOutlined;
 export const Plus = PlusOutlined;
 export const PlayCircle = PlayCircleOutlined;
+export const Project = ProjectOutlined;
 export const Puzzle = AppstoreAddOutlined;
 export const QuestionCircle = QuestionCircleOutlined;
 export const RefreshCw = ReloadOutlined;

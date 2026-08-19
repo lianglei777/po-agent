@@ -279,7 +279,58 @@ body {
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Pipeline 工作台设计 Token ──
+   独立的 --pl-* CSS 变量命名空间，不依赖聊天工作区的变量。
+   参考 LumenX 的玻璃质感和 border 分割风格，但配色更克制。 */
+:root {
+  --pl-surface: #1a1a2e;
+  --pl-surface-glass: rgba(26, 26, 46, 0.6);
+  --pl-surface-elevated: #222238;
+  --pl-surface-subtle: #16162a;
+  --pl-surface-hover: #2a2a44;
+  --pl-border: rgba(255, 255, 255, 0.08);
+  --pl-border-glass: rgba(255, 255, 255, 0.06);
+  --pl-border-strong: rgba(255, 255, 255, 0.15);
+  --pl-text: #f3f4f6;
+  --pl-text-secondary: #9ca3af;
+  --pl-text-muted: #6b7280;
+  --pl-accent: #818cf8;
+  --pl-accent-hover: #a5b4fc;
+  --pl-accent-soft: rgba(129, 140, 248, 0.1);
+  --pl-ready: #34d399;
+  --pl-warn: #fbbf24;
+  --pl-idle: #4b5563;
+  --pl-error: #f87171;
+  --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pl-surface: #1a1a2e;
+    --pl-surface-glass: rgba(26, 26, 46, 0.6);
+    --pl-surface-elevated: #222238;
+    --pl-surface-subtle: #16162a;
+    --pl-surface-hover: #2a2a44;
+    --pl-border: rgba(255, 255, 255, 0.08);
+    --pl-border-glass: rgba(255, 255, 255, 0.06);
+    --pl-border-strong: rgba(255, 255, 255, 0.15);
+    --pl-text: #f3f4f6;
+    --pl-text-secondary: #9ca3af;
+    --pl-text-muted: #6b7280;
+    --pl-accent: #818cf8;
+    --pl-accent-hover: #a5b4fc;
+    --pl-accent-soft: rgba(129, 140, 248, 0.1);
+    --pl-ready: #34d399;
+    --pl-warn: #fbbf24;
+    --pl-idle: #4b5563;
+    --pl-error: #f87171;
+    --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 }

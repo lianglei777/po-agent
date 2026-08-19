@@ -46,6 +46,17 @@ import { createRunningHubRoutes } from "@/server/infrastructure/content-generati
 import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
+import { SqlitePipelineRepository } from "@/server/infrastructure/sqlite/sqlite-pipeline-repository";
+import { InMemoryPipelineSse } from "@/server/infrastructure/runtime/in-memory-pipeline-sse";
+import { PiLlmAdapter } from "@/server/infrastructure/pi/pi-llm-adapter";
+import { AssetGenerationService } from "@/server/application/pipeline/asset-generation-service";
+import { VideoGenerationService } from "@/server/application/pipeline/video-generation-service";
+import { ScriptAnalysisService } from "@/server/application/pipeline/script-analysis-service";
+import { StoryboardService } from "@/server/application/pipeline/storyboard-service";
+import { CompositeAgentToolProvider } from "@/server/application/pipeline/composite-agent-tool-provider";
+import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
+import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
+import type { LlmPort } from "@/server/ports/llm-port";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -90,9 +101,17 @@ function createContainer() {
     generationReviews,
   );
 
+  let sharedDatabase: SqliteDatabase | undefined;
+
+  function getDatabase() {
+    if (sharedDatabase) return sharedDatabase;
+    sharedDatabase = new SqliteDatabase(path.join(agentDir, "po-agent.sqlite"));
+    return sharedDatabase;
+  }
+
   function getGenerationRunService() {
     if (generationRunService) return generationRunService;
-    const database = new SqliteDatabase(path.join(agentDir, "po-agent.sqlite"));
+    const database = getDatabase();
     const repository = new SqliteGenerationRepository(database);
     const ready = seedGenerationRoutes(repository, createRunningHubRoutes());
     generationCredentialStore = new FileGenerationCredentialStore(
@@ -113,6 +132,46 @@ function createContainer() {
       generationCredentialStore,
       generationFiles,
     );
+    // 方案 A — Worker 完成回调: 回填 pipeline variant artifactId 并推送 SSE
+    execution.onComplete = async (runId, artifacts) => {
+      try {
+        const run = await repository.getRun(runId);
+        if (!run?.sourceRef?.startsWith("pipeline:")) return;
+        const pipelineRepo = getPipelineRepository();
+        const pipelineSse = getPipelineSse();
+        const artifactId = artifacts[0]?.id ?? null;
+
+        if (run.sourceRef.includes(":image:")) {
+          // 分镜图生成完成 — 回填 frame.selectedImageArtifactId
+          const frameId = run.sourceRef.split(":")[2];
+          await pipelineRepo.updateFrame(frameId, {
+            selectedImageArtifactId: artifactId,
+            status: "completed",
+          });
+        } else if (run.sourceRef.includes(":i2v") || run.sourceRef.includes(":r2v")) {
+          // 视频生成完成 — 不自动选择最终 take，由用户决定
+        } else {
+          // 资产图生成完成 — 回填 AssetVariant
+          const variant = await pipelineRepo.updateVariantByRunId(runId, {
+            artifactId,
+          });
+          if (variant) {
+            await pipelineRepo.updateAsset(variant.assetId, {
+              selectedArtifactId: artifactId,
+              status: "completed",
+            });
+          }
+        }
+        // 推送 SSE
+        pipelineSse.emit({
+          type: "generation_completed",
+          projectId: run.sessionId.replace("pipeline:", ""),
+          payload: { runId, artifacts },
+        });
+      } catch {
+        // 回填失败不影响 Worker 主流程
+      }
+    };
     const worker = new GenerationWorker(
       repository,
       execution,
@@ -128,6 +187,44 @@ function createContainer() {
       throw new Error("Generation credential store was not initialized");
     }
     return generationCredentialStore;
+  }
+
+  let pipelineRepository: SqlitePipelineRepository | undefined;
+
+  function getPipelineRepository() {
+    if (pipelineRepository) return pipelineRepository;
+    const database = getDatabase();
+    pipelineRepository = new SqlitePipelineRepository(database);
+    pipelineSse = new InMemoryPipelineSse();
+    pipelineLlm = new PiLlmAdapter(modelRuntime);
+    const pipelineCwd = path.join(agentDir, "pipeline");
+    scriptAnalysisService = new ScriptAnalysisService(pipelineLlm, pipelineRepository, pipelineSse);
+    storyboardService = new StoryboardService(pipelineLlm, pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
+    assetGenerationService = new AssetGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
+    videoGenerationService = new VideoGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
+    pipelineAgentTools = new PipelineAgentToolProvider(
+      scriptAnalysisService, storyboardService, assetGenerationService, videoGenerationService, pipelineRepository,
+    );
+    return pipelineRepository;
+  }
+
+  let assetGenerationService: AssetGenerationService | undefined;
+  let videoGenerationService: VideoGenerationService | undefined;
+  let pipelineSse: InMemoryPipelineSse | undefined;
+  let pipelineLlm: PiLlmAdapter | undefined;
+  let scriptAnalysisService: ScriptAnalysisService | undefined;
+  let storyboardService: StoryboardService | undefined;
+  let pipelineAgentTools: PipelineAgentToolProvider | undefined;
+
+  function getPipelineServices() {
+    getPipelineRepository();
+    return { pipelineSse, pipelineLlm, scriptAnalysisService, storyboardService, pipelineAgentTools };
+  }
+
+  function getPipelineSse() {
+    getPipelineServices();
+    if (!pipelineSse) throw new Error("Pipeline SSE not initialized");
+    return pipelineSse;
   }
 
   function getGenerationAssetService() {
@@ -147,12 +244,17 @@ function createContainer() {
         getGenerationCredentialStore().getCredential(reference),
     },
   );
+  // 选择 A 变体 — 合并工具: Agent 同时拥有普通生成工具和 Pipeline 工具
+  const compositeAgentTools = new CompositeAgentToolProvider([
+    generationAgentTools,
+    { getTools: (input) => getPipelineServices().pipelineAgentTools!.getTools(input) },
+  ]);
   const agentService = new AgentService(
     sessions,
     runtimes,
     runtimeFactory,
     roots,
-    generationAgentTools,
+    compositeAgentTools,
     generationReviews,
     {
       async getPromptContext(sessionId, generation, assets) {
@@ -222,6 +324,38 @@ function createContainer() {
     skillService: new SkillService(skills, roots),
     skillPackService: new SkillPackService(skillPacks, roots),
     instructionService: new InstructionService(instructionStore, roots),
+    get pipelineRepository() {
+      return getPipelineRepository();
+    },
+    get pipelineSse() {
+      getPipelineServices();
+      return pipelineSse!;
+    },
+    get scriptAnalysisService() {
+      getPipelineServices();
+      return scriptAnalysisService!;
+    },
+    get storyboardService() {
+      getPipelineServices();
+      return storyboardService!;
+    },
+    get assetGenerationService() {
+      getPipelineServices();
+      return assetGenerationService!;
+    },
+    get videoGenerationService() {
+      getPipelineServices();
+      return videoGenerationService!;
+    },
+    createPipelineAgentSession(projectId: string) {
+      const cwd = path.join(agentDir, "pipeline-sessions", projectId);
+      return agentService.create({ cwd });
+    },
+
+    get pipelineAgentTools() {
+      getPipelineServices();
+      return pipelineAgentTools!;
+    },
   };
 }
 
@@ -314,7 +448,7 @@ const globalContainer = globalThis as typeof globalThis & {
   __piAgentContainerVersion?: string;
 };
 
-const CONTAINER_VERSION = "chat-turn-orchestrator-v8";
+const CONTAINER_VERSION = "pipeline-workbench-v4";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

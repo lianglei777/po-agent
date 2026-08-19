@@ -19,6 +19,7 @@ describe("SqliteDatabase", () => {
       { version: 5, name: "generation_route_product" },
       { version: 6, name: "generation_provider_audit_snapshots" },
       { version: 7, name: "generation_run_chat_workflow_source" },
+      { version: 8, name: "pipeline_tables" },
     ]);
     expect(database.prepare(`
       SELECT name FROM sqlite_master
@@ -27,15 +28,27 @@ describe("SqliteDatabase", () => {
         'generation_routes',
         'generation_runs',
         'provider_jobs',
-        'generation_artifacts'
+        'generation_artifacts',
+        'pipeline_projects',
+        'pipeline_assets',
+        'pipeline_asset_variants',
+        'pipeline_frames',
+        'pipeline_canvas_nodes',
+        'pipeline_canvas_edges'
       )
       ORDER BY name
     `).all()).toEqual([
-      { name: "generation_artifacts" },
-      { name: "generation_routes" },
-      { name: "generation_runs" },
-      { name: "provider_jobs" },
-      { name: "sessions" },
+    { name: "generation_artifacts" },
+    { name: "generation_routes" },
+    { name: "generation_runs" },
+    { name: "pipeline_asset_variants" },
+    { name: "pipeline_assets" },
+    { name: "pipeline_canvas_edges" },
+    { name: "pipeline_canvas_nodes" },
+    { name: "pipeline_frames" },
+    { name: "pipeline_projects" },
+    { name: "provider_jobs" },
+    { name: "sessions" },
     ]);
   });
 
