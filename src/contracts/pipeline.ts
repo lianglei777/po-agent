@@ -67,14 +67,117 @@ export interface StoryboardFrame {
   updatedAt: string;
 }
 
+export type CanvasMediaType = "text" | "image" | "video" | "audio";
+
+export interface CanvasWorkspaceFileRef {
+  relativePath: string;
+  contentType: string;
+  name: string;
+}
+
+export interface CanvasMediaReference {
+  nodeId: string;
+  mediaType: CanvasMediaType;
+  label: string;
+  artifactId?: string;
+  url?: string;
+  workspaceFile?: CanvasWorkspaceFileRef;
+  content?: string[];
+}
+
+export interface CanvasGenerationParams {
+  prompt: string;
+  routeId?: string;
+  model?: string;
+  count?: number;
+  modeType?: string;
+  settings?: Record<string, string | number | boolean>;
+  advancedSettings?: Record<string, string | number | boolean>;
+  textList?: CanvasMediaReference[];
+  imageList?: CanvasMediaReference[];
+  videoList?: CanvasMediaReference[];
+  audioList?: CanvasMediaReference[];
+  mixedListOrder?: string[];
+}
+
+export interface CanvasNodeTaskInfo {
+  runId?: string;
+  status: "idle" | "queued" | "processing" | "completed" | "failed";
+  progressPercent?: number;
+  errorMessage?: string;
+}
+
+export interface CanvasGroupRunInfo {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+}
+
+export type CanvasRichTextAttributeValue = string | number | boolean | null;
+
+export interface CanvasRichTextMark {
+  type: "bold" | "italic" | "underline";
+  attrs?: Record<string, CanvasRichTextAttributeValue>;
+}
+
+export interface CanvasRichTextNode {
+  type: "doc" | "paragraph" | "heading" | "bulletList" | "orderedList" | "listItem" | "hardBreak" | "text";
+  attrs?: Record<string, CanvasRichTextAttributeValue>;
+  content?: CanvasRichTextNode[];
+  marks?: CanvasRichTextMark[];
+  text?: string;
+}
+
+export interface CanvasTextDocument {
+  schemaVersion: 1;
+  format: "tiptap-json";
+  content: CanvasRichTextNode;
+  plainText: string;
+}
+
+export interface CanvasNodeData {
+  type: CanvasMediaType;
+  name: string;
+  action: string;
+  generatorType?: "default" | "enhance" | "resource";
+  content?: string[];
+  textDocument?: CanvasTextDocument;
+  url?: string[];
+  poster?: string;
+  artifactIds?: string[];
+  workspaceFile?: CanvasWorkspaceFileRef;
+  params?: CanvasGenerationParams;
+  taskInfo?: CanvasNodeTaskInfo;
+  group?: {
+    id: string;
+    name: string;
+  };
+  groupRun?: CanvasGroupRunInfo;
+  legacyEntity?: {
+    type: "asset" | "frame" | "run" | "script";
+    id: string;
+  };
+}
+
+export type CanvasNodeType =
+  | CanvasMediaType
+  | "script"
+  | "character"
+  | "scene"
+  | "prop"
+  | "storyboard";
+
 export interface CanvasNode {
   id: string;
   projectId: string;
-  type: string;
+  type: CanvasNodeType;
   entityId: string;
   positionX: number;
   positionY: number;
+  width: number | null;
+  height: number | null;
+  data: CanvasNodeData | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CanvasEdge {
@@ -82,7 +185,62 @@ export interface CanvasEdge {
   projectId: string;
   sourceNodeId: string;
   targetNodeId: string;
-  edgeType: string;
+  edgeType: "references" | "source_of" | "generates" | "derives_from";
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CanvasViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export type CanvasMutation =
+  | { type: "node.create"; node: CanvasNode }
+  | { type: "node.update"; nodeId: string; patch: { positionX?: number; positionY?: number; width?: number | null; height?: number | null; data?: CanvasNodeData | null } }
+  | { type: "node.delete"; nodeId: string }
+  | { type: "edge.create"; edge: CanvasEdge }
+  | { type: "edge.delete"; edgeId: string }
+  | { type: "viewport.update"; viewport: CanvasViewport };
+
+export interface CanvasMutationBatch {
+  baseRevision: number;
+  requestId: string;
+  mutations: CanvasMutation[];
+}
+
+export interface CanvasSnapshot {
+  revision: number;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  viewport: CanvasViewport;
+}
+
+export interface CanvasWorkflowNodeTemplate {
+  type: CanvasNodeType;
+  data: CanvasNodeData | null;
+  offsetX: number;
+  offsetY: number;
+  width: number | null;
+  height: number | null;
+}
+
+export interface CanvasWorkflowEdgeTemplate {
+  sourceIndex: number;
+  targetIndex: number;
+  edgeType: CanvasEdge["edgeType"];
+}
+
+export interface CanvasWorkflow {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  nodes: CanvasWorkflowNodeTemplate[];
+  edges: CanvasWorkflowEdgeTemplate[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PipelineStageStatus {
@@ -143,15 +301,53 @@ export interface CreateFrameRequest {
 
 // ── 画布 ──
 
-export interface CanvasStateResponse {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
-}
+export type CanvasStateResponse = CanvasSnapshot;
 
 export interface UpdateNodePositionRequest {
   x: number;
   y: number;
 }
+
+export interface CreateCanvasNodeRequest {
+  type: CanvasMediaType;
+  name?: string;
+  positionX: number;
+  positionY: number;
+}
+
+export interface UpdateCanvasNodeRequest {
+  positionX?: number;
+  positionY?: number;
+  width?: number | null;
+  height?: number | null;
+  data?: CanvasNodeData;
+}
+
+export interface UpdateCanvasViewportRequest {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface GenerateCanvasNodeResponse {
+  node: CanvasNode;
+  runId?: string;
+}
+
+export interface GenerateTextNodeRequest {
+  instruction: string;
+  mode: "generate" | "revise";
+  model?: string;
+}
+
+export interface GenerateTextNodeResponse {
+  node: CanvasNode;
+}
+
+export interface CanvasWorkflowListResponse {
+  workflows: CanvasWorkflow[];
+}
+
 
 // ── 响应包装 ──
 

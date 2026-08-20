@@ -3,6 +3,7 @@ import {
   AppstoreAddOutlined,
   ArrowLeftOutlined,
   BorderOutlined,
+  BoldOutlined,
   BranchesOutlined,
   BulbOutlined,
   CameraOutlined,
@@ -23,6 +24,7 @@ import {
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
+  ExpandOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
   FileImageOutlined,
@@ -36,6 +38,7 @@ import {
   GiftOutlined,
   GlobalOutlined,
   InboxOutlined,
+  ItalicOutlined,
   KeyOutlined,
   LockOutlined,
   LayoutOutlined,
@@ -45,6 +48,7 @@ import {
   MenuUnfoldOutlined,
   MessageOutlined,
   MoreOutlined,
+  OrderedListOutlined,
   ProjectOutlined,
   PaperClipOutlined,
   PictureOutlined,
@@ -63,6 +67,8 @@ import {
   StarOutlined,
   ThunderboltOutlined,
   TranslationOutlined,
+  UnderlineOutlined,
+  UnorderedListOutlined,
   UndoOutlined,
   VideoCameraOutlined,
   WarningOutlined,
@@ -76,6 +82,7 @@ export const AtSign = MailOutlined;
 export const Bot = RobotOutlined;
 export const Box = InboxOutlined;
 export const Brain = BulbOutlined;
+export const Bold = BoldOutlined;
 export const Check = CheckOutlined;
 export const CheckCircle2 = CheckCircleOutlined;
 export const ChevronDown = DownOutlined;
@@ -91,6 +98,7 @@ export const Download = DownloadOutlined;
 export const Grid = AppstoreAddOutlined;
 export const Layers = DeploymentUnitOutlined;
 export const ExternalLink = ExportOutlined;
+export const Maximize2 = ExpandOutlined;
 export const List = ProfileOutlined;
 export const Eye = EyeOutlined;
 export const EyeOff = EyeInvisibleOutlined;
@@ -109,6 +117,7 @@ export const Globe = GlobalOutlined;
 export const Hexagon = DeploymentUnitOutlined;
 export const ImagePlus = FileImageOutlined;
 export const Images = PictureOutlined;
+export const Italic = ItalicOutlined;
 export const Key = KeyOutlined;
 export const KeyRound = KeyOutlined;
 export const Lock = LockOutlined;
@@ -119,6 +128,7 @@ export const MessageSquarePlus = MessageOutlined;
 export const Minimize2 = CompressOutlined;
 export const ModelsJson = ApiOutlined;
 export const MoreHorizontal = MoreOutlined;
+export const OrderedList = OrderedListOutlined;
 export const Package = GiftOutlined;
 export const PackageOpen = InboxOutlined;
 export const PanelLeft = LayoutOutlined;
@@ -150,6 +160,8 @@ export const Sparkles = StarOutlined;
 export const Square = BorderOutlined;
 export const Terminal = CodeOutlined;
 export const Trash2 = DeleteOutlined;
+export const Underline = UnderlineOutlined;
+export const UnorderedList = UnorderedListOutlined;
 export const X = CloseOutlined;
 export const Zap = ThunderboltOutlined;
 

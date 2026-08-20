@@ -2838,3 +2838,118 @@ GET /api/agent/019e.../events
 | Port Interfaces              | `src/server/ports`                    |
 | Pi SDK、文件系统和进程适配器 | `src/server/infrastructure`           |
 | 依赖组装                     | `src/server/composition/container.ts` |
+
+---
+
+## Pipeline Studio Canvas
+
+Pipeline Studio 以项目级 Canvas Snapshot 作为详情页的初始化事实来源。浏览器在本地执行交互并将节点、连线和 viewport 变更合并为带 revision 的 mutation batch；服务端在一个 SQLite 事务中应用整个 batch。
+
+### `GET /api/pipeline/projects/{projectId}/canvas`
+
+返回当前画布快照：
+
+```ts
+interface CanvasSnapshot {
+  revision: number;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+}
+```
+
+- `revision` 从 `0` 开始。
+- 新项目没有 draft 记录时返回 `{ x: 0, y: 0, zoom: 1 }`。
+- 旧 Pipeline 节点会在读取时进行兼容投影，但新的 Studio 只创建文本、图片、视频和音频节点。
+
+#### 文本节点富文本数据
+
+文本节点在 `CanvasNode.data.textDocument` 中保存结构化富文本，同时继续写入 `data.content` 作为旧流程使用的纯文本兼容投影：
+
+```ts
+interface CanvasTextDocument {
+  schemaVersion: 1;
+  format: "tiptap-json";
+  content: CanvasRichTextNode;
+  plainText: string;
+}
+```
+
+- 根节点必须为 `doc`。
+- 支持 `paragraph`、`heading`（仅 1/2/3 级）、`bulletList`、`orderedList`、`listItem`、`hardBreak` 和 `text`。
+- 文本标记支持 `bold`、`italic` 和 `underline`。
+- 单个文档最多包含 5,000 个结构节点，最大嵌套深度为 20，纯文本最大 200,000 字符。
+- 读取没有 `textDocument` 的旧文本节点时，前端会从 `data.content` 生成一级兼容文档；后续编辑保存时会同时更新两种表示。
+- 下游工作流需要纯文本时应优先使用 `textDocument.plainText`，并回退到 `data.content`。
+
+### `POST /api/pipeline/canvas-nodes/{nodeId}/generate-text`
+
+使用已配置的文本模型生成内容或修改文本节点的现有内容。
+
+请求：
+
+```ts
+interface GenerateTextNodeRequest {
+  instruction: string;
+  mode: "generate" | "revise";
+  model?: string; // "provider:modelId"
+}
+```
+
+响应：
+
+```ts
+interface GenerateTextNodeResponse {
+  node: CanvasNode;
+}
+```
+
+- `instruction` 去除首尾空白后不能为空，最大 20,000 字符。
+- `revise` 要求节点已经包含文本；模型必须返回修改后的完整内容，而不是差异片段。
+- 指定 `model` 时必须对应 `/api/models` 返回的可用模型；省略时由模型运行时选择默认可用模型。
+- 连入该节点的上游文本节点会作为参考材料加入请求；当前版本不会把图片 URL 伪装成视觉模型输入。
+- 成功响应会同时更新 `textDocument`、兼容 `content`、最后一次 instruction/model 和任务状态。
+- 生成结果为空或超过 200,000 字符时请求失败，并将节点任务状态标记为 `failed`。
+
+### `POST /api/pipeline/projects/{projectId}/canvas/mutations`
+
+原子应用一批画布操作。
+
+请求：
+
+```ts
+interface CanvasMutationBatch {
+  baseRevision: number;
+  requestId: string;
+  mutations: CanvasMutation[];
+}
+```
+
+支持的 mutation：
+
+```ts
+type CanvasMutation =
+  | { type: "node.create"; node: CanvasNode }
+  | { type: "node.update"; nodeId: string; patch: CanvasNodePatch }
+  | { type: "node.delete"; nodeId: string }
+  | { type: "edge.create"; edge: CanvasEdge }
+  | { type: "edge.delete"; edgeId: string }
+  | { type: "viewport.update"; viewport: CanvasViewport };
+```
+
+行为：
+
+- 请求必须包含 `1` 到 `500` 个 mutation。
+- `baseRevision` 必须与服务端当前 revision 一致。
+- 节点、连线和 viewport 在同一个 SQLite 事务中应用。
+- 成功后 revision 增加 `1`，响应返回完整的最新 `CanvasSnapshot`。
+- revision 不一致时返回 HTTP `409` 和错误码 `PIPELINE_CANVAS_REVISION_CONFLICT`。
+- 所有节点和 edge 必须属于 URL 指定的项目；跨项目端点会被拒绝。
+
+### Canvas 自动保存
+
+前端 Pipeline Studio feature 将交互产生的 mutation 暂存在 feature-scoped Zustand Store 中，并在短暂防抖后提交。保存期间继续产生的操作保留在下一批中，不会被上一批响应覆盖。浏览器刷新后重新通过 Canvas Snapshot 恢复节点、连线、viewport 和 revision。

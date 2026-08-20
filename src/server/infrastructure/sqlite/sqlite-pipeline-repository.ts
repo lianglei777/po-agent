@@ -2,8 +2,12 @@ import type { SQLOutputValue } from "node:sqlite";
 import type {
   AssetVariant,
   CanvasEdge,
+  CanvasMutation,
   CanvasNode,
   CanvasNodeType,
+  CanvasNodeData,
+  CanvasViewport,
+  CanvasWorkflow,
   PipelineAsset,
   PipelineAssetType,
   PipelineProject,
@@ -204,7 +208,7 @@ export class SqlitePipelineRepository implements PipelineRepository {
       "UPDATE pipeline_frames SET scene_id = ?, character_ids_json = ?, prop_ids_json = ?, frame_index = ?, visual_description = ?, dialogue_structured_json = ?, camera_movement_json = ?, blocking_json = ?, lighting_json = ?, audio_note_json = ?, shot_size = ?, transition_hint = ?, image_prompt = ?, video_prompt = ?, selected_image_artifact_id = ?, final_take_run_id = ?, locked = ?, status = ?, updated_at = ? WHERE id = ?",
     ).run(
       updated.sceneId, toJson(updated.characterIds), toJson(updated.propIds),
-      updated.visualDescription,
+      updated.index, updated.visualDescription,
       updated.dialogueStructured ? toJson(updated.dialogueStructured) : null,
       updated.cameraMovement ? toJson(updated.cameraMovement) : null,
       updated.blocking ? toJson(updated.blocking) : null,
@@ -228,11 +232,22 @@ export class SqlitePipelineRepository implements PipelineRepository {
     });
   }
 
-  async createCanvasNode(input: Omit<CanvasNode, "createdAt">): Promise<CanvasNode> {
-    const node: CanvasNode = { ...input, createdAt: nowIso() };
+  async createCanvasNode(input: Omit<CanvasNode, "createdAt" | "updatedAt" | "width" | "height" | "data"> & { width?: number | null; height?: number | null; data?: CanvasNodeData | null }): Promise<CanvasNode> {
+    const ts = nowIso();
+    const node: CanvasNode = {
+      ...input,
+      width: input.width ?? null,
+      height: input.height ?? null,
+      data: input.data ?? null,
+      createdAt: ts,
+      updatedAt: ts,
+    };
     this.database.prepare(
-      "INSERT INTO pipeline_canvas_nodes(id, project_id, type, entity_id, position_x, position_y, created_at) VALUES (?,?,?,?,?,?,?)",
-    ).run(node.id, node.projectId, node.type, node.entityId, node.positionX, node.positionY, node.createdAt);
+      "INSERT INTO pipeline_canvas_nodes(id, project_id, type, entity_id, position_x, position_y, width, height, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      node.id, node.projectId, node.type, node.entityId, node.positionX, node.positionY,
+      node.width, node.height, node.data ? toJson(node.data) : null, node.createdAt, node.updatedAt,
+    );
     return node;
   }
 
@@ -247,7 +262,34 @@ export class SqlitePipelineRepository implements PipelineRepository {
   }
 
   async updateCanvasNodePosition(id: string, x: number, y: number): Promise<void> {
-    this.database.prepare("UPDATE pipeline_canvas_nodes SET position_x = ?, position_y = ? WHERE id = ?").run(x, y, id);
+    this.database.prepare("UPDATE pipeline_canvas_nodes SET position_x = ?, position_y = ?, updated_at = ? WHERE id = ?").run(x, y, nowIso(), id);
+  }
+
+  async updateCanvasNode(id: string, patch: {
+    positionX?: number;
+    positionY?: number;
+    width?: number | null;
+    height?: number | null;
+    data?: CanvasNodeData | null;
+  }): Promise<CanvasNode | null> {
+    const existing = await this.getCanvasNode(id);
+    if (!existing) return null;
+    const updated: CanvasNode = {
+      ...existing,
+      positionX: patch.positionX ?? existing.positionX,
+      positionY: patch.positionY ?? existing.positionY,
+      width: patch.width === undefined ? existing.width : patch.width,
+      height: patch.height === undefined ? existing.height : patch.height,
+      data: patch.data === undefined ? existing.data : patch.data,
+      updatedAt: nowIso(),
+    };
+    this.database.prepare(
+      "UPDATE pipeline_canvas_nodes SET position_x = ?, position_y = ?, width = ?, height = ?, data_json = ?, updated_at = ? WHERE id = ?",
+    ).run(
+      updated.positionX, updated.positionY, updated.width, updated.height,
+      updated.data ? toJson(updated.data) : null, updated.updatedAt, id,
+    );
+    return updated;
   }
 
   async deleteCanvasNode(id: string): Promise<boolean> {
@@ -259,17 +301,22 @@ export class SqlitePipelineRepository implements PipelineRepository {
     return row ? canvasNodeFromRow(row as SqliteRow) : null;
   }
 
-  async createCanvasEdge(input: Omit<CanvasEdge, "id">): Promise<CanvasEdge> {
-    const id = randomId();
-    const edge: CanvasEdge = { ...input, id };
+  async createCanvasEdge(input: Omit<CanvasEdge, "id" | "createdAt" | "updatedAt">): Promise<CanvasEdge> {
+    const ts = nowIso();
+    const edge: CanvasEdge = { ...input, id: randomId(), createdAt: ts, updatedAt: ts };
     this.database.prepare(
-      "INSERT INTO pipeline_canvas_edges(id, project_id, source_node_id, target_node_id, edge_type) VALUES (?,?,?,?,?)",
-    ).run(edge.id, edge.projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType);
+      "INSERT INTO pipeline_canvas_edges(id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+    ).run(edge.id, edge.projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, ts, ts);
     return edge;
   }
 
+  async getCanvasEdge(id: string): Promise<CanvasEdge | null> {
+    const row = this.database.prepare("SELECT * FROM pipeline_canvas_edges WHERE id = ?").get(id);
+    return row ? canvasEdgeFromRow(row as SqliteRow) : null;
+  }
+
   async listCanvasEdges(projectId: string): Promise<CanvasEdge[]> {
-    const rows = this.database.prepare("SELECT * FROM pipeline_canvas_edges WHERE project_id = ?").all(projectId) as SqliteRow[];
+    const rows = this.database.prepare("SELECT * FROM pipeline_canvas_edges WHERE project_id = ? ORDER BY created_at ASC").all(projectId) as SqliteRow[];
     return rows.map(canvasEdgeFromRow);
   }
 
@@ -279,6 +326,166 @@ export class SqlitePipelineRepository implements PipelineRepository {
 
   async deleteCanvasEdgesByNode(nodeId: string): Promise<void> {
     this.database.prepare("DELETE FROM pipeline_canvas_edges WHERE source_node_id = ? OR target_node_id = ?").run(nodeId, nodeId);
+  }
+
+  async getCanvasViewport(projectId: string): Promise<CanvasViewport> {
+    const row = this.database.prepare("SELECT viewport_x, viewport_y, viewport_zoom FROM pipeline_canvas_drafts WHERE project_id = ?").get(projectId) as SqliteRow | undefined;
+    if (!row) return { x: 0, y: 0, zoom: 1 };
+    return { x: Number(row.viewport_x), y: Number(row.viewport_y), zoom: Number(row.viewport_zoom) };
+  }
+
+  async getCanvasRevision(projectId: string): Promise<number> {
+    const row = this.database.prepare("SELECT revision FROM pipeline_canvas_drafts WHERE project_id = ?").get(projectId) as SqliteRow | undefined;
+    return row ? Number(row.revision) : 0;
+  }
+
+  async updateCanvasViewport(projectId: string, viewport: CanvasViewport): Promise<void> {
+    this.database.prepare(`
+      INSERT INTO pipeline_canvas_drafts(project_id, viewport_x, viewport_y, viewport_zoom, revision, updated_at)
+      VALUES (?,?,?,?,0,?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        viewport_x = excluded.viewport_x,
+        viewport_y = excluded.viewport_y,
+        viewport_zoom = excluded.viewport_zoom,
+        updated_at = excluded.updated_at
+    `).run(projectId, viewport.x, viewport.y, viewport.zoom, nowIso());
+  }
+
+  async applyCanvasMutationBatch(
+    projectId: string,
+    baseRevision: number,
+    mutations: CanvasMutation[],
+  ): Promise<{ applied: boolean; revision: number }> {
+    return this.database.transaction(() => {
+      const timestamp = nowIso();
+      this.database.prepare(`
+        INSERT INTO pipeline_canvas_drafts(project_id, viewport_x, viewport_y, viewport_zoom, revision, updated_at)
+        VALUES (?,0,0,1,0,?)
+        ON CONFLICT(project_id) DO NOTHING
+      `).run(projectId, timestamp);
+
+      const currentRow = this.database.prepare(
+        "SELECT revision FROM pipeline_canvas_drafts WHERE project_id = ?",
+      ).get(projectId) as SqliteRow;
+      const currentRevision = Number(currentRow.revision);
+      if (currentRevision !== baseRevision) {
+        return { applied: false, revision: currentRevision };
+      }
+
+      for (const mutation of mutations) {
+        if (mutation.type === "node.create") {
+          const node = mutation.node;
+          if (node.projectId !== projectId) throw new Error("Canvas node project mismatch");
+          this.database.prepare(`
+            INSERT INTO pipeline_canvas_nodes(
+              id, project_id, type, entity_id, position_x, position_y, width, height, data_json, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+          `).run(
+            node.id, projectId, node.type, node.entityId, node.positionX, node.positionY,
+            node.width, node.height, node.data ? toJson(node.data) : null, timestamp, timestamp,
+          );
+          continue;
+        }
+
+        if (mutation.type === "node.update") {
+          const existing = this.database.prepare(
+            "SELECT * FROM pipeline_canvas_nodes WHERE id = ? AND project_id = ?",
+          ).get(mutation.nodeId, projectId) as SqliteRow | undefined;
+          if (!existing) throw new Error("Canvas node was not found in this project");
+          const current = canvasNodeFromRow(existing);
+          const patch = mutation.patch;
+          this.database.prepare(`
+            UPDATE pipeline_canvas_nodes
+            SET position_x = ?, position_y = ?, width = ?, height = ?, data_json = ?, updated_at = ?
+            WHERE id = ? AND project_id = ?
+          `).run(
+            patch.positionX ?? current.positionX,
+            patch.positionY ?? current.positionY,
+            patch.width === undefined ? current.width : patch.width,
+            patch.height === undefined ? current.height : patch.height,
+            patch.data === undefined ? (current.data ? toJson(current.data) : null) : (patch.data ? toJson(patch.data) : null),
+            timestamp,
+            mutation.nodeId,
+            projectId,
+          );
+          continue;
+        }
+
+        if (mutation.type === "node.delete") {
+          this.database.prepare(
+            "DELETE FROM pipeline_canvas_nodes WHERE id = ? AND project_id = ?",
+          ).run(mutation.nodeId, projectId);
+          continue;
+        }
+
+        if (mutation.type === "edge.create") {
+          const edge = mutation.edge;
+          if (edge.projectId !== projectId) throw new Error("Canvas edge project mismatch");
+          const endpoints = this.database.prepare(`
+            SELECT COUNT(*) AS count
+            FROM pipeline_canvas_nodes
+            WHERE project_id = ? AND id IN (?, ?)
+          `).get(projectId, edge.sourceNodeId, edge.targetNodeId) as SqliteRow;
+          if (Number(endpoints.count) !== 2) throw new Error("Canvas edge endpoints are invalid");
+          this.database.prepare(`
+            INSERT INTO pipeline_canvas_edges(
+              id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?)
+          `).run(edge.id, projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, timestamp, timestamp);
+          continue;
+        }
+
+        if (mutation.type === "edge.delete") {
+          this.database.prepare(
+            "DELETE FROM pipeline_canvas_edges WHERE id = ? AND project_id = ?",
+          ).run(mutation.edgeId, projectId);
+          continue;
+        }
+
+        this.database.prepare(`
+          UPDATE pipeline_canvas_drafts
+          SET viewport_x = ?, viewport_y = ?, viewport_zoom = ?, updated_at = ?
+          WHERE project_id = ?
+        `).run(
+          mutation.viewport.x,
+          mutation.viewport.y,
+          mutation.viewport.zoom,
+          timestamp,
+          projectId,
+        );
+      }
+
+      const nextRevision = currentRevision + 1;
+      this.database.prepare(`
+        UPDATE pipeline_canvas_drafts
+        SET revision = ?, updated_at = ?
+        WHERE project_id = ? AND revision = ?
+      `).run(nextRevision, timestamp, projectId, currentRevision);
+      return { applied: true, revision: nextRevision };
+    });
+  }
+
+  async createCanvasWorkflow(input: Omit<CanvasWorkflow, "createdAt" | "updatedAt">): Promise<CanvasWorkflow> {
+    const ts = nowIso();
+    const workflow: CanvasWorkflow = { ...input, createdAt: ts, updatedAt: ts };
+    this.database.prepare(
+      "INSERT INTO pipeline_canvas_workflows(id, project_id, name, description, template_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+    ).run(workflow.id, workflow.projectId, workflow.name, workflow.description, toJson({ nodes: workflow.nodes, edges: workflow.edges }), ts, ts);
+    return workflow;
+  }
+
+  async listCanvasWorkflows(projectId: string): Promise<CanvasWorkflow[]> {
+    const rows = this.database.prepare("SELECT * FROM pipeline_canvas_workflows WHERE project_id = ? ORDER BY updated_at DESC").all(projectId) as SqliteRow[];
+    return rows.map(canvasWorkflowFromRow);
+  }
+
+  async getCanvasWorkflow(id: string): Promise<CanvasWorkflow | null> {
+    const row = this.database.prepare("SELECT * FROM pipeline_canvas_workflows WHERE id = ?").get(id);
+    return row ? canvasWorkflowFromRow(row as SqliteRow) : null;
+  }
+
+  async deleteCanvasWorkflow(id: string): Promise<boolean> {
+    return this.database.prepare("DELETE FROM pipeline_canvas_workflows WHERE id = ?").run(id).changes > 0;
   }
 
   async getStageStatuses(projectId: string): Promise<PipelineStageStatus[]> {
@@ -362,18 +569,42 @@ function frameFromRow(row: SqliteRow): StoryboardFrame {
 
 function canvasNodeFromRow(row: SqliteRow): CanvasNode {
   return {
-    id: row.id as string, projectId: row.project_id as string,
-    type: row.type as CanvasNodeType, entityId: row.entity_id as string,
-    positionX: row.position_x as number, positionY: row.position_y as number,
+    id: row.id as string,
+    projectId: row.project_id as string,
+    type: row.type as CanvasNodeType,
+    entityId: row.entity_id as string,
+    positionX: Number(row.position_x),
+    positionY: Number(row.position_y),
+    width: row.width == null ? null : Number(row.width),
+    height: row.height == null ? null : Number(row.height),
+    data: parseJson<CanvasNodeData>(row.data_json),
     createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }
 
 function canvasEdgeFromRow(row: SqliteRow): CanvasEdge {
   return {
-    id: row.id as string, projectId: row.project_id as string,
+    id: row.id as string,
+    projectId: row.project_id as string,
     sourceNodeId: row.source_node_id as string,
     targetNodeId: row.target_node_id as string,
     edgeType: row.edge_type as CanvasEdge["edgeType"],
+    createdAt: row.created_at as string | undefined,
+    updatedAt: row.updated_at as string | undefined,
+  };
+}
+
+function canvasWorkflowFromRow(row: SqliteRow): CanvasWorkflow {
+  const template = parseJson<{ nodes: CanvasWorkflow["nodes"]; edges: CanvasWorkflow["edges"] }>(row.template_json) ?? { nodes: [], edges: [] };
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    name: row.name as string,
+    description: row.description as string,
+    nodes: template.nodes,
+    edges: template.edges,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }

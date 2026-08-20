@@ -128,13 +128,13 @@ export class StoryboardService {
     for (const charId of frame.characterIds) {
       const asset = characters.find((a) => a.id === charId);
       if (asset?.selectedArtifactId) {
-        refAssets.push({ slot: "reference", ref: { type: "artifact", artifactId: asset.selectedArtifactId } });
+        refAssets.push({ slot: "imageUrls", ref: { type: "artifact", artifactId: asset.selectedArtifactId } });
       }
     }
     if (frame.sceneId) {
       const scene = scenes.find((s) => s.id === frame.sceneId);
       if (scene?.selectedArtifactId) {
-        refAssets.push({ slot: "reference", ref: { type: "artifact", artifactId: scene.selectedArtifactId } });
+        refAssets.push({ slot: "imageUrls", ref: { type: "artifact", artifactId: scene.selectedArtifactId } });
       }
     }
 

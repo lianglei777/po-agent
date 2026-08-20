@@ -20,6 +20,8 @@ describe("SqliteDatabase", () => {
       { version: 6, name: "generation_provider_audit_snapshots" },
       { version: 7, name: "generation_run_chat_workflow_source" },
       { version: 8, name: "pipeline_tables" },
+      { version: 9, name: "pipeline_media_canvas" },
+      { version: 10, name: "pipeline_canvas_revision" },
     ]);
     expect(database.prepare(`
       SELECT name FROM sqlite_master
@@ -34,7 +36,9 @@ describe("SqliteDatabase", () => {
         'pipeline_asset_variants',
         'pipeline_frames',
         'pipeline_canvas_nodes',
-        'pipeline_canvas_edges'
+        'pipeline_canvas_edges',
+        'pipeline_canvas_drafts',
+        'pipeline_canvas_workflows'
       )
       ORDER BY name
     `).all()).toEqual([
@@ -43,8 +47,10 @@ describe("SqliteDatabase", () => {
     { name: "generation_runs" },
     { name: "pipeline_asset_variants" },
     { name: "pipeline_assets" },
+    { name: "pipeline_canvas_drafts" },
     { name: "pipeline_canvas_edges" },
     { name: "pipeline_canvas_nodes" },
+    { name: "pipeline_canvas_workflows" },
     { name: "pipeline_frames" },
     { name: "pipeline_projects" },
     { name: "provider_jobs" },

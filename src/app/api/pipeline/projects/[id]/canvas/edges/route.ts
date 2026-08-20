@@ -1,43 +1,28 @@
-import type { CanvasEdge } from '@/contracts/pipeline';
-import { container } from '@/server/composition/container';
-import { AppError } from '@/server/domain/app-error';
-import { handleRoute, readJson } from '@/server/transport/http/api-response';
+import type { CanvasEdge } from "@/contracts/pipeline";
+import { container } from "@/server/composition/container";
+import { AppError } from "@/server/domain/app-error";
+import { handleRoute, readJson } from "@/server/transport/http/api-response";
 
-export const runtime = 'nodejs';
-
+export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<{ success: true; edge: CanvasEdge }>(async () => {
+  return handleRoute<{ edge: CanvasEdge }>(async () => {
     const { id } = await context.params;
-    const body = (await readJson(request)) as {
-      sourceNodeId: string;
-      targetNodeId: string;
-      edgeType: string;
-    };
+    const body = (await readJson(request)) as { sourceNodeId?: string; targetNodeId?: string };
     if (!body.sourceNodeId || !body.targetNodeId) {
-      throw new AppError('VALIDATION_ERROR', 'sourceNodeId and targetNodeId are required', 400);
+      throw new AppError("VALIDATION_ERROR", "sourceNodeId and targetNodeId are required", 400);
     }
-    const edgeType = (body.edgeType === 'source_of' || body.edgeType === 'generates') ? body.edgeType : 'references';
-    const edge = await container.pipelineRepository.createCanvasEdge({
-      projectId: id,
-      sourceNodeId: body.sourceNodeId,
-      targetNodeId: body.targetNodeId,
-      edgeType: edgeType as never,
-    });
-    return { success: true as const, edge };
+    return { edge: await container.canvasStudioService.connect({ projectId: id, sourceNodeId: body.sourceNodeId, targetNodeId: body.targetNodeId }) };
   });
 }
 
 export async function DELETE(request: Request, context: Context) {
   return handleRoute<{ success: true }>(async () => {
     const { id } = await context.params;
-    const url = new URL(request.url);
-    const edgeId = url.searchParams.get('edgeId');
-    if (!edgeId) {
-      throw new AppError('VALIDATION_ERROR', 'edgeId query parameter is required', 400);
-    }
-    await container.pipelineRepository.deleteCanvasEdge(edgeId);
+    const edgeId = new URL(request.url).searchParams.get("edgeId");
+    if (!edgeId) throw new AppError("VALIDATION_ERROR", "edgeId query parameter is required", 400);
+    await container.canvasStudioService.deleteEdge(edgeId, id);
     return { success: true as const };
   });
 }

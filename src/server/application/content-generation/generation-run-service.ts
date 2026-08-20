@@ -186,6 +186,11 @@ export class GenerationRunService {
     return (await this.getRun(id))!;
   }
 
+  async getArtifact(id: string) {
+    await this.ready;
+    return this.repository.getArtifact(id);
+  }
+
   async getRun(id: string): Promise<GenerationRunView | null> {
     await this.ready;
     const run = await this.repository.getRun(id);

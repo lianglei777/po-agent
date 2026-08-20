@@ -19,7 +19,7 @@ export class VideoGenerationService {
     if (!frame.selectedImageArtifactId) throw new Error(`Frame ${frameId} has no selected image`);
     const prompt = frame.videoPrompt || frame.imagePrompt || frame.visualDescription || "";
     const assets: GenerationInputAsset[] = [
-      { slot: "source_image", ref: { type: "artifact", artifactId: frame.selectedImageArtifactId } },
+      { slot: "firstFrameUrl", ref: { type: "artifact", artifactId: frame.selectedImageArtifactId } },
     ];
     await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
     const runView = await this.runService.createRun({
@@ -38,11 +38,11 @@ export class VideoGenerationService {
     const refAssets: GenerationInputAsset[] = [];
     for (const charId of frame.characterIds) {
       const asset = await this.repo.getAsset(charId);
-      if (asset?.selectedArtifactId) refAssets.push({ slot: "reference", ref: { type: "artifact", artifactId: asset.selectedArtifactId } });
+      if (asset?.selectedArtifactId) refAssets.push({ slot: "imageUrls", ref: { type: "artifact", artifactId: asset.selectedArtifactId } });
     }
     if (frame.sceneId) {
       const scene = await this.repo.getAsset(frame.sceneId);
-      if (scene?.selectedArtifactId) refAssets.push({ slot: "reference", ref: { type: "artifact", artifactId: scene.selectedArtifactId } });
+      if (scene?.selectedArtifactId) refAssets.push({ slot: "imageUrls", ref: { type: "artifact", artifactId: scene.selectedArtifactId } });
     }
     const prompt = frame.videoPrompt || frame.visualDescription || "";
     await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
@@ -71,7 +71,7 @@ export class VideoGenerationService {
     });
     this.sse?.emit({ type: "node_created", projectId, payload: node });
     if (frameNode) {
-      const edge = await this.repo.createCanvasEdge({ projectId, sourceNodeId: node.id, targetNodeId: frameNode.id, edgeType: "source_of" });
+      const edge = await this.repo.createCanvasEdge({ projectId, sourceNodeId: frameNode.id, targetNodeId: node.id, edgeType: "references" });
       this.sse?.emit({ type: "edge_created", projectId, payload: edge });
     }
   }

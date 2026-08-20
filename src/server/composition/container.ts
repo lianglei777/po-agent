@@ -53,6 +53,7 @@ import { AssetGenerationService } from "@/server/application/pipeline/asset-gene
 import { VideoGenerationService } from "@/server/application/pipeline/video-generation-service";
 import { ScriptAnalysisService } from "@/server/application/pipeline/script-analysis-service";
 import { StoryboardService } from "@/server/application/pipeline/storyboard-service";
+import { CanvasStudioService } from "@/server/application/pipeline/canvas-studio-service";
 import { CompositeAgentToolProvider } from "@/server/application/pipeline/composite-agent-tool-provider";
 import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
@@ -141,7 +142,10 @@ function createContainer() {
         const pipelineSse = getPipelineSse();
         const artifactId = artifacts[0]?.id ?? null;
 
-        if (run.sourceRef.includes(":image:")) {
+        if (run.sourceRef.startsWith("pipeline:canvas:")) {
+          const nodeId = run.sourceRef.slice("pipeline:canvas:".length);
+          await getPipelineServices().canvasStudioService!.completeGeneration(nodeId, runId, artifacts);
+        } else if (run.sourceRef.includes(":image:")) {
           // 分镜图生成完成 — 回填 frame.selectedImageArtifactId
           const frameId = run.sourceRef.split(":")[2];
           await pipelineRepo.updateFrame(frameId, {
@@ -172,6 +176,16 @@ function createContainer() {
         // 回填失败不影响 Worker 主流程
       }
     };
+    execution.onFail = async (runId, _code, message) => {
+      try {
+        const run = await repository.getRun(runId);
+        if (!run?.sourceRef?.startsWith("pipeline:canvas:")) return;
+        const nodeId = run.sourceRef.slice("pipeline:canvas:".length);
+        await getPipelineServices().canvasStudioService!.failGeneration(nodeId, runId, message);
+      } catch {
+        // 回填失败不影响 Worker 主流程。
+      }
+    };
     const worker = new GenerationWorker(
       repository,
       execution,
@@ -190,6 +204,7 @@ function createContainer() {
   }
 
   let pipelineRepository: SqlitePipelineRepository | undefined;
+  let canvasStudioService: CanvasStudioService | undefined;
 
   function getPipelineRepository() {
     if (pipelineRepository) return pipelineRepository;
@@ -202,6 +217,14 @@ function createContainer() {
     storyboardService = new StoryboardService(pipelineLlm, pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
     assetGenerationService = new AssetGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
     videoGenerationService = new VideoGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
+    canvasStudioService = new CanvasStudioService(
+      pipelineRepository,
+      getGenerationRunService(),
+      getGenerationAssetService(),
+      pipelineLlm,
+      pipelineCwd,
+      pipelineSse,
+    );
     pipelineAgentTools = new PipelineAgentToolProvider(
       scriptAnalysisService, storyboardService, assetGenerationService, videoGenerationService, pipelineRepository,
     );
@@ -218,7 +241,7 @@ function createContainer() {
 
   function getPipelineServices() {
     getPipelineRepository();
-    return { pipelineSse, pipelineLlm, scriptAnalysisService, storyboardService, pipelineAgentTools };
+    return { pipelineSse, pipelineLlm, scriptAnalysisService, storyboardService, canvasStudioService, pipelineAgentTools };
   }
 
   function getPipelineSse() {
@@ -346,6 +369,10 @@ function createContainer() {
     get videoGenerationService() {
       getPipelineServices();
       return videoGenerationService!;
+    },
+    get canvasStudioService() {
+      getPipelineServices();
+      return canvasStudioService!;
     },
     createPipelineAgentSession(projectId: string) {
       const cwd = path.join(agentDir, "pipeline-sessions", projectId);

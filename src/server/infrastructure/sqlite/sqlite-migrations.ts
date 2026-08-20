@@ -305,4 +305,92 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         ON pipeline_canvas_edges(target_node_id);
     `,
   },
+
+  {
+    version: 9,
+    name: "pipeline_media_canvas",
+    // 旧表的 CHECK 约束无法 ALTER；重建节点/边，同时保留已有 Pipeline 数据。
+    disableForeignKeys: true,
+    sql: `
+      CREATE TABLE pipeline_canvas_nodes_v9 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('text', 'image', 'video', 'audio', 'script', 'character', 'scene', 'prop', 'storyboard')),
+        entity_id TEXT NOT NULL,
+        position_x REAL NOT NULL,
+        position_y REAL NOT NULL,
+        width REAL,
+        height REAL,
+        data_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO pipeline_canvas_nodes_v9(
+        id, project_id, type, entity_id, position_x, position_y, width, height, data_json, created_at, updated_at
+      )
+      SELECT id, project_id, type, entity_id, position_x, position_y, NULL, NULL, NULL, created_at, created_at
+      FROM pipeline_canvas_nodes;
+
+      CREATE TABLE pipeline_canvas_edges_v9 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        source_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes_v9(id) ON DELETE CASCADE,
+        target_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes_v9(id) ON DELETE CASCADE,
+        edge_type TEXT NOT NULL CHECK (edge_type IN ('references', 'source_of', 'generates', 'derives_from')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO pipeline_canvas_edges_v9(
+        id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at
+      )
+      SELECT id, project_id, source_node_id, target_node_id, edge_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM pipeline_canvas_edges;
+
+      DROP TABLE pipeline_canvas_edges;
+      DROP TABLE pipeline_canvas_nodes;
+      ALTER TABLE pipeline_canvas_nodes_v9 RENAME TO pipeline_canvas_nodes;
+      ALTER TABLE pipeline_canvas_edges_v9 RENAME TO pipeline_canvas_edges;
+
+      CREATE INDEX pipeline_canvas_nodes_project_idx
+        ON pipeline_canvas_nodes(project_id, type);
+      CREATE UNIQUE INDEX pipeline_canvas_nodes_entity_unique
+        ON pipeline_canvas_nodes(project_id, type, entity_id);
+      CREATE INDEX pipeline_canvas_edges_project_idx
+        ON pipeline_canvas_edges(project_id);
+      CREATE INDEX pipeline_canvas_edges_source_idx
+        ON pipeline_canvas_edges(source_node_id);
+      CREATE INDEX pipeline_canvas_edges_target_idx
+        ON pipeline_canvas_edges(target_node_id);
+
+      CREATE TABLE pipeline_canvas_drafts (
+        project_id TEXT PRIMARY KEY REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        viewport_x REAL NOT NULL DEFAULT 0,
+        viewport_y REAL NOT NULL DEFAULT 0,
+        viewport_zoom REAL NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE pipeline_canvas_workflows (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        template_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_workflows_project_idx
+        ON pipeline_canvas_workflows(project_id, updated_at DESC);
+    `,
+  },
+  {
+    version: 10,
+    name: "pipeline_canvas_revision",
+    sql: `
+      ALTER TABLE pipeline_canvas_drafts
+      ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

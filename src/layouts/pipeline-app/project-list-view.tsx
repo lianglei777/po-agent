@@ -1,143 +1,140 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Button, Empty, Popconfirm, Segmented, Spin, message } from "antd";
-import { Grid, List, Plus, Trash2 } from "@/components/icons";
-import { useI18n } from "@/i18n/use-i18n";
-import { pipelineApi } from "./pipeline-api";
+import { Button, Popconfirm, Spin } from "antd";
 import type { ProjectSummary } from "@/contracts/pipeline";
-
-type ViewMode = "grid" | "list";
+import { Plus, Project, Trash2 } from "@/components/icons";
+import { useI18n } from "@/i18n/use-i18n";
 
 export type ProjectListViewProps = {
-  viewMode: ViewMode;
-  onViewModeChange: (mode: ViewMode) => void;
+  projects: ProjectSummary[];
+  loading: boolean;
   onNewProject: () => void;
   onOpenProject: (projectId: string) => void;
+  onDeleteProject: (projectId: string) => Promise<void>;
 };
 
-export function ProjectListView({ viewMode, onViewModeChange, onNewProject, onOpenProject }: ProjectListViewProps) {
-  const { t } = useI18n();
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
-
-  useEffect(() => {
-    let cancelled = false;
-    pipelineApi.listProjects().then((data) => {
-      if (!cancelled) { setProjects(data.projects); setLoading(false); }
-    }).catch((err) => {
-      if (!cancelled) { setLoading(false); message.error(err instanceof Error ? err.message : String(err)); }
-    });
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  const projectContent = viewMode === "grid" ? (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-      {projects.map((project) => (
-        <ProjectCard key={project.id} project={project}
-          onOpen={() => onOpenProject(project.id)}
-          onDelete={async () => { await pipelineApi.deleteProject(project.id); refresh(); }}
-        />
-      ))}
-    </div>
-  ) : (
-    <div className="flex flex-col gap-2">
-      {projects.map((project) => (
-        <div key={project.id}
-          className="group flex cursor-pointer items-center gap-4 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-4 py-3 transition-all hover:border-[var(--pl-border-strong)] hover:shadow-[var(--pl-shadow-card)]"
-          onClick={() => onOpenProject(project.id)} role="button" tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenProject(project.id); } }}
-        >
-          <div className="flex gap-1.5">
-            {project.stageStatuses.map((stage) => (
-              <div key={stage.stage} className={"h-1.5 w-6 rounded-full " +
-                (stage.status === "ready" ? "bg-[var(--pl-ready)]" :
-                 stage.status === "warn" ? "bg-[var(--pl-warn)]" : "bg-[var(--pl-idle)]")
-              } />
-            ))}
-          </div>
-          <span className="flex-1 truncate text-sm font-medium text-[var(--pl-text)]">{project.title}</span>
-          <span className="text-xs text-[var(--pl-text-muted)]">{project.frameCount} frames</span>
-          <Popconfirm title={t.pipeline.confirmDelete.replace("{title}", project.title)}
-            onConfirm={async () => { await pipelineApi.deleteProject(project.id); refresh(); }}>
-            <Button danger size="small" type="text" icon={<Trash2 className="size-3.5" />}
-              onClick={(e) => e.stopPropagation()} className="opacity-0 transition-opacity group-hover:opacity-100" />
-          </Popconfirm>
-        </div>
-      ))}
-    </div>
-  );
+export function ProjectListView({
+  projects,
+  loading,
+  onNewProject,
+  onOpenProject,
+  onDeleteProject,
+}: ProjectListViewProps) {
+  const { locale, t } = useI18n();
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[var(--pl-surface-subtle)]">
-      <div className="flex items-center justify-between border-b border-[var(--pl-border)] bg-[var(--pl-surface)] px-6 py-4">
-        <h1 className="text-lg font-semibold text-[var(--pl-text)]">{t.pipeline.projectListTitle}</h1>
-        <div className="flex items-center gap-3">
-          <Segmented size="small" value={viewMode} onChange={(val) => onViewModeChange(val as ViewMode)}
-            options={[{ value: "grid", icon: <Grid className="size-3.5" />, tooltip: t.pipeline.viewGrid },
-                     { value: "list", icon: <List className="size-3.5" />, tooltip: t.pipeline.viewList }]}
-          />
-          <Button type="primary" icon={<Plus className="size-4" />} onClick={onNewProject} size="middle">{t.pipeline.newProject}</Button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6">
+    <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--pl-surface)]">
+      <header className="flex min-h-16 items-center border-b border-[var(--pl-border)] px-8">
+        <h1 className="text-lg font-semibold tracking-[-0.02em] text-[var(--pl-text)]">
+          {t.pipeline.projectListTitle}
+        </h1>
+      </header>
+
+      <section className="min-h-0 flex-1 overflow-y-auto px-8 py-8" aria-labelledby="pipeline-project-list">
+        <h2 id="pipeline-project-list" className="sr-only">{t.pipeline.projectListTitle}</h2>
+
         {loading ? (
-          <div className="flex h-full items-center justify-center"><Spin size="large" /></div>
-        ) : projects.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center">
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={<div className="text-center"><p className="text-base font-medium text-[var(--pl-text)]">{t.pipeline.emptyTitle}</p>
-              <p className="mt-1 text-sm text-[var(--pl-text-secondary)]">{t.pipeline.emptyDescription}</p></div>}>
-              <Button type="primary" icon={<Plus className="size-4" />} onClick={onNewProject} size="middle">{t.pipeline.emptyNewProject}</Button>
-            </Empty>
+          <div className="flex h-full min-h-72 items-center justify-center">
+            <Spin size="large" />
           </div>
         ) : (
-          projectContent
+          <>
+            <div className="grid max-w-[1280px] grid-cols-[repeat(auto-fill,minmax(250px,290px))] gap-x-5 gap-y-8">
+              <button
+                type="button"
+                onClick={onNewProject}
+                className="group text-left focus-visible:outline-none"
+              >
+                <div className="flex aspect-[16/10] items-center justify-center rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] transition-colors group-hover:border-[var(--pl-accent)] group-hover:bg-[var(--pl-surface-hover)] group-focus-visible:border-[var(--pl-accent)]">
+                  <span className="flex flex-col items-center gap-3 text-[var(--pl-text-secondary)] transition-colors group-hover:text-[var(--pl-text)]">
+                    <span className="flex size-11 items-center justify-center rounded-full border border-[var(--pl-border-strong)] bg-[var(--pl-surface)]">
+                      <Plus className="size-5" />
+                    </span>
+                    <span className="text-base font-semibold">{t.pipeline.startCreating}</span>
+                  </span>
+                </div>
+                <div className="px-1 pt-3">
+                  <div className="text-sm font-medium text-[var(--pl-text)]">{t.pipeline.newProject}</div>
+                  <div className="mt-1 text-xs text-[var(--pl-text-muted)]">{t.pipeline.createProjectHint}</div>
+                </div>
+              </button>
+
+              {projects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  locale={locale}
+                  onOpen={() => onOpenProject(project.id)}
+                  onDelete={() => onDeleteProject(project.id)}
+                />
+              ))}
+            </div>
+
+            <p className="max-w-[1280px] py-12 text-center text-xs text-[var(--pl-text-muted)]">
+              {projects.length ? t.pipeline.noMoreProjects : t.pipeline.emptyTitle}
+            </p>
+          </>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
 
-function ProjectCard({ project, onOpen, onDelete }: {
+function ProjectCard({
+  project,
+  locale,
+  onOpen,
+  onDelete,
+}: {
   project: ProjectSummary;
+  locale: "zh" | "en";
   onOpen: () => void;
   onDelete: () => Promise<void>;
 }) {
   const { t } = useI18n();
-  const stageLabels: Record<string, string> = {
-    script: t.pipeline.stageScript, assets: t.pipeline.stageAssets,
-    storyboard: t.pipeline.stageStoryboard, video: t.pipeline.stageVideo, assembly: t.pipeline.stageAssembly,
-  };
+  const updatedAt = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(project.updatedAt));
+
   return (
-    <article className="group relative cursor-pointer overflow-hidden rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] shadow-[var(--pl-shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--pl-shadow-hover)]"
-      onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}>
-      <div className="aspect-[16/10] bg-[var(--pl-surface-subtle)]" />
-      <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
-        <Popconfirm title={t.pipeline.confirmDelete.replace("{title}", project.title)}
-          onConfirm={(e) => { e?.stopPropagation(); onDelete(); }} onCancel={(e) => e?.stopPropagation()}>
-          <Button danger size="small" type="text" icon={<Trash2 className="size-3.5" />} onClick={(e) => e.stopPropagation()} />
-        </Popconfirm>
-      </div>
-      <div className="p-4">
-        <h3 className="truncate text-sm font-semibold text-[var(--pl-text)]">{project.title}</h3>
-        <div className="mt-2 flex flex-col gap-1">
-          {project.stageStatuses.map((stage) => (
-            <div key={stage.stage} className="flex items-center gap-1.5 text-xs">
-              <span className={"size-1.5 rounded-full " + (stage.status === "ready" ? "bg-[var(--pl-ready)]" : stage.status === "warn" ? "bg-[var(--pl-warn)]" : "border border-[var(--pl-text-muted)] opacity-40")
-              } />
-              <span className="text-[var(--pl-text-secondary)]">{stageLabels[stage.stage]}</span>
-              <span className="ml-auto text-[var(--pl-text-muted)]">{stage.statusLabel}</span>
-            </div>
-          ))}
+    <article className="group relative min-w-0">
+      <button type="button" onClick={onOpen} className="block w-full text-left focus-visible:outline-none">
+        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-project-card)] transition-colors group-hover:border-[var(--pl-border-strong)] group-focus-within:border-[var(--pl-accent)]">
+          <div className="absolute left-5 top-5 h-9 w-14 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
+          <div className="absolute bottom-5 right-5 h-12 w-20 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
+          <span className="flex size-12 items-center justify-center rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-accent)]">
+            <Project className="size-5" />
+          </span>
         </div>
-        <div className="mt-2 text-xs text-[var(--pl-text-muted)]">{project.frameCount} {t.pipeline.frames}</div>
+        <div className="px-1 pt-3">
+          <h3 className="truncate text-sm font-semibold text-[var(--pl-text)]">{project.title}</h3>
+          <time
+            dateTime={project.updatedAt}
+            aria-label={`${t.pipeline.updatedAt} ${updatedAt}`}
+            className="mt-1 block text-xs tabular-nums text-[var(--pl-text-muted)]"
+          >
+            {updatedAt}
+          </time>
+        </div>
+      </button>
+
+      <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <Popconfirm
+          title={t.pipeline.confirmDelete.replace("{title}", project.title)}
+          onConfirm={onDelete}
+        >
+          <Button
+            danger
+            type="text"
+            size="small"
+            aria-label={t.pipeline.confirmDelete.replace("{title}", project.title)}
+            icon={<Trash2 className="size-3.5" />}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </Popconfirm>
       </div>
     </article>
   );
 }
-

@@ -1,8 +1,12 @@
 import type {
   AssetVariant,
   CanvasEdge,
+  CanvasMutation,
   CanvasNode,
   CanvasNodeType,
+  CanvasNodeData,
+  CanvasViewport,
+  CanvasWorkflow,
   PipelineAsset,
   PipelineAssetType,
   PipelineProject,
@@ -36,17 +40,35 @@ export interface PipelineRepository {
   deleteFrame(id: string): Promise<boolean>;
   reorderFrames(projectId: string, frameIds: string[]): Promise<void>;
 
-  createCanvasNode(input: Omit<CanvasNode, "createdAt">): Promise<CanvasNode>;
+  createCanvasNode(input: Omit<CanvasNode, "createdAt" | "updatedAt" | "width" | "height" | "data"> & { width?: number | null; height?: number | null; data?: CanvasNodeData | null }): Promise<CanvasNode>;
   getCanvasNode(id: string): Promise<CanvasNode | null>;
   listCanvasNodes(projectId: string): Promise<CanvasNode[]>;
   updateCanvasNodePosition(id: string, x: number, y: number): Promise<void>;
+  updateCanvasNode(id: string, patch: {
+    positionX?: number;
+    positionY?: number;
+    width?: number | null;
+    height?: number | null;
+    data?: CanvasNodeData | null;
+  }): Promise<CanvasNode | null>;
   deleteCanvasNode(id: string): Promise<boolean>;
   findCanvasNodeByEntity(projectId: string, entityType: CanvasNodeType, entityId: string): Promise<CanvasNode | null>;
 
-  createCanvasEdge(input: Omit<CanvasEdge, "id">): Promise<CanvasEdge>;
+  createCanvasEdge(input: Omit<CanvasEdge, "id" | "createdAt" | "updatedAt">): Promise<CanvasEdge>;
+  getCanvasEdge(id: string): Promise<CanvasEdge | null>;
   listCanvasEdges(projectId: string): Promise<CanvasEdge[]>;
   deleteCanvasEdge(id: string): Promise<boolean>;
   deleteCanvasEdgesByNode(nodeId: string): Promise<void>;
+
+  getCanvasViewport(projectId: string): Promise<CanvasViewport>;
+  getCanvasRevision(projectId: string): Promise<number>;
+  updateCanvasViewport(projectId: string, viewport: CanvasViewport): Promise<void>;
+  applyCanvasMutationBatch(projectId: string, baseRevision: number, mutations: CanvasMutation[]): Promise<{ applied: boolean; revision: number }>;
+
+  createCanvasWorkflow(input: Omit<CanvasWorkflow, "createdAt" | "updatedAt">): Promise<CanvasWorkflow>;
+  listCanvasWorkflows(projectId: string): Promise<CanvasWorkflow[]>;
+  getCanvasWorkflow(id: string): Promise<CanvasWorkflow | null>;
+  deleteCanvasWorkflow(id: string): Promise<boolean>;
 
   getStageStatuses(projectId: string): Promise<PipelineStageStatus[]>;
 }

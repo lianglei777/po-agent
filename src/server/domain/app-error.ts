@@ -57,6 +57,7 @@ export type AppErrorCode =
   | "PIPELINE_ASSET_LOCKED"
   | "PIPELINE_LLM_FAILED"
   | "PIPELINE_CANVAS_NODE_NOT_FOUND"
+  | "PIPELINE_CANVAS_REVISION_CONFLICT"
  | "INTERNAL_ERROR";
 
 export class AppError extends Error {

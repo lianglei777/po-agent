@@ -180,7 +180,104 @@ export interface AudioNote {
   bgmNote: string | null;
 }
 
-// ── 画布节点 ──
+// ── 无限画布 ──
+
+export type CanvasMediaType = "text" | "image" | "video" | "audio";
+
+export interface CanvasWorkspaceFileRef {
+  relativePath: string;
+  contentType: string;
+  name: string;
+}
+
+export interface CanvasMediaReference {
+  nodeId: string;
+  mediaType: CanvasMediaType;
+  label: string;
+  artifactId?: string;
+  url?: string;
+  workspaceFile?: CanvasWorkspaceFileRef;
+  content?: string[];
+}
+
+export interface CanvasGenerationParams {
+  prompt: string;
+  routeId?: string;
+  model?: string;
+  count?: number;
+  modeType?: string;
+  settings?: Record<string, string | number | boolean>;
+  advancedSettings?: Record<string, string | number | boolean>;
+  textList?: CanvasMediaReference[];
+  imageList?: CanvasMediaReference[];
+  videoList?: CanvasMediaReference[];
+  audioList?: CanvasMediaReference[];
+  mixedListOrder?: string[];
+}
+
+export interface CanvasNodeTaskInfo {
+  runId?: string;
+  status: "idle" | "queued" | "processing" | "completed" | "failed";
+  progressPercent?: number;
+  errorMessage?: string;
+}
+
+export interface CanvasGroupRunInfo {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+}
+
+export type CanvasRichTextAttributeValue = string | number | boolean | null;
+
+export interface CanvasRichTextMark {
+  type: "bold" | "italic" | "underline";
+  attrs?: Record<string, CanvasRichTextAttributeValue>;
+}
+
+export interface CanvasRichTextNode {
+  type: "doc" | "paragraph" | "heading" | "bulletList" | "orderedList" | "listItem" | "hardBreak" | "text";
+  attrs?: Record<string, CanvasRichTextAttributeValue>;
+  content?: CanvasRichTextNode[];
+  marks?: CanvasRichTextMark[];
+  text?: string;
+}
+
+export interface CanvasTextDocument {
+  schemaVersion: 1;
+  format: "tiptap-json";
+  content: CanvasRichTextNode;
+  plainText: string;
+}
+
+export interface GenerateTextNodeInput {
+  instruction: string;
+  mode: "generate" | "revise";
+  model?: string;
+}
+
+export interface CanvasNodeData {
+  type: CanvasMediaType;
+  name: string;
+  action: string;
+  generatorType?: "default" | "enhance" | "resource";
+  content?: string[];
+  textDocument?: CanvasTextDocument;
+  url?: string[];
+  poster?: string;
+  artifactIds?: string[];
+  workspaceFile?: CanvasWorkspaceFileRef;
+  params?: CanvasGenerationParams;
+  taskInfo?: CanvasNodeTaskInfo;
+  group?: {
+    id: string;
+    name: string;
+  };
+  groupRun?: CanvasGroupRunInfo;
+  legacyEntity?: {
+    type: "asset" | "frame" | "run" | "script";
+    id: string;
+  };
+}
 
 export interface CanvasNode {
   id: string;
@@ -189,18 +286,21 @@ export interface CanvasNode {
   entityId: string;
   positionX: number;
   positionY: number;
+  width: number | null;
+  height: number | null;
+  data: CanvasNodeData | null;
   createdAt: string;
+  updatedAt: string;
 }
 
+// 保留旧 Pipeline 节点类型用于无损迁移；新 Studio 只创建四种媒体节点。
 export type CanvasNodeType =
+  | CanvasMediaType
   | "script"
   | "character"
   | "scene"
   | "prop"
-  | "storyboard"
-  | "video";
-
-// ── 画布边 ──
+  | "storyboard";
 
 export interface CanvasEdge {
   id: string;
@@ -208,6 +308,8 @@ export interface CanvasEdge {
   sourceNodeId: string;
   targetNodeId: string;
   edgeType: CanvasEdgeType;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type CanvasEdgeType =
@@ -215,6 +317,59 @@ export type CanvasEdgeType =
   | "source_of"
   | "generates"
   | "derives_from";
+
+export interface CanvasViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export type CanvasMutation =
+  | { type: "node.create"; node: CanvasNode }
+  | { type: "node.update"; nodeId: string; patch: { positionX?: number; positionY?: number; width?: number | null; height?: number | null; data?: CanvasNodeData | null } }
+  | { type: "node.delete"; nodeId: string }
+  | { type: "edge.create"; edge: CanvasEdge }
+  | { type: "edge.delete"; edgeId: string }
+  | { type: "viewport.update"; viewport: CanvasViewport };
+
+export interface CanvasMutationBatch {
+  baseRevision: number;
+  requestId: string;
+  mutations: CanvasMutation[];
+}
+
+export interface CanvasSnapshot {
+  revision: number;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  viewport: CanvasViewport;
+}
+
+export interface CanvasWorkflowNodeTemplate {
+  type: CanvasNodeType;
+  data: CanvasNodeData | null;
+  offsetX: number;
+  offsetY: number;
+  width: number | null;
+  height: number | null;
+}
+
+export interface CanvasWorkflowEdgeTemplate {
+  sourceIndex: number;
+  targetIndex: number;
+  edgeType: CanvasEdgeType;
+}
+
+export interface CanvasWorkflow {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  nodes: CanvasWorkflowNodeTemplate[];
+  edges: CanvasWorkflowEdgeTemplate[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ── 阶段进度 ──
 
