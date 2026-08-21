@@ -337,12 +337,14 @@ export interface UpdateCanvasViewportRequest {
 export interface GenerateCanvasNodeResponse {
   node: CanvasNode;
   runId?: string;
+  edge?: CanvasEdge;
 }
 
 export interface GenerateCanvasNodeRequest {
   prompt?: string;
   routeId?: string;
   settings?: Record<string, string | number | boolean>;
+  createNewNode?: boolean;
 }
 
 export interface GenerateTextNodeRequest {

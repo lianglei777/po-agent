@@ -25,6 +25,7 @@ type CanvasStoreState = CanvasDocument & {
   viewport: CanvasViewport;
   selectedNodeIds: string[];
   editingNodeId: string | null;
+  imageComposerNodeId: string | null;
   interactionMode: CanvasInteractionMode;
   connectionsVisible: boolean;
   minimapVisible: boolean;
@@ -40,11 +41,14 @@ type CanvasStoreState = CanvasDocument & {
   setSelection: (nodeIds: string[]) => void;
   startEditingNode: (nodeId: string) => void;
   stopEditingNode: (nodeId?: string) => void;
+  openImageComposer: (nodeId: string) => void;
+  closeImageComposer: (nodeId?: string) => void;
   setInteractionMode: (mode: CanvasInteractionMode) => void;
   toggleConnections: () => void;
   toggleMinimap: () => void;
   createNode: (type: CanvasMediaType, position: { x: number; y: number }, name: string) => CanvasNode;
   insertServerNode: (node: CanvasNode) => void;
+  insertServerGenerationResult: (node: CanvasNode, edge?: CanvasEdge) => void;
   applyServerNodeData: (nodeId: string, data: CanvasNodeData, updatedAt?: string) => void;
   updateNodeData: (nodeId: string, data: CanvasNodeData) => void;
   updateNodePositionLive: (nodeId: string, position: { x: number; y: number }) => void;
@@ -93,6 +97,7 @@ export function createCanvasStore(projectId: string) {
     viewport: { x: 0, y: 0, zoom: 1 },
     selectedNodeIds: [],
     editingNodeId: null,
+    imageComposerNodeId: null,
     interactionMode: "select",
     connectionsVisible: true,
     minimapVisible: false,
@@ -110,6 +115,7 @@ export function createCanvasStore(projectId: string) {
       viewport: snapshot.viewport,
       selectedNodeIds: [],
       editingNodeId: null,
+      imageComposerNodeId: null,
       loaded: true,
       error: null,
       saveState: "idle",
@@ -130,6 +136,9 @@ export function createCanvasStore(projectId: string) {
         viewport: state.viewport,
         selectedNodeIds,
         editingNodeId: state.editingNodeId && nodeIds.has(state.editingNodeId) ? state.editingNodeId : null,
+        imageComposerNodeId: state.imageComposerNodeId && nodeIds.has(state.imageComposerNodeId)
+          ? state.imageComposerNodeId
+          : null,
         loaded: true,
         error: null,
         saveState: "saved",
@@ -144,13 +153,22 @@ export function createCanvasStore(projectId: string) {
       const editingNodeId = state.editingNodeId && nodeIds.includes(state.editingNodeId)
         ? state.editingNodeId
         : null;
-      if (arraysEqual(state.selectedNodeIds, nodeIds) && editingNodeId === state.editingNodeId) return state;
-      return { selectedNodeIds: nodeIds, editingNodeId };
+      const imageComposerNodeId = state.imageComposerNodeId && nodeIds.includes(state.imageComposerNodeId)
+        ? state.imageComposerNodeId
+        : null;
+      if (arraysEqual(state.selectedNodeIds, nodeIds)
+        && editingNodeId === state.editingNodeId
+        && imageComposerNodeId === state.imageComposerNodeId) return state;
+      return { selectedNodeIds: nodeIds, editingNodeId, imageComposerNodeId };
     }),
 
-    startEditingNode: (editingNodeId) => set({ editingNodeId, selectedNodeIds: [editingNodeId] }),
+    startEditingNode: (editingNodeId) => set({ editingNodeId, selectedNodeIds: [editingNodeId], imageComposerNodeId: null }),
     stopEditingNode: (nodeId) => set((state) => (
       nodeId && state.editingNodeId !== nodeId ? state : { editingNodeId: null }
+    )),
+    openImageComposer: (imageComposerNodeId) => set({ imageComposerNodeId, selectedNodeIds: [imageComposerNodeId], editingNodeId: null }),
+    closeImageComposer: (nodeId) => set((state) => (
+      nodeId && state.imageComposerNodeId !== nodeId ? state : { imageComposerNodeId: null }
     )),
 
     setInteractionMode: (interactionMode) => set({ interactionMode }),
@@ -160,13 +178,22 @@ export function createCanvasStore(projectId: string) {
     createNode: (type, position, name) => {
       const node = makeCanvasNode(projectId, type, position, name);
       commitDocument(set, get, [...get().nodes, node], get().edges, [{ type: "node.create", node }]);
-      set({ selectedNodeIds: [node.id] });
+      set({ selectedNodeIds: [node.id], imageComposerNodeId: null });
       return node;
     },
 
     insertServerNode: (node) => set((state) => ({
       nodes: [...state.nodes.filter((item) => item.id !== node.id), node],
       selectedNodeIds: [node.id],
+      imageComposerNodeId: null,
+    })),
+
+    insertServerGenerationResult: (node, edge) => set((state) => ({
+      nodes: [...state.nodes.filter((item) => item.id !== node.id), node],
+      edges: edge ? [...state.edges.filter((item) => item.id !== edge.id), edge] : state.edges,
+      selectedNodeIds: [node.id],
+      editingNodeId: null,
+      imageComposerNodeId: null,
     })),
 
     applyServerNodeData: (nodeId, data, updatedAt) => set((state) => {
@@ -295,6 +322,9 @@ export function createCanvasStore(projectId: string) {
       set((current) => ({
         selectedNodeIds: [],
         editingNodeId: current.editingNodeId && ids.has(current.editingNodeId) ? null : current.editingNodeId,
+        imageComposerNodeId: current.imageComposerNodeId && ids.has(current.imageComposerNodeId)
+          ? null
+          : current.imageComposerNodeId,
       }));
     },
 
@@ -341,7 +371,7 @@ export function createCanvasStore(projectId: string) {
         ],
       );
       const createdIds = copies.map((node) => node.id);
-      set({ selectedNodeIds: createdIds });
+      set({ selectedNodeIds: createdIds, imageComposerNodeId: null });
       return createdIds;
     },
 

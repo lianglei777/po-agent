@@ -28,6 +28,15 @@ describe("image generation options", () => {
     expect(selectImageGenerationRoute(routes, "missing")?.id).toBe("image-default");
   });
 
+  it("selects image-to-image routes for AI image modification", () => {
+    const routes = imageGenerationRoutes([
+      route("create", "text-to-image", true),
+      route("modify", "image-to-image", true),
+    ], "image-to-image");
+
+    expect(routes.map((item) => item.id)).toEqual(["modify"]);
+  });
+
   it("validates the selected route prompt bounds", () => {
     const selected = route("image", "text-to-image");
     expect(imagePromptProblem(selected, "")).toBe("required");

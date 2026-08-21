@@ -1,7 +1,10 @@
 import type { GenerationRouteDto } from "@/contracts/generation";
 
-export function imageGenerationRoutes(routes: GenerationRouteDto[]): GenerationRouteDto[] {
-  return routes.filter((route) => route.capability === "text-to-image");
+export function imageGenerationRoutes(
+  routes: GenerationRouteDto[],
+  capability: "text-to-image" | "image-to-image" = "text-to-image",
+): GenerationRouteDto[] {
+  return routes.filter((route) => route.capability === capability);
 }
 
 export function selectImageGenerationRoute(

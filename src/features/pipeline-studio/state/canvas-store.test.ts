@@ -50,6 +50,18 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().editingNodeId).toBeNull();
   });
 
+  it("closes the image modification composer when its node loses selection", () => {
+    const store = createCanvasStore("project-1");
+    store.getState().hydrate({ revision: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().openImageComposer("image-1");
+    expect(store.getState().imageComposerNodeId).toBe("image-1");
+    expect(store.getState().selectedNodeIds).toEqual(["image-1"]);
+
+    store.getState().setSelection([]);
+    expect(store.getState().imageComposerNodeId).toBeNull();
+  });
+
   it("updates node size live and records one mutation only after resize ends", () => {
     const store = createCanvasStore("project-1");
     const node = {
@@ -198,5 +210,37 @@ describe("pipeline studio canvas store", () => {
 
     expect(store.getState().selectedNodeIds).toEqual([node.id]);
     expect(store.getState().nodes[0]?.data?.taskInfo?.status).toBe("processing");
+  });
+
+  it("inserts a server-created AI image node and its provenance edge without queuing local mutations", () => {
+    const store = createCanvasStore("project-1");
+    store.getState().hydrate({ revision: 2, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    const node = {
+      id: "derived-1",
+      projectId: "project-1",
+      type: "image" as const,
+      entityId: "entity-derived-1",
+      positionX: 500,
+      positionY: 100,
+      width: 350,
+      height: 350,
+      data: { type: "image" as const, name: "Image · AI", action: "image_generate", taskInfo: { status: "processing" as const } },
+      createdAt: "2026-08-21T00:00:00.000Z",
+      updatedAt: "2026-08-21T00:00:00.000Z",
+    };
+    const edge = {
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: "source-1",
+      targetNodeId: node.id,
+      edgeType: "references" as const,
+    };
+
+    store.getState().insertServerGenerationResult(node, edge);
+
+    expect(store.getState().nodes).toEqual([node]);
+    expect(store.getState().edges).toEqual([edge]);
+    expect(store.getState().selectedNodeIds).toEqual([node.id]);
+    expect(store.getState().pendingMutations).toEqual([]);
   });
 });

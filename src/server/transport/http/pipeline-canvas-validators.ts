@@ -14,6 +14,12 @@ const IMAGE_RESOLUTIONS = new Set(["1k", "2k"]);
 
 export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNodeRequest {
   if (!isRecord(value)) throw validationError("Canvas generation request must be an object");
+  if (value.createNewNode !== undefined && typeof value.createNewNode !== "boolean") {
+    throw validationError("createNewNode is invalid");
+  }
+  if (value.createNewNode === true && (typeof value.prompt !== "string" || !value.prompt.trim())) {
+    throw validationError("prompt is required when createNewNode is true");
+  }
   if (value.prompt !== undefined && (
     typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > MAX_AI_INSTRUCTION_LENGTH
   )) throw validationError("prompt is invalid");
@@ -38,6 +44,7 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
       ...(typeof settings.aspectRatio === "string" ? { aspectRatio: settings.aspectRatio } : {}),
       ...(typeof settings.resolution === "string" ? { resolution: settings.resolution } : {}),
     } : undefined,
+    ...(typeof value.createNewNode === "boolean" ? { createNewNode: value.createNewNode } : {}),
   };
 }
 

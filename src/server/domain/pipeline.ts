@@ -259,6 +259,7 @@ export interface GenerateCanvasNodeInput {
   prompt?: string;
   routeId?: string;
   settings?: Record<string, string | number | boolean>;
+  createNewNode?: boolean;
 }
 
 export interface CanvasNodeData {

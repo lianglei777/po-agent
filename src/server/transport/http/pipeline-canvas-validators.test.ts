@@ -123,4 +123,13 @@ describe("parseGenerateCanvasNodeRequest", () => {
       settings: { width: 99999 },
     })).toThrow("settings contains unsupported fields");
   });
+
+  it("accepts an explicit request to create a derived image node", () => {
+    expect(parseGenerateCanvasNodeRequest({ prompt: "change the lighting", createNewNode: true }))
+      .toMatchObject({ prompt: "change the lighting", createNewNode: true });
+    expect(() => parseGenerateCanvasNodeRequest({ createNewNode: "yes" }))
+      .toThrow("createNewNode is invalid");
+    expect(() => parseGenerateCanvasNodeRequest({ createNewNode: true }))
+      .toThrow("prompt is required when createNewNode is true");
+  });
 });

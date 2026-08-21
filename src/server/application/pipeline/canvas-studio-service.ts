@@ -258,7 +258,10 @@ export class CanvasStudioService {
     throw new AppError("FILE_NOT_FOUND", "Canvas media is not available locally", 404);
   }
 
-  async generate(nodeId: string, input?: GenerateCanvasNodeInput): Promise<{ node: CanvasNode; runId?: string }> {
+  async generate(nodeId: string, input?: GenerateCanvasNodeInput): Promise<{ node: CanvasNode; runId?: string; edge?: CanvasEdge }> {
+    if (input?.createNewNode) {
+      return this.generateDerivedImage(nodeId, input);
+    }
     await this.syncTargetReferences(nodeId);
     let node = await this.requireNode(nodeId);
     let data = node.data;
@@ -367,6 +370,40 @@ export class CanvasStudioService {
       await this.markFailed(node, error);
       throw error;
     }
+  }
+
+  private async generateDerivedImage(
+    sourceNodeId: string,
+    input: GenerateCanvasNodeInput,
+  ): Promise<{ node: CanvasNode; runId?: string; edge: CanvasEdge }> {
+    const source = await this.requireNode(sourceNodeId);
+    const sourceReference = mediaReference(source);
+    if (!input.prompt?.trim()) {
+      throw new AppError("VALIDATION_ERROR", "Enter an image modification instruction first", 400);
+    }
+    if (source.data?.type !== "image" || !sourceReference || !referenceAssets([sourceReference], "imageUrls").length) {
+      throw new AppError("VALIDATION_ERROR", "AI image modification requires a locally available source image", 400);
+    }
+
+    const nodes = await this.repository.listCanvasNodes(source.projectId);
+    const position = derivedImagePosition(source, nodes);
+    const target = await this.createNode({
+      projectId: source.projectId,
+      type: "image",
+      name: `${source.data.name} · AI`,
+      ...position,
+    });
+    const edge = await this.connect({
+      projectId: source.projectId,
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+    });
+    const result = await this.generate(target.id, {
+      prompt: input.prompt,
+      routeId: input.routeId,
+      settings: input.settings,
+    });
+    return { ...result, edge };
   }
 
   async cancelGeneration(nodeId: string): Promise<CanvasNode> {
@@ -919,6 +956,36 @@ function isMediaType(value: string): value is CanvasMediaType {
 
 function canvasFileUrl(nodeId: string) {
   return `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/media`;
+}
+
+function derivedImagePosition(source: CanvasNode, nodes: CanvasNode[]) {
+  const width = 350;
+  const height = 350;
+  const startX = source.positionX + (source.width ?? width) + 120;
+  const startY = source.positionY;
+  for (let index = 0; index < 40; index += 1) {
+    const column = Math.floor(index / 5);
+    const row = index % 5;
+    const positionX = startX + column * (width + 100);
+    const positionY = startY + row * (height + 80);
+    const occupied = nodes.some((node) => rectanglesOverlap(
+      { x: positionX, y: positionY, width, height },
+      { x: node.positionX, y: node.positionY, width: node.width ?? width, height: node.height ?? height },
+    ));
+    if (!occupied) return { positionX, positionY };
+  }
+  return { positionX: startX, positionY: startY + 5 * (height + 80) };
+}
+
+function rectanglesOverlap(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+) {
+  const gap = 32;
+  return left.x < right.x + right.width + gap
+    && left.x + left.width + gap > right.x
+    && left.y < right.y + right.height + gap
+    && left.y + left.height + gap > right.y;
 }
 
 function cloneDataForTemplate(data: CanvasNodeData): CanvasNodeData {

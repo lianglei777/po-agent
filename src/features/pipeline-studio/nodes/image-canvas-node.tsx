@@ -5,7 +5,7 @@ import { memo, useCallback, useRef, useState } from "react";
 import { Button, Modal, Spin, message } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, Eye, ImagePlus, Images, RefreshCw, Trash2 } from "@/components/icons";
+import { Copy, Download, Eye, ImagePlus, Images, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
@@ -39,6 +39,10 @@ export function ImageCanvasNode({
   const fitNodeSize = useCanvasStore((state) => state.fitNodeSize);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
+  const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
+  const modifyComposerOpen = useCanvasStore((state) => state.imageComposerNodeId === id);
+  const openImageComposer = useCanvasStore((state) => state.openImageComposer);
+  const closeImageComposer = useCanvasStore((state) => state.closeImageComposer);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
@@ -188,6 +192,11 @@ export function ImageCanvasNode({
 
       {presentation.showToolbar && !deferMediaLoad ? (
         <CanvasNodeContextToolbar offset={54}>
+          <CanvasNodeToolbarButton
+            label={t.pipeline.imageAiModify}
+            icon={<Sparkles className="size-4" />}
+            onClick={() => openImageComposer(id)}
+          />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImagePreview} icon={<Eye className="size-4" />} onClick={() => setPreviewOpen(true)} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImageReplace} icon={<RefreshCw className="size-4" />} onClick={() => inputRef.current?.click()} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImageDownload} icon={<Download className="size-4" />} onClick={downloadImage} />
@@ -295,6 +304,24 @@ export function ImageCanvasNode({
           onUpload={() => inputRef.current?.click()}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+          }}
+        />
+      ) : null}
+
+      {selected && hasImage && !dragging && modifyComposerOpen ? (
+        <ImageAiComposer
+          key={`${id}:modify`}
+          nodeId={id}
+          data={canvas}
+          mode="modify"
+          waitingForSave={waitingForSave}
+          onUpload={() => inputRef.current?.click()}
+          onNodeUpdate={(serverNode) => {
+            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+          }}
+          onGenerationStarted={(serverNode, edge) => {
+            insertServerGenerationResult(serverNode, edge);
+            closeImageComposer(id);
           }}
         />
       ) : null}

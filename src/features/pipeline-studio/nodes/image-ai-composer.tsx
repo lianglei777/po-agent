@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { Modal, Tooltip } from "antd";
 import type { GenerationRouteDto } from "@/contracts/generation";
-import type { CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
+import type { CanvasEdge, CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
 import { ImagePlus, LoaderCircle, Maximize2, Send, Sparkles, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -17,17 +17,21 @@ export function ImageAiComposer({
   nodeId,
   data,
   waitingForSave,
+  mode = "create",
   onUpload,
   onNodeUpdate,
+  onGenerationStarted,
 }: {
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
+  mode?: "create" | "modify";
   onUpload: () => void;
   onNodeUpdate: (node: CanvasNode) => void;
+  onGenerationStarted?: (node: CanvasNode, edge?: CanvasEdge) => void;
 }) {
   const { t } = useI18n();
-  const [instruction, setInstruction] = useState(data.params?.prompt ?? "");
+  const [instruction, setInstruction] = useState(mode === "modify" ? "" : data.params?.prompt ?? "");
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
   const [aspectRatio, setAspectRatio] = useState(readOption(data.params?.settings?.aspectRatio, ASPECT_RATIOS, "1:1"));
@@ -43,13 +47,16 @@ export function ImageAiComposer({
   );
   const taskStatus = data.taskInfo?.status;
   const generating = taskStatus === "queued" || taskStatus === "processing" || submitting;
+  const capability = mode === "modify" || Boolean(data.params?.imageList?.length)
+    ? "image-to-image"
+    : "text-to-image";
 
   useEffect(() => {
     const controller = new AbortController();
     pipelineStudioApi.getGenerationOptions(controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
-        const available = imageGenerationRoutes(response.routes);
+        const available = imageGenerationRoutes(response.routes, capability);
         const selected = selectImageGenerationRoute(available, data.params?.routeId);
         setRoutes(available);
         setSelectedRouteId(selected?.id ?? "");
@@ -64,13 +71,15 @@ export function ImageAiComposer({
         if (!controller.signal.aborted) setLoadingRoutes(false);
       });
     return () => controller.abort();
-  }, [data.params?.routeId, data.params?.settings?.resolution]);
+  }, [capability, data.params?.routeId, data.params?.settings?.resolution]);
 
   const promptProblem = imagePromptProblem(selectedRoute, instruction);
   const disabledReason = useMemo(() => {
     if (waitingForSave) return t.pipeline.imageAiPendingSave;
     if (loadingRoutes) return t.pipeline.imageAiRoutesLoading;
-    if (!routes.length || !selectedRoute) return t.pipeline.imageAiNoRoutes;
+    if (!routes.length || !selectedRoute) {
+      return capability === "image-to-image" ? t.pipeline.imageAiNoModifyRoutes : t.pipeline.imageAiNoRoutes;
+    }
     if (promptProblem === "required") return t.pipeline.imageAiInstructionRequired;
     if (promptProblem === "too-short") {
       return t.pipeline.imageAiPromptTooShort.replace("{count}", String(selectedRoute.inputSchema.prompt.minLength ?? 1));
@@ -79,7 +88,7 @@ export function ImageAiComposer({
       return t.pipeline.imageAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [loadingRoutes, promptProblem, routes.length, selectedRoute, t.pipeline, waitingForSave]);
+  }, [capability, loadingRoutes, promptProblem, routes.length, selectedRoute, t.pipeline, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating || cancelling || !selectedRoute) return;
@@ -90,8 +99,10 @@ export function ImageAiComposer({
         prompt: instruction.trim(),
         routeId: selectedRoute.id,
         settings: { aspectRatio, resolution },
+        createNewNode: mode === "modify",
       });
-      onNodeUpdate(response.node);
+      if (onGenerationStarted) onGenerationStarted(response.node, response.edge);
+      else onNodeUpdate(response.node);
       setExpanded(false);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : t.pipeline.imageAiError);
@@ -123,6 +134,7 @@ export function ImageAiComposer({
   const surface = (large: boolean) => (
     <ComposerSurface
       large={large}
+      mode={mode}
       instruction={instruction}
       routes={routes}
       selectedRouteId={selectedRouteId}
@@ -157,7 +169,7 @@ export function ImageAiComposer({
       </div>
       <Modal
         open={expanded}
-        title={t.pipeline.imageAiTitle}
+        title={mode === "modify" ? t.pipeline.imageAiModifyTitle : t.pipeline.imageAiTitle}
         width={1000}
         footer={null}
         mask={{ closable: false }}
@@ -172,12 +184,13 @@ export function ImageAiComposer({
 }
 
 function ComposerSurface({
-  large, instruction, routes, selectedRouteId, aspectRatio, resolution,
+  large, mode, instruction, routes, selectedRouteId, aspectRatio, resolution,
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
   onInstructionChange, onRouteChange, onAspectRatioChange, onResolutionChange,
   onKeyDown, onSubmit, onCancel, onUpload, onExpand,
 }: {
   large: boolean;
+  mode: "create" | "modify";
   instruction: string;
   routes: GenerationRouteDto[];
   selectedRouteId: string;
@@ -203,21 +216,28 @@ function ComposerSurface({
   const busy = generating || cancelling;
   return (
     <CanvasNodeComposerShell
-      ariaLabel={t.pipeline.imageAiTitle}
+      ariaLabel={mode === "modify" ? t.pipeline.imageAiModifyTitle : t.pipeline.imageAiTitle}
       large={large}
       error={error}
       body={(
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex items-center px-4 pt-4">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onUpload}
-              className="flex h-9 items-center gap-2 rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] px-3 text-xs font-medium text-[var(--pl-text-secondary)] hover:border-[var(--pl-accent)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <ImagePlus className="size-4" />
-              {t.pipeline.nodeImageChoose}
-            </button>
+            {mode === "create" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={onUpload}
+                className="flex h-9 items-center gap-2 rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] px-3 text-xs font-medium text-[var(--pl-text-secondary)] hover:border-[var(--pl-accent)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ImagePlus className="size-4" />
+                {t.pipeline.nodeImageChoose}
+              </button>
+            ) : (
+              <span className="flex h-9 items-center gap-2 text-xs font-medium text-[var(--pl-text-secondary)]">
+                <ImagePlus className="size-4 text-[var(--pl-accent)]" />
+                {t.pipeline.imageAiCurrentReference}
+              </span>
+            )}
             {!large ? (
               <button
                 type="button"
@@ -236,7 +256,7 @@ function ComposerSurface({
             disabled={busy}
             onChange={(event) => onInstructionChange(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={t.pipeline.imageAiPlaceholder}
+            placeholder={mode === "modify" ? t.pipeline.imageAiModifyPlaceholder : t.pipeline.imageAiPlaceholder}
             aria-label={t.pipeline.imageAiInstruction}
             className="nodrag nowheel min-h-0 flex-1 resize-none border-0 bg-transparent px-5 py-4 text-sm leading-6 text-[var(--pl-text)] outline-none placeholder:text-[var(--pl-text-muted)] disabled:opacity-60"
           />
@@ -294,14 +314,14 @@ function ComposerSurface({
             </Tooltip>
           ) : (
             <Tooltip
-              title={disabledReason || t.pipeline.imageAiGenerate}
+              title={disabledReason || (mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate)}
               getPopupContainer={tooltipContainer}
             >
               <span>
                 <button
                   type="button"
                   disabled={Boolean(disabledReason)}
-                  aria-label={t.pipeline.imageAiGenerate}
+                  aria-label={mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate}
                   onClick={onSubmit}
                   className="flex size-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
                 >

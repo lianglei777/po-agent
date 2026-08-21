@@ -2967,6 +2967,8 @@ interface GenerateTextNodeResponse {
 interface GenerateCanvasNodeRequest {
   prompt?: string;
   routeId?: string;
+  // 仅用于已有图片：保留源节点，并在旁边创建一个图生图结果节点。
+  createNewNode?: boolean;
   settings?: {
     aspectRatio?: "16:9" | "9:16" | "4:3" | "3:4" | "1:1";
     resolution?: "1k" | "2k";
@@ -2980,10 +2982,12 @@ interface GenerateCanvasNodeRequest {
 interface GenerateCanvasNodeResponse {
   node: CanvasNode;
   runId?: string;
+  edge?: CanvasEdge;
 }
 ```
 
 - 图片节点没有上游图片参考时使用 `text-to-image` Route。
+- 对已有图片提交 `createNewNode: true` 时，服务端保留源节点，在其右侧寻找空位创建结果节点，以源图片作为 `image-to-image` 输入，并返回两节点之间的来源连线。失败或取消只影响新节点。
 - `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
 - 图片比例会转换为 Route 的 `width` 和 `height` 参数，生成配置与任务状态同时持久化到当前节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。

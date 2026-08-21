@@ -240,6 +240,86 @@ describe("CanvasStudioService image AI", () => {
     })).rejects.toMatchObject({ status: 400 });
     expect(runs.createRun).not.toHaveBeenCalled();
   });
+
+  it("keeps the source image and starts image-to-image generation in a connected new node", async () => {
+    const source: CanvasNode = {
+      ...imageNode(),
+      positionX: 100,
+      positionY: 80,
+      width: 480,
+      data: {
+        ...imageNode().data!,
+        name: "Reference",
+        generatorType: "resource",
+        workspaceFile: { relativePath: "assets/imports/reference.png", contentType: "image/png", name: "reference.png" },
+        url: ["/api/pipeline/canvas-nodes/image-node-1/media"],
+      },
+    };
+    const nodes = new Map<string, CanvasNode>([[source.id, source]]);
+    const edges: Array<{ id: string; projectId: string; sourceNodeId: string; targetNodeId: string; edgeType: "references" }> = [];
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasNodes: vi.fn().mockImplementation(async () => [...nodes.values()]),
+      listCanvasEdges: vi.fn().mockImplementation(async () => edges),
+      createCanvasNode: vi.fn().mockImplementation(async (input: Omit<CanvasNode, "createdAt" | "updatedAt">) => {
+        const created = { ...input, createdAt: "2026-08-21T00:00:00.000Z", updatedAt: "2026-08-21T00:00:00.000Z" };
+        nodes.set(created.id, created);
+        return created;
+      }),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const current = nodes.get(id)!;
+        const updated = { ...current, ...patch, updatedAt: "2026-08-21T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+      createCanvasEdge: vi.fn().mockImplementation(async (input: Omit<(typeof edges)[number], "id">) => {
+        const edge = { ...input, id: "edge-derived-1" };
+        edges.push(edge);
+        return edge;
+      }),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-image-edit-1",
+      enabled: true,
+      isDefault: true,
+      capability: "image-to-image",
+      inputSchema: { prompt: { required: true }, parameters: [] },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-image-edit-1" } }),
+    } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    const result = await service.generate(source.id, {
+      prompt: "Change daytime into a rainy night",
+      routeId: route.id,
+      settings: { aspectRatio: "4:3", resolution: "2k" },
+      createNewNode: true,
+    });
+
+    expect(repository.createCanvasNode).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: source.projectId,
+      type: "image",
+      data: expect.objectContaining({ name: "Reference · AI" }),
+      positionX: 700,
+      positionY: 80,
+    }));
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "image-to-image",
+      routeId: route.id,
+      assets: [{ slot: "imageUrls", ref: { type: "workspace-file", relativePath: "assets/imports/reference.png" } }],
+      sourceRef: expect.stringMatching(/^pipeline:canvas:/),
+    }));
+    expect(result).toMatchObject({
+      runId: "run-image-edit-1",
+      edge: { sourceNodeId: source.id, targetNodeId: result.node.id },
+      node: { data: { taskInfo: { status: "processing" } } },
+    });
+    expect(nodes.get(source.id)).toEqual(source);
+  });
 });
 
 function repositoryStub(result: { applied: boolean; revision: number }) {
