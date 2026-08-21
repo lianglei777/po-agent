@@ -14,8 +14,10 @@ export async function POST(request: Request, context: Context) {
     if (!(file instanceof File)) throw new AppError("VALIDATION_ERROR", "file is required", 400);
     const positionX = Number(form.get("positionX") ?? 0);
     const positionY = Number(form.get("positionY") ?? 0);
+    const nodeIdValue = form.get("nodeId");
     const node = await container.canvasStudioService.upload({
       projectId: id,
+      nodeId: typeof nodeIdValue === "string" && nodeIdValue.trim() ? nodeIdValue.trim() : undefined,
       name: file.name,
       contentType: file.type,
       data: new Uint8Array(await file.arrayBuffer()),

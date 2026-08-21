@@ -42,11 +42,12 @@ export const pipelineStudioApi = {
     { method: "POST", body: JSON.stringify(input) },
   ),
 
-  uploadFile: async (projectId: string, file: File, positionX: number, positionY: number) => {
+  uploadFile: async (projectId: string, file: File, positionX: number, positionY: number, nodeId?: string) => {
     const form = new FormData();
     form.append("file", file);
     form.append("positionX", String(positionX));
     form.append("positionY", String(positionY));
+    if (nodeId) form.append("nodeId", nodeId);
     const response = await fetch(`/api/pipeline/projects/${projectId}/canvas/upload`, { method: "POST", body: form });
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: { message: response.statusText } }));

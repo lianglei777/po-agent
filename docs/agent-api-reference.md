@@ -2904,6 +2904,12 @@ interface CanvasSnapshot {
 - 新项目没有 draft 记录时返回 `{ x: 0, y: 0, zoom: 1 }`。
 - 旧 Pipeline 节点会在读取时进行兼容投影，但新的 Studio 只创建文本、图片、视频和音频节点。
 
+### `POST /api/pipeline/projects/{projectId}/canvas/upload`
+
+通过 `multipart/form-data` 将本地素材导入项目。字段包括 `file`、`positionX`、`positionY`，以及可选的
+`nodeId`。未提供 `nodeId` 时创建新的媒体节点；提供后，文件媒体类型必须与目标节点一致，服务端会把
+素材写入该节点并保留节点位置、尺寸、分组和已有参数。图片节点使用该能力完成空节点导入和安全替换。
+
 #### 文本节点富文本数据
 
 文本节点在 `CanvasNode.data.textDocument` 中保存结构化富文本，同时继续写入 `data.content` 作为旧流程使用的纯文本兼容投影：

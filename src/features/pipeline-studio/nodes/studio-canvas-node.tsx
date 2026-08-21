@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { memo } from "react";
 import { Button, Input, Tooltip } from "antd";
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
@@ -9,6 +8,7 @@ import { Copy, FileMusic, Images, Trash2, FileVideo } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { useCanvasStore } from "../state/canvas-store";
 import { TextCanvasNode } from "./text-canvas-node";
+import { ImageCanvasNode } from "./image-canvas-node";
 
 export type StudioFlowNodeData = { canvasNode: CanvasNode } & Record<string, unknown>;
 export type StudioFlowNode = Node<StudioFlowNodeData, "studio">;
@@ -32,6 +32,9 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
   if (!canvas) return null;
   if (canvas.type === "text") {
     return <TextCanvasNode id={id} node={node} selected={selected} dragging={dragging} />;
+  }
+  if (canvas.type === "image") {
+    return <ImageCanvasNode id={id} node={node} selected={selected} dragging={dragging} />;
   }
 
   const meta = TYPE_META[canvas.type];
@@ -70,11 +73,7 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
       </header>
 
       <div className="nodrag nowheel h-[calc(100%-44px)] min-h-0">
-        {canvas.type === "image" && mediaUrl ? (
-          <div className="relative h-full min-h-[130px] w-full bg-[var(--pl-surface-subtle)]">
-            <Image src={mediaUrl} alt={canvas.name} fill unoptimized className="object-contain p-2" />
-          </div>
-        ) : canvas.type === "video" && mediaUrl ? (
+        {canvas.type === "video" && mediaUrl ? (
           <video src={mediaUrl} controls className="h-full min-h-[140px] w-full bg-black object-contain" />
         ) : canvas.type === "audio" ? (
           <div className="flex h-full min-h-[96px] items-center gap-3 px-4">

@@ -108,6 +108,43 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().past).toEqual([]);
   });
 
+  it("fits an image node around its center and ignores fractional repeat adjustments", () => {
+    const store = createCanvasStore("project-1");
+    const node = {
+      id: "node-1",
+      projectId: "project-1",
+      type: "image" as const,
+      entityId: "entity-1",
+      positionX: 100,
+      positionY: 100,
+      width: 360,
+      height: 300,
+      data: { type: "image" as const, name: "Image", action: "image_generate", url: [] },
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    };
+    store.getState().hydrate({ revision: 1, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().fitNodeSize("node-1", { width: 360, height: 202.5 });
+
+    expect(store.getState().nodes[0]).toMatchObject({
+      positionX: 100,
+      positionY: 148.75,
+      width: 360,
+      height: 202.5,
+    });
+    expect(store.getState().pendingMutations).toEqual([{
+      type: "node.update",
+      nodeId: "node-1",
+      patch: { positionX: 100, positionY: 148.75, width: 360, height: 202.5 },
+    }]);
+    expect(store.getState().past).toHaveLength(1);
+
+    store.getState().fitNodeSize("node-1", { width: 360, height: 203 });
+    expect(store.getState().pendingMutations).toHaveLength(1);
+    expect(store.getState().past).toHaveLength(1);
+  });
+
   it("applies AI text returned by the server without letting an older data mutation overwrite it", () => {
     const store = createCanvasStore("project-1");
     const node = {

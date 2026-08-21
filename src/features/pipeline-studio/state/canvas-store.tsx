@@ -50,6 +50,7 @@ type CanvasStoreState = CanvasDocument & {
   updateNodePositionLive: (nodeId: string, position: { x: number; y: number }) => void;
   commitNodePosition: (nodeId: string, previous: { x: number; y: number }) => void;
   resizeNode: (nodeId: string, width: number, height: number) => void;
+  fitNodeSize: (nodeId: string, size: { width: number; height: number }) => void;
   updateNodeSizeLive: (nodeId: string, size: { width: number; height: number }) => void;
   commitNodeSize: (nodeId: string, previous: { width: number; height: number }) => void;
   deleteNodes: (nodeIds: string[]) => void;
@@ -223,6 +224,30 @@ export function createCanvasStore(projectId: string) {
       const state = get();
       const nextNodes = state.nodes.map((node) => node.id === nodeId ? { ...node, width, height } : node);
       commitDocument(set, get, nextNodes, state.edges, [{ type: "node.update", nodeId, patch: { width, height } }]);
+    },
+
+    fitNodeSize: (nodeId, size) => {
+      const state = get();
+      const current = state.nodes.find((node) => node.id === nodeId);
+      if (!current) return;
+      const currentWidth = current.width ?? 320;
+      const currentHeight = current.height ?? 220;
+      if (Math.abs(currentWidth - size.width) <= 1 && Math.abs(currentHeight - size.height) <= 1) return;
+      // 图片比例首次确定或发生替换时保持视觉中心不变，避免节点只向右下角伸展。
+      const positionX = current.positionX + (currentWidth - size.width) / 2;
+      const positionY = current.positionY + (currentHeight - size.height) / 2;
+      const nodes = state.nodes.map((node) => node.id === nodeId ? {
+        ...node,
+        positionX,
+        positionY,
+        width: size.width,
+        height: size.height,
+      } : node);
+      commitDocument(set, get, nodes, state.edges, [{
+        type: "node.update",
+        nodeId,
+        patch: { positionX, positionY, width: size.width, height: size.height },
+      }]);
     },
 
     updateNodeSizeLive: (nodeId, size) => set((state) => ({

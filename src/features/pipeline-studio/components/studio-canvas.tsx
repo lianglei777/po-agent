@@ -34,6 +34,7 @@ import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { studioNodeTypes, type StudioFlowNode } from "../nodes/studio-canvas-node";
+import { canvasNodeDragHandle } from "../model/node-interaction";
 
 const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
 
@@ -111,7 +112,8 @@ export function StudioCanvas({
     selected: selectedNodeIds.includes(node.id),
     draggable: interactionMode === "select" && editingNodeId !== node.id,
     style: { width: node.width ?? 320, height: node.height ?? 220 },
-    dragHandle: node.data?.type === "text" ? undefined : ".pipeline-node-drag-handle",
+    // 文本和图片节点自身划分 nodrag 控件，其余媒体节点暂时仍只允许从标题拖动。
+    dragHandle: canvasNodeDragHandle(node.data?.type),
   })), [editingNodeId, interactionMode, nodes, selectedNodeIds]);
 
   const flowEdges = useMemo<Edge[]>(() => connectionsVisible ? edges.map((edge) => ({
@@ -131,7 +133,11 @@ export function StudioCanvas({
     setCreateMenu(null);
   }, [createNode, defaultNodeNames]);
 
-  const uploadFiles = useCallback(async (files: File[], position?: { x: number; y: number }) => {
+  const uploadFiles = useCallback(async (
+    files: File[],
+    position?: { x: number; y: number },
+    targetNodeId?: string,
+  ) => {
     if (!files.length) return;
     const instance = instanceRef.current;
     const origin = position ?? (instance
@@ -139,7 +145,13 @@ export function StudioCanvas({
       : { x: 180, y: 140 });
     try {
       for (let index = 0; index < files.length; index += 1) {
-        const result = await pipelineStudioApi.uploadFile(projectId, files[index], origin.x + index * 36, origin.y + index * 36);
+        const result = await pipelineStudioApi.uploadFile(
+          projectId,
+          files[index],
+          origin.x + index * 36,
+          origin.y + index * 36,
+          index === 0 ? targetNodeId : undefined,
+        );
         insertServerNode(result.node);
       }
     } catch (uploadError) {
@@ -230,7 +242,14 @@ export function StudioCanvas({
     const handlePaste = (event: ClipboardEvent) => {
       if (isEditingTarget(event.target)) return;
       const files = Array.from(event.clipboardData?.files ?? []);
-      if (files.length) void uploadFiles(files);
+      if (!files.length) return;
+      const selectedImage = selectedNodeIds.length === 1
+        ? nodes.find((node) => node.id === selectedNodeIds[0] && node.data?.type === "image")
+        : undefined;
+      const targetNodeId = files.length === 1 && files[0].type.startsWith("image/")
+        ? selectedImage?.id
+        : undefined;
+      void uploadFiles(files, undefined, targetNodeId);
     };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("paste", handlePaste);
@@ -238,7 +257,7 @@ export function StudioCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [copySelection, deleteNodes, duplicateNodes, pasteSelection, redo, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
+  }, [copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
     let nextSelection: Set<string> | null = null;

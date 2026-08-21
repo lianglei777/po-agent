@@ -178,6 +178,7 @@ export class CanvasStudioService {
 
   async upload(input: {
     projectId: string;
+    nodeId?: string;
     name: string;
     contentType: string;
     data: Uint8Array;
@@ -186,6 +187,10 @@ export class CanvasStudioService {
   }): Promise<CanvasNode> {
     const type = mediaTypeForMime(input.contentType, input.name);
     if (!type) throw new AppError("VALIDATION_ERROR", "Only image, video, audio, or text files can be added to the canvas", 400);
+    const targetNode = input.nodeId ? await this.requireNode(input.nodeId) : null;
+    if (targetNode && (targetNode.projectId !== input.projectId || targetNode.data?.type !== type)) {
+      throw new AppError("VALIDATION_ERROR", "The uploaded file type does not match the target canvas node", 400);
+    }
     await ensurePipelineRunSession(this.runs, input.projectId, await this.requireProjectRoot(input.projectId));
     const uploaded = await this.assets.upload({
       sessionId: `pipeline:${input.projectId}`,
@@ -193,7 +198,7 @@ export class CanvasStudioService {
       contentType: input.contentType,
       data: input.data,
     });
-    const node = await this.createNode({
+    const node = targetNode ?? await this.createNode({
       projectId: input.projectId,
       type,
       name: input.name,
@@ -202,7 +207,13 @@ export class CanvasStudioService {
     });
     let content: string[] | undefined;
     if (type === "text") content = [new TextDecoder().decode(input.data)];
-    const data = createNodeData(type, input.name, "resource");
+    const hadMedia = Boolean(node.data?.workspaceFile || node.data?.artifactIds?.length || node.data?.url?.length);
+    const data = {
+      ...createNodeData(type, hadMedia ? node.data?.name ?? input.name : input.name, "resource"),
+      params: node.data?.params ?? createNodeData(type, input.name).params,
+      group: node.data?.group,
+      groupRun: node.data?.groupRun,
+    };
     data.workspaceFile = {
       relativePath: uploaded.ref.relativePath,
       contentType: uploaded.contentType,

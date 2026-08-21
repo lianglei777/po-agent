@@ -86,6 +86,54 @@ describe("CanvasStudioService text AI", () => {
   });
 });
 
+describe("CanvasStudioService local image upload", () => {
+  it("fills an existing empty image node instead of creating another node", async () => {
+    let currentNode = imageNode();
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      createCanvasNode: vi.fn(),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch, updatedAt: "2026-08-21T00:00:00.000Z" };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const runs = { ensureSession: vi.fn() } as unknown as GenerationRunService;
+    const assets = {
+      upload: vi.fn().mockResolvedValue({
+        name: "reference.png",
+        contentType: "image/png",
+        ref: { type: "workspace-file", relativePath: "assets/imports/reference.png" },
+      }),
+    } as unknown as GenerationAssetService;
+    const service = createService(repository, {} as LlmPort, runs, assets);
+
+    const result = await service.upload({
+      projectId: "project-1",
+      nodeId: "image-node-1",
+      name: "reference.png",
+      contentType: "image/png",
+      data: new Uint8Array([1, 2, 3]),
+      positionX: 120,
+      positionY: 180,
+    });
+
+    expect(repository.createCanvasNode).not.toHaveBeenCalled();
+    expect(result.id).toBe("image-node-1");
+    expect(result.data).toMatchObject({
+      type: "image",
+      name: "reference.png",
+      generatorType: "resource",
+      workspaceFile: {
+        relativePath: "assets/imports/reference.png",
+        contentType: "image/png",
+        name: "reference.png",
+      },
+      url: ["/api/pipeline/canvas-nodes/image-node-1/media"],
+    });
+  });
+});
+
 function repositoryStub(result: { applied: boolean; revision: number }) {
   return {
     getProject: vi.fn().mockResolvedValue(project),
@@ -97,14 +145,43 @@ function repositoryStub(result: { applied: boolean; revision: number }) {
   } as unknown as PipelineRepository;
 }
 
-function createService(repository: PipelineRepository, llm = {} as LlmPort) {
+function createService(
+  repository: PipelineRepository,
+  llm = {} as LlmPort,
+  runs = {} as GenerationRunService,
+  assets = {} as GenerationAssetService,
+) {
   return new CanvasStudioService(
     repository,
-    {} as GenerationRunService,
-    {} as GenerationAssetService,
+    runs,
+    assets,
     llm,
     { emit: vi.fn() } as unknown as PipelineSsePort,
   );
+}
+
+function imageNode(): CanvasNode {
+  return {
+    id: "image-node-1",
+    projectId: "project-1",
+    type: "image",
+    entityId: "image-entity-1",
+    positionX: 0,
+    positionY: 0,
+    width: 360,
+    height: 300,
+    data: {
+      type: "image",
+      name: "Image",
+      action: "image_generate",
+      generatorType: "default",
+      url: [],
+      params: { prompt: "", count: 1 },
+      taskInfo: { status: "idle" },
+    },
+    createdAt: "2026-08-19T00:00:00.000Z",
+    updatedAt: "2026-08-19T00:00:00.000Z",
+  };
 }
 
 function textNode(content: string): CanvasNode {

@@ -7,6 +7,7 @@ import type { CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
 import { LoaderCircle, Maximize2, Send, Sparkles } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 
 export function TextAiComposer({
   nodeId,
@@ -171,14 +172,12 @@ function ComposerSurface({
 }) {
   const { t } = useI18n();
   return (
-    <section
-      className={
-        "flex flex-col overflow-hidden rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-hover)] " +
-        (large ? "h-[min(68vh,680px)]" : "h-56")
-      }
-      aria-label={t.pipeline.textAiTitle}
-    >
-      <div className="flex min-h-0 flex-1">
+    <CanvasNodeComposerShell
+      ariaLabel={t.pipeline.textAiTitle}
+      large={large}
+      error={error}
+      body={(
+        <>
         <textarea
           autoFocus={large}
           value={instruction}
@@ -200,11 +199,10 @@ function ComposerSurface({
             <Maximize2 className="size-4" />
           </button>
         ) : null}
-      </div>
-
-      {error ? <div role="alert" className="border-t border-red-400/20 bg-red-500/10 px-4 py-2 text-xs text-red-200">{error}</div> : null}
-
-      <footer className="flex h-14 shrink-0 items-center gap-3 border-t border-[var(--pl-border)] px-3">
+        </>
+      )}
+      footer={(
+        <>
         <Sparkles className="size-4 shrink-0 text-[var(--pl-accent)]" />
         <label className="sr-only" htmlFor={`text-ai-model-${large ? "large" : "inline"}`}>{t.pipeline.textAiModel}</label>
         <select
@@ -235,8 +233,9 @@ function ComposerSurface({
             {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
           </button>
         </span>
-      </footer>
-    </section>
+        </>
+      )}
+    />
   );
 }
 
