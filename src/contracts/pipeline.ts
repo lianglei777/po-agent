@@ -339,6 +339,12 @@ export interface GenerateCanvasNodeResponse {
   runId?: string;
 }
 
+export interface GenerateCanvasNodeRequest {
+  prompt?: string;
+  routeId?: string;
+  settings?: Record<string, string | number | boolean>;
+}
+
 export interface GenerateTextNodeRequest {
   instruction: string;
   mode: "generate" | "revise";

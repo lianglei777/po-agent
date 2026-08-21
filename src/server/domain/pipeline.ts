@@ -255,6 +255,12 @@ export interface GenerateTextNodeInput {
   model?: string;
 }
 
+export interface GenerateCanvasNodeInput {
+  prompt?: string;
+  routeId?: string;
+  settings?: Record<string, string | number | boolean>;
+}
+
 export interface CanvasNodeData {
   type: CanvasMediaType;
   name: string;

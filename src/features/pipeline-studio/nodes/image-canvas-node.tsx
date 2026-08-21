@@ -37,11 +37,16 @@ export function ImageCanvasNode({
   const store = useCanvasStoreApi();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const fitNodeSize = useCanvasStore((state) => state.fitNodeSize);
+  const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
+  )));
+  const waitingForSave = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
+    mutation.type === "node.create" ? mutation.node.id === id :
+      mutation.type === "node.update" && mutation.nodeId === id && mutation.patch.data !== undefined
   )));
   const canvas = node.data;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -65,6 +70,7 @@ export function ImageCanvasNode({
   const imageState = imageStatus.url === mediaUrl ? imageStatus.state : "loading";
   const dimensions = imageDimensions?.url === mediaUrl ? imageDimensions : null;
   const presentation = imageNodePresentation({ selected, dragging, hasImage });
+  const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
   const handleImageReady = useCallback((width: number, height: number) => {
     if (!mediaUrl) return;
     setImageStatus({ url: mediaUrl, state: "ready" });
@@ -270,13 +276,27 @@ export function ImageCanvasNode({
           </div>
         ) : (
           <div className="pointer-events-none flex h-full w-full items-center justify-center bg-[var(--pl-surface-subtle)] text-[var(--pl-text-muted)]">
-            <Images className="size-10 opacity-45" />
+            {isGenerating ? (
+              <span className="flex flex-col items-center gap-3 text-sm text-[var(--pl-text-secondary)]">
+                <Spin size="small" />
+                {t.pipeline.imageAiGenerating}
+              </span>
+            ) : <Images className="size-10 opacity-45" />}
           </div>
         )}
       </section>
 
       {presentation.showComposer ? (
-        <ImageAiComposer key={id} onUpload={() => inputRef.current?.click()} />
+        <ImageAiComposer
+          key={id}
+          nodeId={id}
+          data={canvas}
+          waitingForSave={waitingForSave}
+          onUpload={() => inputRef.current?.click()}
+          onNodeUpdate={(serverNode) => {
+            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+          }}
+        />
       ) : null}
 
       <Modal

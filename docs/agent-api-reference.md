@@ -2959,6 +2959,40 @@ interface GenerateTextNodeResponse {
 - 成功响应会同时更新 `textDocument`、兼容 `content`、最后一次 instruction/model 和任务状态。
 - 生成结果为空或超过 200,000 字符时请求失败，并将节点任务状态标记为 `failed`。
 
+### `POST /api/pipeline/canvas-nodes/{nodeId}/generate`
+
+启动画布媒体节点生成。请求体可以为空对象以继续使用节点已有参数；图片节点可直接提交本次文生图配置：
+
+```ts
+interface GenerateCanvasNodeRequest {
+  prompt?: string;
+  routeId?: string;
+  settings?: {
+    aspectRatio?: "16:9" | "9:16" | "4:3" | "3:4" | "1:1";
+    resolution?: "1k" | "2k";
+  };
+}
+```
+
+响应：
+
+```ts
+interface GenerateCanvasNodeResponse {
+  node: CanvasNode;
+  runId?: string;
+}
+```
+
+- 图片节点没有上游图片参考时使用 `text-to-image` Route。
+- `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
+- 图片比例会转换为 Route 的 `width` 和 `height` 参数，生成配置与任务状态同时持久化到当前节点。
+- 同一节点已有排队或执行中的任务时拒绝重复生成。
+- 生成完成或失败后通过项目 SSE 通知客户端重新读取 Canvas Snapshot。
+
+### `POST /api/pipeline/canvas-nodes/{nodeId}/cancel-generation`
+
+取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点没有活动 Run 时返回冲突错误。
+
 ### `POST /api/pipeline/projects/{projectId}/canvas/mutations`
 
 原子应用一批画布操作。

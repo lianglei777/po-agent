@@ -88,7 +88,10 @@ export const pipelineApi = {
     request<{ success: true }>(`${BASE}/projects/${projectId}/canvas/edges?edgeId=${encodeURIComponent(edgeId)}`, { method: "DELETE" }),
 
   generateCanvasNode: (nodeId: string) =>
-    request<{ node: CanvasNode; runId?: string }>(`${BASE}/canvas-nodes/${encodeURIComponent(nodeId)}/generate`, { method: "POST" }),
+    request<{ node: CanvasNode; runId?: string }>(`${BASE}/canvas-nodes/${encodeURIComponent(nodeId)}/generate`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 
   listCanvasWorkflows: (projectId: string) =>
     request<CanvasWorkflowListResponse>(`${BASE}/projects/${projectId}/canvas/workflows`),

@@ -10,6 +10,7 @@ import type {
   CanvasNodeData,
   CanvasViewport,
   CanvasWorkflow,
+  GenerateCanvasNodeInput,
   GenerateTextNodeInput,
 } from "@/server/domain/pipeline";
 import type { GenerationArtifact } from "@/server/domain/generation";
@@ -257,12 +258,30 @@ export class CanvasStudioService {
     throw new AppError("FILE_NOT_FOUND", "Canvas media is not available locally", 404);
   }
 
-  async generate(nodeId: string): Promise<{ node: CanvasNode; runId?: string }> {
+  async generate(nodeId: string, input?: GenerateCanvasNodeInput): Promise<{ node: CanvasNode; runId?: string }> {
     await this.syncTargetReferences(nodeId);
-    const node = await this.requireNode(nodeId);
-    const data = node.data;
+    let node = await this.requireNode(nodeId);
+    let data = node.data;
     if (!data || !isMediaType(data.type)) throw new AppError("VALIDATION_ERROR", "This node cannot generate media", 400);
     if (data.type === "audio") throw new AppError("VALIDATION_ERROR", "Audio generation is not configured in this project", 400);
+    if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
+      throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
+    }
+
+    if (input && (input.prompt !== undefined || input.routeId !== undefined || input.settings !== undefined)) {
+      data = {
+        ...data,
+        generatorType: "default",
+        params: {
+          ...(data.params ?? { prompt: "" }),
+          ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+          ...(input.routeId !== undefined ? { routeId: input.routeId } : {}),
+          settings: { ...data.params?.settings, ...input.settings },
+        },
+        taskInfo: { status: "idle" },
+      };
+      node = await this.updateNode(node.id, { data });
+    }
 
     if (data.type === "text") {
       if (!this.llm.isConfigured()) throw new AppError("PIPELINE_LLM_FAILED", "Configure a text model before generating text", 400);
@@ -317,6 +336,9 @@ export class CanvasStudioService {
     try {
       await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
       const requestedRoute = data.params?.routeId ? await this.runs.getRoute(data.params.routeId) : null;
+      if (input?.routeId && (!requestedRoute?.enabled || requestedRoute.capability !== capability)) {
+        throw new AppError("VALIDATION_ERROR", "The selected generation route is not available for this node", 400);
+      }
       const route = requestedRoute?.enabled && requestedRoute.capability === capability
         ? requestedRoute
         : (await this.runs.listRoutes()).find((candidate) => candidate.enabled && candidate.isDefault && candidate.capability === capability);
@@ -345,6 +367,19 @@ export class CanvasStudioService {
       await this.markFailed(node, error);
       throw error;
     }
+  }
+
+  async cancelGeneration(nodeId: string): Promise<CanvasNode> {
+    const node = await this.requireNode(nodeId);
+    const data = node.data;
+    const runId = data?.taskInfo?.runId;
+    if (!data || !runId || (data.taskInfo?.status !== "processing" && data.taskInfo?.status !== "queued")) {
+      throw new AppError("VALIDATION_ERROR", "This canvas node has no active generation", 409);
+    }
+    await this.runs.cancelRun(runId);
+    return this.updateNode(node.id, {
+      data: { ...data, taskInfo: { status: "idle" } },
+    });
   }
 
   async generateText(nodeId: string, input: GenerateTextNodeInput): Promise<CanvasNode> {

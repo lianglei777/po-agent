@@ -1,4 +1,4 @@
-import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, GenerateTextNodeRequest } from "@/contracts/pipeline";
+import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 
 const NODE_TYPES = new Set(["text", "image", "video", "audio", "script", "character", "scene", "prop", "storyboard"]);
@@ -9,6 +9,37 @@ const MAX_TEXT_LENGTH = 200_000;
 const MAX_RICH_TEXT_NODES = 5_000;
 const MAX_RICH_TEXT_DEPTH = 20;
 const MAX_AI_INSTRUCTION_LENGTH = 20_000;
+const IMAGE_ASPECT_RATIOS = new Set(["16:9", "9:16", "4:3", "3:4", "1:1"]);
+const IMAGE_RESOLUTIONS = new Set(["1k", "2k"]);
+
+export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNodeRequest {
+  if (!isRecord(value)) throw validationError("Canvas generation request must be an object");
+  if (value.prompt !== undefined && (
+    typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > MAX_AI_INSTRUCTION_LENGTH
+  )) throw validationError("prompt is invalid");
+  if (value.routeId !== undefined && (
+    typeof value.routeId !== "string" || !value.routeId.trim() || value.routeId.length > 300
+  )) throw validationError("routeId is invalid");
+  if (value.settings !== undefined && !isRecord(value.settings)) throw validationError("settings is invalid");
+  const settings = value.settings;
+  if (settings && Object.keys(settings).some((key) => key !== "aspectRatio" && key !== "resolution")) {
+    throw validationError("settings contains unsupported fields");
+  }
+  if (settings?.aspectRatio !== undefined && (
+    typeof settings.aspectRatio !== "string" || !IMAGE_ASPECT_RATIOS.has(settings.aspectRatio)
+  )) throw validationError("settings.aspectRatio is invalid");
+  if (settings?.resolution !== undefined && (
+    typeof settings.resolution !== "string" || !IMAGE_RESOLUTIONS.has(settings.resolution)
+  )) throw validationError("settings.resolution is invalid");
+  return {
+    prompt: typeof value.prompt === "string" ? value.prompt.trim() : undefined,
+    routeId: typeof value.routeId === "string" ? value.routeId.trim() : undefined,
+    settings: settings ? {
+      ...(typeof settings.aspectRatio === "string" ? { aspectRatio: settings.aspectRatio } : {}),
+      ...(typeof settings.resolution === "string" ? { resolution: settings.resolution } : {}),
+    } : undefined,
+  };
+}
 
 export function parseGenerateTextNodeRequest(value: unknown): GenerateTextNodeRequest {
   if (!isRecord(value)) throw validationError("Text generation request must be an object");

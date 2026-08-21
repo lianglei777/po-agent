@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCanvasMutationBatch, parseGenerateTextNodeRequest } from "./pipeline-canvas-validators";
+import { parseCanvasMutationBatch, parseGenerateCanvasNodeRequest, parseGenerateTextNodeRequest } from "./pipeline-canvas-validators";
 
 const node = {
   id: "node-1",
@@ -101,5 +101,26 @@ describe("parseGenerateTextNodeRequest", () => {
   it("rejects an empty instruction", () => {
     expect(() => parseGenerateTextNodeRequest({ instruction: "   ", mode: "generate" }))
       .toThrow("instruction is invalid");
+  });
+});
+
+describe("parseGenerateCanvasNodeRequest", () => {
+  it("normalizes supported image generation settings", () => {
+    expect(parseGenerateCanvasNodeRequest({
+      prompt: "  cinematic mountain landscape  ",
+      routeId: " route-image-1 ",
+      settings: { aspectRatio: "16:9", resolution: "2k" },
+    })).toEqual({
+      prompt: "cinematic mountain landscape",
+      routeId: "route-image-1",
+      settings: { aspectRatio: "16:9", resolution: "2k" },
+    });
+  });
+
+  it("rejects unsupported image generation settings", () => {
+    expect(() => parseGenerateCanvasNodeRequest({
+      prompt: "valid prompt",
+      settings: { width: 99999 },
+    })).toThrow("settings contains unsupported fields");
   });
 });

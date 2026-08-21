@@ -2,11 +2,14 @@ import type {
   CanvasMutationBatch,
   CanvasNode,
   CanvasSnapshot,
+  GenerateCanvasNodeRequest,
+  GenerateCanvasNodeResponse,
   PipelineProject,
   GenerateTextNodeRequest,
   GenerateTextNodeResponse,
 } from "@/contracts/pipeline";
 import type { ModelsResponse } from "@/contracts/models";
+import type { GenerationComposerOptionsResponse } from "@/contracts/generation";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -36,6 +39,21 @@ export const pipelineStudioApi = {
   ),
 
   getTextModels: () => request<ModelsResponse>("/api/models"),
+
+  getGenerationOptions: (signal?: AbortSignal) => request<GenerationComposerOptionsResponse>(
+    "/api/generation/composer-options",
+    { signal },
+  ),
+
+  generateCanvasNode: (nodeId: string, input: GenerateCanvasNodeRequest) => request<GenerateCanvasNodeResponse>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generate`,
+    { method: "POST", body: JSON.stringify(input) },
+  ),
+
+  cancelCanvasNodeGeneration: (nodeId: string) => request<GenerateCanvasNodeResponse>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/cancel-generation`,
+    { method: "POST" },
+  ),
 
   generateText: (nodeId: string, input: GenerateTextNodeRequest) => request<GenerateTextNodeResponse>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generate-text`,

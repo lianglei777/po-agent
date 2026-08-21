@@ -1,13 +1,15 @@
 import type { GenerateCanvasNodeResponse } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
-import { handleRoute } from "@/server/transport/http/api-response";
+import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { parseGenerateCanvasNodeRequest } from "@/server/transport/http/pipeline-canvas-validators";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ nodeId: string }> };
 
-export async function POST(_request: Request, context: Context) {
+export async function POST(request: Request, context: Context) {
   return handleRoute<GenerateCanvasNodeResponse>(async () => {
     const { nodeId } = await context.params;
-    return container.canvasStudioService.generate(nodeId);
+    const input = parseGenerateCanvasNodeRequest(await readJson(request));
+    return container.canvasStudioService.generate(nodeId, input);
   });
 }

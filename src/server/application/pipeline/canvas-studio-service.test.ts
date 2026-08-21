@@ -134,6 +134,114 @@ describe("CanvasStudioService local image upload", () => {
   });
 });
 
+describe("CanvasStudioService image AI", () => {
+  it("stores the submitted image prompt and starts the selected text-to-image route", async () => {
+    let currentNode = imageNode();
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch, updatedAt: "2026-08-21T00:00:00.000Z" };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-image-1",
+      enabled: true,
+      isDefault: true,
+      capability: "text-to-image",
+      inputSchema: {
+        prompt: { required: true },
+        parameters: [
+          { key: "resolution", label: "Resolution", type: "select", options: [{ label: "2k", value: "2k" }] },
+          { key: "width", label: "Width", type: "number", min: 240, max: 8192 },
+          { key: "height", label: "Height", type: "number", min: 240, max: 8192 },
+        ],
+      },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-image-1" } }),
+    } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    const result = await service.generate("image-node-1", {
+      prompt: "A cinematic mountain landscape",
+      routeId: "route-image-1",
+      settings: { aspectRatio: "16:9", resolution: "2k" },
+    });
+
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "text-to-image",
+      routeId: "route-image-1",
+      prompt: "A cinematic mountain landscape",
+      parameters: { resolution: "2k", width: 2048, height: 1152 },
+      sourceRef: "pipeline:canvas:image-node-1",
+    }));
+    expect(result).toMatchObject({
+      runId: "run-image-1",
+      node: {
+        data: {
+          params: {
+            prompt: "A cinematic mountain landscape",
+            routeId: "route-image-1",
+            settings: { aspectRatio: "16:9", resolution: "2k" },
+          },
+          taskInfo: { runId: "run-image-1", status: "processing", progressPercent: 0 },
+        },
+      },
+    });
+  });
+
+  it("cancels the active run and returns the image node to an editable state", async () => {
+    let currentNode: CanvasNode = {
+      ...imageNode(),
+      data: { ...imageNode().data!, taskInfo: { runId: "run-image-1", status: "processing" as const } },
+    };
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const runs = { cancelRun: vi.fn().mockResolvedValue({ run: { id: "run-image-1", status: "cancelled" } }) } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    const result = await service.cancelGeneration("image-node-1");
+
+    expect(runs.cancelRun).toHaveBeenCalledWith("run-image-1");
+    expect(result.data?.taskInfo).toEqual({ status: "idle" });
+  });
+
+  it("rejects an unavailable route explicitly instead of silently using another model", async () => {
+    let currentNode = imageNode();
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue({ id: "disabled-route", enabled: false, capability: "text-to-image" }),
+      createRun: vi.fn(),
+    } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    await expect(service.generate("image-node-1", {
+      prompt: "A valid image prompt",
+      routeId: "disabled-route",
+    })).rejects.toMatchObject({ status: 400 });
+    expect(runs.createRun).not.toHaveBeenCalled();
+  });
+});
+
 function repositoryStub(result: { applied: boolean; revision: number }) {
   return {
     getProject: vi.fn().mockResolvedValue(project),
