@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AudioNote, Blocking, CameraMovementData, DialogueStructured, LightingData, PipelineAsset, PipelineProject, StoryboardFrame } from "@/server/domain/pipeline";
+import type { AudioNote, Blocking, CameraMovementData, DialogueStructured, LightingData, PipelineAsset, StoryboardFrame } from "@/server/domain/pipeline";
 import type { LlmPort } from "@/server/ports/llm-port";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
@@ -13,7 +13,6 @@ export class StoryboardService {
     private readonly llm: LlmPort,
     private readonly repo: PipelineRepository,
     private readonly runService: GenerationRunService,
-    private readonly pipelineCwd: string,
     private readonly sse?: PipelineSsePort,
   ) {}
 
@@ -121,7 +120,7 @@ export class StoryboardService {
     const scenes = await this.repo.listAssets(projectId, "scene");
 
     // 拼装 prompt
-    const draftPrompt = this.assembleFramePrompt(frame, characters, scenes, project);
+    const draftPrompt = this.assembleFramePrompt(frame, characters, scenes);
 
     // 收集参考图 (选中变体的 artifact)
     const refAssets: GenerationInputAsset[] = [];
@@ -139,7 +138,9 @@ export class StoryboardService {
     }
 
     // 创建 GenerationRun (I2I)
-    await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
+    const rootPath = await this.repo.getProjectRoot(projectId);
+    if (!rootPath) throw new Error(`Project ${projectId} not found`);
+    await ensurePipelineRunSession(this.runService, projectId, rootPath);
     const runView = await this.runService.createRun({
       sessionId: `pipeline:${projectId}`,
       capability: "image-to-image",
@@ -155,7 +156,7 @@ export class StoryboardService {
     return runView.run.id;
   }
 
-  private assembleFramePrompt(frame: StoryboardFrame, characters: PipelineAsset[], scenes: PipelineAsset[], project: PipelineProject): string {
+  private assembleFramePrompt(frame: StoryboardFrame, characters: PipelineAsset[], scenes: PipelineAsset[]): string {
     const parts: string[] = [];
     if (frame.visualDescription) parts.push(frame.visualDescription);
     if (frame.lighting?.description) parts.push(frame.lighting.description);

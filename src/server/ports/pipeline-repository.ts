@@ -16,8 +16,10 @@ import type {
 
 export interface PipelineRepository {
   createProject(input: Omit<PipelineProject, "createdAt" | "updatedAt">): Promise<PipelineProject>;
+  openProject(rootPath: string): Promise<PipelineProject>;
+  getProjectRoot(projectId: string): Promise<string | null>;
   getProject(id: string): Promise<PipelineProject | null>;
-  listProjects(workspaceId: string): Promise<PipelineProject[]>;
+  listProjects(): Promise<PipelineProject[]>;
   updateProject(id: string, patch: Partial<PipelineProject>): Promise<PipelineProject | null>;
   deleteProject(id: string): Promise<boolean>;
 

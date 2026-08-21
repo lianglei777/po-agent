@@ -2843,6 +2843,44 @@ GET /api/agent/019e.../events
 
 ## Pipeline Studio Canvas
 
+### Pipeline Studio 本地项目
+
+Pipeline Studio 项目以用户选择的本地目录为内容事实来源。全局配置只记录最近打开项目的
+`projectId`、绝对路径和最后打开时间，不保存画布内容或资源。
+
+#### `POST /api/pipeline/projects`
+
+创建新的项目目录。`rootPath` 必须是绝对路径，其父目录必须存在，且目标目录不能已经存在。
+
+```ts
+interface CreateProjectRequest {
+  title: string;
+  originalText: string;
+  rootPath: string;
+  artDirection?: string;
+}
+```
+
+成功后目录至少包含 `.pipeline-studio/project.json`、
+`.pipeline-studio/project.sqlite`、`assets/imports/`、`generated/` 和 `exports/`。
+
+#### `POST /api/pipeline/projects/open`
+
+把已存在的 Pipeline Studio 项目加入当前设备的项目列表。
+
+```ts
+interface OpenPipelineProjectRequest {
+  rootPath: string;
+}
+```
+
+目录必须包含格式有效的 `.pipeline-studio/project.json` 和对应项目数据库。返回完整项目对象。
+
+#### `DELETE /api/pipeline/projects/{projectId}`
+
+仅从当前设备的项目列表移除项目并关闭数据库，不删除用户的项目目录和资源。用户可以随后通过
+`POST /api/pipeline/projects/open` 再次打开。
+
 Pipeline Studio 以项目级 Canvas Snapshot 作为详情页的初始化事实来源。浏览器在本地执行交互并将节点、连线和 viewport 变更合并为带 revision 的 mutation batch；服务端在一个 SQLite 事务中应用整个 batch。
 
 ### `GET /api/pipeline/projects/{projectId}/canvas`

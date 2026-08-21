@@ -13,7 +13,7 @@ describe("SqlitePipelineRepository canvas mutations", () => {
     const repository = new SqlitePipelineRepository(database);
     await repository.createProject({
       id: "project-1",
-      workspaceId: "default",
+      rootPath: ".",
       title: "Project",
       originalText: "",
       artDirection: null,
@@ -37,7 +37,7 @@ describe("SqlitePipelineRepository canvas mutations", () => {
     const repository = new SqlitePipelineRepository(database);
     await repository.createProject({
       id: "project-1",
-      workspaceId: "default",
+      rootPath: ".",
       title: "Project",
       originalText: "",
       artDirection: null,

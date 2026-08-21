@@ -207,6 +207,14 @@ Store 负责。组件私有草稿、短暂视觉反馈及副作用句柄不属�
 
 ### 持久化后台任务
 
+Pipeline Studio 使用可迁移的本地项目目录。创建项目时，用户指定目标目录；
+`.pipeline-studio/project.json` 标识项目格式，`.pipeline-studio/project.sqlite` 保存项目、画布、
+节点和工作流等结构化数据，`assets/imports/`、`generated/` 与 `exports/` 保存资源和产物。
+全局 `pipeline-projects.json` 只是最近打开路径索引，不是项目内容的事实来源。Pipeline application
+继续依赖 `PipelineRepository` port，由本地项目 repository 根据项目索引打开对应 SQLite；Route Handler
+不得直接访问项目数据库。项目路径在 composition 中注册为 workspace root，Agent 会话与生成任务均以
+该项目根目录作为 cwd。首页的移除操作只删除索引，不能递归删除用户项目目录。
+
 内容生成 Run 和供应商 Job 使用 `node:sqlite` 持久化。任务编排和状态机位于 application，SQLite、RunningHub、文件系统和凭证存储分别通过 ports 隔离。进程内 Worker 由 composition 启动，只通过 application 和 ports 推进 Job，不允许 Route Handler 或供应商 adapter 直接修改任务状态。
 
 浏览器原始素材先经受控资产接口写入 workspace 的 `.po-agent/generation-inputs/`，再以 workspace-relative `AssetRef` 创建 Run。直接生成 UI 只读取持久化 Run view；它不会直接调用 RunningHub 查询接口。显式重试保留 Run，并原子新增带独立幂等键的 Provider Job。

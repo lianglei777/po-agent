@@ -9,7 +9,7 @@ import { CanvasStudioService } from "./canvas-studio-service";
 
 const project: PipelineProject = {
   id: "project-1",
-  workspaceId: "default",
+  rootPath: ".",
   title: "Project",
   originalText: "",
   artDirection: null,
@@ -103,7 +103,6 @@ function createService(repository: PipelineRepository, llm = {} as LlmPort) {
     {} as GenerationRunService,
     {} as GenerationAssetService,
     llm,
-    "D:\\workspace",
     { emit: vi.fn() } as unknown as PipelineSsePort,
   );
 }

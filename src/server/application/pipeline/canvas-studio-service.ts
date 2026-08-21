@@ -32,7 +32,6 @@ export class CanvasStudioService {
     private readonly runs: GenerationRunService,
     private readonly assets: GenerationAssetService,
     private readonly llm: LlmPort,
-    private readonly cwd: string,
     private readonly sse: PipelineSsePort,
   ) {}
 
@@ -187,7 +186,7 @@ export class CanvasStudioService {
   }): Promise<CanvasNode> {
     const type = mediaTypeForMime(input.contentType, input.name);
     if (!type) throw new AppError("VALIDATION_ERROR", "Only image, video, audio, or text files can be added to the canvas", 400);
-    await ensurePipelineRunSession(this.runs, input.projectId, this.cwd);
+    await ensurePipelineRunSession(this.runs, input.projectId, await this.requireProjectRoot(input.projectId));
     const uploaded = await this.assets.upload({
       sessionId: `pipeline:${input.projectId}`,
       name: input.name,
@@ -218,7 +217,7 @@ export class CanvasStudioService {
   async readNodeMedia(nodeId: string) {
     const node = await this.requireNode(nodeId);
     if (node.data?.workspaceFile) {
-      await ensurePipelineRunSession(this.runs, node.projectId, this.cwd);
+      await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
       return this.assets.read({
         sessionId: `pipeline:${node.projectId}`,
         relativePath: node.data.workspaceFile.relativePath,
@@ -229,7 +228,7 @@ export class CanvasStudioService {
       const view = await this.runs.getRun(runId);
       const artifact = view?.artifacts[0];
       if (artifact?.localPath) {
-        await ensurePipelineRunSession(this.runs, node.projectId, this.cwd);
+        await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
         return this.assets.read({
           sessionId: `pipeline:${node.projectId}`,
           relativePath: artifact.localPath,
@@ -240,7 +239,7 @@ export class CanvasStudioService {
     if (artifactId) {
       const artifact = await this.runs.getArtifact(artifactId);
       if (artifact?.localPath) {
-        await ensurePipelineRunSession(this.runs, node.projectId, this.cwd);
+        await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
         return this.assets.read({ sessionId: `pipeline:${node.projectId}`, relativePath: artifact.localPath });
       }
     }
@@ -305,7 +304,7 @@ export class CanvasStudioService {
     }
 
     try {
-      await ensurePipelineRunSession(this.runs, node.projectId, this.cwd);
+      await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
       const requestedRoute = data.params?.routeId ? await this.runs.getRoute(data.params.routeId) : null;
       const route = requestedRoute?.enabled && requestedRoute.capability === capability
         ? requestedRoute
@@ -458,7 +457,7 @@ export class CanvasStudioService {
               }
               hadSynchronousCompletion = true;
             }
-          } catch (error) {
+          } catch {
             const latest = await this.repository.getCanvasNode(node.id);
             if (latest?.data?.groupRun?.id === groupRunId) {
               await this.updateNode(node.id, {
@@ -656,6 +655,12 @@ export class CanvasStudioService {
     const node = await this.repository.getCanvasNode(id);
     if (!node) throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found", 404);
     return node;
+  }
+
+  private async requireProjectRoot(projectId: string) {
+    const rootPath = await this.repository.getProjectRoot(projectId);
+    if (!rootPath) throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
+    return rootPath;
   }
 
   private async markFailed(node: CanvasNode, error: unknown) {

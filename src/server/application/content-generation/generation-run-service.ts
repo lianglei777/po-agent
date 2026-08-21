@@ -81,7 +81,7 @@ export class GenerationRunService {
   async ensureSession(session: GenerationSession): Promise<void> {
     await this.ready;
     const existing = await this.resolveSession(session.id);
-    if (existing && !existing.deletedAt) return;
+    if (existing && !existing.deletedAt && existing.cwd === session.cwd) return;
     await this.repository.upsertSession(session);
   }
 

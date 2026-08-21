@@ -45,7 +45,7 @@ export class SqlitePipelineRepository implements PipelineRepository {
     this.database.prepare(
       "INSERT INTO pipeline_projects(id, workspace_id, title, original_text, art_direction_json, model_settings_json, prompt_config_json, status, cover_artifact_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     ).run(
-      project.id, project.workspaceId, project.title, project.originalText,
+      project.id, project.rootPath, project.title, project.originalText,
       project.artDirection ? toJson(project.artDirection) : null,
       project.modelSettings ? toJson(project.modelSettings) : null,
       project.promptConfig ? toJson(project.promptConfig) : null,
@@ -54,13 +54,21 @@ export class SqlitePipelineRepository implements PipelineRepository {
     return project;
   }
 
+  async openProject(): Promise<PipelineProject> {
+    throw new Error("Opening a project directory requires the local Pipeline repository");
+  }
+
+  async getProjectRoot(projectId: string): Promise<string | null> {
+    return (await this.getProject(projectId))?.rootPath ?? null;
+  }
+
   async getProject(id: string): Promise<PipelineProject | null> {
     const row = this.database.prepare("SELECT * FROM pipeline_projects WHERE id = ?").get(id);
     return row ? projectFromRow(row as SqliteRow) : null;
   }
 
-  async listProjects(workspaceId: string): Promise<PipelineProject[]> {
-    const rows = this.database.prepare("SELECT * FROM pipeline_projects WHERE workspace_id = ? ORDER BY updated_at DESC").all(workspaceId) as SqliteRow[];
+  async listProjects(): Promise<PipelineProject[]> {
+    const rows = this.database.prepare("SELECT * FROM pipeline_projects ORDER BY updated_at DESC").all() as SqliteRow[];
     return rows.map(projectFromRow);
   }
 
@@ -509,7 +517,7 @@ export class SqlitePipelineRepository implements PipelineRepository {
 function projectFromRow(row: SqliteRow): PipelineProject {
   return {
     id: row.id as string,
-    workspaceId: row.workspace_id as string,
+    rootPath: row.workspace_id as string,
     title: row.title as string,
     originalText: row.original_text as string,
     artDirection: parseJson(row.art_direction_json),

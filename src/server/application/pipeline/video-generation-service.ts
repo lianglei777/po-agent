@@ -9,7 +9,6 @@ export class VideoGenerationService {
   constructor(
     private readonly repo: PipelineRepository,
     private readonly runService: GenerationRunService,
-    private readonly pipelineCwd: string,
     private readonly sse?: PipelineSsePort,
   ) {}
 
@@ -21,7 +20,7 @@ export class VideoGenerationService {
     const assets: GenerationInputAsset[] = [
       { slot: "firstFrameUrl", ref: { type: "artifact", artifactId: frame.selectedImageArtifactId } },
     ];
-    await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
+    await ensurePipelineRunSession(this.runService, projectId, await this.requireProjectRoot(projectId));
     const runView = await this.runService.createRun({
       sessionId: `pipeline:${projectId}`, capability: "image-to-video", prompt, assets, source,
       sourceRef: `pipeline:frame:${frameId}:i2v`, idempotencyKey: `pipeline:frame:${frameId}:i2v:${Date.now()}`,
@@ -45,7 +44,7 @@ export class VideoGenerationService {
       if (scene?.selectedArtifactId) refAssets.push({ slot: "imageUrls", ref: { type: "artifact", artifactId: scene.selectedArtifactId } });
     }
     const prompt = frame.videoPrompt || frame.visualDescription || "";
-    await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
+    await ensurePipelineRunSession(this.runService, projectId, await this.requireProjectRoot(projectId));
     const runView = await this.runService.createRun({
       sessionId: `pipeline:${projectId}`, capability: "multimodal-to-video", prompt,
       assets: refAssets.length > 0 ? refAssets : undefined, source,
@@ -55,6 +54,12 @@ export class VideoGenerationService {
     await this.repo.updateFrame(frameId, { status: "processing" });
     await this.createVideoNodeAndEdge(projectId, frameId, runView.run.id);
     return runView.run.id;
+  }
+
+  private async requireProjectRoot(projectId: string) {
+    const rootPath = await this.repo.getProjectRoot(projectId);
+    if (!rootPath) throw new Error(`Project ${projectId} not found`);
+    return rootPath;
   }
 
   async selectFinalTake(frameId: string, runId: string): Promise<void> {

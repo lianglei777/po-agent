@@ -29,6 +29,8 @@ import { NodeGenerationFileStore } from "@/server/infrastructure/filesystem/node
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
 import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-directory-browser";
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
+import { JsonPipelineProjectRegistry } from "@/server/infrastructure/filesystem/json-pipeline-project-registry";
+import { LocalPipelineRepository } from "@/server/infrastructure/filesystem/local-pipeline-repository";
 import { InMemoryWorkspaceRoots } from "@/server/infrastructure/filesystem/workspace-roots";
 import { PiAgentRuntimeFactory } from "@/server/infrastructure/pi/pi-agent-runtime";
 import { PiGenerationIntentClassifier } from "@/server/infrastructure/pi/pi-generation-intent-classifier";
@@ -46,7 +48,6 @@ import { createRunningHubRoutes } from "@/server/infrastructure/content-generati
 import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
-import { SqlitePipelineRepository } from "@/server/infrastructure/sqlite/sqlite-pipeline-repository";
 import { InMemoryPipelineSse } from "@/server/infrastructure/runtime/in-memory-pipeline-sse";
 import { PiLlmAdapter } from "@/server/infrastructure/pi/pi-llm-adapter";
 import { AssetGenerationService } from "@/server/application/pipeline/asset-generation-service";
@@ -56,8 +57,8 @@ import { StoryboardService } from "@/server/application/pipeline/storyboard-serv
 import { CanvasStudioService } from "@/server/application/pipeline/canvas-studio-service";
 import { CompositeAgentToolProvider } from "@/server/application/pipeline/composite-agent-tool-provider";
 import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
-import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
-import type { LlmPort } from "@/server/ports/llm-port";
+import type { PipelineRepository } from "@/server/ports/pipeline-repository";
+import { AppError } from "@/server/domain/app-error";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -82,6 +83,9 @@ function createContainer() {
   const directoryBrowser = new NodeDirectoryBrowser();
   const projectRepository = new JsonProjectRepository(
     path.join(agentDir, "projects.json"),
+  );
+  const pipelineProjectRegistry = new JsonPipelineProjectRegistry(
+    path.join(agentDir, "pipeline-projects.json"),
   );
   const processes = new NodeProcessRunner();
   const skills = new PiSkillProvider(processes);
@@ -203,26 +207,23 @@ function createContainer() {
     return generationCredentialStore;
   }
 
-  let pipelineRepository: SqlitePipelineRepository | undefined;
+  let pipelineRepository: PipelineRepository | undefined;
   let canvasStudioService: CanvasStudioService | undefined;
 
   function getPipelineRepository() {
     if (pipelineRepository) return pipelineRepository;
-    const database = getDatabase();
-    pipelineRepository = new SqlitePipelineRepository(database);
+    pipelineRepository = new LocalPipelineRepository(pipelineProjectRegistry, roots);
     pipelineSse = new InMemoryPipelineSse();
     pipelineLlm = new PiLlmAdapter(modelRuntime);
-    const pipelineCwd = path.join(agentDir, "pipeline");
     scriptAnalysisService = new ScriptAnalysisService(pipelineLlm, pipelineRepository, pipelineSse);
-    storyboardService = new StoryboardService(pipelineLlm, pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
-    assetGenerationService = new AssetGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
-    videoGenerationService = new VideoGenerationService(pipelineRepository, getGenerationRunService(), pipelineCwd, pipelineSse);
+    storyboardService = new StoryboardService(pipelineLlm, pipelineRepository, getGenerationRunService(), pipelineSse);
+    assetGenerationService = new AssetGenerationService(pipelineRepository, getGenerationRunService(), pipelineSse);
+    videoGenerationService = new VideoGenerationService(pipelineRepository, getGenerationRunService(), pipelineSse);
     canvasStudioService = new CanvasStudioService(
       pipelineRepository,
       getGenerationRunService(),
       getGenerationAssetService(),
       pipelineLlm,
-      pipelineCwd,
       pipelineSse,
     );
     pipelineAgentTools = new PipelineAgentToolProvider(
@@ -374,8 +375,9 @@ function createContainer() {
       getPipelineServices();
       return canvasStudioService!;
     },
-    createPipelineAgentSession(projectId: string) {
-      const cwd = path.join(agentDir, "pipeline-sessions", projectId);
+    async createPipelineAgentSession(projectId: string) {
+      const cwd = await getPipelineRepository().getProjectRoot(projectId);
+      if (!cwd) throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
       return agentService.create({ cwd });
     },
 

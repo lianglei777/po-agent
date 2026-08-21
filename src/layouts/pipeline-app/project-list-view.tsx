@@ -2,13 +2,14 @@
 
 import { Button, Popconfirm, Spin } from "antd";
 import type { ProjectSummary } from "@/contracts/pipeline";
-import { Plus, Project, Trash2 } from "@/components/icons";
+import { FolderOpen, Plus, Project, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 
 export type ProjectListViewProps = {
   projects: ProjectSummary[];
   loading: boolean;
   onNewProject: () => void;
+  onOpenExisting: () => void;
   onOpenProject: (projectId: string) => void;
   onDeleteProject: (projectId: string) => Promise<void>;
 };
@@ -17,6 +18,7 @@ export function ProjectListView({
   projects,
   loading,
   onNewProject,
+  onOpenExisting,
   onOpenProject,
   onDeleteProject,
 }: ProjectListViewProps) {
@@ -24,10 +26,13 @@ export function ProjectListView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--pl-surface)]">
-      <header className="flex min-h-16 items-center border-b border-[var(--pl-border)] px-8">
+      <header className="flex min-h-16 items-center justify-between border-b border-[var(--pl-border)] px-8">
         <h1 className="text-lg font-semibold tracking-[-0.02em] text-[var(--pl-text)]">
           {t.pipeline.projectListTitle}
         </h1>
+        <Button icon={<FolderOpen className="size-4" />} onClick={onOpenExisting}>
+          {t.pipeline.openExistingProject}
+        </Button>
       </header>
 
       <section className="min-h-0 flex-1 overflow-y-auto px-8 py-8" aria-labelledby="pipeline-project-list">
@@ -117,6 +122,9 @@ function ProjectCard({
           >
             {updatedAt}
           </time>
+          <p className="mt-1 truncate text-xs text-[var(--pl-text-muted)]" title={project.rootPath}>
+            {project.rootPath}
+          </p>
         </div>
       </button>
 

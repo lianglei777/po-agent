@@ -39,10 +39,16 @@ export const pipelineApi = {
   updateProject: (id: string, body: { title?: string; originalText?: string }) =>
     request<ProjectResponse>(`${BASE}/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
-  createProject: (body: { title: string; originalText: string; workspaceId: string; artDirection?: string }) =>
+  createProject: (body: { title: string; originalText: string; rootPath: string; artDirection?: string }) =>
     request<ProjectResponse>(`${BASE}/projects`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  openProject: (rootPath: string) =>
+    request<ProjectResponse>(`${BASE}/projects/open`, {
+      method: "POST",
+      body: JSON.stringify({ rootPath }),
     }),
 
   deleteProject: (id: string) =>

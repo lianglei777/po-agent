@@ -3,7 +3,7 @@
 
 export interface PipelineProject {
   id: string;
-  workspaceId: string;
+  rootPath: string;
   title: string;
   originalText: string;
   artDirection: unknown;
@@ -254,8 +254,12 @@ export interface PipelineStageStatus {
 export interface CreateProjectRequest {
   title: string;
   originalText: string;
-  workspaceId: string;
+  rootPath: string;
   artDirection?: string;
+}
+
+export interface OpenPipelineProjectRequest {
+  rootPath: string;
 }
 
 export interface UpdateProjectRequest {
@@ -266,6 +270,7 @@ export interface UpdateProjectRequest {
 export interface ProjectSummary {
   id: string;
   title: string;
+  rootPath: string;
   status: string;
   stageStatuses: PipelineStageStatus[];
   frameCount: number;

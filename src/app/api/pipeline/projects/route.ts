@@ -9,11 +9,9 @@ import { handleRoute, readJson } from "@/server/transport/http/api-response";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request) {
+export async function GET() {
   return handleRoute<ProjectListResponse>(async () => {
-    const url = new URL(request.url);
-    const workspaceId = url.searchParams.get("workspaceId") ?? "default";
-    const projects = await container.pipelineRepository.listProjects(workspaceId);
+    const projects = await container.pipelineRepository.listProjects();
     const summaries = await Promise.all(
       projects.map(async (p) => {
         const stages = await container.pipelineRepository.getStageStatuses(p.id);
@@ -21,6 +19,7 @@ export async function GET(request: Request) {
         return {
           id: p.id,
           title: p.title,
+          rootPath: p.rootPath,
           status: p.status,
           stageStatuses: stages,
           frameCount: frames.length,
@@ -38,13 +37,13 @@ export async function POST(request: Request) {
     if (!body.title?.trim()) {
       throw new AppError("VALIDATION_ERROR", "Project title is required", 400);
     }
-    if (!body.workspaceId?.trim()) {
-      throw new AppError("VALIDATION_ERROR", "Workspace ID is required", 400);
+    if (!body.rootPath?.trim()) {
+      throw new AppError("VALIDATION_ERROR", "Project folder is required", 400);
     }
     const id = crypto.randomUUID();
     return container.pipelineRepository.createProject({
       id,
-      workspaceId: body.workspaceId,
+      rootPath: body.rootPath.trim(),
       title: body.title.trim(),
       originalText: body.originalText ?? "",
       artDirection: body.artDirection ? { selectedStyleId: body.artDirection, styleConfig: {}, customStyles: [], aiRecommendations: [] } as never : null,

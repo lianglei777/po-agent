@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Form, Input, Modal, message } from "antd";
+import { Button, Form, Input, Modal, message } from "antd";
+import { FolderOpen } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineApi } from "./pipeline-api";
 
@@ -10,8 +11,6 @@ export type NewProjectDialogProps = {
   onClose: () => void;
   onCreated: () => void;
 };
-
-const WORKSPACE_ID = "default";
 
 export function NewProjectDialog({ open, onClose, onCreated }: NewProjectDialogProps) {
   const { t } = useI18n();
@@ -23,9 +22,9 @@ export function NewProjectDialog({ open, onClose, onCreated }: NewProjectDialogP
       const values = await form.validateFields();
       setLoading(true);
       await pipelineApi.createProject({
-        title: values.title,
+        title: values.title.trim(),
         originalText: "",
-        workspaceId: WORKSPACE_ID,
+        rootPath: joinProjectPath(values.parentDirectory.trim(), values.title),
       });
       onCreated();
       form.resetFields();
@@ -37,6 +36,17 @@ export function NewProjectDialog({ open, onClose, onCreated }: NewProjectDialogP
       setLoading(false);
     }
   };
+
+  const handleBrowse = async () => {
+    const selected = await window.poAgentDesktop?.selectProjectDirectory();
+    if (selected) form.setFieldValue("parentDirectory", selected);
+  };
+
+  const title = Form.useWatch("title", form) as string | undefined;
+  const parentDirectory = Form.useWatch("parentDirectory", form) as string | undefined;
+  const projectPath = title?.trim() && parentDirectory?.trim()
+    ? joinProjectPath(parentDirectory.trim(), title)
+    : "";
 
   const handleCancel = () => {
     form.resetFields();
@@ -65,7 +75,43 @@ export function NewProjectDialog({ open, onClose, onCreated }: NewProjectDialogP
         >
           <Input autoFocus placeholder={t.pipeline.dialogProjectTitlePlaceholder} />
         </Form.Item>
+        <Form.Item
+          name="parentDirectory"
+          label={t.pipeline.dialogProjectLocation}
+          extra={projectPath
+            ? `${t.pipeline.dialogProjectPathPreview}: ${projectPath}`
+            : t.pipeline.dialogProjectLocationHint}
+          rules={[{ required: true, message: t.pipeline.dialogProjectLocationPlaceholder }]}
+        >
+          <Input
+            placeholder={t.pipeline.dialogProjectLocationPlaceholder}
+            addonAfter={typeof window !== "undefined" && window.poAgentDesktop ? (
+              <Button
+                type="text"
+                size="small"
+                icon={<FolderOpen className="size-4" />}
+                onClick={handleBrowse}
+              >
+                {t.pipeline.dialogBrowse}
+              </Button>
+            ) : null}
+          />
+        </Form.Item>
       </Form>
     </Modal>
   );
+}
+
+function joinProjectPath(parentDirectory: string, title: string) {
+  const normalized = title
+    .normalize("NFKC")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/[. ]+$/g, "")
+    .trim()
+    .slice(0, 80);
+  const folderName = normalized && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(normalized)
+    ? normalized
+    : "pipeline-project";
+  const separator = parentDirectory.includes("\\") ? "\\" : "/";
+  return `${parentDirectory.replace(/[\\/]+$/, "")}${separator}${folderName}`;
 }

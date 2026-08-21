@@ -9,7 +9,6 @@ export class AssetGenerationService {
   constructor(
     private readonly repo: PipelineRepository,
     private readonly runService: GenerationRunService,
-    private readonly pipelineCwd: string,
     private readonly sse?: PipelineSsePort,
   ) {}
 
@@ -19,8 +18,8 @@ export class AssetGenerationService {
     if (asset.locked) throw new Error(`Asset ${assetId} is locked`);
     const project = await this.repo.getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found`);
-    const prompt = this.assemblePrompt(asset, project);
-    await ensurePipelineRunSession(this.runService, projectId, this.pipelineCwd);
+    const prompt = this.assemblePrompt(asset);
+    await ensurePipelineRunSession(this.runService, projectId, await this.requireProjectRoot(projectId));
     const runView = await this.runService.createRun({
       sessionId: `pipeline:${projectId}`,
       capability: "text-to-image",
@@ -39,6 +38,12 @@ export class AssetGenerationService {
     return variant;
   }
 
+  private async requireProjectRoot(projectId: string) {
+    const rootPath = await this.repo.getProjectRoot(projectId);
+    if (!rootPath) throw new Error(`Project ${projectId} not found`);
+    return rootPath;
+  }
+
   async selectVariant(assetId: string, variantId: string): Promise<void> {
     const variant = (await this.repo.listVariants(assetId)).find((v) => v.id === variantId);
     if (!variant) throw new Error(`Variant ${variantId} not found`);
@@ -51,7 +56,7 @@ export class AssetGenerationService {
     await this.repo.updateAsset(assetId, { locked: !asset.locked });
   }
 
-  private assemblePrompt(asset: PipelineAsset, project: PipelineProject): string {
+  private assemblePrompt(asset: PipelineAsset): string {
     const parts: string[] = [asset.description];
     const attrs = asset.attributes as Record<string, unknown> | null;
     if (attrs) {

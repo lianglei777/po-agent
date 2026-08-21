@@ -4,7 +4,7 @@
 
 export interface PipelineProject {
   id: string;
-  workspaceId: string;
+  rootPath: string;
   title: string;
   originalText: string;
   artDirection: ArtDirection | null;
