@@ -15,7 +15,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Drawer, Dropdown, Input, Modal, Tooltip, message } from "antd";
+import { Drawer, Dropdown, Input, Modal, Slider, Tooltip, message } from "antd";
 import type { CanvasMediaType, CanvasNode } from "@/contracts/pipeline";
 import {
   ArrowLeft,
@@ -35,7 +35,7 @@ import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
-import { isPlainCanvasShortcut } from "../model/canvas-shortcuts";
+import { getCanvasZoomShortcut, isPlainCanvasShortcut } from "../model/canvas-shortcuts";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
 import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
 import {
@@ -98,6 +98,7 @@ export function StudioCanvas({
 
   const instanceRef = useRef<ReactFlowInstance<StudioFlowNode, StudioCanvasEdge> | null>(null);
   const dragOriginsRef = useRef(new Map<string, { x: number; y: number }>());
+  const transientViewportChangeRef = useRef(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [createMenu, setCreateMenu] = useState<CreateMenuState>(null);
   const [assetsOpen, setAssetsOpen] = useState(false);
@@ -105,6 +106,8 @@ export function StudioCanvas({
   const [renameValue, setRenameValue] = useState(projectTitle);
   const [reactFlowNodes, setReactFlowNodes] = useState<StudioFlowNode[]>([]);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState<number | null>(null);
+  const displayZoom = previewZoom ?? viewport.zoom;
   const defaultNodeNames = useMemo<Record<CanvasMediaType, string>>(() => ({
     text: t.pipeline.nodeText,
     image: t.pipeline.nodeImage,
@@ -231,8 +234,43 @@ export function StudioCanvas({
     }
   }, [createEdge, createNode, defaultNodeNames, setSelection, store, t.pipeline.canvasClipboardInvalid]);
 
+  const zoomInCanvas = useCallback(() => {
+    void instanceRef.current?.zoomIn({ duration: 120 });
+  }, []);
+
+  const zoomOutCanvas = useCallback(() => {
+    void instanceRef.current?.zoomOut({ duration: 120 });
+  }, []);
+
+  const previewCanvasZoom = useCallback((percentage: number) => {
+    const instance = instanceRef.current;
+    if (!instance) return;
+    transientViewportChangeRef.current = true;
+    setPreviewZoom(percentage / 100);
+    void instance.zoomTo(percentage / 100);
+  }, []);
+
+  const commitCanvasZoom = useCallback(async (percentage: number) => {
+    const instance = instanceRef.current;
+    if (!instance) return;
+    transientViewportChangeRef.current = true;
+    await instance.zoomTo(percentage / 100);
+    const nextViewport = instance.getViewport();
+    setViewport(nextViewport, true);
+    transientViewportChangeRef.current = false;
+    setPreviewZoom(null);
+  }, [setViewport]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const zoomShortcut = getCanvasZoomShortcut(event);
+      if (zoomShortcut) {
+        // 阻止浏览器或 Electron 页面缩放，只改变画布视口。
+        event.preventDefault();
+        if (zoomShortcut === "in") zoomInCanvas();
+        else zoomOutCanvas();
+        return;
+      }
       if (isEditingTarget(event.target)) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === "z") {
@@ -285,7 +323,7 @@ export function StudioCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
+  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles, zoomInCanvas, zoomOutCanvas]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
     setReactFlowNodes((currentNodes) => {
@@ -364,6 +402,10 @@ export function StudioCanvas({
           panOnScroll
           panOnScrollMode={PanOnScrollMode.Vertical}
           onMoveEnd={(event, nextViewport) => {
+            if (transientViewportChangeRef.current) {
+              setPreviewZoom(nextViewport.zoom);
+              return;
+            }
             // 滚轮仅用于浏览画布，不触发持久化；React Flow 内部管理移动帧，避免整棵画布高频重渲染。
             setViewport(nextViewport, event?.type !== "wheel");
           }}
@@ -415,7 +457,7 @@ export function StudioCanvas({
               position="bottom-left"
               pannable
               zoomable
-              className="!bottom-20 !left-5 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)]"
+              className="!bottom-16 !left-4 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)]"
               maskColor="rgb(16 18 20 / 68%)"
               nodeColor="#168cff"
             />
@@ -426,14 +468,16 @@ export function StudioCanvas({
       {!nodes.length ? <EmptyCanvasActions onCreate={createAt} /> : null}
 
       <BottomLeftControls
-        zoom={viewport.zoom}
+        zoom={displayZoom}
         minimapVisible={minimapVisible}
         connectionsVisible={connectionsVisible}
         onOpenAssets={() => setAssetsOpen(true)}
         onToggleMinimap={toggleMinimap}
         onToggleConnections={toggleConnections}
-        onZoomOut={() => instanceRef.current?.zoomOut({ duration: 160 })}
-        onZoomIn={() => instanceRef.current?.zoomIn({ duration: 160 })}
+        onZoomOut={zoomOutCanvas}
+        onZoomIn={zoomInCanvas}
+        onZoomChange={previewCanvasZoom}
+        onZoomChangeComplete={(percentage) => void commitCanvasZoom(percentage)}
       />
 
       <BottomCenterToolbar
@@ -518,26 +562,26 @@ function TopCanvasBar({
     { key: "rename", label: t.pipeline.canvasRenameProject },
   ];
   return (
-    <header className="pointer-events-none absolute left-4 top-4 z-30 flex h-12 items-center">
-      <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/95 p-1.5 shadow-[var(--pl-shadow-card)] backdrop-blur">
+    <header className="pointer-events-none absolute left-4 top-4 z-30 flex h-10 items-center">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/95 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur">
         <Tooltip title={t.pipeline.canvasBackProjects}>
-          <button type="button" onClick={onBack} className="flex size-9 items-center justify-center rounded-xl text-[var(--pl-text)] hover:bg-[var(--pl-surface-hover)]">
+          <button type="button" onClick={onBack} className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text)] transition-colors hover:bg-[var(--pl-surface-hover)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]">
             <ArrowLeft className="size-4" />
           </button>
         </Tooltip>
         <Dropdown menu={{ items: menuItems, onClick: ({ key }) => key === "back" ? onBack() : onRename() }}>
-          <button type="button" className="flex h-9 max-w-72 items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 text-sm font-medium text-[var(--pl-text)] hover:bg-[var(--pl-surface-hover)]">
+          <button type="button" className="flex h-8 max-w-64 items-center gap-1.5 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2.5 text-caption font-medium text-[var(--pl-text)] transition-colors hover:bg-[var(--pl-surface-hover)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]">
             <Project className="size-4 text-[var(--pl-accent)]" />
             <span className="truncate">{projectTitle}</span>
             <ChevronDown className="size-3 text-[var(--pl-text-muted)]" />
           </button>
         </Dropdown>
         <Tooltip title={t.pipeline.canvasFit}>
-          <button type="button" onClick={onFit} className="flex size-9 items-center justify-center rounded-xl text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]">
+          <button type="button" onClick={onFit} className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]">
             <Minimize2 className="size-4" />
           </button>
         </Tooltip>
-        <span className="px-2 text-[10px] text-[var(--pl-text-muted)]">{saveLabel(saveState, t.pipeline)}</span>
+        <span className="px-1.5 text-caption text-[var(--pl-text-muted)]">{saveLabel(saveState, t.pipeline)}</span>
       </div>
     </header>
   );
@@ -564,7 +608,7 @@ function EmptyCanvasActions({ onCreate }: { onCreate: (type: CanvasMediaType, po
     </div>
   );
 }
-function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onZoomOut, onZoomIn }: {
+function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
   zoom: number;
   minimapVisible: boolean;
   connectionsVisible: boolean;
@@ -573,15 +617,34 @@ function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAs
   onToggleConnections: () => void;
   onZoomOut: () => void;
   onZoomIn: () => void;
+  onZoomChange: (percentage: number) => void;
+  onZoomChangeComplete: (percentage: number) => void;
 }) {
   const { t } = useI18n();
+  const zoomPercentage = Math.round(zoom * 100);
   return (
-    <div className="absolute bottom-5 left-5 z-30 flex h-12 items-center rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 px-2 shadow-[var(--pl-shadow-card)] backdrop-blur">
+    <div className="absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur">
       <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} />
       <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<Project className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
       <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<Settings2 className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
-      <ToolButton title={t.pipeline.canvasZoomOut} icon={<span className="text-lg leading-none">−</span>} onClick={onZoomOut} />
-      <button type="button" onClick={onZoomIn} className="h-8 min-w-12 rounded-lg px-2 text-xs font-semibold tabular-nums text-[var(--pl-text)] hover:bg-[var(--pl-surface-hover)]">{Math.round(zoom * 100)}%</button>
+      <div className="mx-0.5 h-5 w-px bg-[var(--pl-border)]" />
+      <ToolButton title={t.pipeline.canvasZoomOut} icon={<span className="text-base leading-none">−</span>} onClick={onZoomOut} />
+      <Slider
+        min={5}
+        max={400}
+        step={5}
+        value={zoomPercentage}
+        onChange={onZoomChange}
+        onChangeComplete={onZoomChangeComplete}
+        ariaLabelForHandle={t.pipeline.canvasZoomLevel}
+        ariaValueTextFormatterForHandle={(value) => `${value}%`}
+        tooltip={{ formatter: (value) => `${value}%` }}
+        className="!m-0 w-20"
+      />
+      <ToolButton title={t.pipeline.canvasZoomIn} icon={<span className="text-base leading-none">+</span>} onClick={onZoomIn} />
+      <output className="min-w-10 px-1 text-right font-mono text-caption tabular-nums text-[var(--pl-text-secondary)]">
+        {zoomPercentage}%
+      </output>
     </div>
   );
 }
@@ -590,14 +653,14 @@ function BottomCenterToolbar({ onCreate }: {
 }) {
   const { t } = useI18n();
   return (
-    <div className="absolute bottom-5 left-1/2 z-30 flex h-14 -translate-x-1/2 items-center gap-1 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1.5 shadow-[var(--pl-shadow-hover)] backdrop-blur" onClick={(event) => event.stopPropagation()}>
+    <div className="absolute bottom-4 left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-hover)] backdrop-blur" onClick={(event) => event.stopPropagation()}>
       <ToolButton title={t.pipeline.canvasAddNode} icon={<Plus className="size-5" />} primary onClick={onCreate} />
       <CanvasShortcutsPopover />
     </div>
   );
 }
 function ToolButton({ title, icon, label, active, primary, onClick }: { title: string; icon: ReactNode; label?: string; active?: boolean; primary?: boolean; onClick: () => void }) {
-  return <Tooltip title={title}><button type="button" onClick={onClick} className={"flex h-10 items-center justify-center gap-2 rounded-xl px-3 transition-colors " + (primary ? "bg-white text-black hover:bg-slate-200" : active ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]")}>{icon}{label ? <span className="text-sm">{label}</span> : null}</button></Tooltip>;
+  return <Tooltip title={title}><button type="button" onClick={onClick} className={"flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)] " + (primary ? "bg-white text-black hover:bg-slate-200" : active ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]")}>{icon}{label ? <span className="text-caption">{label}</span> : null}</button></Tooltip>;
 }
 
 function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number; screenY: number; onCreate: (type: CanvasMediaType) => void; onUpload: () => void }) {

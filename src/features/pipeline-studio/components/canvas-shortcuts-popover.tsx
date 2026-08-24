@@ -28,6 +28,8 @@ export function CanvasShortcutsPopover() {
     selectTool: t.pipeline.canvasShortcutSelectTool,
     panTool: t.pipeline.canvasShortcutPanTool,
     fitCanvas: t.pipeline.canvasShortcutFitCanvas,
+    zoomIn: t.pipeline.canvasShortcutZoomIn,
+    zoomOut: t.pipeline.canvasShortcutZoomOut,
     temporaryPan: t.pipeline.canvasShortcutTemporaryPan,
     multiSelect: t.pipeline.canvasShortcutMultiSelect,
     boxSelect: t.pipeline.canvasShortcutBoxSelect,
@@ -124,7 +126,7 @@ export function CanvasShortcutsPopover() {
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={t.pipeline.canvasShortcuts}
-        className="flex h-10 items-center justify-center rounded-xl px-3 text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent)]"
+        className="flex h-8 items-center justify-center rounded-lg px-2 text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]"
       >
         <KeyRound className="size-4" />
       </button>

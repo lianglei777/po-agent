@@ -16,6 +16,8 @@ export const CANVAS_SHORTCUT_GROUPS = [
       { id: "selectTool", sequences: [["V"]] },
       { id: "panTool", sequences: [["H"]] },
       { id: "fitCanvas", sequences: [["F"]] },
+      { id: "zoomIn", sequences: [["Mod", "+"]] },
+      { id: "zoomOut", sequences: [["Mod", "-"]] },
       { id: "temporaryPan", sequences: [["Space", "Drag"]] },
     ],
   },
@@ -31,6 +33,22 @@ export const CANVAS_SHORTCUT_GROUPS = [
 
 export type CanvasShortcutGroupId = (typeof CANVAS_SHORTCUT_GROUPS)[number]["id"];
 export type CanvasShortcutId = (typeof CANVAS_SHORTCUT_GROUPS)[number]["shortcuts"][number]["id"];
+export type CanvasZoomShortcut = "in" | "out";
+
+export function getCanvasZoomShortcut(
+  event: Pick<KeyboardEvent, "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+): CanvasZoomShortcut | null {
+  if ((!event.ctrlKey && !event.metaKey) || event.altKey) return null;
+
+  // 同时识别字符和物理键位，兼容 Shift+=、Cmd/Ctrl+= 与数字键盘。
+  if (event.key === "+" || event.key === "=" || event.code === "Equal" || event.code === "NumpadAdd") {
+    return "in";
+  }
+  if (!event.shiftKey && (event.key === "-" || event.code === "Minus" || event.code === "NumpadSubtract")) {
+    return "out";
+  }
+  return null;
+}
 
 export function isPlainCanvasShortcut(
   event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
