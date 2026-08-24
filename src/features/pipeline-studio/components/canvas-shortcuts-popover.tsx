@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Popover } from "antd";
-import { KeyRound, X } from "@/components/icons";
+import { Keyboard, X } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   CANVAS_SHORTCUT_GROUPS,
@@ -128,7 +128,7 @@ export function CanvasShortcutsPopover() {
         aria-label={t.pipeline.canvasShortcuts}
         className="flex h-8 items-center justify-center rounded-lg px-2 text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]"
       >
-        <KeyRound className="size-4" />
+        <Keyboard className="size-4" />
       </button>
     </Popover>
   );

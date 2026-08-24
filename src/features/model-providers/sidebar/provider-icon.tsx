@@ -20,7 +20,7 @@ type IconComponent = React.ComponentType<{
   style?: React.CSSProperties;
 }>;
 
-// 将 provider ID 映射到统一的 Ant Design 图标语义。
+// 将 provider ID 映射到统一的 Lucide 图标语义。
 const PROVIDER_ICONS: Record<string, { Icon: IconComponent; hasColor: boolean }> = {
   anthropic: { Icon: Sparkles, hasColor: false },
   openai: { Icon: Zap, hasColor: false },

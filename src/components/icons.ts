@@ -1,173 +1,205 @@
+import { createElement, forwardRef } from "react";
 import {
-  ApiOutlined,
-  AppstoreAddOutlined,
-  ArrowLeftOutlined,
-  BorderOutlined,
-  BoldOutlined,
-  BranchesOutlined,
-  BulbOutlined,
-  CameraOutlined,
-  CheckCircleOutlined,
-  CheckOutlined,
-  ClockCircleOutlined,
-  CloseOutlined,
-  CloudOutlined,
-  CodeOutlined,
-  CompressOutlined,
-  ControlOutlined,
-  CopyOutlined,
-  CustomerServiceOutlined,
-  DatabaseOutlined,
-  DeleteOutlined,
-  DeploymentUnitOutlined,
-  DownOutlined,
-  DownloadOutlined,
-  EditOutlined,
-  ExportOutlined,
-  ExpandOutlined,
-  EyeInvisibleOutlined,
-  EyeOutlined,
-  FileImageOutlined,
-  FileOutlined,
-  FileTextOutlined,
-  FireOutlined,
-  FolderOpenOutlined,
-  FolderOutlined,
-  ForkOutlined,
-  FormOutlined,
-  GiftOutlined,
-  GlobalOutlined,
-  InboxOutlined,
-  ItalicOutlined,
-  KeyOutlined,
-  LockOutlined,
-  LayoutOutlined,
-  LoadingOutlined,
-  MailOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-  MessageOutlined,
-  MoreOutlined,
-  OrderedListOutlined,
-  ProjectOutlined,
-  PaperClipOutlined,
-  PictureOutlined,
-  ProfileOutlined,
-  PlusOutlined,
-  PlayCircleOutlined,
- QuestionCircleOutlined,
- RedoOutlined,
- ReloadOutlined,
-  RightOutlined,
-  RobotOutlined,
-  SafetyCertificateOutlined,
-  ScissorOutlined,
-  SearchOutlined,
-  SendOutlined,
-  SettingOutlined,
-  StarOutlined,
-  SwapOutlined,
-  ThunderboltOutlined,
-  TranslationOutlined,
-  UnderlineOutlined,
-  UnorderedListOutlined,
-  UndoOutlined,
-  VideoCameraOutlined,
-  WarningOutlined,
-} from "@ant-design/icons";
+  AlertTriangle as AlertTriangleIcon,
+  Aperture as ApertureIcon,
+  ArrowLeft as ArrowLeftIcon,
+  AtSign as AtSignIcon,
+  Bot as BotIcon,
+  Box as BoxIcon,
+  Brain as BrainIcon,
+  Bold as BoldIcon,
+  Check as CheckIcon,
+  CheckCircle2 as CheckCircle2Icon,
+  ChevronDown as ChevronDownIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  CircleHelp as QuestionCircleIcon,
+  Clock3 as Clock3Icon,
+  Cloud as CloudIcon,
+  Copy as CopyIcon,
+  Cpu as CpuIcon,
+  Database as DatabaseIcon,
+  Download as DownloadIcon,
+  ExternalLink as ExternalLinkIcon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
+  File as FileIcon,
+  FileCode2 as FileCode2Icon,
+  FileImage as FileImageIcon,
+  FileJson2 as ModelsJsonIcon,
+  FileMusic as FileMusicIcon,
+  FileText as FileTextIcon,
+  FileVideo as FileVideoIcon,
+  Film as FilmIcon,
+  Flame as FlameIcon,
+  FlipHorizontal as FlipHorizontalIcon,
+  FlipVertical as FlipVerticalIcon,
+  Folder as FolderIcon,
+  FolderKanban as ProjectIcon,
+  FolderOpen as FolderOpenIcon,
+  GitBranch as GitBranchIcon,
+  GitFork as GitForkIcon,
+  Globe as GlobeIcon,
+  Grid as GridIcon,
+  Hexagon as HexagonIcon,
+  ImagePlus as ImagePlusIcon,
+  Images as ImagesIcon,
+  Italic as ItalicIcon,
+  Key as KeyIcon,
+  KeyRound as KeyRoundIcon,
+  Keyboard as KeyboardIcon,
+  Languages as LanguagesIcon,
+  Layers as LayersIcon,
+  LineSquiggle as LineSquiggleIcon,
+  List as ListIcon,
+  ListOrdered as OrderedListIcon,
+  LoaderCircle as LoaderCircleIcon,
+  Lock as LockIcon,
+  Maximize2 as Maximize2Icon,
+  MessageSquare as MessageSquareIcon,
+  MessageSquarePlus as MessageSquarePlusIcon,
+  Minimize2 as Minimize2Icon,
+  MoreHorizontal as MoreHorizontalIcon,
+  Package as PackageIcon,
+  PackageOpen as PackageOpenIcon,
+  PanelLeft as PanelLeftIcon,
+  PanelLeftClose as PanelLeftCloseIcon,
+  PanelLeftOpen as PanelLeftOpenIcon,
+  PanelRight as PanelRightIcon,
+  PanelRightClose as PanelRightCloseIcon,
+  Paperclip as PaperclipIcon,
+  Pencil as PencilIcon,
+  PencilLine as PencilLineIcon,
+  PlayCircle as PlayCircleIcon,
+  Plus as PlusIcon,
+  Puzzle as PuzzleIcon,
+  RefreshCw as RefreshCwIcon,
+  RotateCcw as RotateCcwIcon,
+  RotateCw as RotateCwIcon,
+  Scissors as ScissorsIcon,
+  ScrollText as ScrollTextIcon,
+  Search as SearchIcon,
+  Send as SendIcon,
+  Server as ServerIcon,
+  ServerCog as ServerCogIcon,
+  Settings as SettingsIcon,
+  Settings2 as Settings2Icon,
+  ShieldAlert as ShieldAlertIcon,
+  Sparkles as SparklesIcon,
+  Square as SquareIcon,
+  SquareDashed as SelectionIcon,
+  Terminal as TerminalIcon,
+  Trash2 as Trash2Icon,
+  Underline as UnderlineIcon,
+  X as XIcon,
+  Zap as ZapIcon,
+  type LucideIcon,
+  type LucideProps,
+} from "lucide-react";
 
-// 迁移期间保留原有语义名称，让业务逻辑与图标库切换解耦。
-export const AlertTriangle = WarningOutlined;
-export const Aperture = CameraOutlined;
-export const ArrowLeft = ArrowLeftOutlined;
-export const AtSign = MailOutlined;
-export const Bot = RobotOutlined;
-export const Box = InboxOutlined;
-export const Brain = BulbOutlined;
-export const Bold = BoldOutlined;
-export const Check = CheckOutlined;
-export const CheckCircle2 = CheckCircleOutlined;
-export const ChevronDown = DownOutlined;
-export const ChevronLeft = ArrowLeftOutlined;
-export const ChevronRight = RightOutlined;
-export const Clock3 = ClockCircleOutlined;
-export const Cloud = CloudOutlined;
-export const Copy = CopyOutlined;
-export const Cpu = ControlOutlined;
-export const Database = DatabaseOutlined;
-export const Film = VideoCameraOutlined;
-export const Download = DownloadOutlined;
-export const Grid = AppstoreAddOutlined;
-export const Layers = DeploymentUnitOutlined;
-export const ExternalLink = ExportOutlined;
-export const Maximize2 = ExpandOutlined;
-export const List = ProfileOutlined;
-export const Eye = EyeOutlined;
-export const EyeOff = EyeInvisibleOutlined;
-export const File = FileOutlined;
-export const FileCode2 = CodeOutlined;
-export const FileImage = FileImageOutlined;
-export const FileMusic = CustomerServiceOutlined;
-export const FileText = FileTextOutlined;
-export const FileVideo = VideoCameraOutlined;
-export const Flame = FireOutlined;
-export const FlipHorizontal = SwapOutlined;
-export const FlipVertical = SwapOutlined;
-export const Folder = FolderOutlined;
-export const FolderOpen = FolderOpenOutlined;
-export const GitBranch = BranchesOutlined;
-export const GitFork = ForkOutlined;
-export const Globe = GlobalOutlined;
-export const Hexagon = DeploymentUnitOutlined;
-export const ImagePlus = FileImageOutlined;
-export const Images = PictureOutlined;
-export const Italic = ItalicOutlined;
-export const Key = KeyOutlined;
-export const KeyRound = KeyOutlined;
-export const Lock = LockOutlined;
-export const Languages = TranslationOutlined;
-export const LoaderCircle = LoadingOutlined;
-export const MessageSquare = MessageOutlined;
-export const MessageSquarePlus = MessageOutlined;
-export const Minimize2 = CompressOutlined;
-export const ModelsJson = ApiOutlined;
-export const MoreHorizontal = MoreOutlined;
-export const OrderedList = OrderedListOutlined;
-export const Package = GiftOutlined;
-export const PackageOpen = InboxOutlined;
-export const PanelLeft = LayoutOutlined;
-export const PanelLeftClose = MenuFoldOutlined;
-export const PanelLeftOpen = MenuUnfoldOutlined;
-export const PanelRight = LayoutOutlined;
-export const PanelRightClose = MenuUnfoldOutlined;
-export const Paperclip = PaperClipOutlined;
-export const Pencil = EditOutlined;
-export const PencilLine = FormOutlined;
-export const Plus = PlusOutlined;
-export const PlayCircle = PlayCircleOutlined;
-export const Project = ProjectOutlined;
-export const Puzzle = AppstoreAddOutlined;
-export const QuestionCircle = QuestionCircleOutlined;
-export const RefreshCw = ReloadOutlined;
-export const RotateCcw = UndoOutlined;
-export const RotateCw = RedoOutlined;
-export const ScrollText = FileTextOutlined;
-export const Scissors = ScissorOutlined;
-export const Search = SearchOutlined;
-export const Selection = BorderOutlined;
-export const Send = SendOutlined;
-export const Server = DatabaseOutlined;
-export const ServerCog = SettingOutlined;
-export const Settings = SettingOutlined;
-export const Settings2 = SettingOutlined;
-export const ShieldAlert = SafetyCertificateOutlined;
-export const Sparkles = StarOutlined;
-export const Square = BorderOutlined;
-export const Terminal = CodeOutlined;
-export const Trash2 = DeleteOutlined;
-export const Underline = UnderlineOutlined;
-export const UnorderedList = UnorderedListOutlined;
-export const X = CloseOutlined;
-export const Zap = ThunderboltOutlined;
+// 统一默认尺寸与笔触，既保留原有 1em 布局，也避免各业务模块自行配置后产生视觉漂移。
+function createAppIcon(Icon: LucideIcon): LucideIcon {
+  const AppIcon = forwardRef<SVGSVGElement, LucideProps>(
+    ({ size = "1em", strokeWidth = 1.75, ...props }, ref) =>
+      createElement(Icon, { ref, size, strokeWidth, ...props }),
+  );
+  AppIcon.displayName = `AppIcon(${Icon.displayName ?? Icon.name})`;
+  return AppIcon;
+}
 
-export type AppIcon = typeof SettingOutlined;
+export const AlertTriangle = createAppIcon(AlertTriangleIcon);
+export const Aperture = createAppIcon(ApertureIcon);
+export const ArrowLeft = createAppIcon(ArrowLeftIcon);
+export const AtSign = createAppIcon(AtSignIcon);
+export const Bot = createAppIcon(BotIcon);
+export const Box = createAppIcon(BoxIcon);
+export const Brain = createAppIcon(BrainIcon);
+export const Bold = createAppIcon(BoldIcon);
+export const Check = createAppIcon(CheckIcon);
+export const CheckCircle2 = createAppIcon(CheckCircle2Icon);
+export const ChevronDown = createAppIcon(ChevronDownIcon);
+export const ChevronLeft = createAppIcon(ChevronLeftIcon);
+export const ChevronRight = createAppIcon(ChevronRightIcon);
+export const Clock3 = createAppIcon(Clock3Icon);
+export const Cloud = createAppIcon(CloudIcon);
+export const Copy = createAppIcon(CopyIcon);
+export const Cpu = createAppIcon(CpuIcon);
+export const Database = createAppIcon(DatabaseIcon);
+export const Film = createAppIcon(FilmIcon);
+export const Download = createAppIcon(DownloadIcon);
+export const Grid = createAppIcon(GridIcon);
+export const Layers = createAppIcon(LayersIcon);
+export const ExternalLink = createAppIcon(ExternalLinkIcon);
+export const Maximize2 = createAppIcon(Maximize2Icon);
+export const List = createAppIcon(ListIcon);
+export const Eye = createAppIcon(EyeIcon);
+export const EyeOff = createAppIcon(EyeOffIcon);
+export const File = createAppIcon(FileIcon);
+export const FileCode2 = createAppIcon(FileCode2Icon);
+export const FileImage = createAppIcon(FileImageIcon);
+export const FileMusic = createAppIcon(FileMusicIcon);
+export const FileText = createAppIcon(FileTextIcon);
+export const FileVideo = createAppIcon(FileVideoIcon);
+export const Flame = createAppIcon(FlameIcon);
+export const FlipHorizontal = createAppIcon(FlipHorizontalIcon);
+export const FlipVertical = createAppIcon(FlipVerticalIcon);
+export const Folder = createAppIcon(FolderIcon);
+export const FolderOpen = createAppIcon(FolderOpenIcon);
+export const GitBranch = createAppIcon(GitBranchIcon);
+export const GitFork = createAppIcon(GitForkIcon);
+export const Globe = createAppIcon(GlobeIcon);
+export const Hexagon = createAppIcon(HexagonIcon);
+export const ImagePlus = createAppIcon(ImagePlusIcon);
+export const Images = createAppIcon(ImagesIcon);
+export const Italic = createAppIcon(ItalicIcon);
+export const Key = createAppIcon(KeyIcon);
+export const KeyRound = createAppIcon(KeyRoundIcon);
+export const Keyboard = createAppIcon(KeyboardIcon);
+export const Lock = createAppIcon(LockIcon);
+export const Languages = createAppIcon(LanguagesIcon);
+export const LineSquiggle = createAppIcon(LineSquiggleIcon);
+export const LoaderCircle = createAppIcon(LoaderCircleIcon);
+export const MessageSquare = createAppIcon(MessageSquareIcon);
+export const MessageSquarePlus = createAppIcon(MessageSquarePlusIcon);
+export const Minimize2 = createAppIcon(Minimize2Icon);
+export const ModelsJson = createAppIcon(ModelsJsonIcon);
+export const MoreHorizontal = createAppIcon(MoreHorizontalIcon);
+export const OrderedList = createAppIcon(OrderedListIcon);
+export const Package = createAppIcon(PackageIcon);
+export const PackageOpen = createAppIcon(PackageOpenIcon);
+export const PanelLeft = createAppIcon(PanelLeftIcon);
+export const PanelLeftClose = createAppIcon(PanelLeftCloseIcon);
+export const PanelLeftOpen = createAppIcon(PanelLeftOpenIcon);
+export const PanelRight = createAppIcon(PanelRightIcon);
+export const PanelRightClose = createAppIcon(PanelRightCloseIcon);
+export const Paperclip = createAppIcon(PaperclipIcon);
+export const Pencil = createAppIcon(PencilIcon);
+export const PencilLine = createAppIcon(PencilLineIcon);
+export const Plus = createAppIcon(PlusIcon);
+export const PlayCircle = createAppIcon(PlayCircleIcon);
+export const Project = createAppIcon(ProjectIcon);
+export const Puzzle = createAppIcon(PuzzleIcon);
+export const QuestionCircle = createAppIcon(QuestionCircleIcon);
+export const RefreshCw = createAppIcon(RefreshCwIcon);
+export const RotateCcw = createAppIcon(RotateCcwIcon);
+export const RotateCw = createAppIcon(RotateCwIcon);
+export const ScrollText = createAppIcon(ScrollTextIcon);
+export const Scissors = createAppIcon(ScissorsIcon);
+export const Search = createAppIcon(SearchIcon);
+export const Selection = createAppIcon(SelectionIcon);
+export const Send = createAppIcon(SendIcon);
+export const Server = createAppIcon(ServerIcon);
+export const ServerCog = createAppIcon(ServerCogIcon);
+export const Settings = createAppIcon(SettingsIcon);
+export const Settings2 = createAppIcon(Settings2Icon);
+export const ShieldAlert = createAppIcon(ShieldAlertIcon);
+export const Sparkles = createAppIcon(SparklesIcon);
+export const Square = createAppIcon(SquareIcon);
+export const Terminal = createAppIcon(TerminalIcon);
+export const Trash2 = createAppIcon(Trash2Icon);
+export const Underline = createAppIcon(UnderlineIcon);
+export const UnorderedList = createAppIcon(ListIcon);
+export const X = createAppIcon(XIcon);
+export const Zap = createAppIcon(ZapIcon);
+
+export type AppIcon = LucideIcon;

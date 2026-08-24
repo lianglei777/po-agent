@@ -34,7 +34,7 @@ Ant Design 6 and its enterprise product patterns are the primary reference. Focu
 2. **Quiet surfaces, active states.** At rest the UI is neutral and breathable; blue appears only for focus, links, switches, live state, and explicit status.
 3. **The agent is a tool, not a character.** No personality avatars, no confetti, no cheerleading copy.
 4. **Respect system conventions.** Support reduced motion and keep keyboard paths obvious.
-5. **Ant Design by default.** Use Ant components, icons, tokens, typography, feedback, and interaction patterns for standard UI. The primary `#1677ff` communicates actions and state; custom UI is reserved for real Po Agent domain behavior.
+5. **Ant Design by default.** Use Ant components, tokens, typography, feedback, and interaction patterns for standard UI, with Lucide as the single product icon set. The primary `#1677ff` communicates actions and state; custom UI is reserved for real Po Agent domain behavior.
 6. **Stable workflows over novelty.** Preserve Chat state and established operation paths while central workspace views change; configuration navigation must not interrupt a running conversation.
 7. **Explicit destructive actions.** Important deletion, credential removal, and disconnect operations require confirmation with concrete action language.
 8. **Dialogs close deliberately.** Dialogs remain open on backdrop clicks and Escape; users leave through visible close, cancel, save, or confirmation actions.

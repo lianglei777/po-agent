@@ -28,7 +28,7 @@ import {
   Paperclip,
   Plus,
   Project,
-  Settings2,
+  LineSquiggle,
   FileVideo,
 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
@@ -626,7 +626,7 @@ function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAs
     <div className="absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur">
       <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} />
       <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<Project className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
-      <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<Settings2 className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
+      <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<LineSquiggle className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
       <div className="mx-0.5 h-5 w-px bg-[var(--pl-border)]" />
       <ToolButton title={t.pipeline.canvasZoomOut} icon={<span className="text-base leading-none">−</span>} onClick={onZoomOut} />
       <Slider

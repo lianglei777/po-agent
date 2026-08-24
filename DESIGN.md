@@ -1,6 +1,6 @@
 ---
 name: Po Agent
-description: An Ant Design 6 desktop workspace that preserves Po Agent's precise, dense, developer-controlled workflows.
+description: An Ant Design 6 desktop workspace with a consistent Lucide icon system that preserves Po Agent's precise, dense, developer-controlled workflows.
 colors:
   light:
     workspace: "#f5f5f5"
@@ -42,14 +42,15 @@ motion:
 
 ## Direction
 
-Po Agent fully adopts Ant Design 6 as its standard component library and design language. Ant Design supplies standard controls, icons, typography, spacing, color semantics, interaction patterns, accessibility behavior, and design guidance. Po Agent keeps its domain-specific workspace composition and safety rules: adopting a design system must not change sessions, chat, files, models, Skills, review flows, persistence, or destructive-action semantics.
+Po Agent fully adopts Ant Design 6 as its standard component library and design language. Ant Design supplies standard controls, typography, spacing, color semantics, interaction patterns, accessibility behavior, and design guidance; Lucide supplies the single product icon system. Po Agent keeps its domain-specific workspace composition and safety rules: adopting a design system must not change sessions, chat, files, models, Skills, review flows, persistence, or destructive-action semantics.
 
 ## Sources of truth
 
 - Use the installed `antd` package, its TypeScript types, the official component documentation, and `https://ant.design/llms-full.txt` before relying on remembered APIs.
 - Use Ant Design MCP when available to inspect component APIs, tokens, examples, and migration guidance.
 - `ConfigProvider` owns locale, global component size, and theme tokens; `App` owns contextual feedback APIs; `AntdRegistry` supplies Next.js App Router SSR styles.
-- Prefer Ant Design components and `@ant-design/icons` for standard UI. Keep custom primitives only for Po Agent-specific behavior with no suitable Ant equivalent, such as workspace split handles, chat execution rendering, and the project file tree.
+- Prefer Ant Design components for standard UI and import Lucide icons only through `src/components/icons.ts`. Keep custom primitives only for Po Agent-specific behavior with no suitable Ant equivalent, such as workspace split handles, chat execution rendering, and the project file tree.
+- Product icons default to `1em` and a `1.75` stroke width. Feature code may adjust size through existing classes or props, but should not introduce a second icon library or inconsistent stroke defaults.
 - Compatibility wrappers in `src/components/ui` preserve existing call sites during migration. New standard UI should use Ant Design APIs directly unless a wrapper enforces a real product invariant.
 
 ## Workspace architecture

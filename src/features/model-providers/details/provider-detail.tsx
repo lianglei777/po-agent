@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
 import { Alert, Button, Checkbox, Empty, Input, Select } from "antd";
+import { Eye, EyeOff } from "@/components/icons";
 import {
   API_OPTIONS,
   type ModelDiscoverySuggestion,
@@ -412,9 +412,9 @@ function SecretTextInput({
       className={mono ? "font-ui-mono" : undefined}
       iconRender={(isVisible) =>
         isVisible ? (
-          <EyeInvisibleOutlined aria-label={t.models.hideApiKey} />
+          <EyeOff aria-label={t.models.hideApiKey} />
         ) : (
-          <EyeOutlined aria-label={t.models.showApiKey} />
+          <Eye aria-label={t.models.showApiKey} />
         )
       }
       id={id}

@@ -65,7 +65,7 @@ describe("Ant Design visual foundation", () => {
     expect(provider).toContain("fontWeightStrong: 600");
   });
 
-  test("keeps unsized Ant icons visible", () => {
+  test("keeps Ant component internal icons visible", () => {
     const iconRule = css.slice(
       css.indexOf(".anticon > svg"),
       css.indexOf("html {", css.indexOf(".anticon > svg")),

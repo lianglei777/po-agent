@@ -7,7 +7,7 @@ const readUi = (name: string) =>
   readFileSync(`${root}/src/components/ui/${name}.tsx`, "utf8");
 const readSource = (path: string) => readFileSync(`${root}/${path}`, "utf8");
 
-describe("Ant Design shared UI contract", () => {
+describe("shared UI contract", () => {
   test("keeps only compatibility components with product invariants", () => {
     expect(readUi("dialog")).toContain('from "antd"');
     expect(readUi("textarea")).toContain("Input.TextArea");
@@ -40,13 +40,15 @@ describe("Ant Design shared UI contract", () => {
     expect(resizeHandle).toContain("focus-visible:ring-2");
   });
 
-  test("uses Ant icons and retains only the justified Radix scroll primitive", () => {
+  test("uses Lucide through the shared icon layer and retains only the justified Radix scroll primitive", () => {
     const icons = readSource("src/components/icons.ts");
     const packageJson = readSource("package.json");
 
-    expect(icons).toContain('from "@ant-design/icons"');
+    expect(icons).toContain('from "lucide-react"');
+    expect(icons).toContain("function createAppIcon");
     expect(packageJson).toContain('"@radix-ui/react-scroll-area"');
-    expect(packageJson).not.toContain('"lucide-react"');
+    expect(packageJson).toContain('"lucide-react"');
+    expect(packageJson).not.toContain('"@ant-design/icons"');
     expect(packageJson).not.toContain('"radix-ui"');
     expect(packageJson).not.toContain('"shadcn"');
   });
