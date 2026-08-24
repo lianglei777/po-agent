@@ -5,15 +5,24 @@ import { memo, useCallback, useRef, useState } from "react";
 import { Button, Modal, Spin, message } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, Eye, ImagePlus, Images, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
+import {
+  EMPTY_IMAGE_EDIT_TRANSFORM,
+  flipImagePreview,
+  imagePreviewChanged,
+  imagePreviewTransformCss,
+  rotateImagePreview,
+  type ImageEditTransform,
+} from "../model/image-edit-transform";
 import { calculateImageNodeSize, IMAGE_NODE_SIZE_LIMITS } from "../model/image-node-geometry";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
 import { imageNodePresentation } from "../model/node-interaction";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { ImageAiComposer } from "./image-ai-composer";
+import { ImageEditToolbar } from "./image-edit-toolbar";
 import { CanvasNodeConnectionHandle } from "./shared/canvas-node-connection-handle";
 import { CanvasNodeContextToolbar, CanvasNodeToolbarButton } from "./shared/canvas-node-context-toolbar";
 import { CanvasNodeResizeControl } from "./shared/canvas-node-resize-control";
@@ -43,6 +52,9 @@ export function ImageCanvasNode({
   const modifyComposerOpen = useCanvasStore((state) => state.imageComposerNodeId === id);
   const openImageComposer = useCanvasStore((state) => state.openImageComposer);
   const closeImageComposer = useCanvasStore((state) => state.closeImageComposer);
+  const editing = useCanvasStore((state) => state.editingNodeId === id);
+  const startEditingNode = useCanvasStore((state) => state.startEditingNode);
+  const stopEditingNode = useCanvasStore((state) => state.stopEditingNode);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
@@ -57,6 +69,7 @@ export function ImageCanvasNode({
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editTransform, setEditTransform] = useState<ImageEditTransform>(EMPTY_IMAGE_EDIT_TRANSFORM);
   const [imageStatus, setImageStatus] = useState<{ url: string | null; state: ImageLoadState }>({
     url: null,
     state: "loading",
@@ -139,16 +152,28 @@ export function ImageCanvasNode({
     anchor.click();
   };
 
+  const beginEditing = () => {
+    setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
+    startEditingNode(id);
+  };
+
+  const cancelEditing = () => {
+    setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
+    stopEditingNode(id);
+  };
+
   return (
     <article
       className={
         "group relative h-full min-h-[120px] w-full min-w-[120px] overflow-visible " +
-        (dragging ? "cursor-grabbing" : "cursor-grab")
+        (editing ? "cursor-default" : dragging ? "cursor-grabbing" : "cursor-grab")
       }
       data-selected={selected}
       data-dragging={dragging}
+      data-editing={editing}
       aria-label={canvas.name}
       onDragOver={(event) => {
+        if (editing) return;
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "copy";
@@ -159,6 +184,7 @@ export function ImageCanvasNode({
         if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setDragActive(false);
       }}
       onDrop={(event) => {
+        if (editing) return;
         event.preventDefault();
         event.stopPropagation();
         setDragActive(false);
@@ -178,20 +204,27 @@ export function ImageCanvasNode({
         }}
       />
 
-      <CanvasNodeResizeControl
-        nodeId={id}
-        minWidth={IMAGE_NODE_SIZE_LIMITS.minWidth}
-        minHeight={IMAGE_NODE_SIZE_LIMITS.minHeight}
-        maxWidth={IMAGE_NODE_SIZE_LIMITS.maxWidth}
-        maxHeight={IMAGE_NODE_SIZE_LIMITS.maxHeight}
-        keepAspectRatio={Boolean(dimensions && hasImage)}
-      />
+      {!editing ? (
+        <CanvasNodeResizeControl
+          nodeId={id}
+          minWidth={IMAGE_NODE_SIZE_LIMITS.minWidth}
+          minHeight={IMAGE_NODE_SIZE_LIMITS.minHeight}
+          maxWidth={IMAGE_NODE_SIZE_LIMITS.maxWidth}
+          maxHeight={IMAGE_NODE_SIZE_LIMITS.maxHeight}
+          keepAspectRatio={Boolean(dimensions && hasImage)}
+        />
+      ) : null}
 
-      <CanvasNodeConnectionHandle type="target" position={Position.Left} label={t.pipeline.nodeImageInputHandle} />
-      <CanvasNodeConnectionHandle type="source" position={Position.Right} label={t.pipeline.nodeImageOutputHandle} />
+      {!editing ? (
+        <>
+          <CanvasNodeConnectionHandle type="target" position={Position.Left} label={t.pipeline.nodeImageInputHandle} />
+          <CanvasNodeConnectionHandle type="source" position={Position.Right} label={t.pipeline.nodeImageOutputHandle} />
+        </>
+      ) : null}
 
-      {presentation.showToolbar && !deferMediaLoad ? (
+      {presentation.showToolbar && !deferMediaLoad && !editing ? (
         <CanvasNodeContextToolbar offset={54}>
+          <CanvasNodeToolbarButton label={t.pipeline.nodeImageEdit} icon={<Pencil className="size-4" />} onClick={beginEditing} />
           <CanvasNodeToolbarButton
             label={t.pipeline.imageAiModify}
             icon={<Sparkles className="size-4" />}
@@ -203,6 +236,17 @@ export function ImageCanvasNode({
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
           <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
         </CanvasNodeContextToolbar>
+      ) : null}
+
+      {selected && hasImage && !dragging && editing ? (
+        <ImageEditToolbar
+          onRotateLeft={() => setEditTransform((current) => rotateImagePreview(current, "left"))}
+          onRotateRight={() => setEditTransform((current) => rotateImagePreview(current, "right"))}
+          onFlipHorizontal={() => setEditTransform((current) => flipImagePreview(current, "horizontal"))}
+          onFlipVertical={() => setEditTransform((current) => flipImagePreview(current, "vertical"))}
+          onReset={() => setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM)}
+          onCancel={cancelEditing}
+        />
       ) : null}
 
       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full">
@@ -236,15 +280,17 @@ export function ImageCanvasNode({
       <section
         className={
           "nowheel relative h-full overflow-hidden rounded-[20px] border bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] transition-[border-color,box-shadow] duration-200 " +
-          (selected || dragging
-            ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]"
-            : "border-transparent group-hover:border-[var(--pl-border)]") +
+          (editing
+            ? "nodrag !border-[var(--pl-accent)] shadow-[0_0_0_1px_var(--pl-accent)] "
+            : selected || dragging
+              ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]"
+              : "border-transparent group-hover:border-[var(--pl-border)]") +
           (dragActive ? " !border-[var(--pl-accent)]" : "")
         }
         onDoubleClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (hasImage) focusNode();
+          if (hasImage && !editing) focusNode();
         }}
       >
         {uploading ? (
@@ -277,9 +323,21 @@ export function ImageCanvasNode({
                 <CanvasImageMedia
                   src={mediaUrl}
                   alt={canvas.name}
+                  editing={editing}
+                  transform={imagePreviewTransformCss(editTransform, {
+                    width: node.width ?? 360,
+                    height: node.height ?? 300,
+                  })}
                   onReady={handleImageReady}
                   onError={handleImageError}
                 />
+                {editing ? (
+                  <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)]/90 px-2.5 py-1 text-caption text-[var(--pl-text-secondary)] shadow-sm">
+                    {imagePreviewChanged(editTransform)
+                      ? t.pipeline.nodeImageEditChangedHint
+                      : t.pipeline.nodeImageEditHint}
+                  </span>
+                ) : null}
               </>
             )}
           </div>
@@ -295,7 +353,7 @@ export function ImageCanvasNode({
         )}
       </section>
 
-      {presentation.showComposer ? (
+      {presentation.showComposer && !editing ? (
         <ImageAiComposer
           key={id}
           nodeId={id}
@@ -308,7 +366,7 @@ export function ImageCanvasNode({
         />
       ) : null}
 
-      {selected && hasImage && !dragging && modifyComposerOpen ? (
+      {selected && hasImage && !dragging && modifyComposerOpen && !editing ? (
         <ImageAiComposer
           key={`${id}:modify`}
           nodeId={id}
@@ -349,11 +407,15 @@ export function ImageCanvasNode({
 const CanvasImageMedia = memo(function CanvasImageMedia({
   src,
   alt,
+  editing,
+  transform,
   onReady,
   onError,
 }: {
   src: string;
   alt: string;
+  editing: boolean;
+  transform: string;
   onReady: (width: number, height: number) => void;
   onError: () => void;
 }) {
@@ -365,7 +427,11 @@ const CanvasImageMedia = memo(function CanvasImageMedia({
       unoptimized
       sizes="900px"
       draggable={false}
-      className="pointer-events-none select-none object-cover"
+      className={
+        "pointer-events-none select-none transition-transform duration-200 motion-reduce:transition-none " +
+        (editing ? "object-contain" : "object-cover")
+      }
+      style={{ transform: editing ? transform : undefined }}
       onLoad={(event) => onReady(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight)}
       onError={onError}
     />

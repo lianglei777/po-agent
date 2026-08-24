@@ -65,6 +65,7 @@ import {
   SendOutlined,
   SettingOutlined,
   StarOutlined,
+  SwapOutlined,
   ThunderboltOutlined,
   TranslationOutlined,
   UnderlineOutlined,
@@ -109,6 +110,8 @@ export const FileMusic = CustomerServiceOutlined;
 export const FileText = FileTextOutlined;
 export const FileVideo = VideoCameraOutlined;
 export const Flame = FireOutlined;
+export const FlipHorizontal = SwapOutlined;
+export const FlipVertical = SwapOutlined;
 export const Folder = FolderOutlined;
 export const FolderOpen = FolderOpenOutlined;
 export const GitBranch = BranchesOutlined;
