@@ -39,4 +39,13 @@ export class GenerationAssetService {
       ref: { type: "workspace-file" as const, relativePath },
     };
   }
+
+  async read(input: { sessionId: string; relativePath: string }) {
+    const session = await this.runs.requireSession(input.sessionId);
+    return this.files.readInput({
+      cwd: session.cwd,
+      relativePath: input.relativePath,
+      slot: "preview",
+    });
+  }
 }

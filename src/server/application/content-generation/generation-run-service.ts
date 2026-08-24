@@ -77,6 +77,14 @@ export class GenerationRunService {
     return session;
   }
 
+  // pipeline 等合成 session 不经过 Pi SessionRepository，需手动确保记录存在。
+  async ensureSession(session: GenerationSession): Promise<void> {
+    await this.ready;
+    const existing = await this.resolveSession(session.id);
+    if (existing && !existing.deletedAt && existing.cwd === session.cwd) return;
+    await this.repository.upsertSession(session);
+  }
+
   async createRun(
     input: CreateGenerationRunInput,
   ): Promise<GenerationRunView & { created: boolean }> {
@@ -176,6 +184,11 @@ export class GenerationRunService {
       );
     }
     return (await this.getRun(id))!;
+  }
+
+  async getArtifact(id: string) {
+    await this.ready;
+    return this.repository.getArtifact(id);
   }
 
   async getRun(id: string): Promise<GenerationRunView | null> {

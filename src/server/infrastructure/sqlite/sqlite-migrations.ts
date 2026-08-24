@@ -203,4 +203,194 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         ON generation_runs(session_id, created_at DESC);
     `,
   },
+  {
+    version: 8,
+    name: "pipeline_tables",
+    sql: `
+      CREATE TABLE pipeline_projects (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        art_direction_json TEXT,
+        model_settings_json TEXT,
+        prompt_config_json TEXT,
+        status TEXT NOT NULL,
+        cover_artifact_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_projects_workspace_idx
+        ON pipeline_projects(workspace_id, updated_at DESC);
+      CREATE TABLE pipeline_assets (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('character', 'scene', 'prop')),
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        attributes_json TEXT,
+        selected_artifact_id TEXT,
+        locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+        starred INTEGER NOT NULL DEFAULT 0 CHECK (starred IN (0, 1)),
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_assets_project_type_idx
+        ON pipeline_assets(project_id, type);
+      CREATE TABLE pipeline_asset_variants (
+        id TEXT PRIMARY KEY,
+        asset_id TEXT NOT NULL REFERENCES pipeline_assets(id) ON DELETE CASCADE,
+        artifact_id TEXT,
+        run_id TEXT,
+        prompt TEXT NOT NULL,
+        is_favorited INTEGER NOT NULL DEFAULT 0 CHECK (is_favorited IN (0, 1)),
+        is_uploaded_source INTEGER NOT NULL DEFAULT 0 CHECK (is_uploaded_source IN (0, 1)),
+        upload_type TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_asset_variants_asset_idx
+        ON pipeline_asset_variants(asset_id, created_at DESC);
+      CREATE TABLE pipeline_frames (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        scene_id TEXT,
+        character_ids_json TEXT NOT NULL DEFAULT '[]',
+        prop_ids_json TEXT NOT NULL DEFAULT '[]',
+        frame_index INTEGER NOT NULL,
+        visual_description TEXT,
+        dialogue_structured_json TEXT,
+        camera_movement_json TEXT,
+        blocking_json TEXT,
+        lighting_json TEXT,
+        audio_note_json TEXT,
+        shot_size TEXT,
+        transition_hint TEXT,
+        image_prompt TEXT,
+        video_prompt TEXT,
+        selected_image_artifact_id TEXT,
+        final_take_run_id TEXT,
+        locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_frames_project_index_idx
+        ON pipeline_frames(project_id, frame_index);
+      CREATE TABLE pipeline_canvas_nodes (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('script', 'character', 'scene', 'prop', 'storyboard', 'video')),
+        entity_id TEXT NOT NULL,
+        position_x REAL NOT NULL,
+        position_y REAL NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_nodes_project_idx
+        ON pipeline_canvas_nodes(project_id, type);
+      CREATE UNIQUE INDEX pipeline_canvas_nodes_entity_unique
+        ON pipeline_canvas_nodes(project_id, type, entity_id);
+      CREATE TABLE pipeline_canvas_edges (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        source_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes(id) ON DELETE CASCADE,
+        target_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes(id) ON DELETE CASCADE,
+        edge_type TEXT NOT NULL CHECK (edge_type IN ('references', 'source_of', 'generates', 'derives_from'))
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_edges_project_idx
+        ON pipeline_canvas_edges(project_id);
+      CREATE INDEX pipeline_canvas_edges_source_idx
+        ON pipeline_canvas_edges(source_node_id);
+      CREATE INDEX pipeline_canvas_edges_target_idx
+        ON pipeline_canvas_edges(target_node_id);
+    `,
+  },
+
+  {
+    version: 9,
+    name: "pipeline_media_canvas",
+    // 旧表的 CHECK 约束无法 ALTER；重建节点/边，同时保留已有 Pipeline 数据。
+    disableForeignKeys: true,
+    sql: `
+      CREATE TABLE pipeline_canvas_nodes_v9 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        type TEXT NOT NULL CHECK (type IN ('text', 'image', 'video', 'audio', 'script', 'character', 'scene', 'prop', 'storyboard')),
+        entity_id TEXT NOT NULL,
+        position_x REAL NOT NULL,
+        position_y REAL NOT NULL,
+        width REAL,
+        height REAL,
+        data_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO pipeline_canvas_nodes_v9(
+        id, project_id, type, entity_id, position_x, position_y, width, height, data_json, created_at, updated_at
+      )
+      SELECT id, project_id, type, entity_id, position_x, position_y, NULL, NULL, NULL, created_at, created_at
+      FROM pipeline_canvas_nodes;
+
+      CREATE TABLE pipeline_canvas_edges_v9 (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        source_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes_v9(id) ON DELETE CASCADE,
+        target_node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes_v9(id) ON DELETE CASCADE,
+        edge_type TEXT NOT NULL CHECK (edge_type IN ('references', 'source_of', 'generates', 'derives_from')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      INSERT INTO pipeline_canvas_edges_v9(
+        id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at
+      )
+      SELECT id, project_id, source_node_id, target_node_id, edge_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      FROM pipeline_canvas_edges;
+
+      DROP TABLE pipeline_canvas_edges;
+      DROP TABLE pipeline_canvas_nodes;
+      ALTER TABLE pipeline_canvas_nodes_v9 RENAME TO pipeline_canvas_nodes;
+      ALTER TABLE pipeline_canvas_edges_v9 RENAME TO pipeline_canvas_edges;
+
+      CREATE INDEX pipeline_canvas_nodes_project_idx
+        ON pipeline_canvas_nodes(project_id, type);
+      CREATE UNIQUE INDEX pipeline_canvas_nodes_entity_unique
+        ON pipeline_canvas_nodes(project_id, type, entity_id);
+      CREATE INDEX pipeline_canvas_edges_project_idx
+        ON pipeline_canvas_edges(project_id);
+      CREATE INDEX pipeline_canvas_edges_source_idx
+        ON pipeline_canvas_edges(source_node_id);
+      CREATE INDEX pipeline_canvas_edges_target_idx
+        ON pipeline_canvas_edges(target_node_id);
+
+      CREATE TABLE pipeline_canvas_drafts (
+        project_id TEXT PRIMARY KEY REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        viewport_x REAL NOT NULL DEFAULT 0,
+        viewport_y REAL NOT NULL DEFAULT 0,
+        viewport_zoom REAL NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE pipeline_canvas_workflows (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        template_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_workflows_project_idx
+        ON pipeline_canvas_workflows(project_id, updated_at DESC);
+    `,
+  },
+  {
+    version: 10,
+    name: "pipeline_canvas_revision",
+    sql: `
+      ALTER TABLE pipeline_canvas_drafts
+      ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

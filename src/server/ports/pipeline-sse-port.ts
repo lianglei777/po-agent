@@ -1,0 +1,25 @@
+export type PipelineSseEventType =
+  | "node_created"
+  | "node_updated"
+  | "node_deleted"
+  | "edge_created"
+  | "edge_deleted"
+  | "asset_updated"
+  | "frame_updated"
+  | "generation_progress"
+  | "generation_completed"
+  | "generation_failed"
+  | "agent_message"
+  | "agent_thinking"
+  | "agent_tool_call";
+
+export interface PipelineSseEvent {
+  type: PipelineSseEventType;
+  projectId: string;
+  payload: unknown;
+}
+
+export interface PipelineSsePort {
+  emit(event: PipelineSseEvent): void;
+  subscribe(projectId: string, listener: (event: PipelineSseEvent) => void): () => void;
+}

@@ -70,6 +70,28 @@ describe("NodeGenerationFileStore", () => {
     );
   });
 
+  it("keeps Pipeline Studio inputs and outputs in the portable project folder", async () => {
+    await fs.mkdir(path.join(cwd, ".pipeline-studio"));
+    await fs.writeFile(path.join(cwd, ".pipeline-studio", "project.json"), "{}");
+
+    const inputPath = await store.saveInput({
+      cwd,
+      name: "reference.png",
+      data: new Uint8Array([1, 2]),
+    });
+    const outputPath = await store.saveOutput({
+      cwd,
+      runId: "run-local",
+      nameHint: "result",
+      index: 0,
+      extension: "png",
+      data: new Uint8Array([3, 4]),
+    });
+
+    expect(inputPath).toMatch(/^assets[\\/]imports[\\/].+-reference\.png$/);
+    expect(outputPath).toBe(path.join("generated", "run-local", "result-1.png"));
+  });
+
   it("uses a safe fallback for Windows reserved output names", async () => {
     const relativePath = await store.saveOutput({
       cwd,

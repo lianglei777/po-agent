@@ -19,11 +19,10 @@ export class NodeGenerationFileStore implements GenerationFileStore {
         413,
       );
     }
-    const directory = path.join(
-      path.resolve(input.cwd),
-      ".po-agent",
-      "generation-inputs",
-    );
+    const root = path.resolve(input.cwd);
+    const directory = await isPipelineProject(root)
+      ? path.join(root, "assets", "imports")
+      : path.join(root, ".po-agent", "generation-inputs");
     await fs.mkdir(directory, { recursive: true });
     const extension = path.extname(input.name).toLowerCase();
     const safeName = path.basename(input.name, extension)
@@ -79,12 +78,10 @@ export class NodeGenerationFileStore implements GenerationFileStore {
     if (!/^[a-zA-Z0-9_-]+$/.test(input.runId)) {
       throw new AppError("VALIDATION_ERROR", "Invalid generation run ID", 400);
     }
-    const directory = path.join(
-      path.resolve(input.cwd),
-      ".po-agent",
-      "generated",
-      input.runId,
-    );
+    const root = path.resolve(input.cwd);
+    const directory = await isPipelineProject(root)
+      ? path.join(root, "generated", input.runId)
+      : path.join(root, ".po-agent", "generated", input.runId);
     await fs.mkdir(directory, { recursive: true });
     const extension = safeExtension(input.extension);
     const filePath = path.join(
@@ -155,4 +152,13 @@ function mimeForPath(filePath: string): string {
     ".m4a": "audio/mp4",
   } as Record<string, string>)[path.extname(filePath).toLowerCase()] ??
     "application/octet-stream";
+}
+
+async function isPipelineProject(root: string) {
+  try {
+    await fs.access(path.join(root, ".pipeline-studio", "project.json"));
+    return true;
+  } catch {
+    return false;
+  }
 }

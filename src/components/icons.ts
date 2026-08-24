@@ -3,6 +3,7 @@ import {
   AppstoreAddOutlined,
   ArrowLeftOutlined,
   BorderOutlined,
+  BoldOutlined,
   BranchesOutlined,
   BulbOutlined,
   CameraOutlined,
@@ -23,6 +24,7 @@ import {
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
+  ExpandOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
   FileImageOutlined,
@@ -36,7 +38,9 @@ import {
   GiftOutlined,
   GlobalOutlined,
   InboxOutlined,
+  ItalicOutlined,
   KeyOutlined,
+  LockOutlined,
   LayoutOutlined,
   LoadingOutlined,
   MailOutlined,
@@ -44,9 +48,12 @@ import {
   MenuUnfoldOutlined,
   MessageOutlined,
   MoreOutlined,
- PaperClipOutlined,
- PictureOutlined,
- PlusOutlined,
+  OrderedListOutlined,
+  ProjectOutlined,
+  PaperClipOutlined,
+  PictureOutlined,
+  ProfileOutlined,
+  PlusOutlined,
   PlayCircleOutlined,
  QuestionCircleOutlined,
  RedoOutlined,
@@ -58,8 +65,11 @@ import {
   SendOutlined,
   SettingOutlined,
   StarOutlined,
+  SwapOutlined,
   ThunderboltOutlined,
   TranslationOutlined,
+  UnderlineOutlined,
+  UnorderedListOutlined,
   UndoOutlined,
   VideoCameraOutlined,
   WarningOutlined,
@@ -73,16 +83,24 @@ export const AtSign = MailOutlined;
 export const Bot = RobotOutlined;
 export const Box = InboxOutlined;
 export const Brain = BulbOutlined;
+export const Bold = BoldOutlined;
 export const Check = CheckOutlined;
 export const CheckCircle2 = CheckCircleOutlined;
 export const ChevronDown = DownOutlined;
+export const ChevronLeft = ArrowLeftOutlined;
 export const ChevronRight = RightOutlined;
 export const Clock3 = ClockCircleOutlined;
 export const Cloud = CloudOutlined;
 export const Copy = CopyOutlined;
 export const Cpu = ControlOutlined;
+export const Database = DatabaseOutlined;
+export const Film = VideoCameraOutlined;
 export const Download = DownloadOutlined;
+export const Grid = AppstoreAddOutlined;
+export const Layers = DeploymentUnitOutlined;
 export const ExternalLink = ExportOutlined;
+export const Maximize2 = ExpandOutlined;
+export const List = ProfileOutlined;
 export const Eye = EyeOutlined;
 export const EyeOff = EyeInvisibleOutlined;
 export const File = FileOutlined;
@@ -92,6 +110,8 @@ export const FileMusic = CustomerServiceOutlined;
 export const FileText = FileTextOutlined;
 export const FileVideo = VideoCameraOutlined;
 export const Flame = FireOutlined;
+export const FlipHorizontal = SwapOutlined;
+export const FlipVertical = SwapOutlined;
 export const Folder = FolderOutlined;
 export const FolderOpen = FolderOpenOutlined;
 export const GitBranch = BranchesOutlined;
@@ -100,8 +120,10 @@ export const Globe = GlobalOutlined;
 export const Hexagon = DeploymentUnitOutlined;
 export const ImagePlus = FileImageOutlined;
 export const Images = PictureOutlined;
+export const Italic = ItalicOutlined;
 export const Key = KeyOutlined;
 export const KeyRound = KeyOutlined;
+export const Lock = LockOutlined;
 export const Languages = TranslationOutlined;
 export const LoaderCircle = LoadingOutlined;
 export const MessageSquare = MessageOutlined;
@@ -109,6 +131,7 @@ export const MessageSquarePlus = MessageOutlined;
 export const Minimize2 = CompressOutlined;
 export const ModelsJson = ApiOutlined;
 export const MoreHorizontal = MoreOutlined;
+export const OrderedList = OrderedListOutlined;
 export const Package = GiftOutlined;
 export const PackageOpen = InboxOutlined;
 export const PanelLeft = LayoutOutlined;
@@ -121,6 +144,7 @@ export const Pencil = EditOutlined;
 export const PencilLine = FormOutlined;
 export const Plus = PlusOutlined;
 export const PlayCircle = PlayCircleOutlined;
+export const Project = ProjectOutlined;
 export const Puzzle = AppstoreAddOutlined;
 export const QuestionCircle = QuestionCircleOutlined;
 export const RefreshCw = ReloadOutlined;
@@ -139,6 +163,8 @@ export const Sparkles = StarOutlined;
 export const Square = BorderOutlined;
 export const Terminal = CodeOutlined;
 export const Trash2 = DeleteOutlined;
+export const Underline = UnderlineOutlined;
+export const UnorderedList = UnorderedListOutlined;
 export const X = CloseOutlined;
 export const Zap = ThunderboltOutlined;
 

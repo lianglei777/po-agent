@@ -279,7 +279,172 @@ body {
   *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
   }
+}
+
+/* ── Pipeline 工作台设计 Token ──
+   独立的 --pl-* CSS 变量命名空间，不依赖聊天工作区的变量。
+   参考 LumenX 的玻璃质感和 border 分割风格，但配色更克制。 */
+:root {
+  --pl-surface: #1a1a2e;
+  --pl-surface-glass: rgba(26, 26, 46, 0.6);
+  --pl-surface-elevated: #222238;
+  --pl-surface-subtle: #16162a;
+  --pl-surface-hover: #2a2a44;
+  --pl-border: rgba(255, 255, 255, 0.08);
+  --pl-border-glass: rgba(255, 255, 255, 0.06);
+  --pl-border-strong: rgba(255, 255, 255, 0.15);
+  --pl-text: #f3f4f6;
+  --pl-text-secondary: #9ca3af;
+  --pl-text-muted: #6b7280;
+  --pl-accent: #818cf8;
+  --pl-accent-hover: #a5b4fc;
+  --pl-accent-soft: rgba(129, 140, 248, 0.1);
+  --pl-ready: #34d399;
+  --pl-warn: #fbbf24;
+  --pl-idle: #4b5563;
+  --pl-error: #f87171;
+  --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pl-surface: #1a1a2e;
+    --pl-surface-glass: rgba(26, 26, 46, 0.6);
+    --pl-surface-elevated: #222238;
+    --pl-surface-subtle: #16162a;
+    --pl-surface-hover: #2a2a44;
+    --pl-border: rgba(255, 255, 255, 0.08);
+    --pl-border-glass: rgba(255, 255, 255, 0.06);
+    --pl-border-strong: rgba(255, 255, 255, 0.15);
+    --pl-text: #f3f4f6;
+    --pl-text-secondary: #9ca3af;
+    --pl-text-muted: #6b7280;
+    --pl-accent: #818cf8;
+    --pl-accent-hover: #a5b4fc;
+    --pl-accent-soft: rgba(129, 140, 248, 0.1);
+    --pl-ready: #34d399;
+    --pl-warn: #fbbf24;
+    --pl-idle: #4b5563;
+    --pl-error: #f87171;
+    --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* Pipeline Studio 使用独立深色工作台主题，避免跟随 Agent 工作区的浅色变量。 */
+.pipeline-studio-shell {
+  --pl-sidebar: #0d0f12;
+  --pl-surface: #101214;
+  --pl-surface-glass: #111419;
+  --pl-surface-elevated: #171a1f;
+  --pl-surface-subtle: #0c0e11;
+  --pl-surface-hover: #1c222a;
+  --pl-project-card: #14171b;
+  --pl-border: #252a32;
+  --pl-border-glass: #20252c;
+  --pl-border-strong: #39414c;
+  --pl-text: #f5f8fc;
+  --pl-text-secondary: #aab4c0;
+  --pl-text-muted: #6f7b89;
+  --pl-accent: #168cff;
+  --pl-accent-hover: #3da2ff;
+  --pl-accent-soft: rgb(22 140 255 / 14%);
+  --pl-ready: #49c98f;
+  --pl-warn: #e9b949;
+  --pl-idle: #586473;
+  --pl-error: #ff7875;
+  --pl-shadow-card: 0 10px 28px rgb(0 0 0 / 18%);
+  --pl-shadow-hover: 0 18px 44px rgb(0 0 0 / 28%);
+  color-scheme: dark;
+}
+
+.pipeline-rich-text-editor,
+.pipeline-rich-text-editor > div,
+.pipeline-rich-text-editor .tiptap {
+  height: 100%;
+}
+
+.pipeline-rich-text-editor .tiptap {
+  overflow-y: auto;
+  border-radius: 20px;
+  padding: 20px;
+  color: var(--pl-text-secondary);
+  caret-color: var(--pl-text);
+  outline: none;
+}
+
+.pipeline-rich-text-editor .tiptap p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--pl-text-muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.pipeline-rich-text-empty {
+  color: var(--pl-text-muted);
+}
+
+.pipeline-rich-text-content {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.pipeline-rich-text-content > :first-child {
+  margin-top: 0;
+}
+
+.pipeline-rich-text-content > :last-child {
+  margin-bottom: 0;
+}
+
+.pipeline-rich-text-content p {
+  margin: 0 0 0.55em;
+}
+
+.pipeline-rich-text-content h1,
+.pipeline-rich-text-content h2,
+.pipeline-rich-text-content h3 {
+  margin: 0.7em 0 0.35em;
+  color: var(--pl-text);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.pipeline-rich-text-content h1 {
+  font-size: 1.5em;
+}
+
+.pipeline-rich-text-content h2 {
+  font-size: 1.3em;
+}
+
+.pipeline-rich-text-content h3 {
+  font-size: 1.12em;
+}
+
+.pipeline-rich-text-content ul,
+.pipeline-rich-text-content ol {
+  margin: 0.4em 0 0.65em;
+  padding-left: 1.45em;
+}
+
+.pipeline-rich-text-content ul {
+  list-style: disc;
+}
+
+.pipeline-rich-text-content ol {
+  list-style: decimal;
+}
+
+.pipeline-rich-text-content li {
+  margin: 0.2em 0;
+}
+
+.pipeline-rich-text-content li > p {
+  margin: 0;
 }

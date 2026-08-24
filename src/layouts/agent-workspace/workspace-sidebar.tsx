@@ -1,4 +1,5 @@
 import {
+  Film,
   Languages,
   PanelLeftClose,
   Settings,
@@ -8,6 +9,7 @@ import { Button, Tooltip } from "antd";
 import { ProjectNavigation } from "@/features/sessions/project-navigation";
 import type { SessionNavigationController } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
+import { useWorkspaceMode } from "@/layouts/workspace-mode-state";
 import type { WorkspaceView } from "./workspace-navigation";
 
 export type WorkspaceSidebarProps = {
@@ -26,6 +28,7 @@ export function WorkspaceSidebar({
   onToggleCompact,
 }: WorkspaceSidebarProps) {
   const { locale, setLocale, t } = useI18n();
+  const setMode = useWorkspaceMode((s) => s.setMode);
   const nextLocale = locale === "zh" ? "en" : "zh";
 
   return (
@@ -71,6 +74,25 @@ export function WorkspaceSidebar({
           compact ? "justify-center gap-1" : "gap-1"
         }`}
       >
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement={compact ? "right" : "top"}
+          title={t.pipeline.enterPipeline}
+        >
+          <Button
+            aria-label={t.pipeline.enterPipeline}
+            className={
+              compact
+                ? "size-6! shrink-0! p-0!"
+                : "size-8! shrink-0! p-0!"
+            }
+            htmlType="button"
+            icon={<Film className="size-4" />}
+            onClick={() => setMode("pipeline")}
+            size="small"
+            type="text"
+          />
+        </Tooltip>
         <SidebarIconAction
           active={activeView === "model-provider"}
           compact={compact}
