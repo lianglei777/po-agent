@@ -2,16 +2,13 @@
 
 import { memo } from "react";
 import { Button, Input, Tooltip } from "antd";
-import { Handle, NodeResizer, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { CanvasNode } from "@/contracts/pipeline";
+import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { Copy, FileMusic, Images, Trash2, FileVideo } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
+import type { StudioFlowNode } from "../model/studio-flow-nodes";
 import { useCanvasStore } from "../state/canvas-store";
 import { TextCanvasNode } from "./text-canvas-node";
 import { ImageCanvasNode } from "./image-canvas-node";
-
-export type StudioFlowNodeData = { canvasNode: CanvasNode } & Record<string, unknown>;
-export type StudioFlowNode = Node<StudioFlowNodeData, "studio">;
 
 const TYPE_META = {
   image: { Icon: Images },

@@ -6,6 +6,7 @@ import {
   BackgroundVariant,
   MiniMap,
   ReactFlow,
+  applyNodeChanges,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -33,8 +34,8 @@ import {
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
-import { studioNodeTypes, type StudioFlowNode } from "../nodes/studio-canvas-node";
-import { canvasNodeDragHandle } from "../model/node-interaction";
+import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
+import { studioNodeTypes } from "../nodes/studio-canvas-node";
 
 const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
 
@@ -97,6 +98,7 @@ export function StudioCanvas({
   const [placeholderPanel, setPlaceholderPanel] = useState<PlaceholderPanel>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(projectTitle);
+  const [reactFlowNodes, setReactFlowNodes] = useState<StudioFlowNode[]>([]);
   const defaultNodeNames = useMemo<Record<CanvasMediaType, string>>(() => ({
     text: t.pipeline.nodeText,
     image: t.pipeline.nodeImage,
@@ -104,17 +106,11 @@ export function StudioCanvas({
     audio: t.pipeline.nodeAudio,
   }), [t.pipeline.nodeAudio, t.pipeline.nodeImage, t.pipeline.nodeText, t.pipeline.nodeVideo]);
 
-  const flowNodes = useMemo<StudioFlowNode[]>(() => nodes.map((node) => ({
-    id: node.id,
-    type: "studio",
-    position: { x: node.positionX, y: node.positionY },
-    data: { canvasNode: node },
-    selected: selectedNodeIds.includes(node.id),
-    draggable: interactionMode === "select" && editingNodeId !== node.id,
-    style: { width: node.width ?? 320, height: node.height ?? 220 },
-    // 文本和图片节点自身划分 nodrag 控件，其余媒体节点暂时仍只允许从标题拖动。
-    dragHandle: canvasNodeDragHandle(node.data?.type),
-  })), [editingNodeId, interactionMode, nodes, selectedNodeIds]);
+  const flowNodes = useMemo(() => reconcileStudioFlowNodes(reactFlowNodes, nodes, {
+    selectedNodeIds,
+    editingNodeId,
+    interactionMode,
+  }), [editingNodeId, interactionMode, nodes, reactFlowNodes, selectedNodeIds]);
 
   const flowEdges = useMemo<Edge[]>(() => connectionsVisible ? edges.map((edge) => ({
     id: edge.id,
@@ -259,6 +255,15 @@ export function StudioCanvas({
   }, [copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
+    setReactFlowNodes((currentNodes) => {
+      const state = store.getState();
+      const syncedNodes = reconcileStudioFlowNodes(currentNodes, state.nodes, {
+        selectedNodeIds: state.selectedNodeIds,
+        editingNodeId: state.editingNodeId,
+        interactionMode: state.interactionMode,
+      });
+      return applyNodeChanges(changes, syncedNodes);
+    });
     let nextSelection: Set<string> | null = null;
     for (const change of changes) {
       if (change.type === "select") {
