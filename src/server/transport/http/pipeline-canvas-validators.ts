@@ -3,8 +3,11 @@ import { AppError } from "@/server/domain/app-error";
 
 const NODE_TYPES = new Set(["text", "image", "video", "audio", "script", "character", "scene", "prop", "storyboard"]);
 const EDGE_TYPES = new Set(["references", "source_of", "generates", "derives_from"]);
-const RICH_TEXT_NODE_TYPES = new Set(["doc", "paragraph", "heading", "bulletList", "orderedList", "listItem", "hardBreak", "text"]);
+const RICH_TEXT_NODE_TYPES = new Set(["doc", "paragraph", "heading", "bulletList", "orderedList", "listItem", "hardBreak", "text", "resourceReference"]);
 const RICH_TEXT_MARK_TYPES = new Set(["bold", "italic", "underline"]);
+const RESOURCE_SOURCE_TYPES = new Set(["canvas-node", "asset"]);
+const RESOURCE_MEDIA_TYPES = new Set(["text", "image", "video", "audio"]);
+const RESOURCE_ROLES = new Set(["reference", "first-frame", "last-frame"]);
 const MAX_TEXT_LENGTH = 200_000;
 const MAX_RICH_TEXT_NODES = 5_000;
 const MAX_RICH_TEXT_DEPTH = 20;
@@ -23,6 +26,7 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
   if (value.prompt !== undefined && (
     typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > MAX_AI_INSTRUCTION_LENGTH
   )) throw validationError("prompt is invalid");
+  if (value.promptDocument !== undefined) validatePromptDocument(value.promptDocument, "promptDocument");
   if (value.routeId !== undefined && (
     typeof value.routeId !== "string" || !value.routeId.trim() || value.routeId.length > 300
   )) throw validationError("routeId is invalid");
@@ -39,6 +43,7 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
   )) throw validationError("settings.resolution is invalid");
   return {
     prompt: typeof value.prompt === "string" ? value.prompt.trim() : undefined,
+    promptDocument: value.promptDocument as GenerateCanvasNodeRequest["promptDocument"],
     routeId: typeof value.routeId === "string" ? value.routeId.trim() : undefined,
     settings: settings ? {
       ...(typeof settings.aspectRatio === "string" ? { aspectRatio: settings.aspectRatio } : {}),
@@ -56,11 +61,13 @@ export function parseGenerateTextNodeRequest(value: unknown): GenerateTextNodeRe
   if (value.mode !== "generate" && value.mode !== "revise") {
     throw validationError("mode is invalid");
   }
+  if (value.promptDocument !== undefined) validatePromptDocument(value.promptDocument, "promptDocument");
   if (value.model !== undefined && (typeof value.model !== "string" || !value.model.trim() || value.model.length > 300)) {
     throw validationError("model is invalid");
   }
   return {
     instruction: value.instruction.trim(),
+    promptDocument: value.promptDocument as GenerateTextNodeRequest["promptDocument"],
     mode: value.mode,
     model: typeof value.model === "string" ? value.model.trim() : undefined,
   };
@@ -205,6 +212,13 @@ function validateTextDocument(value: unknown, path: string) {
   }
 }
 
+function validatePromptDocument(value: unknown, path: string) {
+  validateTextDocument(value, path);
+  if (!isRecord(value) || typeof value.plainText !== "string" || value.plainText.length > MAX_AI_INSTRUCTION_LENGTH) {
+    throw validationError(`${path}.plainText is invalid`);
+  }
+}
+
 function validateRichTextNode(
   value: unknown,
   path: string,
@@ -226,6 +240,22 @@ function validateRichTextNode(
     throw validationError(`${path}.text is invalid`);
   }
   validateRichTextAttrs(value.attrs, `${path}.attrs`);
+  if (value.type === "resourceReference") {
+    if (!isRecord(value.attrs)
+      || !validId(value.attrs.referenceId)
+      || !RESOURCE_SOURCE_TYPES.has(String(value.attrs.sourceType))
+      || !validId(value.attrs.sourceId)
+      || !RESOURCE_MEDIA_TYPES.has(String(value.attrs.mediaType))
+      || typeof value.attrs.label !== "string"
+      || !value.attrs.label.trim()
+      || value.attrs.label.length > 300
+      || !RESOURCE_ROLES.has(String(value.attrs.role))) {
+      throw validationError(`${path}.attrs is invalid`);
+    }
+    if (value.content !== undefined || value.marks !== undefined) {
+      throw validationError(`${path} must be an inline resource atom`);
+    }
+  }
   if (value.type === "heading") {
     if (!isRecord(value.attrs) || ![1, 2, 3].includes(Number(value.attrs.level))) {
       throw validationError(`${path}.attrs.level is invalid`);

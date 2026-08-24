@@ -3,6 +3,7 @@ import type { GenerationInputAsset, GenerationParameterField, JsonValue } from "
 import { AppError } from "@/server/domain/app-error";
 import type {
   CanvasEdge,
+  CanvasGenerationParams,
   CanvasMediaReference,
   CanvasMutationBatch,
   CanvasMediaType,
@@ -20,6 +21,7 @@ import type { LlmMessage, LlmPort } from "@/server/ports/llm-port";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import { ensurePipelineRunSession } from "./pipeline-session";
+import { collectPromptResourceReferences, compileCanvasPrompt } from "./prompt-compiler";
 
 const MAX_GENERATED_TEXT_LENGTH = 200_000;
 const MAX_TEXT_REFERENCE_LENGTH = 120_000;
@@ -265,21 +267,35 @@ export class CanvasStudioService {
     await this.syncTargetReferences(nodeId);
     let node = await this.requireNode(nodeId);
     let data = node.data;
+    let compiledPrompt: string | undefined;
     if (!data || !isMediaType(data.type)) throw new AppError("VALIDATION_ERROR", "This node cannot generate media", 400);
     if (data.type === "audio") throw new AppError("VALIDATION_ERROR", "Audio generation is not configured in this project", 400);
     if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
       throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
     }
 
-    if (input && (input.prompt !== undefined || input.routeId !== undefined || input.settings !== undefined)) {
+    const promptDocument = input?.promptDocument ?? data.params?.promptDocument;
+    let promptReferences: CanvasMediaReference[] | undefined;
+    if (promptDocument) {
+      const compiled = await this.compilePromptDocument(node.projectId, promptDocument);
+      if (compiled.issues.length) {
+        throw new AppError("VALIDATION_ERROR", "One or more referenced resources are no longer available", 400);
+      }
+      compiledPrompt = compiled.prompt;
+      promptReferences = mergeReferences(compiled.references, referencesFromParams(data.params));
+    }
+
+    if (input && (input.prompt !== undefined || input.promptDocument !== undefined || input.routeId !== undefined || input.settings !== undefined)) {
       data = {
         ...data,
         generatorType: "default",
         params: {
           ...(data.params ?? { prompt: "" }),
           ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+          ...(input.promptDocument !== undefined ? { promptDocument: input.promptDocument } : {}),
           ...(input.routeId !== undefined ? { routeId: input.routeId } : {}),
           settings: { ...data.params?.settings, ...input.settings },
+          ...(promptReferences ? referenceParams(promptReferences) : {}),
         },
         taskInfo: { status: "idle" },
       };
@@ -288,7 +304,7 @@ export class CanvasStudioService {
 
     if (data.type === "text") {
       if (!this.llm.isConfigured()) throw new AppError("PIPELINE_LLM_FAILED", "Configure a text model before generating text", 400);
-      const prompt = effectivePrompt(data);
+      const prompt = compiledPrompt ?? effectivePrompt(data);
       if (!prompt.trim()) throw new AppError("VALIDATION_ERROR", "Enter a prompt or connect a text reference first", 400);
       await this.updateNode(node.id, { data: { ...data, taskInfo: { status: "processing" } } });
       try {
@@ -312,7 +328,7 @@ export class CanvasStudioService {
       }
     }
 
-    const prompt = effectivePrompt(data);
+    const prompt = compiledPrompt ?? effectivePrompt(data);
     const refs = data.params ?? { prompt: "" };
     const imageRefs = refs.imageList ?? [];
     const videoRefs = refs.videoList ?? [];
@@ -330,8 +346,11 @@ export class CanvasStudioService {
       generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
     } else if (imageRefs.length >= 1) {
       capability = "image-to-video";
-      generationAssets.push(...referenceAssets(imageRefs.slice(0, 1), "firstFrameUrl"));
-      generationAssets.push(...referenceAssets(imageRefs.slice(1, 2), "lastFrameUrl"));
+      const firstFrame = imageRefs.find((reference) => reference.role === "first-frame") ?? imageRefs[0];
+      const lastFrame = imageRefs.find((reference) => reference.role === "last-frame")
+        ?? imageRefs.find((reference) => reference !== firstFrame);
+      generationAssets.push(...referenceAssets(firstFrame ? [firstFrame] : [], "firstFrameUrl"));
+      generationAssets.push(...referenceAssets(lastFrame ? [lastFrame] : [], "lastFrameUrl"));
     } else {
       capability = "text-to-video";
     }
@@ -400,6 +419,7 @@ export class CanvasStudioService {
     });
     const result = await this.generate(target.id, {
       prompt: input.prompt,
+      promptDocument: input.promptDocument,
       routeId: input.routeId,
       settings: input.settings,
     });
@@ -432,7 +452,17 @@ export class CanvasStudioService {
       throw new AppError("VALIDATION_ERROR", "This text node has no content to revise", 400);
     }
 
-    const referenceText = data.params?.textList
+    const compiled = input.promptDocument
+      ? await this.compilePromptDocument(node.projectId, input.promptDocument)
+      : null;
+    if (compiled?.issues.length) {
+      throw new AppError("VALIDATION_ERROR", "One or more referenced resources are no longer available", 400);
+    }
+    if (compiled?.references.some((reference) => reference.mediaType !== "text")) {
+      throw new AppError("VALIDATION_ERROR", "The selected text model currently accepts text references only", 400);
+    }
+    const instruction = compiled?.prompt ?? input.instruction;
+    const referenceText = input.promptDocument ? "" : data.params?.textList
       ?.flatMap((reference) => reference.content ?? [])
       .filter((content) => content.trim())
       .join("\n\n")
@@ -440,14 +470,20 @@ export class CanvasStudioService {
     await this.updateNode(node.id, {
       data: {
         ...data,
-        params: { ...data.params, prompt: input.instruction, model: input.model },
+        params: {
+          ...data.params,
+          prompt: input.instruction,
+          promptDocument: input.promptDocument,
+          model: input.model,
+          ...(compiled ? referenceParams(compiled.references) : {}),
+        },
         taskInfo: { status: "processing" },
       },
     });
 
     try {
       const result = await this.llm.chat(
-        textGenerationMessages(input, currentText, referenceText),
+        textGenerationMessages({ ...input, instruction }, currentText, referenceText),
         { model: input.model, temperature: 0.6, maxTokens: 8_192 },
       );
       if (!result.trim()) throw new AppError("PIPELINE_LLM_FAILED", "The text model returned an empty response", 502);
@@ -685,6 +721,31 @@ export class CanvasStudioService {
     return this.repository.updateCanvasNode(targetNodeId, { data: next });
   }
 
+  private async compilePromptDocument(projectId: string, document: NonNullable<CanvasGenerationParams["promptDocument"]>) {
+    const resolved = new Map<string, CanvasMediaReference>();
+    for (const reference of collectPromptResourceReferences(document)) {
+      if (reference.sourceType === "canvas-node") {
+        const node = await this.repository.getCanvasNode(reference.sourceId);
+        const media = node && node.projectId === projectId ? mediaReference(node) : null;
+        const usable = media?.mediaType === "text"
+          ? Boolean(media.content?.some((content) => content.trim()))
+          : Boolean(media?.artifactId || media?.workspaceFile);
+        if (media?.mediaType === reference.mediaType && usable) resolved.set(reference.referenceId, media);
+        continue;
+      }
+      const asset = await this.repository.getAsset(reference.sourceId);
+      if (asset?.projectId === projectId && asset.selectedArtifactId && reference.mediaType === "image") {
+        resolved.set(reference.referenceId, {
+          nodeId: asset.id,
+          mediaType: "image",
+          label: asset.name,
+          artifactId: asset.selectedArtifactId,
+        });
+      }
+    }
+    return compileCanvasPrompt(document, resolved);
+  }
+
   private async hydrateLegacyNodes(projectId: string): Promise<void> {
     const nodes = await this.repository.listCanvasNodes(projectId);
     const project = await this.repository.getProject(projectId);
@@ -794,7 +855,14 @@ function normalizeData(data: CanvasNodeData, current: CanvasNode): CanvasNodeDat
 function mediaReference(node: CanvasNode): CanvasMediaReference | null {
   const data = node.data;
   if (!data || !isMediaType(data.type)) return null;
-  const ref: CanvasMediaReference = { nodeId: node.id, mediaType: data.type, label: data.name };
+  const ref: CanvasMediaReference = {
+    nodeId: node.id,
+    sourceType: "canvas-node",
+    sourceId: node.id,
+    role: "reference",
+    mediaType: data.type,
+    label: data.name,
+  };
   if (data.artifactIds?.[0]) ref.artifactId = data.artifactIds[0];
   if (data.url?.[0]) ref.url = data.url[0];
   if (data.workspaceFile) ref.workspaceFile = data.workspaceFile;
@@ -822,12 +890,42 @@ function referenceAssets(refs: CanvasMediaReference[], slot: string): Generation
   const assets: GenerationInputAsset[] = [];
   for (const reference of refs) {
     if (reference.artifactId) {
-      assets.push({ slot, ref: { type: "artifact", artifactId: reference.artifactId } });
+      assets.push({ slot, bindingId: reference.referenceId, order: reference.order, ref: { type: "artifact", artifactId: reference.artifactId } });
     } else if (reference.workspaceFile) {
-      assets.push({ slot, ref: { type: "workspace-file", relativePath: reference.workspaceFile.relativePath } });
+      assets.push({ slot, bindingId: reference.referenceId, order: reference.order, ref: { type: "workspace-file", relativePath: reference.workspaceFile.relativePath } });
     }
   }
   return assets;
+}
+
+function referenceParams(references: CanvasMediaReference[]): Pick<CanvasGenerationParams, "textList" | "imageList" | "videoList" | "audioList" | "mixedListOrder"> {
+  return {
+    textList: references.filter((reference) => reference.mediaType === "text"),
+    imageList: references.filter((reference) => reference.mediaType === "image"),
+    videoList: references.filter((reference) => reference.mediaType === "video"),
+    audioList: references.filter((reference) => reference.mediaType === "audio"),
+    mixedListOrder: references.map((reference) => reference.referenceId ?? reference.nodeId),
+  };
+}
+
+function referencesFromParams(params: CanvasGenerationParams | undefined): CanvasMediaReference[] {
+  if (!params) return [];
+  const references = [...(params.textList ?? []), ...(params.imageList ?? []), ...(params.videoList ?? []), ...(params.audioList ?? [])];
+  const order = new Map((params.mixedListOrder ?? []).map((id, index) => [id, index]));
+  return references.sort((left, right) => (order.get(left.referenceId ?? left.nodeId) ?? Number.MAX_SAFE_INTEGER)
+    - (order.get(right.referenceId ?? right.nodeId) ?? Number.MAX_SAFE_INTEGER));
+}
+
+function mergeReferences(primary: CanvasMediaReference[], fallback: CanvasMediaReference[]): CanvasMediaReference[] {
+  const result = [...primary];
+  const keys = new Set(primary.map((reference) => `${reference.sourceType ?? "canvas-node"}:${reference.sourceId ?? reference.nodeId}:${reference.role ?? "reference"}`));
+  for (const reference of fallback) {
+    const key = `${reference.sourceType ?? "canvas-node"}:${reference.sourceId ?? reference.nodeId}:${reference.role ?? "reference"}`;
+    if (keys.has(key)) continue;
+    keys.add(key);
+    result.push({ ...reference, order: result.length });
+  }
+  return result;
 }
 
 function textGenerationMessages(

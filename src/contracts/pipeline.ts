@@ -68,6 +68,8 @@ export interface StoryboardFrame {
 }
 
 export type CanvasMediaType = "text" | "image" | "video" | "audio";
+export type CanvasResourceSourceType = "canvas-node" | "asset";
+export type CanvasResourceRole = "reference" | "first-frame" | "last-frame";
 
 export interface CanvasWorkspaceFileRef {
   relativePath: string;
@@ -77,6 +79,11 @@ export interface CanvasWorkspaceFileRef {
 
 export interface CanvasMediaReference {
   nodeId: string;
+  sourceType?: CanvasResourceSourceType;
+  sourceId?: string;
+  referenceId?: string;
+  role?: CanvasResourceRole;
+  order?: number;
   mediaType: CanvasMediaType;
   label: string;
   artifactId?: string;
@@ -87,6 +94,7 @@ export interface CanvasMediaReference {
 
 export interface CanvasGenerationParams {
   prompt: string;
+  promptDocument?: CanvasPromptDocument;
   routeId?: string;
   model?: string;
   count?: number;
@@ -120,7 +128,7 @@ export interface CanvasRichTextMark {
 }
 
 export interface CanvasRichTextNode {
-  type: "doc" | "paragraph" | "heading" | "bulletList" | "orderedList" | "listItem" | "hardBreak" | "text";
+  type: "doc" | "paragraph" | "heading" | "bulletList" | "orderedList" | "listItem" | "hardBreak" | "text" | "resourceReference";
   attrs?: Record<string, CanvasRichTextAttributeValue>;
   content?: CanvasRichTextNode[];
   marks?: CanvasRichTextMark[];
@@ -128,6 +136,22 @@ export interface CanvasRichTextNode {
 }
 
 export interface CanvasTextDocument {
+  schemaVersion: 1;
+  format: "tiptap-json";
+  content: CanvasRichTextNode;
+  plainText: string;
+}
+
+export interface CanvasResourceReferenceAttrs {
+  referenceId: string;
+  sourceType: CanvasResourceSourceType;
+  sourceId: string;
+  mediaType: CanvasMediaType;
+  label: string;
+  role: CanvasResourceRole;
+}
+
+export interface CanvasPromptDocument {
   schemaVersion: 1;
   format: "tiptap-json";
   content: CanvasRichTextNode;
@@ -342,6 +366,7 @@ export interface GenerateCanvasNodeResponse {
 
 export interface GenerateCanvasNodeRequest {
   prompt?: string;
+  promptDocument?: CanvasPromptDocument;
   routeId?: string;
   settings?: Record<string, string | number | boolean>;
   createNewNode?: boolean;
@@ -349,6 +374,7 @@ export interface GenerateCanvasNodeRequest {
 
 export interface GenerateTextNodeRequest {
   instruction: string;
+  promptDocument?: CanvasPromptDocument;
   mode: "generate" | "revise";
   model?: string;
 }

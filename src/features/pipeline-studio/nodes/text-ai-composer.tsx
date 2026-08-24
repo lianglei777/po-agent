@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import type { ModelInfo } from "@/contracts/models";
-import type { CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
+import type { CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
 import { LoaderCircle, Maximize2, Send, Sparkles } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { promptDocumentFromPlainText } from "../model/prompt-document";
+import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 
 export function TextAiComposer({
@@ -21,7 +23,8 @@ export function TextAiComposer({
   onGenerated: (node: CanvasNode) => void;
 }) {
   const { t } = useI18n();
-  const [instruction, setInstruction] = useState("");
+  const [promptDocument, setPromptDocument] = useState<CanvasPromptDocument>(() => promptDocumentFromPlainText(""));
+  const instruction = promptDocument.plainText;
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState(data.params?.model ?? "");
   const [loadingModels, setLoadingModels] = useState(true);
@@ -73,11 +76,12 @@ export function TextAiComposer({
     try {
       const response = await pipelineStudioApi.generateText(nodeId, {
         instruction: instruction.trim(),
+        promptDocument,
         mode,
         model: selectedModel,
       });
       onGenerated(response.node);
-      setInstruction("");
+      setPromptDocument(promptDocumentFromPlainText(""));
       setExpanded(false);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t.pipeline.textAiError);
@@ -86,16 +90,10 @@ export function TextAiComposer({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    void submit();
-  };
-
   const surface = (large: boolean) => (
     <ComposerSurface
       large={large}
-      instruction={instruction}
+      promptDocument={promptDocument}
       models={models}
       selectedModel={selectedModel}
       loadingModels={loadingModels}
@@ -104,10 +102,10 @@ export function TextAiComposer({
       referenceCount={referenceCount}
       disabledReason={disabledReason}
       error={error}
-      onInstructionChange={setInstruction}
+      onPromptDocumentChange={setPromptDocument}
       onModelChange={setSelectedModel}
-      onKeyDown={handleKeyDown}
       onSubmit={() => void submit()}
+      nodeId={nodeId}
       onExpand={() => setExpanded(true)}
     />
   );
@@ -139,7 +137,7 @@ export function TextAiComposer({
 
 function ComposerSurface({
   large,
-  instruction,
+  promptDocument,
   models,
   selectedModel,
   loadingModels,
@@ -148,14 +146,14 @@ function ComposerSurface({
   referenceCount,
   disabledReason,
   error,
-  onInstructionChange,
+  onPromptDocumentChange,
   onModelChange,
-  onKeyDown,
   onSubmit,
   onExpand,
+  nodeId,
 }: {
   large: boolean;
-  instruction: string;
+  promptDocument: CanvasPromptDocument;
   models: ModelInfo[];
   selectedModel: string;
   loadingModels: boolean;
@@ -164,11 +162,11 @@ function ComposerSurface({
   referenceCount: number;
   disabledReason: string;
   error: string | null;
-  onInstructionChange: (value: string) => void;
+  onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onModelChange: (value: string) => void;
-  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSubmit: () => void;
   onExpand: () => void;
+  nodeId: string;
 }) {
   const { t } = useI18n();
   return (
@@ -178,15 +176,16 @@ function ComposerSurface({
       error={error}
       body={(
         <>
-        <textarea
+        <ResourcePromptEditor
           autoFocus={large}
-          value={instruction}
+          value={promptDocument}
           disabled={generating}
-          onChange={(event) => onInstructionChange(event.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={onPromptDocumentChange}
+          onSubmit={onSubmit}
+          allowedMediaTypes={["text"]}
+          excludedCanvasNodeId={nodeId}
           placeholder={mode === "revise" ? t.pipeline.textAiRevisePlaceholder : t.pipeline.textAiGeneratePlaceholder}
-          aria-label={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
-          className="nodrag nowheel min-h-0 flex-1 resize-none border-0 bg-transparent p-5 text-sm leading-6 text-[var(--pl-text)] outline-none placeholder:text-[var(--pl-text-muted)] disabled:opacity-60"
+          ariaLabel={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
         />
         {!large ? (
           <button

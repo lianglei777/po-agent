@@ -71,6 +71,8 @@ export class RunningHubAdapter implements GenerationProvider {
       }
       uploaded.push({
         slot: asset.slot,
+        bindingId: asset.bindingId,
+        order: asset.order,
         name: asset.name,
         mimeType: asset.mimeType,
         url: data.download_url,
@@ -314,14 +316,22 @@ function urlsForSlot(
   assets: PreparedGenerationAsset[],
   slot: string,
 ): string[] {
-  return assets.filter((asset) => asset.slot === slot).map((asset) => asset.url);
+  return orderedAssetsForSlot(assets, slot).map((asset) => asset.url);
 }
 
 function firstUrlForSlot(
   assets: PreparedGenerationAsset[],
   slot: string,
 ): string | null {
-  return assets.find((asset) => asset.slot === slot)?.url ?? null;
+  return orderedAssetsForSlot(assets, slot)[0]?.url ?? null;
+}
+
+function orderedAssetsForSlot(assets: PreparedGenerationAsset[], slot: string): PreparedGenerationAsset[] {
+  return assets
+    .map((asset, index) => ({ asset, index }))
+    .filter(({ asset }) => asset.slot === slot)
+    .sort((left, right) => (left.asset.order ?? left.index) - (right.asset.order ?? right.index))
+    .map(({ asset }) => asset);
 }
 
 function normalizeResponse(value: unknown): ProviderSubmitResult {

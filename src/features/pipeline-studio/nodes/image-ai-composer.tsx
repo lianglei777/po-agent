@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Tooltip } from "antd";
 import type { GenerationRouteDto } from "@/contracts/generation";
-import type { CanvasEdge, CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
+import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
 import { ImagePlus, LoaderCircle, Maximize2, Send, Sparkles, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
+import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute } from "../model/image-generation-options";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 
@@ -31,12 +33,15 @@ export function ImageAiComposer({
   onGenerationStarted?: (node: CanvasNode, edge?: CanvasEdge) => void;
 }) {
   const { t } = useI18n();
-  const [instruction, setInstruction] = useState(mode === "modify" ? "" : data.params?.prompt ?? "");
+  const [promptDocument, setPromptDocument] = useState<CanvasPromptDocument>(() => mode === "modify"
+    ? promptDocumentFromPlainText("")
+    : data.params?.promptDocument ?? promptDocumentFromPlainText(data.params?.prompt ?? ""));
+  const instruction = promptDocument.plainText;
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
   const [aspectRatio, setAspectRatio] = useState(readOption(data.params?.settings?.aspectRatio, ASPECT_RATIOS, "1:1"));
   const [resolution, setResolution] = useState(readOption(data.params?.settings?.resolution, RESOLUTIONS, "2k"));
-  const [loadingRoutes, setLoadingRoutes] = useState(true);
+  const [loadedCapability, setLoadedCapability] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -47,9 +52,11 @@ export function ImageAiComposer({
   );
   const taskStatus = data.taskInfo?.status;
   const generating = taskStatus === "queued" || taskStatus === "processing" || submitting;
-  const capability = mode === "modify" || Boolean(data.params?.imageList?.length)
+  const hasImageReference = promptDocumentResourceAttrs(promptDocument).some((reference) => reference.mediaType === "image");
+  const capability = mode === "modify" || hasImageReference || Boolean(data.params?.imageList?.length)
     ? "image-to-image"
     : "text-to-image";
+  const loadingRoutes = loadedCapability !== capability;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -68,7 +75,7 @@ export function ImageAiComposer({
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoadingRoutes(false);
+        if (!controller.signal.aborted) setLoadedCapability(capability);
       });
     return () => controller.abort();
   }, [capability, data.params?.routeId, data.params?.settings?.resolution]);
@@ -97,6 +104,7 @@ export function ImageAiComposer({
     try {
       const response = await pipelineStudioApi.generateCanvasNode(nodeId, {
         prompt: instruction.trim(),
+        promptDocument,
         routeId: selectedRoute.id,
         settings: { aspectRatio, resolution },
         createNewNode: mode === "modify",
@@ -125,17 +133,11 @@ export function ImageAiComposer({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    void submit();
-  };
-
   const surface = (large: boolean) => (
     <ComposerSurface
       large={large}
       mode={mode}
-      instruction={instruction}
+      promptDocument={promptDocument}
       routes={routes}
       selectedRouteId={selectedRouteId}
       aspectRatio={aspectRatio}
@@ -146,15 +148,15 @@ export function ImageAiComposer({
       cancelling={cancelling}
       disabledReason={disabledReason}
       error={localError ?? data.taskInfo?.errorMessage ?? null}
-      onInstructionChange={setInstruction}
+      onPromptDocumentChange={setPromptDocument}
       onRouteChange={setSelectedRouteId}
       onAspectRatioChange={(value) => setAspectRatio(readOption(value, ASPECT_RATIOS, "1:1"))}
       onResolutionChange={(value) => setResolution(readOption(value, RESOLUTIONS, "2k"))}
-      onKeyDown={handleKeyDown}
       onSubmit={() => void submit()}
       onCancel={() => void cancel()}
       onUpload={onUpload}
       onExpand={() => setExpanded(true)}
+      nodeId={nodeId}
     />
   );
 
@@ -184,14 +186,14 @@ export function ImageAiComposer({
 }
 
 function ComposerSurface({
-  large, mode, instruction, routes, selectedRouteId, aspectRatio, resolution,
+  large, mode, promptDocument, routes, selectedRouteId, aspectRatio, resolution,
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
-  onInstructionChange, onRouteChange, onAspectRatioChange, onResolutionChange,
-  onKeyDown, onSubmit, onCancel, onUpload, onExpand,
+  onPromptDocumentChange, onRouteChange, onAspectRatioChange, onResolutionChange,
+  onSubmit, onCancel, onUpload, onExpand, nodeId,
 }: {
   large: boolean;
   mode: "create" | "modify";
-  instruction: string;
+  promptDocument: CanvasPromptDocument;
   routes: GenerationRouteDto[];
   selectedRouteId: string;
   aspectRatio: string;
@@ -202,15 +204,15 @@ function ComposerSurface({
   cancelling: boolean;
   disabledReason: string;
   error: string | null;
-  onInstructionChange: (value: string) => void;
+  onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onRouteChange: (value: string) => void;
   onAspectRatioChange: (value: string) => void;
   onResolutionChange: (value: string) => void;
-  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSubmit: () => void;
   onCancel: () => void;
   onUpload: () => void;
   onExpand: () => void;
+  nodeId: string;
 }) {
   const { t } = useI18n();
   const busy = generating || cancelling;
@@ -250,15 +252,16 @@ function ComposerSurface({
               </button>
             ) : null}
           </div>
-          <textarea
+          <ResourcePromptEditor
             autoFocus={large}
-            value={instruction}
+            value={promptDocument}
             disabled={busy}
-            onChange={(event) => onInstructionChange(event.target.value)}
-            onKeyDown={onKeyDown}
+            onChange={onPromptDocumentChange}
+            onSubmit={onSubmit}
+            allowedMediaTypes={mode === "modify" ? ["text"] : ["text", "image"]}
+            excludedCanvasNodeId={nodeId}
             placeholder={mode === "modify" ? t.pipeline.imageAiModifyPlaceholder : t.pipeline.imageAiPlaceholder}
-            aria-label={t.pipeline.imageAiInstruction}
-            className="nodrag nowheel min-h-0 flex-1 resize-none border-0 bg-transparent px-5 py-4 text-sm leading-6 text-[var(--pl-text)] outline-none placeholder:text-[var(--pl-text-muted)] disabled:opacity-60"
+            ariaLabel={t.pipeline.imageAiInstruction}
           />
         </div>
       )}

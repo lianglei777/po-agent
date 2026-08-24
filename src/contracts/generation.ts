@@ -96,6 +96,9 @@ export type GenerationAssetRef =
 
 export interface GenerationInputAsset {
   slot: string;
+  /** 将提示词中的语义引用与上传结果稳定关联，不能依赖异步完成顺序。 */
+  bindingId?: string;
+  order?: number;
   ref: GenerationAssetRef;
 }
 

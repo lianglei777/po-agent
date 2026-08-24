@@ -38,6 +38,7 @@ import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-f
 import { getCanvasZoomShortcut, isPlainCanvasShortcut } from "../model/canvas-shortcuts";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
 import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
+import { CanvasAssetBrowser } from "./canvas-asset-browser";
 import {
   StudioCanvasEdgeComponent,
   type StudioCanvasEdge,
@@ -149,6 +150,11 @@ export function StudioCanvas({
       removeLabel: t.pipeline.canvasRemoveConnection,
     },
   })) : [], [activeSelectedEdgeId, connectionsVisible, edges, removeEdge, selectEdge, t.pipeline.canvasConnection, t.pipeline.canvasRemoveConnection]);
+
+  const locateNode = useCallback((nodeId: string) => {
+    setSelection([nodeId]);
+    void instanceRef.current?.fitView({ nodes: [{ id: nodeId }], padding: 0.35, duration: 240, maxZoom: 1.25 });
+  }, [setSelection]);
 
   const createAt = useCallback((type: CanvasMediaType, position?: { x: number; y: number }, name?: string) => {
     const instance = instanceRef.current;
@@ -517,11 +523,11 @@ export function StudioCanvas({
         onClose={() => setAssetsOpen(false)}
         title={t.pipeline.canvasAssetManagement}
         size={360}
-        mask={{ closable: false }}
+        placement="left"
+        mask={false}
+        styles={{ body: { padding: 0 } }}
       >
-        <p className="text-sm leading-6 text-[var(--pl-text-secondary)]">
-          {t.pipeline.canvasPlaceholderBody}
-        </p>
+        <CanvasAssetBrowser projectId={projectId} nodes={nodes} onLocateNode={locateNode} />
       </Drawer>
 
       <Modal

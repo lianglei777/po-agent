@@ -488,6 +488,14 @@ body {
   pointer-events: none;
 }
 
+.pipeline-prompt-editor .tiptap p.is-editor-empty:first-child::before {
+  float: left;
+  height: 0;
+  color: var(--pl-text-muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
 .pipeline-rich-text-empty {
   color: var(--pl-text-muted);
 }

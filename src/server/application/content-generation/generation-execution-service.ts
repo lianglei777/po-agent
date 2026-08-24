@@ -378,11 +378,12 @@ export class GenerationExecutionService {
         }
         relativePath = artifact.localPath;
       }
-      resolved.push(await this.files.readInput({
+      const inputFile = await this.files.readInput({
         cwd: session.cwd,
         relativePath,
         slot: asset.slot,
-      }));
+      });
+      resolved.push({ ...inputFile, bindingId: asset.bindingId, order: asset.order });
     }
     return resolved;
   }

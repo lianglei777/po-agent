@@ -2939,6 +2939,7 @@ interface CanvasTextDocument {
 ```ts
 interface GenerateTextNodeRequest {
   instruction: string;
+  promptDocument?: CanvasPromptDocument;
   mode: "generate" | "revise";
   model?: string; // "provider:modelId"
 }
@@ -2953,6 +2954,7 @@ interface GenerateTextNodeResponse {
 ```
 
 - `instruction` 去除首尾空白后不能为空，最大 20,000 字符。
+- `promptDocument` 使用下文的语义资源引用；文本生成当前只接受文本资源，不能把图片、视频或音频伪装成文本模型输入。
 - `revise` 要求节点已经包含文本；模型必须返回修改后的完整内容，而不是差异片段。
 - 指定 `model` 时必须对应 `/api/models` 返回的可用模型；省略时由模型运行时选择默认可用模型。
 - 连入该节点的上游文本节点会作为参考材料加入请求；当前版本不会把图片 URL 伪装成视觉模型输入。
@@ -2966,6 +2968,7 @@ interface GenerateTextNodeResponse {
 ```ts
 interface GenerateCanvasNodeRequest {
   prompt?: string;
+  promptDocument?: CanvasPromptDocument;
   routeId?: string;
   // 仅用于已有图片：保留源节点，并在旁边创建一个图生图结果节点。
   createNewNode?: boolean;
@@ -2975,6 +2978,31 @@ interface GenerateCanvasNodeRequest {
   };
 }
 ```
+
+`CanvasPromptDocument` 与文本节点使用相同的 Tiptap JSON 外壳，并额外允许不可编辑的行内 `resourceReference` 原子节点：
+
+```ts
+interface CanvasPromptDocument {
+  schemaVersion: 1;
+  format: "tiptap-json";
+  content: CanvasRichTextNode;
+  plainText: string;
+}
+
+interface CanvasResourceReferenceAttrs {
+  referenceId: string; // 本次 @ 引用的稳定绑定 ID
+  sourceType: "canvas-node" | "asset";
+  sourceId: string;
+  mediaType: "text" | "image" | "video" | "audio";
+  label: string;       // 仅用于显示，解析不依赖名称
+  role: "reference" | "first-frame" | "last-frame";
+}
+```
+
+- 服务端只信任 `sourceType + sourceId`，并重新校验资源属于当前项目、媒体类型一致且文件仍可用。
+- 编译器按资源在提示词中的首次出现顺序生成 `图片1`、`图片2` 等模型令牌；重复引用同一资源会复用编号。
+- 每个输入文件携带 `bindingId` 和显式 `order`，Provider 适配器按该顺序构造 URL 数组，因此上传完成顺序不会改变提示词与文件的对应关系。
+- 文本引用会以内联编号和受界定的参考文本附录加入最终提示词；失效引用会导致请求失败，而不是静默删除或误绑其他资源。
 
 响应：
 

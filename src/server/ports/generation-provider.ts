@@ -6,6 +6,8 @@ import type {
 
 export interface ProviderInputAsset {
   slot: string;
+  bindingId?: string;
+  order?: number;
   name: string;
   mimeType: string;
   data: Uint8Array;

@@ -3,6 +3,7 @@ import type {
   CanvasEdge,
   CanvasNode,
   CanvasSnapshot,
+  AssetListResponse,
   GenerateCanvasNodeRequest,
   GenerateCanvasNodeResponse,
   PipelineProject,
@@ -33,6 +34,11 @@ export const pipelineStudioApi = {
   }),
 
   getSnapshot: (projectId: string, signal?: AbortSignal) => request<CanvasSnapshot>(`/api/pipeline/projects/${projectId}/canvas`, { signal }),
+
+  getAssets: (projectId: string, signal?: AbortSignal) => request<AssetListResponse>(
+    `/api/pipeline/projects/${encodeURIComponent(projectId)}/assets`,
+    { signal },
+  ),
 
   applyMutations: (projectId: string, batch: CanvasMutationBatch) => request<CanvasSnapshot>(
     `/api/pipeline/projects/${projectId}/canvas/mutations`,

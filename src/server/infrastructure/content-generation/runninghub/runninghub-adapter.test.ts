@@ -103,6 +103,26 @@ describe("RunningHubAdapter", () => {
     expect(JSON.stringify(result.requestSnapshot)).not.toContain("secret");
   });
 
+  it("uses explicit binding order instead of asynchronous upload order", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ taskId: "ordered-task", status: "RUNNING" }));
+    const adapter = new RunningHubAdapter(fetcher as typeof fetch);
+
+    await adapter.submit({
+      operation: "seedream-v5-pro-image-to-image",
+      generation: { prompt: "让图片1模仿图片2" },
+      assets: [
+        { slot: "imageUrls", bindingId: "ref-2", order: 1, name: "second.png", mimeType: "image/png", url: "https://example.test/second.png" },
+        { slot: "imageUrls", bindingId: "ref-1", order: 0, name: "first.png", mimeType: "image/png", url: "https://example.test/first.png" },
+      ],
+      credential: "secret-key",
+    });
+
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).imageUrls).toEqual([
+      "https://example.test/first.png",
+      "https://example.test/second.png",
+    ]);
+  });
+
   it("normalizes successful polling outputs and redacts snapshots", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       taskId: "remote-1",

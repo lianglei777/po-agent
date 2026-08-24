@@ -95,6 +95,8 @@ export interface ProviderJob {
 
 export interface PreparedGenerationAsset {
   slot: string;
+  bindingId?: string;
+  order?: number;
   name: string;
   mimeType: string;
   url: string;

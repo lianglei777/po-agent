@@ -102,6 +102,34 @@ describe("parseGenerateTextNodeRequest", () => {
     expect(() => parseGenerateTextNodeRequest({ instruction: "   ", mode: "generate" }))
       .toThrow("instruction is invalid");
   });
+
+  it("accepts semantic resource atoms and rejects incomplete bindings", () => {
+    const promptDocument = {
+      schemaVersion: 1,
+      format: "tiptap-json",
+      plainText: "参考 @分镜一",
+      content: {
+        type: "doc",
+        content: [{
+          type: "paragraph",
+          content: [
+            { type: "text", text: "参考 " },
+            { type: "resourceReference", attrs: { referenceId: "ref-1", sourceType: "canvas-node", sourceId: "node-image", mediaType: "image", label: "分镜一", role: "reference" } },
+          ],
+        }],
+      },
+    };
+    expect(parseGenerateTextNodeRequest({ instruction: "参考 @分镜一", promptDocument, mode: "generate" }))
+      .toMatchObject({ promptDocument });
+    expect(() => parseGenerateTextNodeRequest({
+      instruction: "参考资源",
+      mode: "generate",
+      promptDocument: {
+        ...promptDocument,
+        content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "resourceReference", attrs: { label: "缺少身份" } }] }] },
+      },
+    })).toThrow("attrs is invalid");
+  });
 });
 
 describe("parseGenerateCanvasNodeRequest", () => {
