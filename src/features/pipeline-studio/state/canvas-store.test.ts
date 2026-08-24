@@ -243,4 +243,28 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().selectedNodeIds).toEqual([node.id]);
     expect(store.getState().pendingMutations).toEqual([]);
   });
+
+  it("leaves image editing mode when a server-created image becomes selected", () => {
+    const store = createCanvasStore("project-1");
+    store.getState().hydrate({ revision: 1, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    store.getState().startEditingNode("source-1");
+    const result = {
+      id: "result-1",
+      projectId: "project-1",
+      type: "image" as const,
+      entityId: "entity-result-1",
+      positionX: 500,
+      positionY: 100,
+      width: 350,
+      height: 350,
+      data: { type: "image" as const, name: "Edited", action: "image_resource" },
+      createdAt: "2026-08-24T00:00:00.000Z",
+      updatedAt: "2026-08-24T00:00:00.000Z",
+    };
+
+    store.getState().insertServerNode(result);
+
+    expect(store.getState().editingNodeId).toBeNull();
+    expect(store.getState().selectedNodeIds).toEqual([result.id]);
+  });
 });

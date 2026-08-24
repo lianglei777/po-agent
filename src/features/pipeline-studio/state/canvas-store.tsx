@@ -185,6 +185,7 @@ export function createCanvasStore(projectId: string) {
     insertServerNode: (node) => set((state) => ({
       nodes: [...state.nodes.filter((item) => item.id !== node.id), node],
       selectedNodeIds: [node.id],
+      editingNodeId: null,
       imageComposerNodeId: null,
     })),
 

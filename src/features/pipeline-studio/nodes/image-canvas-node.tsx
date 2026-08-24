@@ -2,13 +2,15 @@
 
 import NextImage from "next/image";
 import { memo, useCallback, useRef, useState } from "react";
-import { Button, Modal, Spin, message } from "antd";
+import { App, Button, Modal, Spin } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
 import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
+import { findDerivedImagePosition } from "../model/image-derived-position";
+import { exportTransformedImage } from "../model/image-edit-export";
 import {
   EMPTY_IMAGE_EDIT_TRANSFORM,
   flipImagePreview,
@@ -42,6 +44,7 @@ export function ImageCanvasNode({
   dragging: boolean;
 }) {
   const { t } = useI18n();
+  const { message } = App.useApp();
   const { getViewport, setCenter } = useReactFlow();
   const store = useCanvasStoreApi();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
@@ -70,6 +73,7 @@ export function ImageCanvasNode({
   const [dragActive, setDragActive] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editTransform, setEditTransform] = useState<ImageEditTransform>(EMPTY_IMAGE_EDIT_TRANSFORM);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [imageStatus, setImageStatus] = useState<{ url: string | null; state: ImageLoadState }>({
     url: null,
     state: "loading",
@@ -106,7 +110,7 @@ export function ImageCanvasNode({
 
   const uploadImage = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {
-      message.error(t.pipeline.nodeImageOnlyError);
+      void message.error(t.pipeline.nodeImageOnlyError);
       return;
     }
     setUploading(true);
@@ -120,11 +124,11 @@ export function ImageCanvasNode({
       );
       insertServerNode(result.node);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : String(error));
+      void message.error(error instanceof Error ? error.message : String(error));
     } finally {
       setUploading(false);
     }
-  }, [id, insertServerNode, node.positionX, node.positionY, node.projectId, t.pipeline.nodeImageOnlyError]);
+  }, [id, insertServerNode, message, node.positionX, node.positionY, node.projectId, t.pipeline.nodeImageOnlyError]);
 
   if (!canvas || canvas.type !== "image") return null;
 
@@ -158,8 +162,39 @@ export function ImageCanvasNode({
   };
 
   const cancelEditing = () => {
+    if (savingEdit) return;
     setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
     stopEditingNode(id);
+  };
+
+  const saveEditing = async () => {
+    if (!mediaUrl || savingEdit || !imagePreviewChanged(editTransform)) return;
+    setSavingEdit(true);
+    try {
+      const file = await exportTransformedImage({
+        sourceUrl: mediaUrl,
+        sourceName: canvas.workspaceFile?.name ?? canvas.name,
+        transform: editTransform,
+      });
+      const position = findDerivedImagePosition(node, store.getState().nodes);
+      const uploaded = await pipelineStudioApi.uploadFile(node.projectId, file, position.x, position.y);
+      try {
+        const { edge } = await pipelineStudioApi.connectCanvasNodes(node.projectId, id, uploaded.node.id);
+        const snapshot = await pipelineStudioApi.getSnapshot(node.projectId);
+        const connectedNode = snapshot.nodes.find((candidate) => candidate.id === uploaded.node.id) ?? uploaded.node;
+        insertServerGenerationResult(connectedNode, edge);
+        setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
+        void message.success(t.pipeline.nodeImageEditSaved);
+      } catch (error) {
+        // 图片已经写入项目目录时必须保留新节点，连线失败不能让用户误以为编辑结果也丢失了。
+        insertServerNode(uploaded.node);
+        throw error;
+      }
+    } catch {
+      void message.error(t.pipeline.nodeImageEditSaveError);
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   return (
@@ -245,7 +280,10 @@ export function ImageCanvasNode({
           onFlipHorizontal={() => setEditTransform((current) => flipImagePreview(current, "horizontal"))}
           onFlipVertical={() => setEditTransform((current) => flipImagePreview(current, "vertical"))}
           onReset={() => setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM)}
+          onSave={() => void saveEditing()}
           onCancel={cancelEditing}
+          changed={imagePreviewChanged(editTransform)}
+          saving={savingEdit}
         />
       ) : null}
 
@@ -334,7 +372,7 @@ export function ImageCanvasNode({
                 {editing ? (
                   <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)]/90 px-2.5 py-1 text-caption text-[var(--pl-text-secondary)] shadow-sm">
                     {imagePreviewChanged(editTransform)
-                      ? t.pipeline.nodeImageEditChangedHint
+                      ? savingEdit ? t.pipeline.nodeImageEditSaving : t.pipeline.nodeImageEditChangedHint
                       : t.pipeline.nodeImageEditHint}
                   </span>
                 ) : null}

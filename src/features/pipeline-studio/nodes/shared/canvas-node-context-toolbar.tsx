@@ -19,24 +19,32 @@ export function CanvasNodeToolbarButton({
   icon,
   onClick,
   danger = false,
+  disabled = false,
+  disabledReason,
 }: {
   label: string;
   icon: ReactNode;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
+  const button = (
+    <Button
+      type="text"
+      danger={danger}
+      disabled={disabled}
+      aria-label={label}
+      icon={icon}
+      onClick={onClick}
+      className="!h-9 !px-3"
+    >
+      {label}
+    </Button>
+  );
   return (
-    <Tooltip title={label}>
-      <Button
-        type="text"
-        danger={danger}
-        aria-label={label}
-        icon={icon}
-        onClick={onClick}
-        className="!h-9 !px-3"
-      >
-        {label}
-      </Button>
+    <Tooltip title={disabled && disabledReason ? disabledReason : label}>
+      {disabled ? <span className="inline-flex">{button}</span> : button}
     </Tooltip>
   );
 }

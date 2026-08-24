@@ -1,5 +1,6 @@
 import type {
   CanvasMutationBatch,
+  CanvasEdge,
   CanvasNode,
   CanvasSnapshot,
   GenerateCanvasNodeRequest,
@@ -36,6 +37,11 @@ export const pipelineStudioApi = {
   applyMutations: (projectId: string, batch: CanvasMutationBatch) => request<CanvasSnapshot>(
     `/api/pipeline/projects/${projectId}/canvas/mutations`,
     { method: "POST", body: JSON.stringify(batch) },
+  ),
+
+  connectCanvasNodes: (projectId: string, sourceNodeId: string, targetNodeId: string) => request<{ edge: CanvasEdge }>(
+    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/edges`,
+    { method: "POST", body: JSON.stringify({ sourceNodeId, targetNodeId }) },
   ),
 
   getTextModels: () => request<ModelsResponse>("/api/models"),

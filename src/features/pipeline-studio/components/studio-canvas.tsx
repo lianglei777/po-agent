@@ -120,7 +120,6 @@ export function StudioCanvas({
     id: edge.id,
     source: edge.sourceNodeId,
     target: edge.targetNodeId,
-    type: "bezier",
     style: { stroke: "#168cff", strokeWidth: 1.6, opacity: 0.72 },
   })) : [], [connectionsVisible, edges]);
 
