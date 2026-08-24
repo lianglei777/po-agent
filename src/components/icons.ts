@@ -61,6 +61,7 @@ import {
   RightOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ScissorOutlined,
   SearchOutlined,
   SendOutlined,
   SettingOutlined,
@@ -151,6 +152,7 @@ export const RefreshCw = ReloadOutlined;
 export const RotateCcw = UndoOutlined;
 export const RotateCw = RedoOutlined;
 export const ScrollText = FileTextOutlined;
+export const Scissors = ScissorOutlined;
 export const Search = SearchOutlined;
 export const Selection = BorderOutlined;
 export const Send = SendOutlined;

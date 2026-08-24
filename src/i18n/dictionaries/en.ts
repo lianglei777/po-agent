@@ -974,6 +974,8 @@ export const en = {
     canvasNameSuffix: "Infinite Canvas",
     canvasHideConnections: "Hide connections",
     canvasShowConnections: "Show connections",
+    canvasConnection: "Node connection",
+    canvasRemoveConnection: "Remove connection",
     canvasFit: "Fit all nodes",
     canvasAgent: "Agent",
     canvasEmptyCreateHint: "Use the add button below to create a node",

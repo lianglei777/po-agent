@@ -19,6 +19,31 @@ describe("pipeline studio canvas store", () => {
     vi.unstubAllGlobals();
   });
 
+  it("deletes a connection and restores it through undo", () => {
+    const store = createCanvasStore("project-1");
+    const edge = {
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2",
+      edgeType: "references" as const,
+      createdAt: "2026-08-24T00:00:00.000Z",
+      updatedAt: "2026-08-24T00:00:00.000Z",
+    };
+    store.getState().hydrate({ revision: 1, nodes: [], edges: [edge], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().deleteEdges([edge.id]);
+    expect(store.getState().edges).toEqual([]);
+    expect(store.getState().pendingMutations).toEqual([{ type: "edge.delete", edgeId: edge.id }]);
+
+    store.getState().undo();
+    expect(store.getState().edges).toEqual([edge]);
+    expect(store.getState().pendingMutations).toEqual([
+      { type: "edge.delete", edgeId: edge.id },
+      { type: "edge.create", edge },
+    ]);
+  });
+
   it("keeps only the latest viewport mutation", () => {
     const store = createCanvasStore("project-1");
     store.getState().hydrate({ revision: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });

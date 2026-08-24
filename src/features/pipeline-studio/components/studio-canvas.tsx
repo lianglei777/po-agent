@@ -5,11 +5,12 @@ import {
   Background,
   BackgroundVariant,
   MiniMap,
+  PanOnScrollMode,
   ReactFlow,
   applyNodeChanges,
   type Connection,
-  type Edge,
   type EdgeChange,
+  type EdgeTypes,
   type NodeChange,
   type ReactFlowInstance,
 } from "@xyflow/react";
@@ -36,8 +37,13 @@ import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
+import {
+  StudioCanvasEdgeComponent,
+  type StudioCanvasEdge,
+} from "./studio-canvas-edge";
 
 const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
+const studioEdgeTypes = { studio: StudioCanvasEdgeComponent } satisfies EdgeTypes;
 
 type CreateMenuState = { screenX: number; screenY: number; flowX: number; flowY: number } | null;
 type PlaceholderPanel = "assets" | "shortcuts" | null;
@@ -91,7 +97,7 @@ export function StudioCanvas({
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
 
-  const instanceRef = useRef<ReactFlowInstance<StudioFlowNode, Edge> | null>(null);
+  const instanceRef = useRef<ReactFlowInstance<StudioFlowNode, StudioCanvasEdge> | null>(null);
   const dragOriginsRef = useRef(new Map<string, { x: number; y: number }>());
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [createMenu, setCreateMenu] = useState<CreateMenuState>(null);
@@ -99,6 +105,7 @@ export function StudioCanvas({
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(projectTitle);
   const [reactFlowNodes, setReactFlowNodes] = useState<StudioFlowNode[]>([]);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const defaultNodeNames = useMemo<Record<CanvasMediaType, string>>(() => ({
     text: t.pipeline.nodeText,
     image: t.pipeline.nodeImage,
@@ -112,12 +119,34 @@ export function StudioCanvas({
     interactionMode,
   }), [editingNodeId, interactionMode, nodes, reactFlowNodes, selectedNodeIds]);
 
-  const flowEdges = useMemo<Edge[]>(() => connectionsVisible ? edges.map((edge) => ({
+  const removeEdge = useCallback((edgeId: string) => {
+    deleteEdges([edgeId]);
+    setSelectedEdgeId((current) => current === edgeId ? null : current);
+  }, [deleteEdges]);
+
+  const selectEdge = useCallback((edgeId: string) => {
+    setSelectedEdgeId(edgeId);
+    setSelection([]);
+  }, [setSelection]);
+  const activeSelectedEdgeId = connectionsVisible && edges.some((edge) => edge.id === selectedEdgeId)
+    ? selectedEdgeId
+    : null;
+
+  const flowEdges = useMemo<StudioCanvasEdge[]>(() => connectionsVisible ? edges.map((edge) => ({
     id: edge.id,
     source: edge.sourceNodeId,
     target: edge.targetNodeId,
-    style: { stroke: "#168cff", strokeWidth: 1.6, opacity: 0.72 },
-  })) : [], [connectionsVisible, edges]);
+    type: "studio",
+    selected: activeSelectedEdgeId === edge.id,
+    focusable: false,
+    ariaLabel: t.pipeline.canvasConnection,
+    data: {
+      onDelete: removeEdge,
+      onSelect: selectEdge,
+      connectionLabel: t.pipeline.canvasConnection,
+      removeLabel: t.pipeline.canvasRemoveConnection,
+    },
+  })) : [], [activeSelectedEdgeId, connectionsVisible, edges, removeEdge, selectEdge, t.pipeline.canvasConnection, t.pipeline.canvasRemoveConnection]);
 
   const createAt = useCallback((type: CanvasMediaType, position?: { x: number; y: number }, name?: string) => {
     const instance = instanceRef.current;
@@ -222,7 +251,8 @@ export function StudioCanvas({
         duplicateNodes(selectedNodeIds);
       } else if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        deleteNodes(selectedNodeIds);
+        if (activeSelectedEdgeId) removeEdge(activeSelectedEdgeId);
+        else deleteNodes(selectedNodeIds);
       } else if (event.key.toLowerCase() === "f") {
         instanceRef.current?.fitView({ padding: 0.2, duration: 220 });
       } else if (event.key.toLowerCase() === "v") {
@@ -231,6 +261,7 @@ export function StudioCanvas({
         setInteractionMode("pan");
       } else if (event.key === "Escape") {
         setCreateMenu(null);
+        setSelectedEdgeId(null);
         setSelection([]);
       }
     };
@@ -252,7 +283,7 @@ export function StudioCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
+  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
     setReactFlowNodes((currentNodes) => {
@@ -282,6 +313,10 @@ export function StudioCanvas({
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     const removed = changes.filter((change) => change.type === "remove").map((change) => change.id);
     if (removed.length) deleteEdges(removed);
+    for (const change of changes) {
+      if (change.type !== "select") continue;
+      setSelectedEdgeId((current) => change.selected ? change.id : current === change.id ? null : current);
+    }
   }, [deleteEdges]);
 
   const openCreateMenu = useCallback((event: MouseEvent | globalThis.MouseEvent) => {
@@ -316,16 +351,24 @@ export function StudioCanvas({
           void uploadFiles(Array.from(event.dataTransfer.files), instance.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
         }}
       >
-        <ReactFlow<StudioFlowNode, Edge>
+        <ReactFlow<StudioFlowNode, StudioCanvasEdge>
           nodes={flowNodes}
           edges={flowEdges}
           nodeTypes={studioNodeTypes}
-          viewport={viewport}
-          onViewportChange={(nextViewport) => setViewport(nextViewport)}
-          onMoveEnd={(_, nextViewport) => setViewport(nextViewport, true)}
+          edgeTypes={studioEdgeTypes}
+          defaultViewport={viewport}
+          zoomOnScroll={false}
+          zoomActivationKeyCode={null}
+          panOnScroll
+          panOnScrollMode={PanOnScrollMode.Vertical}
+          onMoveEnd={(event, nextViewport) => {
+            // 滚轮仅用于浏览画布，不触发持久化；React Flow 内部管理移动帧，避免整棵画布高频重渲染。
+            setViewport(nextViewport, event?.type !== "wheel");
+          }}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onNodeClick={(event, node) => {
+            setSelectedEdgeId(null);
             if (event.metaKey || event.ctrlKey) {
               setSelection(selectedNodeIds.includes(node.id)
                 ? selectedNodeIds.filter((nodeId) => nodeId !== node.id)
@@ -336,6 +379,7 @@ export function StudioCanvas({
           }}
           onPaneClick={() => {
             setCreateMenu(null);
+            setSelectedEdgeId(null);
             setSelection([]);
           }}
           onNodeDragStart={(_, node) => {

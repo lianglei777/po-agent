@@ -936,6 +936,8 @@ export const zh = {
     canvasNameSuffix: "无限画布",
     canvasHideConnections: "隐藏连线",
     canvasShowConnections: "显示连线",
+    canvasConnection: "节点连线",
+    canvasRemoveConnection: "移除连线",
     canvasFit: "适配全部节点",
     canvasAgent: "Agent",
     canvasEmptyCreateHint: "使用下方添加按钮创建节点",

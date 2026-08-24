@@ -9,6 +9,7 @@ import type { StudioFlowNode } from "../model/studio-flow-nodes";
 import { useCanvasStore } from "../state/canvas-store";
 import { TextCanvasNode } from "./text-canvas-node";
 import { ImageCanvasNode } from "./image-canvas-node";
+import { getCanvasNodeBoundaryHandleStyle } from "./shared/canvas-node-connection-handle";
 
 const TYPE_META = {
   image: { Icon: Images },
@@ -51,8 +52,8 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
         handleClassName="!size-2 !border-[var(--pl-accent)] !bg-[var(--pl-surface)]"
         onResizeEnd={(_, params) => resizeNode(id, params.width, params.height)}
       />
-      <Handle type="target" position={Position.Left} className="!size-3 !border-2 !border-[var(--pl-surface-elevated)] !bg-[var(--pl-accent)]" />
-      <Handle type="source" position={Position.Right} className="!size-3 !border-2 !border-[var(--pl-surface-elevated)] !bg-[var(--pl-accent)]" />
+      <Handle type="target" position={Position.Left} style={getCanvasNodeBoundaryHandleStyle(Position.Left)} className="!size-3 !border-2 !border-[var(--pl-surface-elevated)] !bg-[var(--pl-accent)]" />
+      <Handle type="source" position={Position.Right} style={getCanvasNodeBoundaryHandleStyle(Position.Right)} className="!size-3 !border-2 !border-[var(--pl-surface-elevated)] !bg-[var(--pl-accent)]" />
 
       <header className="pipeline-node-drag-handle flex h-11 cursor-grab items-center gap-2 border-b border-[var(--pl-border)] px-3 active:cursor-grabbing">
         <meta.Icon className="size-4 shrink-0 text-[var(--pl-accent)]" />
