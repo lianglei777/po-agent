@@ -20,7 +20,6 @@ import type { CanvasMediaType, CanvasNode } from "@/contracts/pipeline";
 import {
   ArrowLeft,
   ChevronDown,
-  Clock3,
   FileMusic,
   FileText,
   Images,
@@ -36,7 +35,9 @@ import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
+import { isPlainCanvasShortcut } from "../model/canvas-shortcuts";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
+import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
 import {
   StudioCanvasEdgeComponent,
   type StudioCanvasEdge,
@@ -46,8 +47,6 @@ const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
 const studioEdgeTypes = { studio: StudioCanvasEdgeComponent } satisfies EdgeTypes;
 
 type CreateMenuState = { screenX: number; screenY: number; flowX: number; flowY: number } | null;
-type PlaceholderPanel = "assets" | "shortcuts" | null;
-
 type ClipboardBundle = {
   version: 2;
   nodes: Array<{
@@ -101,7 +100,7 @@ export function StudioCanvas({
   const dragOriginsRef = useRef(new Map<string, { x: number; y: number }>());
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [createMenu, setCreateMenu] = useState<CreateMenuState>(null);
-  const [placeholderPanel, setPlaceholderPanel] = useState<PlaceholderPanel>(null);
+  const [assetsOpen, setAssetsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(projectTitle);
   const [reactFlowNodes, setReactFlowNodes] = useState<StudioFlowNode[]>([]);
@@ -253,11 +252,14 @@ export function StudioCanvas({
         event.preventDefault();
         if (activeSelectedEdgeId) removeEdge(activeSelectedEdgeId);
         else deleteNodes(selectedNodeIds);
-      } else if (event.key.toLowerCase() === "f") {
+      } else if (isPlainCanvasShortcut(event, "f")) {
+        event.preventDefault();
         instanceRef.current?.fitView({ padding: 0.2, duration: 220 });
-      } else if (event.key.toLowerCase() === "v") {
+      } else if (isPlainCanvasShortcut(event, "v")) {
+        event.preventDefault();
         setInteractionMode("select");
-      } else if (event.key.toLowerCase() === "h") {
+      } else if (isPlainCanvasShortcut(event, "h")) {
+        event.preventDefault();
         setInteractionMode("pan");
       } else if (event.key === "Escape") {
         setCreateMenu(null);
@@ -427,7 +429,7 @@ export function StudioCanvas({
         zoom={viewport.zoom}
         minimapVisible={minimapVisible}
         connectionsVisible={connectionsVisible}
-        onOpenAssets={() => setPlaceholderPanel("assets")}
+        onOpenAssets={() => setAssetsOpen(true)}
         onToggleMinimap={toggleMinimap}
         onToggleConnections={toggleConnections}
         onZoomOut={() => instanceRef.current?.zoomOut({ duration: 160 })}
@@ -442,7 +444,6 @@ export function StudioCanvas({
             : { x: 200, y: 160 };
           setCreateMenu({ screenX: window.innerWidth / 2 - 90, screenY: window.innerHeight - 150, flowX: center.x, flowY: center.y });
         }}
-        onOpenShortcuts={() => setPlaceholderPanel("shortcuts")}
       />
 
       <input
@@ -468,9 +469,9 @@ export function StudioCanvas({
       ) : null}
 
       <Drawer
-        open={Boolean(placeholderPanel)}
-        onClose={() => setPlaceholderPanel(null)}
-        title={placeholderTitle(placeholderPanel, t.pipeline)}
+        open={assetsOpen}
+        onClose={() => setAssetsOpen(false)}
+        title={t.pipeline.canvasAssetManagement}
         size={360}
         mask={{ closable: false }}
       >
@@ -584,15 +585,14 @@ function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAs
     </div>
   );
 }
-function BottomCenterToolbar({ onCreate, onOpenShortcuts }: {
+function BottomCenterToolbar({ onCreate }: {
   onCreate: () => void;
-  onOpenShortcuts: () => void;
 }) {
   const { t } = useI18n();
   return (
     <div className="absolute bottom-5 left-1/2 z-30 flex h-14 -translate-x-1/2 items-center gap-1 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1.5 shadow-[var(--pl-shadow-hover)] backdrop-blur" onClick={(event) => event.stopPropagation()}>
       <ToolButton title={t.pipeline.canvasAddNode} icon={<Plus className="size-5" />} primary onClick={onCreate} />
-      <ToolButton title={t.pipeline.canvasShortcuts} icon={<Clock3 className="size-4" />} onClick={onOpenShortcuts} />
+      <CanvasShortcutsPopover />
     </div>
   );
 }
@@ -617,10 +617,6 @@ function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number;
 
 function CreateMenuButton({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
   return <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"><span className="text-[var(--pl-accent)]">{icon}</span>{label}</button>;
-}
-
-function placeholderTitle(panel: PlaceholderPanel, copy: ReturnType<typeof useI18n>["t"]["pipeline"]) {
-  return ({ assets: copy.canvasAssetManagement, shortcuts: copy.canvasShortcuts } as const)[panel ?? "shortcuts"];
 }
 
 function saveLabel(state: string, copy: ReturnType<typeof useI18n>["t"]["pipeline"]) {
