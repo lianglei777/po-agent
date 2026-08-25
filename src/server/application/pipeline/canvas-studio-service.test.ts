@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CanvasMutationBatch, CanvasNode, PipelineProject } from "@/server/domain/pipeline";
+import type { CanvasMutationBatch, CanvasNode, CanvasPromptDocument, PipelineProject } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
 import type { LlmPort } from "@/server/ports/llm-port";
@@ -131,6 +131,42 @@ describe("CanvasStudioService local image upload", () => {
       },
       url: ["/api/pipeline/canvas-nodes/image-node-1/media"],
     });
+  });
+});
+
+describe("CanvasStudioService asset media", () => {
+  it("reads the selected artifact through the registered project workspace", async () => {
+    const repository = {
+      getAsset: vi.fn().mockResolvedValue({
+        id: "asset-1",
+        projectId: "project-1",
+        selectedArtifactId: "artifact-1",
+      }),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+    } as unknown as PipelineRepository;
+    const runs = {
+      getArtifact: vi.fn().mockResolvedValue({ id: "artifact-1", localPath: "generated/reference.png" }),
+      ensureSession: vi.fn(),
+    } as unknown as GenerationRunService;
+    const assets = {
+      read: vi.fn().mockResolvedValue({ data: new Uint8Array([1, 2]), mimeType: "image/png" }),
+    } as unknown as GenerationAssetService;
+    const service = createService(repository, {} as LlmPort, runs, assets);
+
+    await expect(service.readAssetMedia("asset-1")).resolves.toMatchObject({ mimeType: "image/png" });
+    expect(assets.read).toHaveBeenCalledWith({
+      sessionId: "pipeline:project-1",
+      relativePath: "generated/reference.png",
+    });
+  });
+
+  it("rejects assets without selected local media", async () => {
+    const repository = {
+      getAsset: vi.fn().mockResolvedValue({ id: "asset-1", projectId: "project-1", selectedArtifactId: null }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await expect(service.readAssetMedia("asset-1")).rejects.toMatchObject({ code: "FILE_NOT_FOUND", status: 404 });
   });
 });
 
@@ -322,6 +358,78 @@ describe("CanvasStudioService image AI", () => {
   });
 });
 
+describe("CanvasStudioService video AI", () => {
+  it("binds explicit first and last frame mentions to stable route slots in prompt order", async () => {
+    const target = videoNode();
+    const first = {
+      ...imageNode(),
+      id: "frame-first",
+      data: {
+        ...imageNode().data!,
+        name: "Opening",
+        workspaceFile: { relativePath: "assets/opening.png", contentType: "image/png", name: "opening.png" },
+      },
+    };
+    const last = {
+      ...imageNode(),
+      id: "frame-last",
+      data: {
+        ...imageNode().data!,
+        name: "Ending",
+        workspaceFile: { relativePath: "assets/ending.png", contentType: "image/png", name: "ending.png" },
+      },
+    };
+    const nodes = new Map([[target.id, target], [first.id, first], [last.id, last]]);
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-08-21T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-video-1",
+      enabled: true,
+      isDefault: true,
+      capability: "image-to-video",
+      inputSchema: {
+        prompt: { required: true },
+        parameters: [
+          { key: "durationSeconds", label: "Duration", type: "select", options: [{ label: "5", value: 5 }] },
+          { key: "conversionSlots", label: "Slots", type: "multi-select", options: [{ label: "All", value: "all" }] },
+        ],
+      },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-video-1" } }),
+    } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    await service.generate(target.id, {
+      prompt: "Move from day to night",
+      promptDocument: videoPromptDocument(),
+      routeId: route.id,
+      settings: { durationSeconds: 5, conversionSlots: ["all"] },
+    });
+
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "image-to-video",
+      routeId: route.id,
+      prompt: "Move from day to night 图片1 图片2",
+      assets: [
+        { slot: "firstFrameUrl", bindingId: "mention-first", order: 0, ref: { type: "workspace-file", relativePath: "assets/opening.png" } },
+        { slot: "lastFrameUrl", bindingId: "mention-last", order: 1, ref: { type: "workspace-file", relativePath: "assets/ending.png" } },
+      ],
+      parameters: { durationSeconds: 5, conversionSlots: ["all"] },
+    }));
+  });
+});
+
 function repositoryStub(result: { applied: boolean; revision: number }) {
   return {
     getProject: vi.fn().mockResolvedValue(project),
@@ -369,6 +477,44 @@ function imageNode(): CanvasNode {
     },
     createdAt: "2026-08-19T00:00:00.000Z",
     updatedAt: "2026-08-19T00:00:00.000Z",
+  };
+}
+
+function videoNode(): CanvasNode {
+  return {
+    ...imageNode(),
+    id: "video-node-1",
+    type: "video",
+    entityId: "video-entity-1",
+    data: {
+      type: "video",
+      name: "Video",
+      action: "video_generate",
+      generatorType: "default",
+      url: [],
+      params: { prompt: "", settings: {} },
+      taskInfo: { status: "idle" },
+    },
+  };
+}
+
+function videoPromptDocument(): CanvasPromptDocument {
+  return {
+    schemaVersion: 1 as const,
+    format: "tiptap-json" as const,
+    plainText: "Move from day to night @Opening @Ending",
+    content: {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Move from day to night " },
+          { type: "resourceReference", attrs: { referenceId: "mention-first", sourceType: "canvas-node", sourceId: "frame-first", mediaType: "image", label: "Opening", role: "first-frame" } },
+          { type: "text", text: " " },
+          { type: "resourceReference", attrs: { referenceId: "mention-last", sourceType: "canvas-node", sourceId: "frame-last", mediaType: "image", label: "Ending", role: "last-frame" } },
+        ],
+      }],
+    },
   };
 }
 

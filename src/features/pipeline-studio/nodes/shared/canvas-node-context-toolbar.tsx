@@ -1,16 +1,21 @@
 import { Button, Tooltip } from "antd";
+import { NodeToolbar, Position } from "@xyflow/react";
 import type { ReactNode } from "react";
 
 export function CanvasNodeContextToolbar({ children, offset = 14 }: { children: ReactNode; offset?: number }) {
   return (
-    <div
-      className="nodrag nowheel absolute bottom-[calc(100%+14px)] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--pl-shadow-hover)]"
-      style={{ bottom: `calc(100% + ${offset}px)` }}
+    <NodeToolbar
+      // Portal 会跟随节点位置并抵消画布 zoom，保证工具栏始终保持屏幕空间尺寸。
+      isVisible
+      position={Position.Top}
+      offset={offset}
+      align="center"
+      className="nodrag nowheel flex items-center gap-1 whitespace-nowrap rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--pl-shadow-hover)]"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
       {children}
-    </div>
+    </NodeToolbar>
   );
 }
 

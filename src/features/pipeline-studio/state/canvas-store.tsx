@@ -9,6 +9,7 @@ import type {
   CanvasMutation,
   CanvasNode,
   CanvasNodeData,
+  CanvasPromptDocument,
   CanvasSnapshot,
   CanvasViewport,
 } from "@/contracts/pipeline";
@@ -16,6 +17,7 @@ import { textDocumentFromPlainText } from "../model/text-document";
 
 export type CanvasInteractionMode = "select" | "pan";
 export type CanvasSaveState = "idle" | "saving" | "saved" | "error";
+export type CanvasComposerDraftKind = "text" | "image-create" | "image-modify" | "video";
 
 type CanvasDocument = { nodes: CanvasNode[]; edges: CanvasEdge[] };
 
@@ -26,6 +28,7 @@ type CanvasStoreState = CanvasDocument & {
   selectedNodeIds: string[];
   editingNodeId: string | null;
   imageComposerNodeId: string | null;
+  composerDrafts: Record<string, CanvasPromptDocument>;
   interactionMode: CanvasInteractionMode;
   connectionsVisible: boolean;
   minimapVisible: boolean;
@@ -43,6 +46,7 @@ type CanvasStoreState = CanvasDocument & {
   stopEditingNode: (nodeId?: string) => void;
   openImageComposer: (nodeId: string) => void;
   closeImageComposer: (nodeId?: string) => void;
+  setComposerDraft: (nodeId: string, kind: CanvasComposerDraftKind, document: CanvasPromptDocument) => void;
   setInteractionMode: (mode: CanvasInteractionMode) => void;
   toggleConnections: () => void;
   toggleMinimap: () => void;
@@ -98,6 +102,7 @@ export function createCanvasStore(projectId: string) {
     selectedNodeIds: [],
     editingNodeId: null,
     imageComposerNodeId: null,
+    composerDrafts: loadComposerDrafts(projectId),
     interactionMode: "select",
     connectionsVisible: true,
     minimapVisible: false,
@@ -108,20 +113,28 @@ export function createCanvasStore(projectId: string) {
     past: [],
     future: [],
 
-    hydrate: (snapshot) => set({
-      revision: snapshot.revision,
-      nodes: snapshot.nodes,
-      edges: snapshot.edges,
-      viewport: snapshot.viewport,
-      selectedNodeIds: [],
-      editingNodeId: null,
-      imageComposerNodeId: null,
-      loaded: true,
-      error: null,
-      saveState: "idle",
-      pendingMutations: [],
-      past: [],
-      future: [],
+    hydrate: (snapshot) => set((state) => {
+      const composerDrafts = filterComposerDrafts(
+        state.composerDrafts,
+        new Set(snapshot.nodes.map((node) => node.id)),
+      );
+      if (composerDrafts !== state.composerDrafts) persistComposerDrafts(projectId, composerDrafts);
+      return {
+        revision: snapshot.revision,
+        nodes: snapshot.nodes,
+        edges: snapshot.edges,
+        viewport: snapshot.viewport,
+        selectedNodeIds: [],
+        editingNodeId: null,
+        imageComposerNodeId: null,
+        composerDrafts,
+        loaded: true,
+        error: null,
+        saveState: "idle",
+        pendingMutations: [],
+        past: [],
+        future: [],
+      };
     }),
 
     reconcileSnapshot: (snapshot) => set((state) => {
@@ -129,6 +142,8 @@ export function createCanvasStore(projectId: string) {
       const selectedNodeIds = state.selectedNodeIds.filter((nodeId) => nodeIds.has(nodeId));
       const documentChanged = JSON.stringify(state.nodes) !== JSON.stringify(snapshot.nodes)
         || JSON.stringify(state.edges) !== JSON.stringify(snapshot.edges);
+      const composerDrafts = filterComposerDrafts(state.composerDrafts, nodeIds);
+      if (composerDrafts !== state.composerDrafts) persistComposerDrafts(projectId, composerDrafts);
       return {
         revision: snapshot.revision,
         nodes: snapshot.nodes,
@@ -139,6 +154,7 @@ export function createCanvasStore(projectId: string) {
         imageComposerNodeId: state.imageComposerNodeId && nodeIds.has(state.imageComposerNodeId)
           ? state.imageComposerNodeId
           : null,
+        composerDrafts,
         loaded: true,
         error: null,
         saveState: "saved",
@@ -170,6 +186,11 @@ export function createCanvasStore(projectId: string) {
     closeImageComposer: (nodeId) => set((state) => (
       nodeId && state.imageComposerNodeId !== nodeId ? state : { imageComposerNodeId: null }
     )),
+    setComposerDraft: (nodeId, kind, document) => set((state) => {
+      const composerDrafts = { ...state.composerDrafts, [composerDraftKey(nodeId, kind)]: document };
+      persistComposerDrafts(projectId, composerDrafts);
+      return { composerDrafts };
+    }),
 
     setInteractionMode: (interactionMode) => set({ interactionMode }),
     toggleConnections: () => set((state) => ({ connectionsVisible: !state.connectionsVisible })),
@@ -326,6 +347,7 @@ export function createCanvasStore(projectId: string) {
         imageComposerNodeId: current.imageComposerNodeId && ids.has(current.imageComposerNodeId)
           ? null
           : current.imageComposerNodeId,
+        composerDrafts: removeNodeComposerDrafts(projectId, current.composerDrafts, ids),
       }));
     },
 
@@ -569,4 +591,75 @@ function diffDocuments(from: CanvasDocument, to: CanvasDocument, projectId: stri
 
 function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+const COMPOSER_DRAFT_KINDS: CanvasComposerDraftKind[] = ["text", "image-create", "image-modify", "video"];
+
+export function composerDraftKey(nodeId: string, kind: CanvasComposerDraftKind) {
+  return `${nodeId}:${kind}`;
+}
+
+function composerDraftStorageKey(projectId: string) {
+  return `pipeline-composer-drafts:v1:${projectId}`;
+}
+
+function loadComposerDrafts(projectId: string): Record<string, CanvasPromptDocument> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(composerDraftStorageKey(projectId));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.drafts)) return {};
+    return Object.fromEntries(Object.entries(parsed.drafts).filter((entry): entry is [string, CanvasPromptDocument] => (
+      isCanvasPromptDocument(entry[1])
+    )));
+  } catch {
+    return {};
+  }
+}
+
+function persistComposerDrafts(projectId: string, drafts: Record<string, CanvasPromptDocument>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(composerDraftStorageKey(projectId), JSON.stringify({ version: 1, drafts }));
+  } catch {
+    // 草稿仍保留在当前画布内存中；浏览器拒绝存储时不能中断正常输入。
+  }
+}
+
+function filterComposerDrafts(
+  drafts: Record<string, CanvasPromptDocument>,
+  nodeIds: ReadonlySet<string>,
+): Record<string, CanvasPromptDocument> {
+  const allowedKeys = new Set([...nodeIds].flatMap((nodeId) => (
+    COMPOSER_DRAFT_KINDS.map((kind) => composerDraftKey(nodeId, kind))
+  )));
+  const entries = Object.entries(drafts).filter(([key]) => allowedKeys.has(key));
+  return entries.length === Object.keys(drafts).length ? drafts : Object.fromEntries(entries);
+}
+
+function removeNodeComposerDrafts(
+  projectId: string,
+  drafts: Record<string, CanvasPromptDocument>,
+  nodeIds: ReadonlySet<string>,
+) {
+  const deletedKeys = new Set([...nodeIds].flatMap((nodeId) => (
+    COMPOSER_DRAFT_KINDS.map((kind) => composerDraftKey(nodeId, kind))
+  )));
+  const next = Object.fromEntries(Object.entries(drafts).filter(([key]) => !deletedKeys.has(key)));
+  if (Object.keys(next).length !== Object.keys(drafts).length) persistComposerDrafts(projectId, next);
+  return next;
+}
+
+function isCanvasPromptDocument(value: unknown): value is CanvasPromptDocument {
+  return isRecord(value)
+    && value.schemaVersion === 1
+    && value.format === "tiptap-json"
+    && typeof value.plainText === "string"
+    && isRecord(value.content)
+    && value.content.type === "doc";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -260,6 +260,23 @@ export class CanvasStudioService {
     throw new AppError("FILE_NOT_FOUND", "Canvas media is not available locally", 404);
   }
 
+  async readAssetMedia(assetId: string) {
+    const asset = await this.repository.getAsset(assetId);
+    if (!asset) throw new AppError("PIPELINE_ASSET_NOT_FOUND", "Pipeline asset was not found", 404);
+    if (!asset.selectedArtifactId) {
+      throw new AppError("FILE_NOT_FOUND", "Pipeline asset has no selected media", 404);
+    }
+    const artifact = await this.runs.getArtifact(asset.selectedArtifactId);
+    if (!artifact?.localPath) {
+      throw new AppError("FILE_NOT_FOUND", "Pipeline asset media is not available locally", 404);
+    }
+    await ensurePipelineRunSession(this.runs, asset.projectId, await this.requireProjectRoot(asset.projectId));
+    return this.assets.read({
+      sessionId: `pipeline:${asset.projectId}`,
+      relativePath: artifact.localPath,
+    });
+  }
+
   async generate(nodeId: string, input?: GenerateCanvasNodeInput): Promise<{ node: CanvasNode; runId?: string; edge?: CanvasEdge }> {
     if (input?.createNewNode) {
       return this.generateDerivedImage(nodeId, input);
@@ -339,18 +356,27 @@ export class CanvasStudioService {
     if (data.type === "image") {
       capability = imageRefs.length ? "image-to-image" : "text-to-image";
       generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
-    } else if (videoRefs.length || audioRefs.length || imageRefs.length > 2) {
+    } else if (promptDocument && (videoRefs.length || audioRefs.length || imageRefs.some((reference) => reference.role === "reference"))) {
       capability = "multimodal-to-video";
       generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
       generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
       generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
-    } else if (imageRefs.length >= 1) {
+    } else if (promptDocument && imageRefs.length >= 1) {
       capability = "image-to-video";
-      const firstFrame = imageRefs.find((reference) => reference.role === "first-frame") ?? imageRefs[0];
-      const lastFrame = imageRefs.find((reference) => reference.role === "last-frame")
-        ?? imageRefs.find((reference) => reference !== firstFrame);
+      const firstFrame = imageRefs.find((reference) => reference.role === "first-frame");
+      const lastFrame = imageRefs.find((reference) => reference.role === "last-frame");
       generationAssets.push(...referenceAssets(firstFrame ? [firstFrame] : [], "firstFrameUrl"));
       generationAssets.push(...referenceAssets(lastFrame ? [lastFrame] : [], "lastFrameUrl"));
+    } else if (!promptDocument && (videoRefs.length || audioRefs.length || imageRefs.length > 2)) {
+      // 旧画布没有富文本提示词，继续按连线数量推断槽位，避免升级后改变已有工作流语义。
+      capability = "multimodal-to-video";
+      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
+      generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
+      generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
+    } else if (!promptDocument && imageRefs.length >= 1) {
+      capability = "image-to-video";
+      generationAssets.push(...referenceAssets(imageRefs.slice(0, 1), "firstFrameUrl"));
+      generationAssets.push(...referenceAssets(imageRefs.slice(1, 2), "lastFrameUrl"));
     } else {
       capability = "text-to-video";
     }

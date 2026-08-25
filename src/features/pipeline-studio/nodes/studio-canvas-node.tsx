@@ -9,6 +9,7 @@ import type { StudioFlowNode } from "../model/studio-flow-nodes";
 import { useCanvasStore } from "../state/canvas-store";
 import { TextCanvasNode } from "./text-canvas-node";
 import { ImageCanvasNode } from "./image-canvas-node";
+import { VideoCanvasNode } from "./video-canvas-node";
 import { getCanvasNodeBoundaryHandleStyle } from "./shared/canvas-node-connection-handle";
 
 const TYPE_META = {
@@ -33,6 +34,9 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
   }
   if (canvas.type === "image") {
     return <ImageCanvasNode id={id} node={node} selected={selected} dragging={dragging} />;
+  }
+  if (canvas.type === "video") {
+    return <VideoCanvasNode id={id} node={node} selected={selected} dragging={dragging} />;
   }
 
   const meta = TYPE_META[canvas.type];
@@ -71,9 +75,7 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
       </header>
 
       <div className="nodrag nowheel h-[calc(100%-44px)] min-h-0">
-        {canvas.type === "video" && mediaUrl ? (
-          <video src={mediaUrl} controls className="h-full min-h-[140px] w-full bg-black object-contain" />
-        ) : canvas.type === "audio" ? (
+        {canvas.type === "audio" ? (
           <div className="flex h-full min-h-[96px] items-center gap-3 px-4">
             <span className="flex size-10 items-center justify-center rounded-full bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]"><FileMusic className="size-5" /></span>
             {mediaUrl ? <audio src={mediaUrl} controls className="w-full" /> : <span className="text-xs text-[var(--pl-text-muted)]">{t.pipeline.nodeAudioPlaceholder}</span>}

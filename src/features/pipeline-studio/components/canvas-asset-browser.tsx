@@ -5,6 +5,8 @@ import type { CanvasMediaType, CanvasNode, PipelineAsset } from "@/contracts/pip
 import { FileImage, FileMusic, FileText, FileVideo, Images, Search } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { resolveCanvasMediaSource } from "../model/canvas-media-source";
+import { ResourcePreviewThumbnail } from "./resource-preview-thumbnail";
 
 type BrowserTab = "canvas" | "assets";
 type MediaFilter = "all" | CanvasMediaType;
@@ -42,7 +44,7 @@ export function CanvasAssetBrowser({
   }), [filter, nodes, normalizedQuery]);
   const assetItems = useMemo(() => assets.filter((asset) => !normalizedQuery || asset.name.toLocaleLowerCase().includes(normalizedQuery)), [assets, normalizedQuery]);
   const canvasNodeByAssetId = useMemo(() => new Map(nodes.flatMap((node) => node.data?.legacyEntity?.type === "asset"
-    ? [[node.data.legacyEntity.id, node.id] as const]
+    ? [[node.data.legacyEntity.id, node] as const]
     : [])), [nodes]);
 
   return (
@@ -51,8 +53,8 @@ export function CanvasAssetBrowser({
         <TabButton active={tab === "canvas"} onClick={() => setTab("canvas")}>{t.pipeline.canvasElements}</TabButton>
         <TabButton active={tab === "assets"} onClick={() => setTab("assets")}>{t.pipeline.canvasProjectAssets}</TabButton>
       </div>
-      <label className="mx-4 mt-4 flex h-9 items-center gap-2 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)] px-3 focus-within:border-[var(--pl-accent)]">
-        <Search className="size-4 text-[var(--pl-text-muted)]" />
+      <label className="mx-2.5 mt-2.5 flex h-8 items-center gap-2 rounded-md border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2.5 focus-within:border-[var(--pl-accent)]">
+        <Search className="size-3.5 text-[var(--pl-text-muted)]" />
         <span className="sr-only">{t.pipeline.canvasAssetSearch}</span>
         <input
           value={query}
@@ -62,42 +64,43 @@ export function CanvasAssetBrowser({
         />
       </label>
       {tab === "canvas" ? (
-        <div className="flex gap-1 overflow-x-auto px-4 py-3">
+        <div className="flex gap-0.5 overflow-x-auto px-2.5 py-2">
           {(["all", "text", "image", "video", "audio"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setFilter(value)}
-              className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] ${filter === value ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"}`}
+              className={`h-6 shrink-0 rounded-md px-2 text-[10px] transition-colors ${filter === value ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"}`}
             >
               {mediaFilterLabel(value, t.pipeline)}
             </button>
           ))}
         </div>
-      ) : <div className="h-3" />}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      ) : <div className="h-2" />}
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2.5">
         {tab === "canvas" ? (
           canvasItems.length ? canvasItems.map((node) => (
             <ResourceRow
               key={node.id}
               mediaType={node.data!.type}
               label={node.data!.name}
-              meta={t.pipeline.canvasLocateHint}
+              previewNode={node}
               onClick={() => onLocateNode(node.id)}
             />
           )) : <EmptyState label={t.pipeline.canvasElementsEmpty} />
         ) : loadingAssets ? (
           <EmptyState label={t.pipeline.canvasAssetsLoading} />
         ) : assetItems.length ? assetItems.map((asset) => {
-          const nodeId = canvasNodeByAssetId.get(asset.id);
+          const canvasNode = canvasNodeByAssetId.get(asset.id);
           return (
             <ResourceRow
               key={asset.id}
               mediaType="image"
               label={asset.name}
-              meta={nodeId ? t.pipeline.canvasLocateHint : t.pipeline.canvasAssetNotOnCanvas}
-              disabled={!nodeId}
-              onClick={() => nodeId && onLocateNode(nodeId)}
+              meta={canvasNode ? undefined : t.pipeline.canvasAssetNotOnCanvas}
+              previewNode={canvasNode}
+              disabled={!canvasNode}
+              onClick={() => canvasNode && onLocateNode(canvasNode.id)}
             />
           );
         }) : <EmptyState label={t.pipeline.canvasAssetsEmpty} />}
@@ -111,17 +114,18 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`border-b-2 px-3 py-3 text-xs font-medium ${active ? "border-[var(--pl-accent)] text-[var(--pl-text)]" : "border-transparent text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"}`}
+      className={`h-9 border-b-2 px-2 text-[11px] font-medium transition-colors ${active ? "border-[var(--pl-accent)] text-[var(--pl-text)]" : "border-transparent text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"}`}
     >
       {children}
     </button>
   );
 }
 
-function ResourceRow({ mediaType, label, meta, disabled = false, onClick }: {
+function ResourceRow({ mediaType, label, meta, previewNode, disabled = false, onClick }: {
   mediaType: CanvasMediaType;
   label: string;
-  meta: string;
+  meta?: string;
+  previewNode?: CanvasNode;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -131,23 +135,40 @@ function ResourceRow({ mediaType, label, meta, disabled = false, onClick }: {
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-[var(--pl-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-default disabled:opacity-45"
+      className="group flex h-11 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-[var(--pl-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-default disabled:opacity-45"
     >
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface)]">
-        <Icon className="size-4 text-[var(--pl-text-secondary)]" />
-      </span>
+      <ResourceThumbnail node={previewNode} mediaType={mediaType} label={label} fallback={<Icon className="size-3.5 text-[var(--pl-text-secondary)]" />} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium text-[var(--pl-text)]">{label}</span>
-        <span className="mt-0.5 block truncate text-[10px] text-[var(--pl-text-muted)]">{meta}</span>
+        <span className="block truncate text-[11px] font-medium leading-4 text-[var(--pl-text)]">{label}</span>
+        {meta ? <span className="block truncate text-[9px] leading-3.5 text-[var(--pl-text-muted)]">{meta}</span> : null}
       </span>
     </button>
   );
 }
 
+function ResourceThumbnail({ node, mediaType, label, fallback }: {
+  node?: CanvasNode;
+  mediaType: CanvasMediaType;
+  label: string;
+  fallback: ReactNode;
+}) {
+  const source = resolveCanvasMediaSource(node?.id ?? "", node?.data);
+  return (
+    <ResourcePreviewThumbnail
+      mediaType={mediaType}
+      label={label}
+      url={source?.url ?? null}
+      poster={node?.data?.poster}
+      size="browser"
+      fallback={fallback}
+    />
+  );
+}
+
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-4 py-14 text-center text-xs text-[var(--pl-text-muted)]">
-      <Images className="size-6" />
+    <div className="flex flex-col items-center gap-2 px-3 py-10 text-center text-[11px] text-[var(--pl-text-muted)]">
+      <Images className="size-5" />
       {label}
     </div>
   );

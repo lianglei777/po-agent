@@ -87,6 +87,46 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().imageComposerNodeId).toBeNull();
   });
 
+  it("keeps composer drafts across closing and store recreation until the node is deleted", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+    const node = {
+      id: "node-1",
+      projectId: "project-1",
+      type: "image" as const,
+      entityId: "entity-1",
+      positionX: 0,
+      positionY: 0,
+      width: 360,
+      height: 300,
+      data: { type: "image" as const, name: "Image", action: "image_generate", url: [] },
+      createdAt: "2026-08-25T00:00:00.000Z",
+      updatedAt: "2026-08-25T00:00:00.000Z",
+    };
+    const document = {
+      schemaVersion: 1 as const,
+      format: "tiptap-json" as const,
+      plainText: "保留这个提示词",
+      content: { type: "doc" as const, content: [{ type: "paragraph" as const, content: [{ type: "text" as const, text: "保留这个提示词" }] }] },
+    };
+    const store = createCanvasStore("project-1");
+    store.getState().hydrate({ revision: 1, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    store.getState().setComposerDraft(node.id, "image-create", document);
+    store.getState().setSelection([]);
+
+    const restored = createCanvasStore("project-1");
+    expect(restored.getState().composerDrafts[`${node.id}:image-create`]).toEqual(document);
+
+    store.getState().deleteNodes([node.id]);
+    expect(createCanvasStore("project-1").getState().composerDrafts).toEqual({});
+    vi.unstubAllGlobals();
+  });
+
   it("updates node size live and records one mutation only after resize ends", () => {
     const store = createCanvasStore("project-1");
     const node = {

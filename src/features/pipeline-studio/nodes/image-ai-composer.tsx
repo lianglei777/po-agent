@@ -10,7 +10,10 @@ import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute } from "../model/image-generation-options";
+import { promptReferenceRouteProblem } from "../model/prompt-reference-validation";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
+import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
+import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 
 const ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4"] as const;
 const RESOLUTIONS = ["1k", "2k"] as const;
@@ -20,7 +23,6 @@ export function ImageAiComposer({
   data,
   waitingForSave,
   mode = "create",
-  onUpload,
   onNodeUpdate,
   onGenerationStarted,
 }: {
@@ -28,14 +30,21 @@ export function ImageAiComposer({
   data: CanvasNodeData;
   waitingForSave: boolean;
   mode?: "create" | "modify";
-  onUpload: () => void;
   onNodeUpdate: (node: CanvasNode) => void;
   onGenerationStarted?: (node: CanvasNode, edge?: CanvasEdge) => void;
 }) {
   const { t } = useI18n();
-  const [promptDocument, setPromptDocument] = useState<CanvasPromptDocument>(() => mode === "modify"
+  const draftKey = composerDraftKey(nodeId, mode === "modify" ? "image-modify" : "image-create");
+  const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
+  const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
+  const promptDocument = storedDraft ?? (mode === "modify"
     ? promptDocumentFromPlainText("")
     : data.params?.promptDocument ?? promptDocumentFromPlainText(data.params?.prompt ?? ""));
+  const setPromptDocument = (document: CanvasPromptDocument) => setComposerDraft(
+    nodeId,
+    mode === "modify" ? "image-modify" : "image-create",
+    document,
+  );
   const instruction = promptDocument.plainText;
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
@@ -46,6 +55,7 @@ export function ImageAiComposer({
   const [cancelling, setCancelling] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
@@ -57,6 +67,7 @@ export function ImageAiComposer({
     ? "image-to-image"
     : "text-to-image";
   const loadingRoutes = loadedCapability !== capability;
+  const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,6 +98,16 @@ export function ImageAiComposer({
     if (!routes.length || !selectedRoute) {
       return capability === "image-to-image" ? t.pipeline.imageAiNoModifyRoutes : t.pipeline.imageAiNoRoutes;
     }
+    if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
+    if (referenceProblem?.kind === "unsupported") return t.pipeline.promptReferenceUnsupported;
+    if (referenceProblem?.kind === "too-many") {
+      return t.pipeline.promptReferenceTooMany
+        .replace("{label}", referenceProblem.slot.label)
+        .replace("{count}", String(referenceProblem.slot.maxFiles ?? 1));
+    }
+    if (referenceProblem?.kind === "missing-required") {
+      return t.pipeline.promptReferenceRequired.replace("{label}", referenceProblem.slot.label);
+    }
     if (promptProblem === "required") return t.pipeline.imageAiInstructionRequired;
     if (promptProblem === "too-short") {
       return t.pipeline.imageAiPromptTooShort.replace("{count}", String(selectedRoute.inputSchema.prompt.minLength ?? 1));
@@ -95,7 +116,7 @@ export function ImageAiComposer({
       return t.pipeline.imageAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [capability, loadingRoutes, promptProblem, routes.length, selectedRoute, t.pipeline, waitingForSave]);
+  }, [capability, invalidReferenceCount, loadingRoutes, promptProblem, referenceProblem, routes.length, selectedRoute, t.pipeline, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating || cancelling || !selectedRoute) return;
@@ -149,12 +170,12 @@ export function ImageAiComposer({
       disabledReason={disabledReason}
       error={localError ?? data.taskInfo?.errorMessage ?? null}
       onPromptDocumentChange={setPromptDocument}
+      onReferenceStateChange={({ invalidCount }) => setInvalidReferenceCount(invalidCount)}
       onRouteChange={setSelectedRouteId}
       onAspectRatioChange={(value) => setAspectRatio(readOption(value, ASPECT_RATIOS, "1:1"))}
       onResolutionChange={(value) => setResolution(readOption(value, RESOLUTIONS, "2k"))}
       onSubmit={() => void submit()}
       onCancel={() => void cancel()}
-      onUpload={onUpload}
       onExpand={() => setExpanded(true)}
       nodeId={nodeId}
     />
@@ -162,13 +183,9 @@ export function ImageAiComposer({
 
   return (
     <>
-      <div
-        className="nodrag nowheel absolute left-1/2 top-[calc(100%+14px)] z-30 w-[min(900px,84vw)] -translate-x-1/2"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <InlineCanvasNodeComposer widthClass="w-[min(900px,calc(100vw-32px))]">
         {surface(false)}
-      </div>
+      </InlineCanvasNodeComposer>
       <Modal
         open={expanded}
         title={mode === "modify" ? t.pipeline.imageAiModifyTitle : t.pipeline.imageAiTitle}
@@ -189,7 +206,8 @@ function ComposerSurface({
   large, mode, promptDocument, routes, selectedRouteId, aspectRatio, resolution,
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
   onPromptDocumentChange, onRouteChange, onAspectRatioChange, onResolutionChange,
-  onSubmit, onCancel, onUpload, onExpand, nodeId,
+  onReferenceStateChange,
+  onSubmit, onCancel, onExpand, nodeId,
 }: {
   large: boolean;
   mode: "create" | "modify";
@@ -205,12 +223,12 @@ function ComposerSurface({
   disabledReason: string;
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
+  onReferenceStateChange: (state: { invalidCount: number }) => void;
   onRouteChange: (value: string) => void;
   onAspectRatioChange: (value: string) => void;
   onResolutionChange: (value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
-  onUpload: () => void;
   onExpand: () => void;
   nodeId: string;
 }) {
@@ -222,41 +240,32 @@ function ComposerSurface({
       large={large}
       error={error}
       body={(
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center px-4 pt-4">
-            {mode === "create" ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onUpload}
-                className="flex h-9 items-center gap-2 rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] px-3 text-xs font-medium text-[var(--pl-text-secondary)] hover:border-[var(--pl-accent)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <ImagePlus className="size-4" />
-                {t.pipeline.nodeImageChoose}
-              </button>
-            ) : (
-              <span className="flex h-9 items-center gap-2 text-xs font-medium text-[var(--pl-text-secondary)]">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {mode === "modify" ? (
+            <div className="flex shrink-0 items-center px-4 pt-3">
+              <span className="flex h-8 items-center gap-2 text-xs font-medium text-[var(--pl-text-secondary)]">
                 <ImagePlus className="size-4 text-[var(--pl-accent)]" />
                 {t.pipeline.imageAiCurrentReference}
               </span>
-            )}
-            {!large ? (
-              <button
-                type="button"
-                title={t.pipeline.textAiExpand}
-                aria-label={t.pipeline.textAiExpand}
-                onClick={onExpand}
-                className="ml-auto flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-              >
-                <Maximize2 className="size-4" />
-              </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
+          {!large ? (
+            <button
+              type="button"
+              title={t.pipeline.textAiExpand}
+              aria-label={t.pipeline.textAiExpand}
+              onClick={onExpand}
+              className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-lg bg-[var(--pl-surface-elevated)] text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
+            >
+              <Maximize2 className="size-4" />
+            </button>
+          ) : null}
           <ResourcePromptEditor
             autoFocus={large}
             value={promptDocument}
             disabled={busy}
             onChange={onPromptDocumentChange}
+            onReferenceStateChange={onReferenceStateChange}
             onSubmit={onSubmit}
             allowedMediaTypes={mode === "modify" ? ["text"] : ["text", "image"]}
             excludedCanvasNodeId={nodeId}

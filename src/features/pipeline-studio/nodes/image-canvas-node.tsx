@@ -397,7 +397,6 @@ export function ImageCanvasNode({
           nodeId={id}
           data={canvas}
           waitingForSave={waitingForSave}
-          onUpload={() => inputRef.current?.click()}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}
@@ -411,7 +410,6 @@ export function ImageCanvasNode({
           data={canvas}
           mode="modify"
           waitingForSave={waitingForSave}
-          onUpload={() => inputRef.current?.click()}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}

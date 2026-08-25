@@ -145,11 +145,17 @@ describe("parseGenerateCanvasNodeRequest", () => {
     });
   });
 
-  it("rejects unsupported image generation settings", () => {
+  it("accepts bounded schema-driven video settings and rejects nested values", () => {
+    expect(parseGenerateCanvasNodeRequest({
+      prompt: "valid prompt",
+      settings: { durationSeconds: 5, generateAudio: true, conversionSlots: ["all"] },
+    })).toMatchObject({
+      settings: { durationSeconds: 5, generateAudio: true, conversionSlots: ["all"] },
+    });
     expect(() => parseGenerateCanvasNodeRequest({
       prompt: "valid prompt",
-      settings: { width: 99999 },
-    })).toThrow("settings contains unsupported fields");
+      settings: { unsafe: { nested: true } },
+    })).toThrow("settings.unsafe is invalid");
   });
 
   it("accepts an explicit request to create a derived image node", () => {

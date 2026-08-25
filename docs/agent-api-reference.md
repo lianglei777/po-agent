@@ -2963,7 +2963,7 @@ interface GenerateTextNodeResponse {
 
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/generate`
 
-启动画布媒体节点生成。请求体可以为空对象以继续使用节点已有参数；图片节点可直接提交本次文生图配置：
+启动画布媒体节点生成。请求体可以为空对象以继续使用节点已有参数；`settings` 的具体字段由所选 Route 的 `inputSchema.parameters` 定义：
 
 ```ts
 interface GenerateCanvasNodeRequest {
@@ -2972,10 +2972,7 @@ interface GenerateCanvasNodeRequest {
   routeId?: string;
   // 仅用于已有图片：保留源节点，并在旁边创建一个图生图结果节点。
   createNewNode?: boolean;
-  settings?: {
-    aspectRatio?: "16:9" | "9:16" | "4:3" | "3:4" | "1:1";
-    resolution?: "1k" | "2k";
-  };
+  settings?: Record<string, string | number | boolean | Array<string | number | boolean>>;
 }
 ```
 
@@ -3016,6 +3013,8 @@ interface GenerateCanvasNodeResponse {
 
 - 图片节点没有上游图片参考时使用 `text-to-image` Route。
 - 对已有图片提交 `createNewNode: true` 时，服务端保留源节点，在其右侧寻找空位创建结果节点，以源图片作为 `image-to-image` 输入，并返回两节点之间的来源连线。失败或取消只影响新节点。
+- 视频提示词中标记为 `first-frame` / `last-frame` 的图片分别绑定 `firstFrameUrl` / `lastFrameUrl`，使用 `image-to-video` Route；普通图片、视频或音频参考分别绑定 `imageUrls` / `videoUrls` / `audioUrls`，使用 `multimodal-to-video` Route；无媒体引用时使用 `text-to-video` Route。
+- Route Schema 的必填素材槽、最大文件数和全部参数字段会在 Composer 中即时校验；服务端仍会再次校验请求，且只把 Schema 声明并通过类型/范围检查的参数转发给 Provider。
 - `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
 - 图片比例会转换为 Route 的 `width` 和 `height` 参数，生成配置与任务状态同时持久化到当前节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。
@@ -3024,6 +3023,10 @@ interface GenerateCanvasNodeResponse {
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/cancel-generation`
 
 取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点没有活动 Run 时返回冲突错误。
+
+### `GET /api/pipeline/assets/{assetId}/media`
+
+返回项目资产当前选中 Artifact 的本地媒体内容，供画布资产管理和提示词资源引用显示预览。服务端按资产所属项目注册的 workspace root 读取文件；资产不存在、没有选中 Artifact 或文件不再可用时返回 `404`。响应携带真实 `Content-Type`，并使用私有缓存。
 
 ### `POST /api/pipeline/projects/{projectId}/canvas/mutations`
 

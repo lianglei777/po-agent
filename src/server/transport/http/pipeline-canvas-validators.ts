@@ -12,8 +12,8 @@ const MAX_TEXT_LENGTH = 200_000;
 const MAX_RICH_TEXT_NODES = 5_000;
 const MAX_RICH_TEXT_DEPTH = 20;
 const MAX_AI_INSTRUCTION_LENGTH = 20_000;
-const IMAGE_ASPECT_RATIOS = new Set(["16:9", "9:16", "4:3", "3:4", "1:1"]);
-const IMAGE_RESOLUTIONS = new Set(["1k", "2k"]);
+const MAX_GENERATION_SETTINGS = 40;
+const MAX_MULTI_SETTING_VALUES = 50;
 
 export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNodeRequest {
   if (!isRecord(value)) throw validationError("Canvas generation request must be an object");
@@ -31,24 +31,12 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
     typeof value.routeId !== "string" || !value.routeId.trim() || value.routeId.length > 300
   )) throw validationError("routeId is invalid");
   if (value.settings !== undefined && !isRecord(value.settings)) throw validationError("settings is invalid");
-  const settings = value.settings;
-  if (settings && Object.keys(settings).some((key) => key !== "aspectRatio" && key !== "resolution")) {
-    throw validationError("settings contains unsupported fields");
-  }
-  if (settings?.aspectRatio !== undefined && (
-    typeof settings.aspectRatio !== "string" || !IMAGE_ASPECT_RATIOS.has(settings.aspectRatio)
-  )) throw validationError("settings.aspectRatio is invalid");
-  if (settings?.resolution !== undefined && (
-    typeof settings.resolution !== "string" || !IMAGE_RESOLUTIONS.has(settings.resolution)
-  )) throw validationError("settings.resolution is invalid");
+  const settings = value.settings ? parseGenerationSettings(value.settings) : undefined;
   return {
     prompt: typeof value.prompt === "string" ? value.prompt.trim() : undefined,
     promptDocument: value.promptDocument as GenerateCanvasNodeRequest["promptDocument"],
     routeId: typeof value.routeId === "string" ? value.routeId.trim() : undefined,
-    settings: settings ? {
-      ...(typeof settings.aspectRatio === "string" ? { aspectRatio: settings.aspectRatio } : {}),
-      ...(typeof settings.resolution === "string" ? { resolution: settings.resolution } : {}),
-    } : undefined,
+    settings,
     ...(typeof value.createNewNode === "boolean" ? { createNewNode: value.createNewNode } : {}),
   };
 }
@@ -210,6 +198,39 @@ function validateTextDocument(value: unknown, path: string) {
   if (!isRecord(value.content) || value.content.type !== "doc") {
     throw validationError(`${path}.content must be a document`);
   }
+}
+
+function parseGenerationSettings(value: Record<string, unknown>): NonNullable<GenerateCanvasNodeRequest["settings"]> {
+  const entries = Object.entries(value);
+  if (entries.length > MAX_GENERATION_SETTINGS) throw validationError("settings contains too many fields");
+  const settings: NonNullable<GenerateCanvasNodeRequest["settings"]> = {};
+  for (const [key, setting] of entries) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(key)) throw validationError(`settings.${key} is invalid`);
+    if (typeof setting === "string") {
+      if (setting.length > 2_000) throw validationError(`settings.${key} is invalid`);
+      settings[key] = setting;
+      continue;
+    }
+    if (typeof setting === "number") {
+      if (!Number.isFinite(setting)) throw validationError(`settings.${key} is invalid`);
+      settings[key] = setting;
+      continue;
+    }
+    if (typeof setting === "boolean") {
+      settings[key] = setting;
+      continue;
+    }
+    if (Array.isArray(setting)
+      && setting.length <= MAX_MULTI_SETTING_VALUES
+      && setting.every((item) => typeof item === "boolean"
+        || (typeof item === "number" && Number.isFinite(item))
+        || (typeof item === "string" && item.length <= 2_000))) {
+      settings[key] = setting;
+      continue;
+    }
+    throw validationError(`settings.${key} is invalid`);
+  }
+  return settings;
 }
 
 function validatePromptDocument(value: unknown, path: string) {

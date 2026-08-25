@@ -92,6 +92,8 @@ export interface CanvasMediaReference {
   content?: string[];
 }
 
+export type CanvasGenerationSettingValue = string | number | boolean | Array<string | number | boolean>;
+
 export interface CanvasGenerationParams {
   prompt: string;
   promptDocument?: CanvasPromptDocument;
@@ -99,8 +101,8 @@ export interface CanvasGenerationParams {
   model?: string;
   count?: number;
   modeType?: string;
-  settings?: Record<string, string | number | boolean>;
-  advancedSettings?: Record<string, string | number | boolean>;
+  settings?: Record<string, CanvasGenerationSettingValue>;
+  advancedSettings?: Record<string, CanvasGenerationSettingValue>;
   textList?: CanvasMediaReference[];
   imageList?: CanvasMediaReference[];
   videoList?: CanvasMediaReference[];
@@ -368,7 +370,7 @@ export interface GenerateCanvasNodeRequest {
   prompt?: string;
   promptDocument?: CanvasPromptDocument;
   routeId?: string;
-  settings?: Record<string, string | number | boolean>;
+  settings?: Record<string, CanvasGenerationSettingValue>;
   createNewNode?: boolean;
 }
 

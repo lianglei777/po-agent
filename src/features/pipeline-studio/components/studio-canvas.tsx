@@ -463,7 +463,7 @@ export function StudioCanvas({
               position="bottom-left"
               pannable
               zoomable
-              className="!bottom-16 !left-4 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)]"
+              className={`!bottom-16 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)] ${assetsOpen ? "!left-[324px]" : "!left-4"}`}
               maskColor="rgb(16 18 20 / 68%)"
               nodeColor="#168cff"
             />
@@ -475,6 +475,7 @@ export function StudioCanvas({
 
       <BottomLeftControls
         zoom={displayZoom}
+        assetsOpen={assetsOpen}
         minimapVisible={minimapVisible}
         connectionsVisible={connectionsVisible}
         onOpenAssets={() => setAssetsOpen(true)}
@@ -522,10 +523,32 @@ export function StudioCanvas({
         open={assetsOpen}
         onClose={() => setAssetsOpen(false)}
         title={t.pipeline.canvasAssetManagement}
-        size={360}
+        closable={false}
+        size={312}
         placement="left"
         mask={false}
-        styles={{ body: { padding: 0 } }}
+        footer={(
+          <div className="flex h-full items-center justify-between">
+            <Tooltip title={t.pipeline.canvasCloseAssetManagement}>
+              <button
+                type="button"
+                onClick={() => setAssetsOpen(false)}
+                aria-label={t.pipeline.canvasCloseAssetManagement}
+                className="flex size-9 items-center justify-center rounded-md text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]"
+              >
+                <ArrowLeft className="size-5" />
+              </button>
+            </Tooltip>
+            <span className="text-meta tabular-nums text-[var(--pl-text-secondary)]">
+              {t.pipeline.canvasNodeCount.replace("{count}", String(nodes.length))}
+            </span>
+          </div>
+        )}
+        styles={{
+          header: { minHeight: 44, padding: "8px 12px" },
+          body: { padding: 0 },
+          footer: { height: 64, padding: "0 16px", borderTopColor: "var(--pl-border)" },
+        }}
       >
         <CanvasAssetBrowser projectId={projectId} nodes={nodes} onLocateNode={locateNode} />
       </Drawer>
@@ -614,8 +637,9 @@ function EmptyCanvasActions({ onCreate }: { onCreate: (type: CanvasMediaType, po
     </div>
   );
 }
-function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
+function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
   zoom: number;
+  assetsOpen: boolean;
   minimapVisible: boolean;
   connectionsVisible: boolean;
   onOpenAssets: () => void;
@@ -629,8 +653,8 @@ function BottomLeftControls({ zoom, minimapVisible, connectionsVisible, onOpenAs
   const { t } = useI18n();
   const zoomPercentage = Math.round(zoom * 100);
   return (
-    <div className="absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur">
-      <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} />
+    <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${assetsOpen ? "translate-x-[308px]" : "translate-x-0"}`}>
+      {!assetsOpen ? <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} /> : null}
       <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<Project className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
       <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<LineSquiggle className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
       <div className="mx-0.5 h-5 w-px bg-[var(--pl-border)]" />

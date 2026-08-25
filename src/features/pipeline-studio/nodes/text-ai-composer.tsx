@@ -10,6 +10,8 @@ import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
+import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
+import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 
 export function TextAiComposer({
   nodeId,
@@ -23,7 +25,13 @@ export function TextAiComposer({
   onGenerated: (node: CanvasNode) => void;
 }) {
   const { t } = useI18n();
-  const [promptDocument, setPromptDocument] = useState<CanvasPromptDocument>(() => promptDocumentFromPlainText(""));
+  const draftKey = composerDraftKey(nodeId, "text");
+  const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
+  const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
+  const promptDocument = storedDraft
+    ?? data.params?.promptDocument
+    ?? promptDocumentFromPlainText("");
+  const setPromptDocument = (document: CanvasPromptDocument) => setComposerDraft(nodeId, "text", document);
   const instruction = promptDocument.plainText;
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState(data.params?.model ?? "");
@@ -31,6 +39,7 @@ export function TextAiComposer({
   const [generating, setGenerating] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
   const plainText = data.textDocument?.plainText ?? data.content?.join("\n") ?? "";
   const mode = plainText.trim() ? "revise" : "generate";
   const referenceCount = data.params?.textList?.filter((reference) => reference.content?.some((content) => content.trim())).length ?? 0;
@@ -65,9 +74,10 @@ export function TextAiComposer({
     if (waitingForSave) return t.pipeline.textAiPendingSave;
     if (loadingModels) return t.pipeline.textAiModelLoading;
     if (!models.length || !selectedModel) return t.pipeline.textAiNoModels;
+    if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
     if (!instruction.trim()) return t.pipeline.textAiInstructionRequired;
     return "";
-  }, [instruction, loadingModels, models.length, selectedModel, t.pipeline, waitingForSave]);
+  }, [instruction, invalidReferenceCount, loadingModels, models.length, selectedModel, t.pipeline, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating) return;
@@ -81,7 +91,6 @@ export function TextAiComposer({
         model: selectedModel,
       });
       onGenerated(response.node);
-      setPromptDocument(promptDocumentFromPlainText(""));
       setExpanded(false);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t.pipeline.textAiError);
@@ -103,6 +112,7 @@ export function TextAiComposer({
       disabledReason={disabledReason}
       error={error}
       onPromptDocumentChange={setPromptDocument}
+      onReferenceStateChange={({ invalidCount }) => setInvalidReferenceCount(invalidCount)}
       onModelChange={setSelectedModel}
       onSubmit={() => void submit()}
       nodeId={nodeId}
@@ -112,13 +122,9 @@ export function TextAiComposer({
 
   return (
     <>
-      <div
-        className="nodrag nowheel absolute left-1/2 top-[calc(100%+14px)] z-30 w-[min(720px,80vw)] -translate-x-1/2"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <InlineCanvasNodeComposer widthClass="w-[min(720px,calc(100vw-32px))]">
         {surface(false)}
-      </div>
+      </InlineCanvasNodeComposer>
       <Modal
         open={expanded}
         title={t.pipeline.textAiTitle}
@@ -147,6 +153,7 @@ function ComposerSurface({
   disabledReason,
   error,
   onPromptDocumentChange,
+  onReferenceStateChange,
   onModelChange,
   onSubmit,
   onExpand,
@@ -163,6 +170,7 @@ function ComposerSurface({
   disabledReason: string;
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
+  onReferenceStateChange: (state: { invalidCount: number }) => void;
   onModelChange: (value: string) => void;
   onSubmit: () => void;
   onExpand: () => void;
@@ -181,6 +189,7 @@ function ComposerSurface({
           value={promptDocument}
           disabled={generating}
           onChange={onPromptDocumentChange}
+          onReferenceStateChange={onReferenceStateChange}
           onSubmit={onSubmit}
           allowedMediaTypes={["text"]}
           excludedCanvasNodeId={nodeId}
