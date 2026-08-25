@@ -5,7 +5,7 @@ import { memo, useCallback, useRef, useState } from "react";
 import { App, Button, Modal, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
@@ -52,9 +52,8 @@ export function ImageCanvasNode({
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
   const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
-  const modifyComposerOpen = useCanvasStore((state) => state.imageComposerNodeId === id);
-  const openImageComposer = useCanvasStore((state) => state.openImageComposer);
-  const closeImageComposer = useCanvasStore((state) => state.closeImageComposer);
+  const singleSelected = useCanvasStore((state) => state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id);
+  const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
   const editing = useCanvasStore((state) => state.editingNodeId === id);
   const startEditingNode = useCanvasStore((state) => state.startEditingNode);
   const stopEditingNode = useCanvasStore((state) => state.stopEditingNode);
@@ -92,7 +91,7 @@ export function ImageCanvasNode({
   const hasImage = Boolean(mediaUrl);
   const imageState = imageStatus.url === mediaUrl ? imageStatus.state : "loading";
   const dimensions = imageDimensions?.url === mediaUrl ? imageDimensions : null;
-  const presentation = imageNodePresentation({ selected, dragging, hasImage });
+  const presentation = imageNodePresentation({ selected: singleSelected, composerActive, dragging, hasImage });
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
   const handleImageReady = useCallback((width: number, height: number) => {
     if (!mediaUrl) return;
@@ -265,11 +264,6 @@ export function ImageCanvasNode({
       {presentation.showToolbar && !deferMediaLoad && !editing ? (
         <CanvasNodeContextToolbar offset={54}>
           <CanvasNodeToolbarButton label={t.pipeline.nodeImageEdit} icon={<Pencil className="size-4" />} onClick={beginEditing} />
-          <CanvasNodeToolbarButton
-            label={t.pipeline.imageAiModify}
-            icon={<Sparkles className="size-4" />}
-            onClick={() => openImageComposer(id)}
-          />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImagePreview} icon={<Eye className="size-4" />} onClick={() => setPreviewOpen(true)} />
           <CanvasNodeToolbarButton
             label={t.pipeline.nodeImageReplace}
@@ -411,30 +405,17 @@ export function ImageCanvasNode({
 
       {presentation.showComposer && !editing ? (
         <ImageAiComposer
-          key={id}
+          key={`${id}:${hasImage ? "modify" : "create"}`}
           nodeId={id}
           data={canvas}
+          mode={hasImage ? "modify" : "create"}
           waitingForSave={waitingForSave}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}
-        />
-      ) : null}
-
-      {selected && hasImage && !dragging && modifyComposerOpen && !editing ? (
-        <ImageAiComposer
-          key={`${id}:modify`}
-          nodeId={id}
-          data={canvas}
-          mode="modify"
-          waitingForSave={waitingForSave}
-          onNodeUpdate={(serverNode) => {
-            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
-          }}
-          onGenerationStarted={(serverNode, edge) => {
+          onGenerationStarted={hasImage ? (serverNode, edge) => {
             insertServerGenerationResult(serverNode, edge);
-            closeImageComposer(id);
-          }}
+          } : undefined}
         />
       ) : null}
 

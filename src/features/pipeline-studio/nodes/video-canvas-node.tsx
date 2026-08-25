@@ -31,6 +31,9 @@ export function VideoCanvasNode({
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
+  const singleSelected = useCanvasStore((state) => state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id);
+  const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
+  const activateNodeComposer = useCanvasStore((state) => state.activateNodeComposer);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
@@ -137,9 +140,16 @@ export function VideoCanvasNode({
       <CanvasNodeConnectionHandle type="target" position={Position.Left} label={t.pipeline.nodeVideoInputHandle} />
       <CanvasNodeConnectionHandle type="source" position={Position.Right} label={t.pipeline.nodeVideoOutputHandle} />
 
-      {selected && hasVideo && !dragging && !deferMediaLoad ? (
+      {singleSelected && hasVideo && !dragging && !deferMediaLoad ? (
         <CanvasNodeContextToolbar offset={54}>
-          <CanvasNodeToolbarButton label={t.pipeline.videoAiGenerate} icon={<Sparkles className="size-4" />} onClick={() => setComposerOpen(true)} />
+          <CanvasNodeToolbarButton
+            label={t.pipeline.videoAiGenerate}
+            icon={<Sparkles className="size-4" />}
+            onClick={() => {
+              activateNodeComposer(id);
+              setComposerOpen(true);
+            }}
+          />
           <CanvasNodeToolbarButton
             label={t.pipeline.nodeVideoReplace}
             icon={<RefreshCw className="size-4" />}
@@ -207,7 +217,7 @@ export function VideoCanvasNode({
         )}
       </section>
 
-      {selected && !dragging && (!hasVideo || composerOpen) ? (
+      {composerActive && !dragging && (!hasVideo || composerOpen) ? (
         <VideoAiComposer
           key={id}
           nodeId={id}

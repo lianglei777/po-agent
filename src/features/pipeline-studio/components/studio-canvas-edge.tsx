@@ -10,6 +10,7 @@ export type StudioCanvasEdgeData = {
   onSelect: (edgeId: string) => void;
   connectionLabel: string;
   removeLabel: string;
+  highlightFlow: boolean;
 };
 
 export type StudioCanvasEdge = Edge<StudioCanvasEdgeData, "studio">;
@@ -39,7 +40,8 @@ export function StudioCanvasEdgeComponent({
     targetY,
     targetPosition,
   });
-  const active = hovered || edgeFocused || toolbarFocused || selected;
+  const interactive = hovered || edgeFocused || toolbarFocused || selected;
+  const flowActive = interactive || Boolean(data?.highlightFlow);
 
   const cancelScheduledLeave = useCallback(() => {
     if (leaveTimerRef.current === null) return;
@@ -69,7 +71,7 @@ export function StudioCanvasEdgeComponent({
         role="group"
         tabIndex={0}
         aria-label={data?.connectionLabel}
-        className={`pipeline-studio-edge${active ? " is-active" : ""}`}
+        className={`pipeline-studio-edge${flowActive ? " is-active" : ""}`}
         onPointerEnter={showToolbar}
         onPointerLeave={scheduleToolbarHide}
         onClick={(event) => {
@@ -121,7 +123,7 @@ export function StudioCanvasEdgeComponent({
         edgeId={id}
         x={toolbarX}
         y={toolbarY}
-        isVisible={active}
+        isVisible={interactive}
         className="nodrag nopan pipeline-studio-edge-toolbar"
         onPointerEnter={showToolbar}
         onPointerLeave={scheduleToolbarHide}

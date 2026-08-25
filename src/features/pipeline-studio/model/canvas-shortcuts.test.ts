@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CANVAS_SHORTCUT_GROUPS, getCanvasZoomShortcut, isPlainCanvasShortcut } from "./canvas-shortcuts";
+import {
+  CANVAS_SHORTCUT_GROUPS,
+  getCanvasZoomShortcut,
+  isPlainCanvasShortcut,
+  resolveCanvasDeleteSelection,
+} from "./canvas-shortcuts";
 
 describe("pipeline studio canvas shortcuts", () => {
   it("keeps the shortcut panel limited to implemented actions", () => {
@@ -33,5 +38,14 @@ describe("pipeline studio canvas shortcuts", () => {
     expect(isPlainCanvasShortcut({ ...event, metaKey: true }, "f")).toBe(false);
     expect(isPlainCanvasShortcut({ ...event, altKey: true }, "f")).toBe(false);
     expect(isPlainCanvasShortcut({ ...event, shiftKey: true }, "f")).toBe(false);
+  });
+
+  it("deletes selected nodes before any stale edge selection", () => {
+    expect(resolveCanvasDeleteSelection(["node-1", "node-2"], "edge-1")).toEqual({
+      kind: "nodes",
+      nodeIds: ["node-1", "node-2"],
+    });
+    expect(resolveCanvasDeleteSelection([], "edge-1")).toEqual({ kind: "edge", edgeId: "edge-1" });
+    expect(resolveCanvasDeleteSelection([], null)).toBeNull();
   });
 });

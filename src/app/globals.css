@@ -366,6 +366,27 @@ body {
   color-scheme: dark;
 }
 
+/* 持久选区使用独立伪元素外扩，避免 React Flow 的缩放变换让 outline 在松手后丢失。 */
+.pipeline-studio-shell .react-flow__nodesselection-rect {
+  border: 0;
+  background: transparent;
+}
+
+.pipeline-studio-shell .react-flow__nodesselection-rect::before {
+  position: absolute;
+  inset: -20px;
+  border: 1px dashed rgb(22 140 255 / 88%);
+  border-radius: 10px;
+  background: rgb(22 140 255 / 10%);
+  content: "";
+  pointer-events: none;
+}
+
+.pipeline-studio-shell .react-flow__selection {
+  border: 1px dashed rgb(22 140 255 / 88%);
+  background: rgb(22 140 255 / 10%);
+}
+
 .pipeline-studio-edge .pipeline-studio-edge__base {
   stroke: var(--pl-edge);
   stroke-width: 2.2px;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasEdge, CanvasNode } from "@/contracts/pipeline";
-import { canvasConnectionProblem, canvasNodeHasContent, connectedCanvasReferences } from "./canvas-connection-policy";
+import {
+  canvasConnectionProblem,
+  canvasNodeHasContent,
+  connectedCanvasEdgeIds,
+  connectedCanvasReferences,
+} from "./canvas-connection-policy";
 
 describe("canvas connection policy", () => {
   it("only accepts a new edge when the target has no content and no cycle is introduced", () => {
@@ -30,6 +35,16 @@ describe("canvas connection policy", () => {
       expect.objectContaining({ referenceId: "edge:image-edge", sourceId: image.id, mediaType: "image" }),
       expect.objectContaining({ referenceId: "edge:text-edge", sourceId: text.id, mediaType: "text" }),
     ]);
+  });
+
+  it("finds every edge incident to the selected nodes", () => {
+    const edges = [
+      edge("incoming", "outside-a", "selected"),
+      edge("outgoing", "selected", "outside-b"),
+      edge("unrelated", "outside-a", "outside-b"),
+    ];
+    expect([...connectedCanvasEdgeIds(["selected"], edges)]).toEqual(["incoming", "outgoing"]);
+    expect([...connectedCanvasEdgeIds([], edges)]).toEqual([]);
   });
 });
 

@@ -35,8 +35,8 @@ import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
-import { getCanvasZoomShortcut, isPlainCanvasShortcut } from "../model/canvas-shortcuts";
-import { canvasConnectionProblem } from "../model/canvas-connection-policy";
+import { getCanvasZoomShortcut, isPlainCanvasShortcut, resolveCanvasDeleteSelection } from "../model/canvas-shortcuts";
+import { canvasConnectionProblem, connectedCanvasEdgeIds } from "../model/canvas-connection-policy";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
 import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
 import { CanvasAssetBrowser } from "./canvas-asset-browser";
@@ -92,6 +92,8 @@ export function StudioCanvas({
   const createEdge = useCanvasStore((state) => state.createEdge);
   const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const setSelection = useCanvasStore((state) => state.setSelection);
+  const activateNodeComposer = useCanvasStore((state) => state.activateNodeComposer);
+  const closeNodeComposer = useCanvasStore((state) => state.closeNodeComposer);
   const setViewport = useCanvasStore((state) => state.setViewport);
   const setInteractionMode = useCanvasStore((state) => state.setInteractionMode);
   const toggleConnections = useCanvasStore((state) => state.toggleConnections);
@@ -133,9 +135,15 @@ export function StudioCanvas({
     setSelectedEdgeId(edgeId);
     setSelection([]);
   }, [setSelection]);
-  const activeSelectedEdgeId = connectionsVisible && edges.some((edge) => edge.id === selectedEdgeId)
+  const activeSelectedEdgeId = selectedNodeIds.length === 0
+    && connectionsVisible
+    && edges.some((edge) => edge.id === selectedEdgeId)
     ? selectedEdgeId
     : null;
+  const highlightedEdgeIds = useMemo(
+    () => connectedCanvasEdgeIds(selectedNodeIds, edges),
+    [edges, selectedNodeIds],
+  );
 
   const flowEdges = useMemo<StudioCanvasEdge[]>(() => connectionsVisible ? edges.map((edge) => ({
     id: edge.id,
@@ -150,8 +158,9 @@ export function StudioCanvas({
       onSelect: selectEdge,
       connectionLabel: t.pipeline.canvasConnection,
       removeLabel: t.pipeline.canvasRemoveConnection,
+      highlightFlow: highlightedEdgeIds.has(edge.id),
     },
-  })) : [], [activeSelectedEdgeId, connectionsVisible, edges, removeEdge, selectEdge, t.pipeline.canvasConnection, t.pipeline.canvasRemoveConnection]);
+  })) : [], [activeSelectedEdgeId, connectionsVisible, edges, highlightedEdgeIds, removeEdge, selectEdge, t.pipeline.canvasConnection, t.pipeline.canvasRemoveConnection]);
 
   const locateNode = useCallback((nodeId: string) => {
     setSelection([nodeId]);
@@ -296,8 +305,13 @@ export function StudioCanvas({
         duplicateNodes(selectedNodeIds);
       } else if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        if (activeSelectedEdgeId) removeEdge(activeSelectedEdgeId);
-        else deleteNodes(selectedNodeIds);
+        const selection = resolveCanvasDeleteSelection(selectedNodeIds, activeSelectedEdgeId);
+        if (selection?.kind === "nodes") {
+          setSelectedEdgeId(null);
+          deleteNodes(selection.nodeIds);
+        } else if (selection?.kind === "edge") {
+          removeEdge(selection.edgeId);
+        }
       } else if (isPlainCanvasShortcut(event, "f")) {
         event.preventDefault();
         instanceRef.current?.fitView({ padding: 0.2, duration: 220 });
@@ -360,7 +374,10 @@ export function StudioCanvas({
       }
       if (change.type === "remove") deleteNodes([change.id]);
     }
-    if (nextSelection) setSelection([...nextSelection]);
+    if (nextSelection) {
+      if (nextSelection.size) setSelectedEdgeId(null);
+      setSelection([...nextSelection]);
+    }
   }, [deleteNodes, setSelection, store]);
 
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
@@ -432,7 +449,7 @@ export function StudioCanvas({
                 : [...selectedNodeIds, node.id]);
               return;
             }
-            setSelection([node.id]);
+            activateNodeComposer(node.id);
           }}
           onPaneClick={() => {
             setCreateMenu(null);
@@ -459,6 +476,11 @@ export function StudioCanvas({
           )}
           onPaneContextMenu={openCreateMenu}
           onInit={(instance) => { instanceRef.current = instance; }}
+          onSelectionStart={() => {
+            // 框选只表达批量选择，不应把经过的节点误判为用户主动打开了 AI 输入框。
+            closeNodeComposer();
+            setSelectedEdgeId(null);
+          }}
           selectionOnDrag={interactionMode === "select"}
           panOnDrag={interactionMode === "pan" ? [0, 1, 2] : [1, 2]}
           nodesDraggable={interactionMode === "select"}

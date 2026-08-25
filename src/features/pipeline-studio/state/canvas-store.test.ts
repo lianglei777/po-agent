@@ -75,16 +75,26 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().editingNodeId).toBeNull();
   });
 
-  it("closes the image modification composer when its node loses selection", () => {
+  it("keeps canvas selection separate from explicit composer activation", () => {
     const store = createCanvasStore("project-1");
     store.getState().hydrate({ revision: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
 
-    store.getState().openImageComposer("image-1");
-    expect(store.getState().imageComposerNodeId).toBe("image-1");
+    store.getState().setSelection(["image-1"]);
+    expect(store.getState().activeComposerNodeId).toBeNull();
+
+    store.getState().activateNodeComposer("image-1");
+    expect(store.getState().activeComposerNodeId).toBe("image-1");
     expect(store.getState().selectedNodeIds).toEqual(["image-1"]);
 
+    store.getState().setSelection(["image-1"]);
+    expect(store.getState().activeComposerNodeId).toBe("image-1");
+
+    store.getState().setSelection(["image-1", "image-2"]);
+    expect(store.getState().activeComposerNodeId).toBeNull();
+
+    store.getState().activateNodeComposer("image-2");
     store.getState().setSelection([]);
-    expect(store.getState().imageComposerNodeId).toBeNull();
+    expect(store.getState().activeComposerNodeId).toBeNull();
   });
 
   it("keeps composer drafts across closing and store recreation until the node is deleted", () => {

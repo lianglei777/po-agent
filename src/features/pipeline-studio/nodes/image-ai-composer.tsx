@@ -38,9 +38,10 @@ export function ImageAiComposer({
   const draftKey = composerDraftKey(nodeId, mode === "modify" ? "image-modify" : "image-create");
   const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
   const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
-  const promptDocument = storedDraft ?? (mode === "modify"
-    ? promptDocumentFromPlainText("")
-    : data.params?.promptDocument ?? promptDocumentFromPlainText(data.params?.prompt ?? ""));
+  // 已生成节点进入修改模式时沿用生成它的提示词；只有用户自己的修改草稿可以覆盖该基线。
+  const promptDocument = storedDraft
+    ?? data.params?.promptDocument
+    ?? promptDocumentFromPlainText(data.params?.prompt ?? "");
   const setPromptDocument = (document: CanvasPromptDocument) => setComposerDraft(
     nodeId,
     mode === "modify" ? "image-modify" : "image-create",

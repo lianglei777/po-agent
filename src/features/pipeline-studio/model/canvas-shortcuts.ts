@@ -34,6 +34,20 @@ export const CANVAS_SHORTCUT_GROUPS = [
 export type CanvasShortcutGroupId = (typeof CANVAS_SHORTCUT_GROUPS)[number]["id"];
 export type CanvasShortcutId = (typeof CANVAS_SHORTCUT_GROUPS)[number]["shortcuts"][number]["id"];
 export type CanvasZoomShortcut = "in" | "out";
+export type CanvasDeleteSelection =
+  | { kind: "nodes"; nodeIds: string[] }
+  | { kind: "edge"; edgeId: string }
+  | null;
+
+export function resolveCanvasDeleteSelection(
+  selectedNodeIds: string[],
+  selectedEdgeId: string | null,
+): CanvasDeleteSelection {
+  // 节点选择代表更高层级的批量操作；删除节点时其关联边会由画布仓储一并清理。
+  if (selectedNodeIds.length) return { kind: "nodes", nodeIds: selectedNodeIds };
+  if (selectedEdgeId) return { kind: "edge", edgeId: selectedEdgeId };
+  return null;
+}
 
 export function getCanvasZoomShortcut(
   event: Pick<KeyboardEvent, "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,

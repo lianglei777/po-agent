@@ -67,6 +67,17 @@ export function connectedCanvasReferences(
   });
 }
 
+export function connectedCanvasEdgeIds(
+  selectedNodeIds: string[],
+  edges: CanvasEdge[],
+): Set<string> {
+  if (!selectedNodeIds.length) return new Set();
+  const selected = new Set(selectedNodeIds);
+  return new Set(edges.flatMap((edge) => (
+    selected.has(edge.sourceNodeId) || selected.has(edge.targetNodeId) ? [edge.id] : []
+  )));
+}
+
 function canReachNode(edges: CanvasEdge[], startNodeId: string, targetNodeId: string): boolean {
   const outgoing = new Map<string, string[]>();
   for (const edge of edges) {

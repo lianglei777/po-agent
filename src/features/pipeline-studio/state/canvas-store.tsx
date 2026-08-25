@@ -28,7 +28,7 @@ type CanvasStoreState = CanvasDocument & {
   viewport: CanvasViewport;
   selectedNodeIds: string[];
   editingNodeId: string | null;
-  imageComposerNodeId: string | null;
+  activeComposerNodeId: string | null;
   composerDrafts: Record<string, CanvasPromptDocument>;
   interactionMode: CanvasInteractionMode;
   connectionsVisible: boolean;
@@ -46,8 +46,8 @@ type CanvasStoreState = CanvasDocument & {
   setSelection: (nodeIds: string[]) => void;
   startEditingNode: (nodeId: string) => void;
   stopEditingNode: (nodeId?: string) => void;
-  openImageComposer: (nodeId: string) => void;
-  closeImageComposer: (nodeId?: string) => void;
+  activateNodeComposer: (nodeId: string) => void;
+  closeNodeComposer: (nodeId?: string) => void;
   setComposerDraft: (nodeId: string, kind: CanvasComposerDraftKind, document: CanvasPromptDocument) => void;
   setInteractionMode: (mode: CanvasInteractionMode) => void;
   toggleConnections: () => void;
@@ -104,7 +104,7 @@ export function createCanvasStore(projectId: string) {
     viewport: { x: 0, y: 0, zoom: 1 },
     selectedNodeIds: [],
     editingNodeId: null,
-    imageComposerNodeId: null,
+    activeComposerNodeId: null,
     composerDrafts: loadComposerDrafts(projectId),
     interactionMode: "select",
     connectionsVisible: true,
@@ -130,7 +130,7 @@ export function createCanvasStore(projectId: string) {
         viewport: snapshot.viewport,
         selectedNodeIds: [],
         editingNodeId: null,
-        imageComposerNodeId: null,
+        activeComposerNodeId: null,
         composerDrafts,
         loaded: true,
         error: null,
@@ -156,8 +156,8 @@ export function createCanvasStore(projectId: string) {
         viewport: state.viewport,
         selectedNodeIds,
         editingNodeId: state.editingNodeId && nodeIds.has(state.editingNodeId) ? state.editingNodeId : null,
-        imageComposerNodeId: state.imageComposerNodeId && nodeIds.has(state.imageComposerNodeId)
-          ? state.imageComposerNodeId
+        activeComposerNodeId: state.activeComposerNodeId && nodeIds.has(state.activeComposerNodeId)
+          ? state.activeComposerNodeId
           : null,
         composerDrafts,
         loaded: true,
@@ -174,22 +174,28 @@ export function createCanvasStore(projectId: string) {
       const editingNodeId = state.editingNodeId && nodeIds.includes(state.editingNodeId)
         ? state.editingNodeId
         : null;
-      const imageComposerNodeId = state.imageComposerNodeId && nodeIds.includes(state.imageComposerNodeId)
-        ? state.imageComposerNodeId
+      const activeComposerNodeId = state.activeComposerNodeId
+        && nodeIds.length === 1
+        && nodeIds[0] === state.activeComposerNodeId
+        ? state.activeComposerNodeId
         : null;
       if (arraysEqual(state.selectedNodeIds, nodeIds)
         && editingNodeId === state.editingNodeId
-        && imageComposerNodeId === state.imageComposerNodeId) return state;
-      return { selectedNodeIds: nodeIds, editingNodeId, imageComposerNodeId };
+        && activeComposerNodeId === state.activeComposerNodeId) return state;
+      return { selectedNodeIds: nodeIds, editingNodeId, activeComposerNodeId };
     }),
 
-    startEditingNode: (editingNodeId) => set({ editingNodeId, selectedNodeIds: [editingNodeId], imageComposerNodeId: null }),
+    startEditingNode: (editingNodeId) => set({ editingNodeId, selectedNodeIds: [editingNodeId], activeComposerNodeId: null }),
     stopEditingNode: (nodeId) => set((state) => (
       nodeId && state.editingNodeId !== nodeId ? state : { editingNodeId: null }
     )),
-    openImageComposer: (imageComposerNodeId) => set({ imageComposerNodeId, selectedNodeIds: [imageComposerNodeId], editingNodeId: null }),
-    closeImageComposer: (nodeId) => set((state) => (
-      nodeId && state.imageComposerNodeId !== nodeId ? state : { imageComposerNodeId: null }
+    activateNodeComposer: (activeComposerNodeId) => set({
+      activeComposerNodeId,
+      selectedNodeIds: [activeComposerNodeId],
+      editingNodeId: null,
+    }),
+    closeNodeComposer: (nodeId) => set((state) => (
+      nodeId && state.activeComposerNodeId !== nodeId ? state : { activeComposerNodeId: null }
     )),
     setComposerDraft: (nodeId, kind, document) => set((state) => {
       const composerDrafts = { ...state.composerDrafts, [composerDraftKey(nodeId, kind)]: document };
@@ -209,7 +215,7 @@ export function createCanvasStore(projectId: string) {
     createNode: (type, position, name) => {
       const node = makeCanvasNode(projectId, type, position, name);
       commitDocument(set, get, [...get().nodes, node], get().edges, [{ type: "node.create", node }]);
-      set({ selectedNodeIds: [node.id], imageComposerNodeId: null });
+      set({ selectedNodeIds: [node.id], activeComposerNodeId: node.id });
       return node;
     },
 
@@ -217,7 +223,7 @@ export function createCanvasStore(projectId: string) {
       nodes: [...state.nodes.filter((item) => item.id !== node.id), node],
       selectedNodeIds: [node.id],
       editingNodeId: null,
-      imageComposerNodeId: null,
+      activeComposerNodeId: state.activeComposerNodeId === node.id ? node.id : null,
     })),
 
     insertServerGenerationResult: (node, edge) => set((state) => ({
@@ -225,7 +231,7 @@ export function createCanvasStore(projectId: string) {
       edges: edge ? [...state.edges.filter((item) => item.id !== edge.id), edge] : state.edges,
       selectedNodeIds: [node.id],
       editingNodeId: null,
-      imageComposerNodeId: null,
+      activeComposerNodeId: node.id,
     })),
 
     applyServerNodeData: (nodeId, data, updatedAt) => set((state) => {
@@ -354,9 +360,9 @@ export function createCanvasStore(projectId: string) {
       set((current) => ({
         selectedNodeIds: [],
         editingNodeId: current.editingNodeId && ids.has(current.editingNodeId) ? null : current.editingNodeId,
-        imageComposerNodeId: current.imageComposerNodeId && ids.has(current.imageComposerNodeId)
+        activeComposerNodeId: current.activeComposerNodeId && ids.has(current.activeComposerNodeId)
           ? null
-          : current.imageComposerNodeId,
+          : current.activeComposerNodeId,
         composerDrafts: removeNodeComposerDrafts(projectId, current.composerDrafts, ids),
       }));
     },
@@ -404,7 +410,7 @@ export function createCanvasStore(projectId: string) {
         ],
       );
       const createdIds = copies.map((node) => node.id);
-      set({ selectedNodeIds: createdIds, imageComposerNodeId: null });
+      set({ selectedNodeIds: createdIds, activeComposerNodeId: null });
       return createdIds;
     },
 
@@ -457,6 +463,7 @@ export function createCanvasStore(projectId: string) {
         edges: structuredClone(previous.edges),
         selectedNodeIds: [],
         editingNodeId: null,
+        activeComposerNodeId: null,
         past: state.past.slice(0, -1),
         future: [current, ...state.future].slice(0, 50),
         pendingMutations: [...state.pendingMutations, ...diffDocuments(current, previous, projectId)],
@@ -474,6 +481,7 @@ export function createCanvasStore(projectId: string) {
         edges: structuredClone(next.edges),
         selectedNodeIds: [],
         editingNodeId: null,
+        activeComposerNodeId: null,
         past: pushHistory(state.past, current),
         future: state.future.slice(1),
         pendingMutations: [...state.pendingMutations, ...diffDocuments(current, next, projectId)],

@@ -6,12 +6,13 @@ export function canvasNodeDragHandle(type: CanvasMediaType | undefined) {
 
 export function imageNodePresentation(input: {
   selected: boolean;
+  composerActive: boolean;
   dragging: boolean;
   hasImage: boolean;
 }) {
   return {
     showToolbar: input.selected && input.hasImage && !input.dragging,
-    showComposer: input.selected && !input.hasImage && !input.dragging,
+    showComposer: input.composerActive && !input.dragging,
     showUploadAction: input.selected && !input.hasImage && !input.dragging,
   };
 }

@@ -8,22 +8,24 @@ describe("canvas node interaction", () => {
     expect(canvasNodeDragHandle("video")).toBe(".pipeline-node-drag-handle");
   });
 
-  it("shows the image toolbar only for a selected still image", () => {
-    expect(imageNodePresentation({ selected: true, dragging: false, hasImage: true })).toEqual({
+  it("shows the toolbar and composer for a selected still image", () => {
+    expect(imageNodePresentation({ selected: true, composerActive: true, dragging: false, hasImage: true })).toEqual({
       showToolbar: true,
-      showComposer: false,
+      showComposer: true,
       showUploadAction: false,
     });
-    expect(imageNodePresentation({ selected: true, dragging: true, hasImage: true }).showToolbar).toBe(false);
-    expect(imageNodePresentation({ selected: false, dragging: false, hasImage: true }).showToolbar).toBe(false);
+    expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: true }).showToolbar).toBe(false);
+    expect(imageNodePresentation({ selected: false, composerActive: false, dragging: false, hasImage: true }).showToolbar).toBe(false);
+    expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: true }).showComposer).toBe(false);
+    expect(imageNodePresentation({ selected: true, composerActive: false, dragging: false, hasImage: true }).showComposer).toBe(false);
   });
 
-  it("shows the composer only for a selected empty image node that is not moving", () => {
-    expect(imageNodePresentation({ selected: true, dragging: false, hasImage: false })).toEqual({
+  it("shows upload controls only for a selected empty image node that is not moving", () => {
+    expect(imageNodePresentation({ selected: true, composerActive: true, dragging: false, hasImage: false })).toEqual({
       showToolbar: false,
       showComposer: true,
       showUploadAction: true,
     });
-    expect(imageNodePresentation({ selected: true, dragging: true, hasImage: false }).showComposer).toBe(false);
+    expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: false }).showComposer).toBe(false);
   });
 });
