@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CanvasPromptDocument } from "@/contracts/pipeline";
-import { promptDocumentPreviewReferences, resolvePromptResourcePreview } from "./prompt-resource-preview";
+import type { CanvasNode, CanvasPromptDocument, CanvasResourceReferenceAttrs } from "@/contracts/pipeline";
+import { promptDocumentPreviewReferences, promptResourceBindings, resolvePromptResourcePreview } from "./prompt-resource-preview";
 
 const document: CanvasPromptDocument = {
   schemaVersion: 1,
@@ -20,6 +20,27 @@ const document: CanvasPromptDocument = {
 };
 
 describe("prompt resource previews", () => {
+  it("groups an upstream edge and all matching @ occurrences into one resource binding", () => {
+    const source = canvasNode("node-1", "image", "图一");
+    const target = canvasNode("target", "image", "目标");
+    const promptReferences: CanvasResourceReferenceAttrs[] = [
+      { referenceId: "ref-1", sourceType: "canvas-node", sourceId: source.id, mediaType: "image", label: "图一", role: "reference" },
+      { referenceId: "ref-2", sourceType: "canvas-node", sourceId: source.id, mediaType: "image", label: "图一", role: "first-frame" },
+    ];
+
+    expect(promptResourceBindings(target.id, [source, target], [{
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+      edgeType: "references",
+    }], promptReferences)).toEqual([expect.objectContaining({
+      key: "canvas-node:node-1",
+      edgeIds: ["edge-1"],
+      promptReferenceIds: ["ref-1", "ref-2"],
+    })]);
+  });
+
   it("keeps first-use order and reuses the compiler binding identity", () => {
     expect(promptDocumentPreviewReferences(document).map((item) => item.referenceId)).toEqual(["ref-1", "ref-3"]);
   });
@@ -64,6 +85,22 @@ describe("prompt resource previews", () => {
     }])).toMatchObject({ url: "/api/pipeline/assets/asset-1/media?v=artifact%3Aartifact-2" });
   });
 });
+
+function canvasNode(id: string, type: "text" | "image" | "video", name: string): CanvasNode {
+  return {
+    id,
+    projectId: "project-1",
+    type,
+    entityId: id,
+    positionX: 0,
+    positionY: 0,
+    width: 100,
+    height: 100,
+    data: { type, name, action: `${type}_generate` },
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+  };
+}
 
 function reference(
   referenceId: string,

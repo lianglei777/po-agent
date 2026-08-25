@@ -14,6 +14,7 @@ import type {
   CanvasViewport,
 } from "@/contracts/pipeline";
 import { textDocumentFromPlainText } from "../model/text-document";
+import { canvasConnectionProblem } from "../model/canvas-connection-policy";
 
 export type CanvasInteractionMode = "select" | "pan";
 export type CanvasSaveState = "idle" | "saving" | "saved" | "error";
@@ -32,6 +33,7 @@ type CanvasStoreState = CanvasDocument & {
   interactionMode: CanvasInteractionMode;
   connectionsVisible: boolean;
   minimapVisible: boolean;
+  uploadingNodeIds: string[];
   loaded: boolean;
   error: string | null;
   saveState: CanvasSaveState;
@@ -50,6 +52,7 @@ type CanvasStoreState = CanvasDocument & {
   setInteractionMode: (mode: CanvasInteractionMode) => void;
   toggleConnections: () => void;
   toggleMinimap: () => void;
+  setNodeUploading: (nodeId: string, uploading: boolean) => void;
   createNode: (type: CanvasMediaType, position: { x: number; y: number }, name: string) => CanvasNode;
   insertServerNode: (node: CanvasNode) => void;
   insertServerGenerationResult: (node: CanvasNode, edge?: CanvasEdge) => void;
@@ -63,7 +66,7 @@ type CanvasStoreState = CanvasDocument & {
   commitNodeSize: (nodeId: string, previous: { width: number; height: number }) => void;
   deleteNodes: (nodeIds: string[]) => void;
   duplicateNodes: (nodeIds: string[], offset?: { x: number; y: number }) => string[];
-  createEdge: (sourceNodeId: string, targetNodeId: string) => void;
+  createEdge: (sourceNodeId: string, targetNodeId: string, intent?: "connect" | "restore") => void;
   deleteEdges: (edgeIds: string[]) => void;
   setViewport: (viewport: CanvasViewport, persist?: boolean) => void;
   undo: () => void;
@@ -106,6 +109,7 @@ export function createCanvasStore(projectId: string) {
     interactionMode: "select",
     connectionsVisible: true,
     minimapVisible: false,
+    uploadingNodeIds: [],
     loaded: false,
     error: null,
     saveState: "idle",
@@ -132,6 +136,7 @@ export function createCanvasStore(projectId: string) {
         error: null,
         saveState: "idle",
         pendingMutations: [],
+        uploadingNodeIds: [],
         past: [],
         future: [],
       };
@@ -195,6 +200,11 @@ export function createCanvasStore(projectId: string) {
     setInteractionMode: (interactionMode) => set({ interactionMode }),
     toggleConnections: () => set((state) => ({ connectionsVisible: !state.connectionsVisible })),
     toggleMinimap: () => set((state) => ({ minimapVisible: !state.minimapVisible })),
+    setNodeUploading: (nodeId, uploading) => set((state) => ({
+      uploadingNodeIds: uploading
+        ? state.uploadingNodeIds.includes(nodeId) ? state.uploadingNodeIds : [...state.uploadingNodeIds, nodeId]
+        : state.uploadingNodeIds.filter((id) => id !== nodeId),
+    })),
 
     createNode: (type, position, name) => {
       const node = makeCanvasNode(projectId, type, position, name);
@@ -390,7 +400,7 @@ export function createCanvasStore(projectId: string) {
         [...state.edges, ...copiedEdges],
         [
           ...copies.map((node): CanvasMutation => ({ type: "node.create", node })),
-          ...copiedEdges.map((edge): CanvasMutation => ({ type: "edge.create", edge })),
+          ...copiedEdges.map((edge): CanvasMutation => ({ type: "edge.create", edge, intent: "restore" })),
         ],
       );
       const createdIds = copies.map((node) => node.id);
@@ -398,10 +408,11 @@ export function createCanvasStore(projectId: string) {
       return createdIds;
     },
 
-    createEdge: (sourceNodeId, targetNodeId) => {
-      if (sourceNodeId === targetNodeId) return;
+    createEdge: (sourceNodeId, targetNodeId, intent = "connect") => {
       const state = get();
-      if (state.edges.some((edge) => edge.sourceNodeId === sourceNodeId && edge.targetNodeId === targetNodeId)) return;
+      if (intent === "connect" && state.uploadingNodeIds.includes(targetNodeId)) return;
+      const problem = canvasConnectionProblem(state.nodes, state.edges, sourceNodeId, targetNodeId);
+      if (problem && !(intent === "restore" && problem === "target-has-content")) return;
       const now = new Date().toISOString();
       const edge: CanvasEdge = {
         id: crypto.randomUUID(),
@@ -412,7 +423,7 @@ export function createCanvasStore(projectId: string) {
         createdAt: now,
         updatedAt: now,
       };
-      commitDocument(set, get, state.nodes, [...state.edges, edge], [{ type: "edge.create", edge }]);
+      commitDocument(set, get, state.nodes, [...state.edges, edge], [{ type: "edge.create", edge, intent }]);
     },
 
     deleteEdges: (edgeIds) => {
@@ -585,7 +596,9 @@ function diffDocuments(from: CanvasDocument, to: CanvasDocument, projectId: stri
   }
   for (const [id, node] of toNodes) if (!fromNodes.has(id)) mutations.push({ type: "node.create", node: { ...node, projectId } });
   for (const id of fromEdges.keys()) if (!toEdges.has(id)) mutations.push({ type: "edge.delete", edgeId: id });
-  for (const [id, edge] of toEdges) if (!fromEdges.has(id)) mutations.push({ type: "edge.create", edge: { ...edge, projectId } });
+  for (const [id, edge] of toEdges) if (!fromEdges.has(id)) {
+    mutations.push({ type: "edge.create", edge: { ...edge, projectId }, intent: "restore" });
+  }
   return mutations;
 }
 

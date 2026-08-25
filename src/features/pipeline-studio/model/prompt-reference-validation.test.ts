@@ -22,6 +22,23 @@ describe("prompt reference route validation", () => {
     expect(videoCapabilityForPrompt(promptWith([["audio", "reference"]]))).toBe("multimodal-to-video");
   });
 
+  it("includes connected upstream references and does not count the same prompt mention twice", () => {
+    const document = promptWith([["image", "reference"]]);
+    const connected = {
+      referenceId: "edge-1",
+      sourceType: "canvas-node" as const,
+      sourceId: "node-0",
+      mediaType: "image" as const,
+      label: "上游图片",
+      role: "reference" as const,
+    };
+    const multimodalRoute = route("multimodal-to-video", [
+      { key: "imageUrls", label: "参考图", mediaType: "image", maxFiles: 1 },
+    ]);
+    expect(videoCapabilityForPrompt(promptWith([]), [connected])).toBe("multimodal-to-video");
+    expect(promptReferenceRouteProblem(document, multimodalRoute, [connected])).toBeNull();
+  });
+
   it("reports unsupported and missing required slots immediately", () => {
     const firstFrameRoute = route("image-to-video", [
       { key: "firstFrameUrl", label: "首帧", mediaType: "image", required: true, maxFiles: 1 },

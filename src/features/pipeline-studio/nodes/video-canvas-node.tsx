@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { App, Spin } from "antd";
+import { App, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
 import { Copy, Download, FileVideo, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
@@ -33,6 +33,8 @@ export function VideoCanvasNode({
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
+  const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
+  const hasIncomingConnection = useCanvasStore((state) => state.edges.some((edge) => edge.targetNodeId === id));
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
   )));
@@ -52,11 +54,16 @@ export function VideoCanvasNode({
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
 
   const uploadVideo = useCallback(async (file: File) => {
+    if (hasIncomingConnection) {
+      void message.warning(t.pipeline.canvasUploadBlockedByConnection);
+      return;
+    }
     if (!file.type.startsWith("video/")) {
       void message.error(t.pipeline.nodeVideoOnlyError);
       return;
     }
     setUploading(true);
+    setNodeUploading(id, true);
     try {
       const result = await pipelineStudioApi.uploadFile(
         node.projectId,
@@ -71,8 +78,9 @@ export function VideoCanvasNode({
       void message.error(error instanceof Error ? error.message : String(error));
     } finally {
       setUploading(false);
+      setNodeUploading(id, false);
     }
-  }, [id, insertServerNode, message, node.positionX, node.positionY, node.projectId, t.pipeline.nodeVideoOnlyError]);
+  }, [hasIncomingConnection, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeVideoOnlyError]);
 
   if (!canvas || canvas.type !== "video") return null;
 
@@ -93,8 +101,8 @@ export function VideoCanvasNode({
       onDragOver={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        event.dataTransfer.dropEffect = "copy";
-        setDragActive(true);
+        event.dataTransfer.dropEffect = hasIncomingConnection ? "none" : "copy";
+        setDragActive(!hasIncomingConnection);
       }}
       onDragLeave={(event) => {
         const nextTarget = event.relatedTarget;
@@ -104,6 +112,10 @@ export function VideoCanvasNode({
         event.preventDefault();
         event.stopPropagation();
         setDragActive(false);
+        if (hasIncomingConnection) {
+          void message.warning(t.pipeline.canvasUploadBlockedByConnection);
+          return;
+        }
         const video = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith("video/"));
         if (video) void uploadVideo(video);
       }}
@@ -112,6 +124,7 @@ export function VideoCanvasNode({
         ref={inputRef}
         type="file"
         accept="video/*"
+        disabled={hasIncomingConnection}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -127,7 +140,13 @@ export function VideoCanvasNode({
       {selected && hasVideo && !dragging && !deferMediaLoad ? (
         <CanvasNodeContextToolbar offset={54}>
           <CanvasNodeToolbarButton label={t.pipeline.videoAiGenerate} icon={<Sparkles className="size-4" />} onClick={() => setComposerOpen(true)} />
-          <CanvasNodeToolbarButton label={t.pipeline.nodeVideoReplace} icon={<RefreshCw className="size-4" />} onClick={() => inputRef.current?.click()} />
+          <CanvasNodeToolbarButton
+            label={t.pipeline.nodeVideoReplace}
+            icon={<RefreshCw className="size-4" />}
+            onClick={() => inputRef.current?.click()}
+            disabled={hasIncomingConnection}
+            disabledReason={t.pipeline.canvasUploadBlockedByConnection}
+          />
           <CanvasNodeToolbarButton label={t.pipeline.nodeVideoDownload} icon={<Download className="size-4" />} onClick={downloadVideo} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
           <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
@@ -141,14 +160,19 @@ export function VideoCanvasNode({
           ariaLabel={t.pipeline.nodeNameAria.replace("{type}", t.pipeline.nodeVideo)}
           onRename={(name) => updateNodeData(id, { ...canvas, name })}
           actions={!hasVideo ? (
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-            >
-              <FileVideo className="size-3.5" />
-              {t.pipeline.canvasUploadMedia}
-            </button>
+            <Tooltip title={hasIncomingConnection ? t.pipeline.canvasUploadBlockedByConnection : undefined}>
+              <span className="inline-flex">
+                <button
+                  type="button"
+                  disabled={hasIncomingConnection}
+                  onClick={() => inputRef.current?.click()}
+                  className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <FileVideo className="size-3.5" />
+                  {t.pipeline.canvasUploadMedia}
+                </button>
+              </span>
+            </Tooltip>
           ) : null}
         />
       </div>

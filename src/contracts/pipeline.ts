@@ -226,7 +226,7 @@ export type CanvasMutation =
   | { type: "node.create"; node: CanvasNode }
   | { type: "node.update"; nodeId: string; patch: { positionX?: number; positionY?: number; width?: number | null; height?: number | null; data?: CanvasNodeData | null } }
   | { type: "node.delete"; nodeId: string }
-  | { type: "edge.create"; edge: CanvasEdge }
+  | { type: "edge.create"; edge: CanvasEdge; intent?: "connect" | "restore" }
   | { type: "edge.delete"; edgeId: string }
   | { type: "viewport.update"; viewport: CanvasViewport };
 

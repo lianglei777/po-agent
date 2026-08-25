@@ -2,7 +2,7 @@
 
 import NextImage from "next/image";
 import { memo, useCallback, useRef, useState } from "react";
-import { App, Button, Modal, Spin } from "antd";
+import { App, Button, Modal, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
 import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
@@ -60,6 +60,8 @@ export function ImageCanvasNode({
   const stopEditingNode = useCanvasStore((state) => state.stopEditingNode);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
+  const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
+  const hasIncomingConnection = useCanvasStore((state) => state.edges.some((edge) => edge.targetNodeId === id));
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
   )));
@@ -109,11 +111,16 @@ export function ImageCanvasNode({
   }, [mediaUrl]);
 
   const uploadImage = useCallback(async (file: File) => {
+    if (hasIncomingConnection) {
+      void message.warning(t.pipeline.canvasUploadBlockedByConnection);
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       void message.error(t.pipeline.nodeImageOnlyError);
       return;
     }
     setUploading(true);
+    setNodeUploading(id, true);
     try {
       const result = await pipelineStudioApi.uploadFile(
         node.projectId,
@@ -127,8 +134,9 @@ export function ImageCanvasNode({
       void message.error(error instanceof Error ? error.message : String(error));
     } finally {
       setUploading(false);
+      setNodeUploading(id, false);
     }
-  }, [id, insertServerNode, message, node.positionX, node.positionY, node.projectId, t.pipeline.nodeImageOnlyError]);
+  }, [hasIncomingConnection, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeImageOnlyError]);
 
   if (!canvas || canvas.type !== "image") return null;
 
@@ -178,18 +186,10 @@ export function ImageCanvasNode({
       });
       const position = findDerivedImagePosition(node, store.getState().nodes);
       const uploaded = await pipelineStudioApi.uploadFile(node.projectId, file, position.x, position.y);
-      try {
-        const { edge } = await pipelineStudioApi.connectCanvasNodes(node.projectId, id, uploaded.node.id);
-        const snapshot = await pipelineStudioApi.getSnapshot(node.projectId);
-        const connectedNode = snapshot.nodes.find((candidate) => candidate.id === uploaded.node.id) ?? uploaded.node;
-        insertServerGenerationResult(connectedNode, edge);
-        setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
-        void message.success(t.pipeline.nodeImageEditSaved);
-      } catch (error) {
-        // 图片已经写入项目目录时必须保留新节点，连线失败不能让用户误以为编辑结果也丢失了。
-        insertServerNode(uploaded.node);
-        throw error;
-      }
+      // 连线只表达生成输入引用；本地编辑结果已经有内容，不能伪装成可消费的空目标节点。
+      insertServerNode(uploaded.node);
+      setEditTransform(EMPTY_IMAGE_EDIT_TRANSFORM);
+      void message.success(t.pipeline.nodeImageEditSaved);
     } catch {
       void message.error(t.pipeline.nodeImageEditSaveError);
     } finally {
@@ -211,8 +211,8 @@ export function ImageCanvasNode({
         if (editing) return;
         event.preventDefault();
         event.stopPropagation();
-        event.dataTransfer.dropEffect = "copy";
-        setDragActive(true);
+        event.dataTransfer.dropEffect = hasIncomingConnection ? "none" : "copy";
+        setDragActive(!hasIncomingConnection);
       }}
       onDragLeave={(event) => {
         const nextTarget = event.relatedTarget;
@@ -223,6 +223,10 @@ export function ImageCanvasNode({
         event.preventDefault();
         event.stopPropagation();
         setDragActive(false);
+        if (hasIncomingConnection) {
+          void message.warning(t.pipeline.canvasUploadBlockedByConnection);
+          return;
+        }
         const image = Array.from(event.dataTransfer.files).find((file) => file.type.startsWith("image/"));
         if (image) void uploadImage(image);
       }}
@@ -231,6 +235,7 @@ export function ImageCanvasNode({
         ref={inputRef}
         type="file"
         accept="image/*"
+        disabled={hasIncomingConnection}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -266,7 +271,13 @@ export function ImageCanvasNode({
             onClick={() => openImageComposer(id)}
           />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImagePreview} icon={<Eye className="size-4" />} onClick={() => setPreviewOpen(true)} />
-          <CanvasNodeToolbarButton label={t.pipeline.nodeImageReplace} icon={<RefreshCw className="size-4" />} onClick={() => inputRef.current?.click()} />
+          <CanvasNodeToolbarButton
+            label={t.pipeline.nodeImageReplace}
+            icon={<RefreshCw className="size-4" />}
+            onClick={() => inputRef.current?.click()}
+            disabled={hasIncomingConnection}
+            disabledReason={t.pipeline.canvasUploadBlockedByConnection}
+          />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImageDownload} icon={<Download className="size-4" />} onClick={downloadImage} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
           <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
@@ -301,14 +312,19 @@ export function ImageCanvasNode({
                 </span>
               ) : null}
               {presentation.showUploadAction ? (
-                <button
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                  className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-                >
-                  <ImagePlus className="size-3.5" />
-                  {t.pipeline.canvasUploadMedia}
-                </button>
+                <Tooltip title={hasIncomingConnection ? t.pipeline.canvasUploadBlockedByConnection : undefined}>
+                  <span className="inline-flex">
+                    <button
+                      type="button"
+                      disabled={hasIncomingConnection}
+                      onClick={() => inputRef.current?.click()}
+                      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <ImagePlus className="size-3.5" />
+                      {t.pipeline.canvasUploadMedia}
+                    </button>
+                  </span>
+                </Tooltip>
               ) : null}
             </>
           )}
@@ -354,6 +370,8 @@ export function ImageCanvasNode({
               <ImageErrorState
                 onRetry={() => setImageStatus({ url: mediaUrl, state: "loading" })}
                 onReplace={() => inputRef.current?.click()}
+                replaceDisabled={hasIncomingConnection}
+                replaceDisabledReason={t.pipeline.canvasUploadBlockedByConnection}
               />
             ) : (
               <>
@@ -474,7 +492,17 @@ const CanvasImageMedia = memo(function CanvasImageMedia({
   );
 });
 
-function ImageErrorState({ onRetry, onReplace }: { onRetry: () => void; onReplace: () => void }) {
+function ImageErrorState({
+  onRetry,
+  onReplace,
+  replaceDisabled,
+  replaceDisabledReason,
+}: {
+  onRetry: () => void;
+  onReplace: () => void;
+  replaceDisabled: boolean;
+  replaceDisabledReason: string;
+}) {
   const { t } = useI18n();
   return (
     <div className="nodrag absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-6 text-center">
@@ -482,7 +510,9 @@ function ImageErrorState({ onRetry, onReplace }: { onRetry: () => void; onReplac
       <span className="text-sm font-medium text-[var(--pl-text)]">{t.pipeline.nodeImageLoadFailed}</span>
       <div className="flex gap-2">
         <Button size="small" onClick={onRetry}>{t.pipeline.nodeImageRetry}</Button>
-        <Button size="small" type="primary" onClick={onReplace}>{t.pipeline.nodeImageReplace}</Button>
+        <Tooltip title={replaceDisabled ? replaceDisabledReason : undefined}>
+          <span><Button size="small" type="primary" disabled={replaceDisabled} onClick={onReplace}>{t.pipeline.nodeImageReplace}</Button></span>
+        </Tooltip>
       </div>
     </div>
   );

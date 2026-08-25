@@ -116,8 +116,12 @@ function parseMutation(value: unknown, index: number): CanvasMutationBatch["muta
       throw validationError(`mutations[${index}].edge identifiers are invalid`);
     }
     if (!EDGE_TYPES.has(String(edge.edgeType))) throw validationError(`mutations[${index}].edgeType is invalid`);
+    if (value.intent !== undefined && value.intent !== "connect" && value.intent !== "restore") {
+      throw validationError(`mutations[${index}].intent is invalid`);
+    }
     return {
       type: value.type,
+      intent: value.intent as "connect" | "restore" | undefined,
       edge: {
         id: edge.id,
         projectId: edge.projectId,

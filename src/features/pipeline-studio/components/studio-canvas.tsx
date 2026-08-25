@@ -36,6 +36,7 @@ import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
 import { getCanvasZoomShortcut, isPlainCanvasShortcut } from "../model/canvas-shortcuts";
+import { canvasConnectionProblem } from "../model/canvas-connection-policy";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
 import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
 import { CanvasAssetBrowser } from "./canvas-asset-browser";
@@ -80,6 +81,7 @@ export function StudioCanvas({
   const interactionMode = useCanvasStore((state) => state.interactionMode);
   const connectionsVisible = useCanvasStore((state) => state.connectionsVisible);
   const minimapVisible = useCanvasStore((state) => state.minimapVisible);
+  const uploadingNodeIds = useCanvasStore((state) => state.uploadingNodeIds);
   const loaded = useCanvasStore((state) => state.loaded);
   const saveState = useCanvasStore((state) => state.saveState);
   const error = useCanvasStore((state) => state.error);
@@ -232,7 +234,7 @@ export function StudioCanvas({
       for (const edge of bundle.edges) {
         const source = createdIds[edge.sourceIndex];
         const target = createdIds[edge.targetIndex];
-        if (source && target) createEdge(source, target);
+        if (source && target) createEdge(source, target, "restore");
       }
       setSelection(createdIds);
     } catch {
@@ -318,6 +320,11 @@ export function StudioCanvas({
       const selectedImage = selectedNodeIds.length === 1
         ? nodes.find((node) => node.id === selectedNodeIds[0] && node.data?.type === "image")
         : undefined;
+      if (selectedImage && edges.some((edge) => edge.targetNodeId === selectedImage.id)) {
+        event.preventDefault();
+        void message.warning(t.pipeline.canvasUploadBlockedByConnection);
+        return;
+      }
       const targetNodeId = files.length === 1 && files[0].type.startsWith("image/")
         ? selectedImage?.id
         : undefined;
@@ -329,7 +336,7 @@ export function StudioCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles, zoomInCanvas, zoomOutCanvas]);
+  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, edges, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, t.pipeline.canvasUploadBlockedByConnection, undo, uploadFiles, zoomInCanvas, zoomOutCanvas]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
     setReactFlowNodes((currentNodes) => {
@@ -444,6 +451,12 @@ export function StudioCanvas({
           onConnect={(connection: Connection) => {
             if (connection.source && connection.target) createEdge(connection.source, connection.target);
           }}
+          isValidConnection={(connection) => Boolean(
+            connection.source
+            && connection.target
+            && !uploadingNodeIds.includes(connection.target)
+            && !canvasConnectionProblem(nodes, edges, connection.source, connection.target)
+          )}
           onPaneContextMenu={openCreateMenu}
           onInit={(instance) => { instanceRef.current = instance; }}
           selectionOnDrag={interactionMode === "select"}

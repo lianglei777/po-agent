@@ -40,7 +40,7 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().edges).toEqual([edge]);
     expect(store.getState().pendingMutations).toEqual([
       { type: "edge.delete", edgeId: edge.id },
-      { type: "edge.create", edge },
+      { type: "edge.create", edge, intent: "restore" },
     ]);
   });
 

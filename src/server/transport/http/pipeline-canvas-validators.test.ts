@@ -103,6 +103,26 @@ describe("parseGenerateTextNodeRequest", () => {
       .toThrow("instruction is invalid");
   });
 
+  it("accepts restore intent and rejects unknown edge creation intents", () => {
+    const edge = {
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: "node-1",
+      targetNodeId: "node-2",
+      edgeType: "references",
+    };
+    expect(parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "request-edge-restore",
+      mutations: [{ type: "edge.create", edge, intent: "restore" }],
+    }).mutations[0]).toMatchObject({ intent: "restore" });
+    expect(() => parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "request-edge-invalid",
+      mutations: [{ type: "edge.create", edge, intent: "bypass" }],
+    })).toThrow("intent is invalid");
+  });
+
   it("accepts semantic resource atoms and rejects incomplete bindings", () => {
     const promptDocument = {
       schemaVersion: 1,

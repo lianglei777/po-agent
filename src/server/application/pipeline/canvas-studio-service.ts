@@ -56,14 +56,12 @@ export class CanvasStudioService {
     if (!await this.repository.getProject(projectId)) {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
     }
+    const affectedTargets = await this.validateMutationConnections(projectId, batch);
     const result = await this.repository.applyCanvasMutationBatch(projectId, batch.baseRevision, batch.mutations);
     if (!result.applied) {
       throw new AppError("PIPELINE_CANVAS_REVISION_CONFLICT", `Canvas revision conflict. Current revision is ${result.revision}`, 409);
     }
 
-    const affectedTargets = new Set(
-      batch.mutations.flatMap((mutation) => mutation.type === "edge.create" ? [mutation.edge.targetNodeId] : []),
-    );
     for (const targetId of affectedTargets) {
       await this.syncTargetReferences(targetId);
     }
@@ -123,19 +121,14 @@ export class CanvasStudioService {
     sourceNodeId: string;
     targetNodeId: string;
   }): Promise<CanvasEdge> {
-    if (input.sourceNodeId === input.targetNodeId) {
-      throw new AppError("VALIDATION_ERROR", "A node cannot reference itself", 400);
-    }
     const [source, target, edges] = await Promise.all([
       this.requireNode(input.sourceNodeId),
       this.requireNode(input.targetNodeId),
       this.repository.listCanvasEdges(input.projectId),
     ]);
-    if (source.projectId !== input.projectId || target.projectId !== input.projectId) {
-      throw new AppError("VALIDATION_ERROR", "Canvas connection belongs to another project", 400);
-    }
     const existing = edges.find((edge) => edge.sourceNodeId === source.id && edge.targetNodeId === target.id);
     if (existing) return existing;
+    assertCanvasConnectionAllowed(input.projectId, source, target, edges, true);
     const edge = await this.repository.createCanvasEdge({
       projectId: input.projectId,
       sourceNodeId: source.id,
@@ -193,6 +186,13 @@ export class CanvasStudioService {
     const targetNode = input.nodeId ? await this.requireNode(input.nodeId) : null;
     if (targetNode && (targetNode.projectId !== input.projectId || targetNode.data?.type !== type)) {
       throw new AppError("VALIDATION_ERROR", "The uploaded file type does not match the target canvas node", 400);
+    }
+    if (targetNode) {
+      const hasIncoming = (await this.repository.listCanvasEdges(input.projectId))
+        .some((edge) => edge.targetNodeId === targetNode.id);
+      if (hasIncoming) {
+        throw new AppError("VALIDATION_ERROR", "Disconnect upstream nodes before uploading local content", 409);
+      }
     }
     await ensurePipelineRunSession(this.runs, input.projectId, await this.requireProjectRoot(input.projectId));
     const uploaded = await this.assets.upload({
@@ -293,13 +293,18 @@ export class CanvasStudioService {
 
     const promptDocument = input?.promptDocument ?? data.params?.promptDocument;
     let promptReferences: CanvasMediaReference[] | undefined;
+    const connectedReferences = referencesFromParams(data.params);
+    if (connectedReferences.some((reference) => !mediaReferenceIsUsable(reference))) {
+      throw new AppError("VALIDATION_ERROR", "An upstream node has no usable content yet", 409);
+    }
     if (promptDocument) {
       const compiled = await this.compilePromptDocument(node.projectId, promptDocument);
       if (compiled.issues.length) {
         throw new AppError("VALIDATION_ERROR", "One or more referenced resources are no longer available", 400);
       }
       compiledPrompt = compiled.prompt;
-      promptReferences = mergeReferences(compiled.references, referencesFromParams(data.params));
+      // 连线引用先按边顺序发送，@ 引用再按提示词顺序追加；同一资源只上传一次。
+      promptReferences = mergeReferences(connectedReferences, compiled.references);
     }
 
     if (input && (input.prompt !== undefined || input.promptDocument !== undefined || input.routeId !== undefined || input.settings !== undefined)) {
@@ -487,8 +492,15 @@ export class CanvasStudioService {
     if (compiled?.references.some((reference) => reference.mediaType !== "text")) {
       throw new AppError("VALIDATION_ERROR", "The selected text model currently accepts text references only", 400);
     }
+    const connectedReferences = referencesFromParams(data.params);
+    if (connectedReferences.some((reference) => !mediaReferenceIsUsable(reference))) {
+      throw new AppError("VALIDATION_ERROR", "An upstream node has no usable content yet", 409);
+    }
+    if (connectedReferences.some((reference) => reference.mediaType !== "text")) {
+      throw new AppError("VALIDATION_ERROR", "The selected text model currently accepts text references only", 400);
+    }
     const instruction = compiled?.prompt ?? input.instruction;
-    const referenceText = input.promptDocument ? "" : data.params?.textList
+    const referenceText = data.params?.textList
       ?.flatMap((reference) => reference.content ?? [])
       .filter((content) => content.trim())
       .join("\n\n")
@@ -501,7 +513,7 @@ export class CanvasStudioService {
           prompt: input.instruction,
           promptDocument: input.promptDocument,
           model: input.model,
-          ...(compiled ? referenceParams(compiled.references) : {}),
+          ...(compiled ? referenceParams(mergeReferences(connectedReferences, compiled.references)) : {}),
         },
         taskInfo: { status: "processing" },
       },
@@ -747,6 +759,48 @@ export class CanvasStudioService {
     return this.repository.updateCanvasNode(targetNodeId, { data: next });
   }
 
+  private async validateMutationConnections(projectId: string, batch: CanvasMutationBatch): Promise<Set<string>> {
+    const [initialNodes, initialEdges] = await Promise.all([
+      this.repository.listCanvasNodes(projectId),
+      this.repository.listCanvasEdges(projectId),
+    ]);
+    const nodes = new Map(initialNodes.map((node) => [node.id, node]));
+    let edges = [...initialEdges];
+    const affectedTargets = new Set<string>();
+
+    for (const mutation of batch.mutations) {
+      if (mutation.type === "node.create") {
+        if (mutation.node.projectId !== projectId) {
+          throw new AppError("VALIDATION_ERROR", "Canvas node belongs to another project", 400);
+        }
+        nodes.set(mutation.node.id, mutation.node);
+      } else if (mutation.type === "node.update") {
+        const current = nodes.get(mutation.nodeId);
+        if (current) nodes.set(current.id, { ...current, ...mutation.patch, updatedAt: current.updatedAt });
+      } else if (mutation.type === "node.delete") {
+        for (const edge of edges) {
+          if (edge.sourceNodeId === mutation.nodeId && edge.targetNodeId !== mutation.nodeId) {
+            affectedTargets.add(edge.targetNodeId);
+          }
+        }
+        nodes.delete(mutation.nodeId);
+        edges = edges.filter((edge) => edge.sourceNodeId !== mutation.nodeId && edge.targetNodeId !== mutation.nodeId);
+      } else if (mutation.type === "edge.delete") {
+        const deleted = edges.find((edge) => edge.id === mutation.edgeId);
+        if (deleted) affectedTargets.add(deleted.targetNodeId);
+        edges = edges.filter((edge) => edge.id !== mutation.edgeId);
+      } else if (mutation.type === "edge.create") {
+        const source = nodes.get(mutation.edge.sourceNodeId);
+        const target = nodes.get(mutation.edge.targetNodeId);
+        if (!source || !target) throw new AppError("VALIDATION_ERROR", "Canvas connection references a missing node", 400);
+        assertCanvasConnectionAllowed(projectId, source, target, edges, mutation.intent !== "restore", mutation.edge.id);
+        edges.push(mutation.edge);
+        affectedTargets.add(mutation.edge.targetNodeId);
+      }
+    }
+    return affectedTargets;
+  }
+
   private async compilePromptDocument(projectId: string, document: NonNullable<CanvasGenerationParams["promptDocument"]>) {
     const resolved = new Map<string, CanvasMediaReference>();
     for (const reference of collectPromptResourceReferences(document)) {
@@ -895,6 +949,60 @@ function mediaReference(node: CanvasNode): CanvasMediaReference | null {
   const textContent = data.textDocument?.plainText ?? data.content?.join("\n");
   if (textContent) ref.content = [textContent];
   return ref;
+}
+
+function mediaReferenceIsUsable(reference: CanvasMediaReference): boolean {
+  return reference.mediaType === "text"
+    ? Boolean(reference.content?.some((content) => content.trim()))
+    : Boolean(reference.artifactId || reference.workspaceFile);
+}
+
+function canvasNodeHasContent(node: CanvasNode): boolean {
+  const reference = mediaReference(node);
+  if (!reference) return false;
+  return reference.mediaType === "text"
+    ? Boolean(reference.content?.some((content) => content.trim()))
+    : Boolean(reference.artifactId || reference.workspaceFile || reference.url);
+}
+
+function assertCanvasConnectionAllowed(
+  projectId: string,
+  source: CanvasNode,
+  target: CanvasNode,
+  edges: CanvasEdge[],
+  requireEmptyTarget: boolean,
+  edgeId?: string,
+): void {
+  if (source.id === target.id) throw new AppError("VALIDATION_ERROR", "A node cannot reference itself", 400);
+  if (source.projectId !== projectId || target.projectId !== projectId) {
+    throw new AppError("VALIDATION_ERROR", "Canvas connection belongs to another project", 400);
+  }
+  const duplicate = edges.find((edge) => edge.sourceNodeId === source.id
+    && edge.targetNodeId === target.id
+    && edge.id !== edgeId);
+  if (duplicate) throw new AppError("VALIDATION_ERROR", "This canvas connection already exists", 409);
+  if (requireEmptyTarget && (target.data?.taskInfo?.status === "queued" || target.data?.taskInfo?.status === "processing")) {
+    throw new AppError("VALIDATION_ERROR", "A generating node cannot accept a new upstream connection", 409);
+  }
+  if (requireEmptyTarget && canvasNodeHasContent(target)) {
+    throw new AppError("VALIDATION_ERROR", "Only an empty node can accept a new upstream connection", 409);
+  }
+  if (canvasPathExists(edges, target.id, source.id)) {
+    throw new AppError("VALIDATION_ERROR", "Canvas connections cannot form a cycle", 409);
+  }
+}
+
+function canvasPathExists(edges: CanvasEdge[], startNodeId: string, targetNodeId: string): boolean {
+  const pending = [startNodeId];
+  const visited = new Set<string>();
+  while (pending.length) {
+    const nodeId = pending.pop()!;
+    if (nodeId === targetNodeId) return true;
+    if (visited.has(nodeId)) continue;
+    visited.add(nodeId);
+    pending.push(...edges.filter((edge) => edge.sourceNodeId === nodeId).map((edge) => edge.targetNodeId));
+  }
+  return false;
 }
 
 function plainTextDocument(plainText: string): NonNullable<CanvasNodeData["textDocument"]> {

@@ -40,6 +40,7 @@ export function TextAiComposer({
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
+  const [unsupportedReferenceCount, setUnsupportedReferenceCount] = useState(0);
   const plainText = data.textDocument?.plainText ?? data.content?.join("\n") ?? "";
   const mode = plainText.trim() ? "revise" : "generate";
   const referenceCount = data.params?.textList?.filter((reference) => reference.content?.some((content) => content.trim())).length ?? 0;
@@ -75,9 +76,10 @@ export function TextAiComposer({
     if (loadingModels) return t.pipeline.textAiModelLoading;
     if (!models.length || !selectedModel) return t.pipeline.textAiNoModels;
     if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
+    if (unsupportedReferenceCount) return t.pipeline.promptReferenceUnsupported;
     if (!instruction.trim()) return t.pipeline.textAiInstructionRequired;
     return "";
-  }, [instruction, invalidReferenceCount, loadingModels, models.length, selectedModel, t.pipeline, waitingForSave]);
+  }, [instruction, invalidReferenceCount, loadingModels, models.length, selectedModel, t.pipeline, unsupportedReferenceCount, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating) return;
@@ -112,7 +114,10 @@ export function TextAiComposer({
       disabledReason={disabledReason}
       error={error}
       onPromptDocumentChange={setPromptDocument}
-      onReferenceStateChange={({ invalidCount }) => setInvalidReferenceCount(invalidCount)}
+      onReferenceStateChange={({ invalidCount, unsupportedCount }) => {
+        setInvalidReferenceCount(invalidCount);
+        setUnsupportedReferenceCount(unsupportedCount);
+      }}
       onModelChange={setSelectedModel}
       onSubmit={() => void submit()}
       nodeId={nodeId}
@@ -170,7 +175,7 @@ function ComposerSurface({
   disabledReason: string;
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
-  onReferenceStateChange: (state: { invalidCount: number }) => void;
+  onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onModelChange: (value: string) => void;
   onSubmit: () => void;
   onExpand: () => void;
@@ -193,6 +198,7 @@ function ComposerSurface({
           onSubmit={onSubmit}
           allowedMediaTypes={["text"]}
           excludedCanvasNodeId={nodeId}
+          connectedTargetNodeId={nodeId}
           placeholder={mode === "revise" ? t.pipeline.textAiRevisePlaceholder : t.pipeline.textAiGeneratePlaceholder}
           ariaLabel={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
         />

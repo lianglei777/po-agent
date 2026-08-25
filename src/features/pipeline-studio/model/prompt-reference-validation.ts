@@ -11,14 +11,19 @@ export type PromptReferenceRouteProblem =
 export function promptReferenceRouteProblem(
   document: CanvasPromptDocument,
   route: GenerationRouteDto | undefined,
+  additionalReferences: CanvasResourceReferenceAttrs[] = [],
 ): PromptReferenceRouteProblem {
   if (!route) return null;
   const slots = route.inputSchema.assets ?? [];
   const counts = new Map<string, number>();
+  const seenBindings = new Set<string>();
 
-  for (const reference of promptDocumentResourceAttrs(document)) {
+  for (const reference of [...additionalReferences, ...promptDocumentResourceAttrs(document)]) {
     if (reference.mediaType === "text") continue;
     const slotKey = referenceSlotKey(reference);
+    const bindingKey = `${reference.sourceType}:${reference.sourceId}:${slotKey}`;
+    if (seenBindings.has(bindingKey)) continue;
+    seenBindings.add(bindingKey);
     const slot = slots.find((candidate) => candidate.key === slotKey && candidate.mediaType === reference.mediaType);
     if (!slot) return { kind: "unsupported", reference };
     const count = (counts.get(slot.key) ?? 0) + 1;
@@ -33,8 +38,11 @@ export function promptReferenceRouteProblem(
   return null;
 }
 
-export function videoCapabilityForPrompt(document: CanvasPromptDocument) {
-  const references = promptDocumentResourceAttrs(document);
+export function videoCapabilityForPrompt(
+  document: CanvasPromptDocument,
+  additionalReferences: CanvasResourceReferenceAttrs[] = [],
+) {
+  const references = [...additionalReferences, ...promptDocumentResourceAttrs(document)];
   if (references.some((reference) => reference.mediaType === "video"
     || reference.mediaType === "audio"
     || (reference.mediaType === "image" && reference.role === "reference"))) {

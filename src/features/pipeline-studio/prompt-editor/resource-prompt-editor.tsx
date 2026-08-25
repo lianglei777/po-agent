@@ -17,15 +17,17 @@ import type {
   CanvasPromptDocument,
   CanvasResourceReferenceAttrs,
   CanvasResourceRole,
+  CanvasResourceSourceType,
   PipelineAsset,
 } from "@/contracts/pipeline";
-import { AtSign } from "@/components/icons";
+import { AtSign, X } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resourcePickerPosition, type CursorRect } from "../model/floating-panel";
-import { promptDocumentFromJson, promptDocumentResourceAttrs } from "../model/prompt-document";
+import { connectedCanvasReferences } from "../model/canvas-connection-policy";
+import { promptDocumentFromJson, promptDocumentResourceAttrs, removePromptResourceReferences } from "../model/prompt-document";
 import {
-  promptDocumentPreviewReferences,
+  promptResourceBindings,
   resolvePromptResourcePreview,
 } from "../model/prompt-resource-preview";
 import { useCanvasStore } from "../state/canvas-store";
@@ -83,6 +85,7 @@ export function ResourcePromptEditor({
   autoFocus = false,
   allowedMediaTypes,
   excludedCanvasNodeId,
+  connectedTargetNodeId,
   defaultResourceRole = "reference",
   onResourceInserted,
   onReferenceStateChange,
@@ -96,14 +99,17 @@ export function ResourcePromptEditor({
   autoFocus?: boolean;
   allowedMediaTypes: CanvasMediaType[];
   excludedCanvasNodeId?: string;
+  connectedTargetNodeId?: string;
   defaultResourceRole?: CanvasResourceRole;
   onResourceInserted?: () => void;
-  onReferenceStateChange?: (state: { invalidCount: number }) => void;
+  onReferenceStateChange?: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onSubmit: () => void;
 }) {
   const { t } = useI18n();
   const projectId = useCanvasStore((state) => state.projectId);
   const canvasNodes = useCanvasStore((state) => state.nodes);
+  const canvasEdges = useCanvasStore((state) => state.edges);
+  const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const [assets, setAssets] = useState<PipelineAsset[]>([]);
   const [mention, setMention] = useState<{ from: number; to: number; query: string; cursor: CursorRect } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -145,12 +151,29 @@ export function ResourcePromptEditor({
       .sort((left, right) => Number(right.available) - Number(left.available))
       .slice(0, 12);
   }, [mention?.query, options]);
-  const referencedMedia = useMemo(() => promptDocumentPreviewReferences(value).map((reference) => (
-    resolvePromptResourcePreview(reference, canvasNodes, assets)
-  )), [assets, canvasNodes, value]);
-  const invalidReferenceCount = useMemo(() => promptDocumentResourceAttrs(value).filter((reference) => (
+  const connectedReferences = useMemo(() => connectedTargetNodeId
+    ? connectedCanvasReferences(connectedTargetNodeId, canvasNodes, canvasEdges)
+    : [], [canvasEdges, canvasNodes, connectedTargetNodeId]);
+  const promptReferences = useMemo(() => promptDocumentResourceAttrs(value), [value]);
+  const referencedResources = useMemo(() => promptResourceBindings(
+    connectedTargetNodeId,
+    canvasNodes,
+    canvasEdges,
+    promptReferences,
+  ).map((binding) => ({
+    binding,
+    preview: resolvePromptResourcePreview(binding.reference, canvasNodes, assets),
+  })), [assets, canvasEdges, canvasNodes, connectedTargetNodeId, promptReferences]);
+  const allReferences = useMemo(() => [
+    ...connectedReferences,
+    ...promptReferences,
+  ], [connectedReferences, promptReferences]);
+  const invalidReferenceCount = useMemo(() => allReferences.filter((reference) => (
     !resolvePromptResourcePreview(reference, canvasNodes, assets).available
-  )).length, [assets, canvasNodes, value]);
+  )).length, [allReferences, assets, canvasNodes]);
+  const unsupportedReferenceCount = useMemo(() => allReferences.filter((reference) => (
+    !allowedMediaTypes.includes(reference.mediaType)
+  )).length, [allReferences, allowedMediaTypes]);
   const pickerHeight = Math.min(258, 42 + Math.max(1, filteredOptions.length) * 36);
   const pickerPosition = mention && typeof window !== "undefined"
     ? resourcePickerPosition({
@@ -244,8 +267,11 @@ export function ResourcePromptEditor({
   }, [autoFocus, editor]);
 
   useEffect(() => {
-    onReferenceStateChange?.({ invalidCount: invalidReferenceCount });
-  }, [invalidReferenceCount, onReferenceStateChange]);
+    onReferenceStateChange?.({
+      invalidCount: invalidReferenceCount,
+      unsupportedCount: unsupportedReferenceCount,
+    });
+  }, [invalidReferenceCount, onReferenceStateChange, unsupportedReferenceCount]);
 
   function updateMention(currentEditor: NonNullable<typeof editor>) {
     const { selection } = currentEditor.state;
@@ -265,7 +291,7 @@ export function ResourcePromptEditor({
   }
 
   function insertResource(option: PromptResourceOption | undefined) {
-    if (!editor || !mention || !option?.available) return;
+    if (!editor || !mention || !option) return;
     const role = option.mediaType === "image" ? defaultResourceRole : "reference";
     const attrs: CanvasResourceReferenceAttrs = {
       referenceId: crypto.randomUUID(),
@@ -282,6 +308,33 @@ export function ResourcePromptEditor({
     setMention(null);
     onResourceInserted?.();
   }
+
+  function removeResource(sourceType: CanvasResourceSourceType, sourceId: string, edgeIds: string[]) {
+    if (disabled) return;
+    let removedFromEditor = false;
+    if (editor) {
+      const ranges: Array<{ from: number; to: number }> = [];
+      editor.state.doc.descendants((node, position) => {
+        if (node.type.name !== "resourceReference") return;
+        if (node.attrs.sourceType === sourceType && node.attrs.sourceId === sourceId) {
+          ranges.push({ from: position, to: position + node.nodeSize });
+        }
+      });
+      if (ranges.length) {
+        // 从后向前删除，避免前面的 transaction 改变后续引用位置。
+        const transaction = editor.state.tr;
+        for (const range of ranges.reverse()) transaction.delete(range.from, range.to);
+        editor.view.dispatch(transaction);
+        removedFromEditor = true;
+      }
+    }
+    if (!removedFromEditor && promptReferences.some((reference) => (
+      reference.sourceType === sourceType && reference.sourceId === sourceId
+    ))) {
+      onChange(removePromptResourceReferences(value, sourceType, sourceId));
+    }
+    if (edgeIds.length) deleteEdges(edgeIds);
+  }
   useEffect(() => {
     mentionRef.current = mention;
     submitRef.current = onSubmit;
@@ -293,27 +346,46 @@ export function ResourcePromptEditor({
   return (
     <PromptResourceAssetsContext.Provider value={assets}>
     <div className="pipeline-prompt-editor relative flex min-h-0 flex-1 flex-col overflow-hidden" onPointerDown={(event) => event.stopPropagation()}>
-      {referencedMedia.length ? (
+      {referencedResources.length ? (
         <div
           role="list"
           aria-label={t.pipeline.promptReferencesPreview}
           className="flex min-h-16 shrink-0 items-center gap-2 overflow-x-auto px-5 py-2"
         >
-          {referencedMedia.map((preview, index) => (
+          {referencedResources.map(({ binding, preview }, index) => {
+            const removeLabel = binding.edgeIds.length && binding.promptReferenceIds.length
+              ? t.pipeline.promptResourceRemoveAll.replace("{label}", preview.reference.label)
+              : binding.edgeIds.length
+                ? t.pipeline.promptResourceRemoveConnection.replace("{label}", preview.reference.label)
+                : t.pipeline.promptResourceRemoveMentions.replace("{label}", preview.reference.label);
+            return (
             <span
-              key={preview.key}
+              key={binding.key}
               role="listitem"
               title={preview.available ? preview.reference.label : t.pipeline.promptReferenceUnavailable}
-              className={`shrink-0 ${preview.available ? "" : "opacity-50"}`}
+              className={`relative shrink-0 ${preview.available ? "" : "opacity-50"}`}
             >
-              <ResourcePreviewPopover
-                mediaType={preview.reference.mediaType as "image" | "video"}
-                label={preview.reference.label}
-                url={preview.available ? preview.url : null}
-                poster={preview.poster}
-                detail={`${index + 1} · ${resourceRoleLabel(preview.reference.role, t.pipeline)}`}
-                ariaLabel={t.pipeline.promptReferencePreview.replace("{label}", preview.reference.label)}
-              >
+              {preview.reference.mediaType === "image" || preview.reference.mediaType === "video" ? (
+                <ResourcePreviewPopover
+                  mediaType={preview.reference.mediaType}
+                  label={preview.reference.label}
+                  url={preview.available ? preview.url : null}
+                  poster={preview.poster}
+                  detail={`${index + 1} · ${resourceRoleLabel(preview.reference.role, t.pipeline)}`}
+                  ariaLabel={t.pipeline.promptReferencePreview.replace("{label}", preview.reference.label)}
+                >
+                  <ResourcePreviewThumbnail
+                    mediaType={preview.reference.mediaType}
+                    label={preview.reference.label}
+                    url={preview.url}
+                    poster={preview.poster}
+                    size="strip"
+                    badge={index + 1}
+                    accessible
+                    fit="cover"
+                  />
+                </ResourcePreviewPopover>
+              ) : (
                 <ResourcePreviewThumbnail
                   mediaType={preview.reference.mediaType}
                   label={preview.reference.label}
@@ -322,11 +394,26 @@ export function ResourcePromptEditor({
                   size="strip"
                   badge={index + 1}
                   accessible
-                  fit="contain"
+                  fit="cover"
                 />
-              </ResourcePreviewPopover>
+              )}
+              <button
+                type="button"
+                disabled={disabled}
+                title={disabled ? t.pipeline.promptResourceRemoveBusy : removeLabel}
+                aria-label={removeLabel}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  removeResource(binding.reference.sourceType, binding.reference.sourceId, binding.edgeIds);
+                }}
+                className="absolute -right-1 -top-1 z-10 flex size-5 items-center justify-center rounded-full border border-white/35 bg-black/80 text-white shadow-sm transition-colors duration-150 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <X className="size-3" />
+              </button>
             </span>
-          ))}
+            );
+          })}
         </div>
       ) : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -357,7 +444,6 @@ export function ResourcePromptEditor({
                 <button
                   key={`${option.sourceType}:${option.sourceId}`}
                   type="button"
-                  disabled={!option.available}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => insertResource(option)}
                   className={`flex h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs ${index === activeIndex ? "bg-[var(--pl-surface-hover)]" : "hover:bg-[var(--pl-surface-hover)]"} disabled:cursor-not-allowed disabled:opacity-40`}

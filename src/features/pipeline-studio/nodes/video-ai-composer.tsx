@@ -22,6 +22,7 @@ import {
   promptReferenceRouteProblem,
   videoCapabilityForPrompt,
 } from "../model/prompt-reference-validation";
+import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
@@ -56,13 +57,20 @@ export function VideoAiComposer({
   const [expanded, setExpanded] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
-  const capability = videoCapabilityForPrompt(promptDocument);
+  const [unsupportedReferenceCount, setUnsupportedReferenceCount] = useState(0);
+  const canvasNodes = useCanvasStore((state) => state.nodes);
+  const canvasEdges = useCanvasStore((state) => state.edges);
+  const connectedReferences = useMemo(
+    () => connectedCanvasReferences(nodeId, canvasNodes, canvasEdges),
+    [canvasEdges, canvasNodes, nodeId],
+  );
+  const capability = videoCapabilityForPrompt(promptDocument, connectedReferences);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
   );
   const loadingRoutes = loadedCapability !== capability;
-  const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute);
+  const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
   const status = data.taskInfo?.status;
   const generating = status === "queued" || status === "processing" || submitting;
   const cancellable = Boolean(data.taskInfo?.runId) && (status === "queued" || status === "processing");
@@ -94,6 +102,7 @@ export function VideoAiComposer({
     if (loadingRoutes) return t.pipeline.videoAiRoutesLoading;
     if (!selectedRoute) return t.pipeline.videoAiNoRoutes;
     if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
+    if (unsupportedReferenceCount) return t.pipeline.promptReferenceUnsupported;
     if (referenceProblem?.kind === "unsupported") return t.pipeline.promptReferenceUnsupported;
     if (referenceProblem?.kind === "too-many") {
       return t.pipeline.promptReferenceTooMany
@@ -112,7 +121,7 @@ export function VideoAiComposer({
       return t.pipeline.videoAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [invalidReferenceCount, loadingRoutes, promptDocument.plainText, referenceProblem, selectedRoute, t.pipeline, waitingForSave]);
+  }, [invalidReferenceCount, loadingRoutes, promptDocument.plainText, referenceProblem, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
 
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
@@ -171,7 +180,10 @@ export function VideoAiComposer({
       disabledReason={disabledReason}
       error={localError ?? data.taskInfo?.errorMessage ?? null}
       onPromptDocumentChange={setPromptDocument}
-      onReferenceStateChange={({ invalidCount }) => setInvalidReferenceCount(invalidCount)}
+      onReferenceStateChange={({ invalidCount, unsupportedCount }) => {
+        setInvalidReferenceCount(invalidCount);
+        setUnsupportedReferenceCount(unsupportedCount);
+      }}
       onResourceRoleChange={setResourceRole}
       onRouteChange={changeRoute}
       onSettingsChange={setSettings}
@@ -223,7 +235,7 @@ function VideoComposerSurface({
   disabledReason: string;
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
-  onReferenceStateChange: (state: { invalidCount: number }) => void;
+  onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onResourceRoleChange: (role: CanvasResourceRole) => void;
   onRouteChange: (routeId: string) => void;
   onSettingsChange: (settings: Record<string, JsonValue>) => void;
@@ -265,6 +277,7 @@ function VideoComposerSurface({
             onSubmit={onSubmit}
             allowedMediaTypes={["text", "image", "video", "audio"]}
             excludedCanvasNodeId={nodeId}
+            connectedTargetNodeId={nodeId}
             defaultResourceRole={resourceRole}
             onResourceInserted={() => onResourceRoleChange("reference")}
             placeholder={t.pipeline.videoAiPlaceholder}

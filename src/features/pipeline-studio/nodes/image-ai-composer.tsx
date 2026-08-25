@@ -11,6 +11,7 @@ import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../mod
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute } from "../model/image-generation-options";
 import { promptReferenceRouteProblem } from "../model/prompt-reference-validation";
+import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
@@ -56,18 +57,25 @@ export function ImageAiComposer({
   const [expanded, setExpanded] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
+  const [unsupportedReferenceCount, setUnsupportedReferenceCount] = useState(0);
+  const canvasNodes = useCanvasStore((state) => state.nodes);
+  const canvasEdges = useCanvasStore((state) => state.edges);
+  const connectedReferences = useMemo(() => mode === "create"
+    ? connectedCanvasReferences(nodeId, canvasNodes, canvasEdges)
+    : [], [canvasEdges, canvasNodes, mode, nodeId]);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
   );
   const taskStatus = data.taskInfo?.status;
   const generating = taskStatus === "queued" || taskStatus === "processing" || submitting;
-  const hasImageReference = promptDocumentResourceAttrs(promptDocument).some((reference) => reference.mediaType === "image");
+  const hasImageReference = [...connectedReferences, ...promptDocumentResourceAttrs(promptDocument)]
+    .some((reference) => reference.mediaType === "image");
   const capability = mode === "modify" || hasImageReference || Boolean(data.params?.imageList?.length)
     ? "image-to-image"
     : "text-to-image";
   const loadingRoutes = loadedCapability !== capability;
-  const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute);
+  const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,6 +107,7 @@ export function ImageAiComposer({
       return capability === "image-to-image" ? t.pipeline.imageAiNoModifyRoutes : t.pipeline.imageAiNoRoutes;
     }
     if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
+    if (unsupportedReferenceCount) return t.pipeline.promptReferenceUnsupported;
     if (referenceProblem?.kind === "unsupported") return t.pipeline.promptReferenceUnsupported;
     if (referenceProblem?.kind === "too-many") {
       return t.pipeline.promptReferenceTooMany
@@ -116,7 +125,7 @@ export function ImageAiComposer({
       return t.pipeline.imageAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [capability, invalidReferenceCount, loadingRoutes, promptProblem, referenceProblem, routes.length, selectedRoute, t.pipeline, waitingForSave]);
+  }, [capability, invalidReferenceCount, loadingRoutes, promptProblem, referenceProblem, routes.length, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating || cancelling || !selectedRoute) return;
@@ -170,7 +179,10 @@ export function ImageAiComposer({
       disabledReason={disabledReason}
       error={localError ?? data.taskInfo?.errorMessage ?? null}
       onPromptDocumentChange={setPromptDocument}
-      onReferenceStateChange={({ invalidCount }) => setInvalidReferenceCount(invalidCount)}
+      onReferenceStateChange={({ invalidCount, unsupportedCount }) => {
+        setInvalidReferenceCount(invalidCount);
+        setUnsupportedReferenceCount(unsupportedCount);
+      }}
       onRouteChange={setSelectedRouteId}
       onAspectRatioChange={(value) => setAspectRatio(readOption(value, ASPECT_RATIOS, "1:1"))}
       onResolutionChange={(value) => setResolution(readOption(value, RESOLUTIONS, "2k"))}
@@ -223,7 +235,7 @@ function ComposerSurface({
   disabledReason: string;
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
-  onReferenceStateChange: (state: { invalidCount: number }) => void;
+  onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onRouteChange: (value: string) => void;
   onAspectRatioChange: (value: string) => void;
   onResolutionChange: (value: string) => void;
@@ -269,6 +281,7 @@ function ComposerSurface({
             onSubmit={onSubmit}
             allowedMediaTypes={mode === "modify" ? ["text"] : ["text", "image"]}
             excludedCanvasNodeId={nodeId}
+            connectedTargetNodeId={mode === "create" ? nodeId : undefined}
             placeholder={mode === "modify" ? t.pipeline.imageAiModifyPlaceholder : t.pipeline.imageAiPlaceholder}
             ariaLabel={t.pipeline.imageAiInstruction}
           />

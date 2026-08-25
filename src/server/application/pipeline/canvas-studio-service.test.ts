@@ -91,6 +91,7 @@ describe("CanvasStudioService local image upload", () => {
     let currentNode = imageNode();
     const repository = {
       getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
       getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
       createCanvasNode: vi.fn(),
       updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
@@ -167,6 +168,116 @@ describe("CanvasStudioService asset media", () => {
     const service = createService(repository);
 
     await expect(service.readAssetMedia("asset-1")).rejects.toMatchObject({ code: "FILE_NOT_FOUND", status: 404 });
+  });
+
+  it("rejects local replacement while the target has an upstream connection", async () => {
+    const currentNode = imageNode();
+    const repository = {
+      getCanvasNode: vi.fn().mockResolvedValue(currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([{
+        id: "edge-1",
+        projectId: "project-1",
+        sourceNodeId: "source-1",
+        targetNodeId: currentNode.id,
+        edgeType: "references",
+      }]),
+    } as unknown as PipelineRepository;
+    const assets = { upload: vi.fn() } as unknown as GenerationAssetService;
+    const service = createService(repository, {} as LlmPort, {} as GenerationRunService, assets);
+
+    await expect(service.upload({
+      projectId: "project-1",
+      nodeId: currentNode.id,
+      name: "replacement.png",
+      contentType: "image/png",
+      data: new Uint8Array([1]),
+      positionX: 0,
+      positionY: 0,
+    })).rejects.toMatchObject({ status: 409 });
+    expect(assets.upload).not.toHaveBeenCalled();
+  });
+
+  it("clears cached target references after deleting an incoming edge", async () => {
+    const source = {
+      ...imageNode(),
+      id: "source-1",
+      data: {
+        ...imageNode().data!,
+        workspaceFile: { relativePath: "assets/source.png", contentType: "image/png", name: "source.png" },
+      },
+    };
+    let target: CanvasNode = {
+      ...imageNode(),
+      id: "target-1",
+      data: {
+        ...imageNode().data!,
+        params: {
+          prompt: "",
+          imageList: [{
+            nodeId: source.id,
+            mediaType: "image" as const,
+            label: "Source",
+            workspaceFile: source.data.workspaceFile,
+          }],
+        },
+      },
+    };
+    let edges = [{
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+      edgeType: "references" as const,
+    }];
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => id === source.id ? source : id === target.id ? target : null),
+      listCanvasNodes: vi.fn().mockImplementation(async () => [source, target]),
+      listCanvasEdges: vi.fn().mockImplementation(async () => edges),
+      applyCanvasMutationBatch: vi.fn().mockImplementation(async () => {
+        edges = [];
+        return { applied: true, revision: 1 };
+      }),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        target = { ...target, ...patch };
+        return target;
+      }),
+      getCanvasViewport: vi.fn().mockResolvedValue({ x: 0, y: 0, zoom: 1 }),
+      getCanvasRevision: vi.fn().mockResolvedValue(1),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await service.applyMutationBatch("project-1", {
+      baseRevision: 0,
+      requestId: "delete-edge-1",
+      mutations: [{ type: "edge.delete", edgeId: "edge-1" }],
+    });
+
+    expect(target.data?.params?.imageList).toEqual([]);
+  });
+});
+
+describe("CanvasStudioService connection policy", () => {
+  it("rejects a new connection into a node that already has content", async () => {
+    const source = { ...imageNode(), id: "source-1" };
+    const target = {
+      ...imageNode(),
+      id: "target-1",
+      data: { ...imageNode().data!, url: ["/target.png"] },
+    };
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => id === source.id ? source : target),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      createCanvasEdge: vi.fn(),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await expect(service.connect({
+      projectId: "project-1",
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+    })).rejects.toMatchObject({ status: 409 });
+    expect(repository.createCanvasEdge).not.toHaveBeenCalled();
   });
 });
 

@@ -36,6 +36,15 @@ export function promptDocumentResourceAttrs(document: CanvasPromptDocument): Can
   return references;
 }
 
+export function removePromptResourceReferences(
+  document: CanvasPromptDocument,
+  sourceType: CanvasResourceReferenceAttrs["sourceType"],
+  sourceId: string,
+): CanvasPromptDocument {
+  const content = removeMatchingReferences(document.content, sourceType, sourceId);
+  return promptDocumentFromJson(content ?? { type: "doc" });
+}
+
 function promptNodeText(node: CanvasRichTextNode): string {
   if (node.type === "text") return node.text ?? "";
   if (node.type === "hardBreak") return "\n";
@@ -50,4 +59,23 @@ function promptNodeText(node: CanvasRichTextNode): string {
 function visit(node: CanvasRichTextNode, callback: (node: CanvasRichTextNode) => void) {
   callback(node);
   node.content?.forEach((child) => visit(child, callback));
+}
+
+function removeMatchingReferences(
+  node: CanvasRichTextNode,
+  sourceType: CanvasResourceReferenceAttrs["sourceType"],
+  sourceId: string,
+): CanvasRichTextNode | null {
+  if (node.type === "resourceReference") {
+    const attrs = node.attrs as Partial<CanvasResourceReferenceAttrs> | undefined;
+    if (attrs?.sourceType === sourceType && attrs.sourceId === sourceId) return null;
+  }
+  if (!node.content) return node;
+  return {
+    ...node,
+    content: node.content.flatMap((child) => {
+      const next = removeMatchingReferences(child, sourceType, sourceId);
+      return next ? [next] : [];
+    }),
+  };
 }
