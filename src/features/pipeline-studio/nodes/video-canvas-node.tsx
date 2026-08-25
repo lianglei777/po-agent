@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { App, Spin, Tooltip } from "antd";
+import { App, Modal, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, FileVideo, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { Copy, Download, FileVideo, PlayCircle, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
@@ -50,6 +50,7 @@ export function VideoCanvasNode({
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const mediaSource = resolveCanvasMediaSource(id, canvas);
   const mediaUrl = mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
@@ -203,7 +204,29 @@ export function VideoCanvasNode({
           deferMediaLoad ? (
             <div className="flex h-full items-center justify-center bg-[var(--pl-surface-subtle)]"><Spin size="small" /></div>
           ) : (
-            <video src={mediaUrl} controls preload="metadata" className="nodrag h-full min-h-[180px] w-full object-contain" />
+            <>
+              <video
+                src={mediaUrl}
+                aria-hidden="true"
+                draggable={false}
+                muted
+                playsInline
+                preload="metadata"
+                className="pointer-events-none h-full min-h-[180px] w-full object-contain"
+              />
+              <button
+                type="button"
+                aria-label={t.pipeline.nodeVideoPreview}
+                className="nodrag absolute left-1/2 top-1/2 z-10 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-[var(--pl-shadow-floating)] transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:bg-black/90"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setPreviewOpen(true);
+                }}
+              >
+                <PlayCircle className="size-6" />
+              </button>
+            </>
           )
         ) : (
           <div className="flex h-full min-h-[180px] items-center justify-center bg-[var(--pl-surface-subtle)] text-[var(--pl-text-muted)]">
@@ -229,6 +252,30 @@ export function VideoCanvasNode({
           }}
         />
       ) : null}
+
+      <Modal
+        open={previewOpen}
+        title={canvas.name}
+        footer={null}
+        width="min(1180px, calc(100vw - 80px))"
+        onCancel={() => setPreviewOpen(false)}
+        mask={{ closable: false }}
+        keyboard={false}
+        destroyOnHidden
+      >
+        {mediaUrl ? (
+          <div className="grid h-[min(72vh,820px)] w-full place-items-center bg-black">
+            <video
+              src={mediaUrl}
+              aria-label={canvas.name}
+              controls
+              playsInline
+              preload="metadata"
+              className="max-h-full max-w-full"
+            />
+          </div>
+        ) : null}
+      </Modal>
     </article>
   );
 }

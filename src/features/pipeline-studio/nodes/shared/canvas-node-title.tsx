@@ -68,7 +68,7 @@ export function CanvasNodeTitle({
         <span
           tabIndex={0}
           title={name}
-          className="nodrag min-w-0 cursor-text truncate rounded px-1 text-sm font-medium text-[var(--pl-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
+          className="min-w-0 flex-1 cursor-grab truncate rounded px-1 text-sm font-medium text-[var(--pl-text)] outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
           onDoubleClick={(event) => {
             event.preventDefault();
             event.stopPropagation();

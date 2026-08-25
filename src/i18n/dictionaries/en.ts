@@ -1112,6 +1112,7 @@ export const en = {
     nodeImageInputHandle: "Connect an upstream image or reference",
     nodeImageOutputHandle: "Connect the current image downstream",
     nodeImagePreview: "Preview image",
+    nodeVideoPreview: "Preview video",
     nodeImageEdit: "Edit image",
     nodeImageEditPreview: "Image edit preview",
     nodeImageRotateLeft: "Rotate 90° left",

@@ -1074,6 +1074,7 @@ export const zh = {
     nodeImageInputHandle: "连接上游图片或参考内容",
     nodeImageOutputHandle: "将当前图片连接到下游节点",
     nodeImagePreview: "预览图片",
+    nodeVideoPreview: "预览视频",
     nodeImageEdit: "编辑图片",
     nodeImageEditPreview: "图片编辑预览",
     nodeImageRotateLeft: "向左旋转 90°",
