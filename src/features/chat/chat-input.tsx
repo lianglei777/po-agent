@@ -278,7 +278,7 @@ export function ChatInput({
             variant="borderless"
           />
 
-          <div className="flex h-12 items-center gap-1.5 px-3 py-1.5">
+          <div className="flex min-h-12 flex-wrap items-center gap-1.5 px-3 py-1.5">
             <input
               accept="image/*"
               className="hidden"

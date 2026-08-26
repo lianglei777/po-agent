@@ -492,15 +492,15 @@ export function StudioCanvas({
           proOptions={{ hideAttribution: true }}
           colorMode="dark"
         >
-          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#29313a" />
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--pl-canvas-dot)" />
           {minimapVisible ? (
             <MiniMap
               position="bottom-left"
               pannable
               zoomable
               className={`!bottom-16 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)] ${assetsOpen ? "!left-[324px]" : "!left-4"}`}
-              maskColor="rgb(16 18 20 / 68%)"
-              nodeColor="#168cff"
+              maskColor="var(--pl-minimap-mask)"
+              nodeColor="var(--pl-accent)"
             />
           ) : null}
         </ReactFlow>
@@ -602,7 +602,7 @@ export function StudioCanvas({
         <Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} autoFocus />
       </Modal>
 
-      {error ? <div className="absolute right-5 top-20 z-30 max-w-sm rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div> : null}
+      {error ? <div className="absolute right-5 top-20 z-30 max-w-sm rounded-floating border border-[color-mix(in_srgb,var(--pl-error)_32%,transparent)] bg-[color-mix(in_srgb,var(--pl-error)_10%,transparent)] px-3 py-2 text-xs text-[var(--pl-danger)]" role="alert">{error}</div> : null}
     </div>
   );
 }
@@ -661,9 +661,9 @@ function EmptyCanvasActions({ onCreate }: { onCreate: (type: CanvasMediaType, po
         <button
           type="button"
           onClick={() => onCreate("text", undefined, t.pipeline.canvasStoryScript)}
-          className="flex h-20 w-full items-center gap-4 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] px-4 text-left text-sm font-semibold text-[var(--pl-text)] hover:border-[var(--pl-border-strong)] hover:bg-[var(--pl-surface-hover)]"
+          className="flex h-16 w-full items-center gap-3 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] px-3 text-left text-sm font-semibold text-[var(--pl-text)] transition-colors hover:border-[var(--pl-border-strong)] hover:bg-[var(--pl-surface-hover)]"
         >
-          <span className="flex size-12 items-center justify-center rounded-xl bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]">
+          <span className="flex size-10 items-center justify-center rounded-lg bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]">
             <FileText className="size-5" />
           </span>
           <span>{t.pipeline.canvasStoryScript}</span>
@@ -725,14 +725,14 @@ function BottomCenterToolbar({ onCreate }: {
   );
 }
 function ToolButton({ title, icon, label, active, primary, onClick }: { title: string; icon: ReactNode; label?: string; active?: boolean; primary?: boolean; onClick: () => void }) {
-  return <Tooltip title={title}><button type="button" onClick={onClick} className={"flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)] " + (primary ? "bg-white text-black hover:bg-slate-200" : active ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]")}>{icon}{label ? <span className="text-caption">{label}</span> : null}</button></Tooltip>;
+  return <Tooltip title={title}><button type="button" onClick={onClick} className={"flex h-8 items-center justify-center gap-1.5 rounded-lg px-2 transition-colors active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)] " + (primary ? "bg-[var(--pl-accent)] text-white hover:bg-[var(--pl-accent-hover)]" : active ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent-hover)]" : "text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]")}>{icon}{label ? <span className="text-caption">{label}</span> : null}</button></Tooltip>;
 }
 
 function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number; screenY: number; onCreate: (type: CanvasMediaType) => void; onUpload: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="fixed z-50 w-52 rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] p-2 shadow-[var(--pl-shadow-hover)]" style={{ left: Math.min(screenX, window.innerWidth - 224), top: Math.min(screenY, window.innerHeight - 280) }} onClick={(event) => event.stopPropagation()}>
-      <div className="px-2 pb-1 pt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[var(--pl-text-muted)]">{t.pipeline.canvasAddMenu}</div>
+    <div className="fixed z-50 w-52 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] p-2 shadow-[var(--pl-shadow-hover)]" style={{ left: Math.min(screenX, window.innerWidth - 224), top: Math.min(screenY, window.innerHeight - 280) }} onClick={(event) => event.stopPropagation()}>
+      <div className="px-2 pb-1 pt-1 text-caption font-medium text-[var(--pl-text-muted)]">{t.pipeline.canvasAddMenu}</div>
       <CreateMenuButton label={t.pipeline.canvasTextNode} icon={<FileText />} onClick={() => onCreate("text")} />
       <CreateMenuButton label={t.pipeline.canvasImageNode} icon={<Images />} onClick={() => onCreate("image")} />
       <CreateMenuButton label={t.pipeline.canvasVideoNode} icon={<FileVideo />} onClick={() => onCreate("video")} />
@@ -744,7 +744,7 @@ function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number;
 }
 
 function CreateMenuButton({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
-  return <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"><span className="text-[var(--pl-accent)]">{icon}</span>{label}</button>;
+  return <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"><span className="text-[var(--pl-accent)]">{icon}</span>{label}</button>;
 }
 
 function saveLabel(state: string, copy: ReturnType<typeof useI18n>["t"]["pipeline"]) {

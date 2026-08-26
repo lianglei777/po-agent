@@ -107,7 +107,7 @@ export function TextCanvasNode({
 
       <section
         className={
-          "nowheel relative h-[calc(100%-36px)] rounded-[20px] border bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] transition-[border-color,box-shadow] duration-200 " +
+          "nowheel relative h-[calc(100%-36px)] rounded-xl border bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] transition-[border-color,box-shadow] duration-200 " +
           (editing ? "overflow-visible " : "overflow-hidden ") +
           (selected || editing || dragging
             ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]"

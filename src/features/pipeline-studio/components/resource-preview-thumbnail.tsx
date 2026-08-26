@@ -87,7 +87,7 @@ export function ResourcePreviewThumbnail({
     <span className={frameClass}>
       {content}
       {badge ? (
-        <span className="absolute left-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-black/75 text-[9px] font-semibold tabular-nums text-white">
+        <span className="absolute left-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-black/75 text-caption font-semibold tabular-nums text-white">
           {badge}
         </span>
       ) : null}
@@ -132,7 +132,7 @@ export function ResourcePreviewPopover({
       </div>
       <figcaption className="flex items-center gap-2 px-1 pb-0.5 pt-2">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--pl-text)]">{label}</span>
-        <span className="shrink-0 text-[10px] text-[var(--pl-text-muted)]">{detail}</span>
+        <span className="shrink-0 text-caption text-[var(--pl-text-muted)]">{detail}</span>
       </figcaption>
     </figure>
   );

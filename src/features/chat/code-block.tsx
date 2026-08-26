@@ -16,7 +16,7 @@ export function CodeBlock({ code, language }: { code: string; language: string }
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark");
   return (
-    <div className="my-3 overflow-hidden rounded-2xl border border-line-subtle bg-[var(--tool-bg)]">
+    <div className="my-3 overflow-hidden rounded-floating border border-line-subtle bg-[var(--tool-bg)]">
       <div className="flex h-8 items-center border-b border-line-subtle px-3 text-caption text-muted">
         <span>{language}</span>
         <Button

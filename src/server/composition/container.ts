@@ -271,7 +271,7 @@ function createContainer() {
   // 选择 A 变体 — 合并工具: Agent 同时拥有普通生成工具和 Pipeline 工具
   const compositeAgentTools = new CompositeAgentToolProvider([
     generationAgentTools,
-    { getTools: (input) => getPipelineServices().pipelineAgentTools!.getTools(input) },
+    { getTools: () => getPipelineServices().pipelineAgentTools!.getTools() },
   ]);
   const agentService = new AgentService(
     sessions,

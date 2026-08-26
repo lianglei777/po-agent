@@ -6,7 +6,7 @@ import { mergeClasses } from "@/lib/utils";
 
 export function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-0.5 text-meta font-semibold uppercase tracking-[0.06em] text-dim">
+    <div className="mb-0.5 text-meta font-semibold text-muted">
       {children}
     </div>
   );
@@ -22,12 +22,12 @@ export function SettingsSection({
   className?: string;
 }) {
   return (
-    <section className={mergeClasses("flex flex-col gap-2.5", className)}>
+    <section className={mergeClasses("flex flex-col gap-2", className)}>
       <h2 className="px-0.5 text-body-sm font-semibold text-primary">
         {title}
       </h2>
       <Card
-        className="overflow-hidden rounded-floating border-line-subtle bg-elevated"
+        className="overflow-hidden rounded-floating border-line-subtle bg-panel shadow-none"
         styles={{ body: { padding: 0 } }}
       >
         {children}
@@ -56,7 +56,7 @@ export function SettingsRow({
   return (
     <div
       className={mergeClasses(
-        "grid border-t border-line-subtle px-4 py-3.5 first:border-t-0",
+        "grid border-t border-line-subtle px-4 py-3 first:border-t-0",
         compact ? "gap-3" : "gap-6",
         align === "center" ? "items-center" : "items-start",
       )}

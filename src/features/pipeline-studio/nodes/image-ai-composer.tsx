@@ -349,7 +349,7 @@ function ComposerSurface({
                   disabled={Boolean(disabledReason)}
                   aria-label={mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate}
                   onClick={onSubmit}
-                  className="flex size-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
+                  className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
                 >
                   <Send className="size-4" />
                 </button>

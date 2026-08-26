@@ -97,6 +97,8 @@ export function VideoGenerationHistory({
       width={820}
       onCancel={onClose}
       destroyOnHidden
+      keyboard={false}
+      mask={{ closable: false }}
     >
       {loading ? (
         <div className="grid min-h-48 place-items-center"><Spin /></div>
@@ -107,7 +109,7 @@ export function VideoGenerationHistory({
               <div className="relative aspect-video bg-black">
                 <video src={canvasNodeUploadSourceUrl(node.id)} muted playsInline preload="metadata" className="h-full w-full object-cover" />
                 {uploadSelected ? (
-                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--pl-accent)] px-2 py-1 text-[11px] font-medium text-white">
+                  <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-accent)] px-2 py-1 text-caption font-medium text-white">
                     <Check className="size-3" />{t.pipeline.videoHistoryCurrent}
                   </span>
                 ) : null}
@@ -149,7 +151,7 @@ export function VideoGenerationHistory({
                     <div className="grid h-full place-items-center text-[var(--pl-text-muted)]"><FileVideo className="size-8" /></div>
                   )}
                   {selected ? (
-                    <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-[var(--pl-accent)] px-2 py-1 text-[11px] font-medium text-white">
+                    <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-accent)] px-2 py-1 text-caption font-medium text-white">
                       <Check className="size-3" />{t.pipeline.videoHistoryCurrent}
                     </span>
                   ) : null}

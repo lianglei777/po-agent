@@ -230,7 +230,7 @@ function ComposerSurface({
           {models.map((model) => <option key={modelValue(model)} value={modelValue(model)}>{model.name} · {model.provider}</option>)}
         </select>
         {referenceCount ? (
-          <span className="hidden truncate text-[10px] text-[var(--pl-text-muted)] sm:block">
+          <span className="hidden truncate text-caption text-[var(--pl-text-muted)] sm:block">
             {t.pipeline.textAiReferences.replace("{count}", String(referenceCount))}
           </span>
         ) : null}
@@ -242,7 +242,7 @@ function ComposerSurface({
             disabled={Boolean(disabledReason) || generating}
             aria-label={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
             onClick={onSubmit}
-            className="flex size-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
           >
             {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
           </button>

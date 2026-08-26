@@ -195,34 +195,39 @@ export function ChatGenerationControl({
   );
 
   return (
-    <Popover
-      arrow={false}
-      content={content}
-      destroyOnHidden
-      onOpenChange={setOpen}
-      open={open}
-      placement="topLeft"
-      trigger="click"
+    <Tooltip
+      mouseEnterDelay={0.35}
+      placement="top"
+      title={disabled ? t.chat.input.generationUnavailableWhileBusy : summary}
     >
-      <span
-        className="inline-flex"
-        title={disabled ? t.chat.input.generationUnavailableWhileBusy : summary}
-      >
-        <Button
-          aria-label={t.chat.input.generationControl}
-          aria-pressed={enabled}
-          className="h-8 px-2.5 text-xs"
-          color={enabled ? "primary" : "default"}
-          disabled={disabled}
-          htmlType="button"
-          icon={<Images />}
-          size="small"
-          variant={enabled ? "filled" : "text"}
+      <span className="inline-flex">
+        <Popover
+          arrow={false}
+          content={content}
+          destroyOnHidden
+          onOpenChange={setOpen}
+          open={open}
+          placement="topLeft"
+          trigger="click"
         >
-          {t.chat.input.generationControl}
-        </Button>
+          <span className="inline-flex">
+            <Button
+              aria-label={t.chat.input.generationControl}
+              aria-pressed={enabled}
+              className="h-8 px-2.5 text-xs"
+              color={enabled ? "primary" : "default"}
+              disabled={disabled}
+              htmlType="button"
+              icon={<Images />}
+              size="small"
+              variant={enabled ? "filled" : "text"}
+            >
+              {t.chat.input.generationControl}
+            </Button>
+          </span>
+        </Popover>
       </span>
-    </Popover>
+    </Tooltip>
   );
 }
 

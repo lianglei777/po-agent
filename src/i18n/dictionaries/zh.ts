@@ -4,6 +4,7 @@ export const zh = {
   common: {
     cancel: "取消",
     close: "关闭",
+    confirm: "确认",
     delete: "删除",
     global: "全局",
     loading: "加载中...",
@@ -86,6 +87,8 @@ export const zh = {
     apiKeyPlaceholder: "输入 API Key",
     moveUp: "上移供应商",
     moveDown: "下移供应商",
+    providerEnabled: "已启用",
+    providerDisabled: "已停用",
     fallback: "回退条件",
     fallbackDescription: "发生以下故障时，继续尝试下一个已启用的供应商。",
     fallbackKinds: {
@@ -209,6 +212,9 @@ export const zh = {
     removeFile: "移除文件",
     textOnly: "此 API 仅接受文本输入",
     generate: "生成",
+    generateBusy: "当前生成任务结束后才能提交新任务。",
+    generatePromptRequired: "请先填写生成提示词。",
+    generateAssetsRequired: "请先添加所有必填参考素材。",
     taskId: "任务 ID",
     copyTaskId: "复制任务 ID",
     copied: "已复制",

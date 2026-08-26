@@ -2,36 +2,36 @@
 name: Po Agent
 description: An Ant Design 6 desktop workspace with a consistent Lucide icon system that preserves Po Agent's precise, dense, developer-controlled workflows.
 colors:
-  light:
-    workspace: "#f5f5f5"
-    canvas: "#ffffff"
-    panel: "#ffffff"
-    elevated: "#ffffff"
-    subtle: "#fafafa"
-    hover: "#f5f5f5"
-    selected: "#e6f4ff"
-    text: "#1f1f1f"
-    muted: "#595959"
-    dim: "#8c8c8c"
-    borderSubtle: "#f0f0f0"
-    borderStrong: "#d9d9d9"
-    borderEmphasis: "#1677ff"
-    accent: "#1677ff"
+  dark:
+    workspace: "#0d0f12"
+    canvas: "#111317"
+    panel: "#15181c"
+    elevated: "#1b1f24"
+    subtle: "#171a1f"
+    hover: "#20252b"
+    selected: "rgba(64, 150, 255, 0.14)"
+    text: "#f2f4f7"
+    muted: "#a8b0ba"
+    dim: "#747e8a"
+    borderSubtle: "#252a31"
+    borderStrong: "#343c46"
+    borderEmphasis: "#4096ff"
+    accent: "#1668dc"
     accentHover: "#4096ff"
-    accentDeep: "#0958d9"
-    accentSoft: "#e6f4ff"
+    accentDeep: "#1554ad"
+    accentSoft: "rgba(64, 150, 255, 0.14)"
     accentForeground: "#ffffff"
-    destructive: "#ff4d4f"
-    success: "#52c41a"
-    warning: "#faad14"
+    destructive: "#ff7875"
+    success: "#49c98f"
+    warning: "#e9b949"
 typography:
   ui: "-apple-system, BlinkMacSystemFont, Segoe UI, Inter, PingFang SC, Microsoft YaHei, sans-serif"
   mono: "Noto Sans Mono, JetBrains Mono, Fira Code, Consolas, monospace"
 radius:
   small: "6px"
-  control: "6px"
-  floating: "8px"
-  composer: "22px"
+  control: "8px"
+  floating: "12px"
+  composer: "14px"
 motion:
   fast: "150ms"
   standard: "200ms"
@@ -42,7 +42,7 @@ motion:
 
 ## Direction
 
-Po Agent fully adopts Ant Design 6 as its standard component library and design language. Ant Design supplies standard controls, typography, spacing, color semantics, interaction patterns, accessibility behavior, and design guidance; Lucide supplies the single product icon system. Po Agent keeps its domain-specific workspace composition and safety rules: adopting a design system must not change sessions, chat, files, models, Skills, review flows, persistence, or destructive-action semantics.
+Po Agent fully adopts Ant Design 6 as its standard component library and design language and ships one dark theme only. Ant Design supplies standard controls, typography, spacing, color semantics, interaction patterns, accessibility behavior, and design guidance; Lucide supplies the single product icon system. Po Agent keeps its domain-specific workspace composition and safety rules: adopting a design system must not change sessions, chat, files, models, Skills, review flows, persistence, or destructive-action semantics.
 
 ## Sources of truth
 
@@ -57,10 +57,10 @@ Po Agent fully adopts Ant Design 6 as its standard component library and design 
 
 - The primary navigation rail owns projects, Settings, and locale. Its bottom actions are icon-only and horizontal; System Prompt lives inside Settings. The user collapse action fully hides the rail. Its reveal control moves into a dedicated top row of the visible Conversation panel; when Conversation is also hidden, the control falls back to the Chat top bar and is separated from the distinct conversation-list control. Compact icon mode remains automatic on narrower workspaces.
 - The project Conversation panel owns New chat, session search, and the current project's session tree. It is independently resizable and closable so project selection and conversation selection remain separate concepts.
-- Chat uses one continuous white workspace surface containing the project Conversation panel and the conversation canvas. Resize handles show a subtle `border-subtle` resting line so the panel boundary and drag affordance stay discoverable; the line emphasizes to `border-emphasis` on hover and drag.
+- Chat uses one continuous dark workspace surface containing the project Conversation panel and the conversation canvas. Resize handles show a subtle `border-subtle` resting line so the panel boundary and drag affordance stay discoverable; the line emphasizes to `border-emphasis` on hover and drag.
 - A persisted Session may switch between Chat and Generate from a compact control in the workspace top bar. The switch changes the center view without creating another Session or discarding Chat state; Generate selects a capability within the Session instead of binding the Session to one API at creation time.
 - Settings is an exclusive full-screen application state with an explicit Exit Settings action. The project navigation, Conversation panel, Chat, and Project dock are hidden while Settings is visible, while Chat remains mounted to preserve its state.
-- A permanent right-side Project dock exposes Files, Skills, and Project Settings as vertical tabs. The dock and expanded inspector are one continuous white surface, with the resize handle placed only between Chat and the complete right-side surface. Selecting a tab opens a resizable inspector; selecting the active tab or its close button collapses it.
+- A permanent right-side Project dock exposes Files, Skills, and Project Settings as vertical tabs. The dock and expanded inspector are one continuous panel surface, with the resize handle placed only between Chat and the complete right-side surface. Selecting a tab opens a resizable inspector; selecting the active tab or its close button collapses it.
 - On narrow workspaces, the Project inspector becomes an overlay so Chat retains a usable minimum width. Its active tab, open state, rail state, and user-adjusted widths survive reloads.
 - The minimum supported viewport width is 1024px; there is no mobile-specific layout.
 - Projects and sessions use compact single-line rows. Secondary metadata must not overpower titles or displace row actions.
@@ -88,17 +88,17 @@ Ant Design seed and alias tokens are the upstream source. `ConfigProvider` appli
 - Use the native system sans stack for all interface text, headings, navigation, forms, and chat prose.
 - Paths, code, compact metadata, model identifiers, and technical values use the mono stack.
 - Headings use weight 600 with restrained negative tracking; there is no decorative display serif.
-- Font sizes are based on the Ant Design v6 typography scale with a +2px comfort offset — do not use arbitrary `text-[Npx]` values:
-  - `text-caption` (13px, lh 1.25) — badges, timestamps, micro labels
-  - `text-meta` (14px, lh 1.5) — technical metadata, section labels
-  - `text-xs` (15px, lh 1.5) — code, compact technical values
-  - `text-sm` (16px, lh 1.5) — default UI text (base size)
-  - `text-body-sm` (16px, lh 1.5) — descriptions, secondary text
-  - `text-prose` (18px, lh 1.55) — chat composer body
-  - `text-base` (18px, lh 1.55) — body prose
-  - `text-lg` (22px, lh 1.4) — section headings
-- Ant Design `ConfigProvider` sets `token.fontSize` to 16 and heading sizes proportionally; project CSS variables (`--fs-*`) mirror these values so Tailwind utilities and Ant components stay in sync.
-- Default UI text is 16px (`text-sm`); compact code and technical metadata use 13–15px (`text-caption`, `text-meta`, `text-xs`).
+- Font sizes use a compact desktop-workspace scale — do not use arbitrary `text-[Npx]` values:
+  - `text-caption` (12px, lh 1.25) — badges, timestamps, micro labels
+  - `text-meta` (13px, lh 1.5) — technical metadata, section labels
+  - `text-xs` (13px, lh 1.5) — code, compact technical values
+  - `text-sm` (14px, lh 1.5) — default UI text (base size)
+  - `text-body-sm` (14px, lh 1.5) — descriptions, secondary text
+  - `text-prose` (16px, lh 1.55) — chat and composer body
+  - `text-base` (16px, lh 1.55) — body prose
+  - `text-lg` (20px, lh 1.4) — section headings
+- Ant Design `ConfigProvider` sets `token.fontSize` to 14 and heading sizes proportionally; project CSS variables (`--fs-*`) mirror these values so Tailwind utilities and Ant components stay in sync.
+- Default UI text is 14px (`text-sm`); compact code and technical metadata use 12–13px (`text-caption`, `text-meta`, `text-xs`).
 - Body prose should generally remain within 65–75 characters per line.
 
 ## Boundaries, shape, and elevation
@@ -110,10 +110,10 @@ Use three boundary roles:
 3. A complete border plus `shadow-floating` for Dialogs, Dropdowns, Select content, Tooltips, and Popovers.
 
 - Small icon controls use 6px corners; standard controls use 8px; grouped/floating surfaces use 12px.
-- The chat composer is the intentional exception at 22px.
+- The chat composer uses a restrained 14px container radius so it remains prominent without reading as a large bubble.
 - Pills and circles are reserved for badges, status dots, switches, and the send icon button.
 - Resting cards are flat. Shadows appear only where a surface genuinely floats.
-- The primary application rail has no enclosing white card, border, or outer radius. Conversation, Chat, Project dock, and the expanded inspector use white surfaces over the gray application background.
+- The primary application rail has no enclosing card, border, or outer radius. Conversation, Chat, Project dock, and the expanded inspector use quiet dark panel surfaces over the darker application background.
 - Vertical resize handles remain invisible until hover, keyboard focus, or active dragging.
 - Do not use decorative grids, textures, gradients, neon, or layered glass effects.
 
@@ -130,7 +130,7 @@ Every interactive component accounts for default, hover, focus-visible, active, 
 
 ## Color usage
 
-Ant Design blue (`#1677ff`) is the primary action, selection, link, focus, switch, and active-state color. Use Ant semantic colors for success (`#52c41a`), warning (`#faad14`), and error (`#ff4d4f`); never communicate status by color alone.
+Codex blue (`#1668dc`) is the primary action color; `#4096ff` is reserved for focus and active emphasis. Use the shared semantic colors for success (`#49c98f`), warning (`#e9b949`), and error (`#ff7875`); never communicate status by color alone.
 
 ## Chat
 
@@ -146,7 +146,7 @@ Ant Design blue (`#1677ff`) is the primary action, selection, link, focus, switc
 
 ## Settings and detail pages
 
-- Settings replaces the workspace chrome with a quiet gray navigation rail and a rounded white settings surface. A visible Exit Settings action returns to the preserved workspace.
+- Settings replaces the workspace chrome with a quiet near-black navigation rail and a rounded dark panel surface. A visible Exit Settings action returns to the preserved workspace.
 - The model-provider editor stays mounted across Settings-section changes so pending configuration is not discarded.
 - System Prompt is a directly embedded Settings workbench rather than a primary modal. It keeps effective-prompt preview, global append editing, project-instruction preview, reload state, conflict handling, and unsaved-change protection.
 - Settings are grouped into bordered sections with label and description on the left and the control on the right.

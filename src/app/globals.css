@@ -39,16 +39,16 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --radius-sm: 6px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-small-control: 6px;
-  --radius-control: 6px;
-  --radius-floating: 8px;
-  --radius-composer: 22px;
+  --radius-control: 8px;
+  --radius-floating: 12px;
+  --radius-composer: 14px;
   --font-ui-mono:
     var(--font-noto-mono), "JetBrains Mono", "Fira Code", Consolas,
     ui-monospace, "PingFang SC", "Microsoft YaHei", monospace;
-  /* 字号 token — 基于 Ant Design v6 字体规范整体 +2px，全部引用 CSS 变量统一管理 */
+  /* 字号 token 以紧凑桌面工作台为基准，全部引用 CSS 变量统一管理。 */
   --text-caption: var(--fs-caption);
   --text-caption--line-height: 1.25;
   --text-meta: var(--fs-meta);
@@ -68,36 +68,36 @@
 }
 
 :root {
-  --bg: #ffffff;
-  --workspace-bg: #f5f5f5;
-  --bg-panel: #ffffff;
-  --sidebar-bg: #f5f5f5;
-  --conversation-bg: #ffffff;
-  --dock-bg: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-subtle: #fafafa;
-  --bg-hover: #f5f5f5;
-  --bg-selected: #e6f4ff;
-  --border-subtle: #f0f0f0;
-  --border-strong: #d9d9d9;
-  --border-emphasis: #1677ff;
+  --bg: #111317;
+  --workspace-bg: #0d0f12;
+  --bg-panel: #15181c;
+  --sidebar-bg: #0d0f12;
+  --conversation-bg: #15181c;
+  --dock-bg: #15181c;
+  --bg-elevated: #1b1f24;
+  --bg-subtle: #171a1f;
+  --bg-hover: #20252b;
+  --bg-selected: rgb(64 150 255 / 14%);
+  --border-subtle: #252a31;
+  --border-strong: #343c46;
+  --border-emphasis: #4096ff;
   --border: var(--border-subtle);
-  --text: #1f1f1f;
-  --text-muted: #595959;
-  --text-dim: #8c8c8c;
-  /* 字号 token — 基于 Ant Design v6 字体刻度整体 +2px，提升阅读舒适度 */
-  --fs-caption: 13px;  /* 徽章、时间戳、微型标签 */
-  --fs-meta: 14px;     /* 技术元数据、标签 */
-  --fs-xs: 15px;       /* 代码、紧凑技术值 */
-  --fs-sm: 16px;       /* 默认 UI 文本（基准字号） */
-  --fs-body-sm: 16px;  /* 描述文本、次要信息 */
-  --fs-prose: 18px;    /* 聊天正文 */
-  --fs-base: 18px;     /* 正文段落 */
-  --fs-lg: 22px;       /* 区块标题 */
-  --accent: #1677ff;
+  --text: #f2f4f7;
+  --text-muted: #a8b0ba;
+  --text-dim: #747e8a;
+  /* 14px 默认字号降低信息密集界面的体积，聊天正文单独保持 16px。 */
+  --fs-caption: 12px;  /* 徽章、时间戳、微型标签 */
+  --fs-meta: 13px;     /* 技术元数据、标签 */
+  --fs-xs: 13px;       /* 代码、紧凑技术值 */
+  --fs-sm: 14px;       /* 默认 UI 文本（基准字号） */
+  --fs-body-sm: 14px;  /* 描述文本、次要信息 */
+  --fs-prose: 16px;    /* 聊天正文 */
+  --fs-base: 16px;     /* 正文段落 */
+  --fs-lg: 20px;       /* 区块标题 */
+  --accent: #1668dc;
   --accent-hover: #4096ff;
-  --accent-deep: #0958d9;
-  --accent-soft: #e6f4ff;
+  --accent-deep: #1554ad;
+  --accent-soft: rgb(64 150 255 / 14%);
   --background: var(--bg);
   --foreground: var(--text);
   --card: var(--bg-panel);
@@ -105,36 +105,34 @@
   --popover: var(--bg-elevated);
   --popover-foreground: var(--text);
   --primary-foreground: #ffffff;
-  --secondary: #f1f1f1;
-  --secondary-foreground: #1a1c1f;
+  --secondary: #20252b;
+  --secondary-foreground: #f2f4f7;
   --muted-foreground: var(--text-muted);
-  --accent-foreground: #1a1c1f;
-  --destructive: #ff4d4f;
-  --destructive-text: #cf1322;
+  --accent-foreground: #f2f4f7;
+  --destructive: #ff7875;
+  --destructive-text: #ff9c99;
   --destructive-foreground: #ffffff;
-  --success: #52c41a;
-  --success-text: #389e0d;
-  --warning: #faad14;
-  --disabled-surface: #f5f5f5;
-  --disabled-text: #bfbfbf;
+  --success: #49c98f;
+  --success-text: #6fdcab;
+  --warning: #e9b949;
+  --disabled-surface: #171a1f;
+  --disabled-text: #5e6874;
   --input: var(--border);
-  --ring: #1677ff;
+  --ring: #4096ff;
   --radius: 1rem;
-  --user-bg: #f1f1f1;
-  --assistant-bg: #ffffff;
-  --tool-bg: #f7f7f7;
+  --user-bg: #20252b;
+  --assistant-bg: #111317;
+  --tool-bg: #171a1f;
   --motion-fast: 150ms;
   --motion-standard: 200ms;
   --motion-slow: 220ms;
-  --shadow-floating:
-    0 6px 16px 0 rgb(0 0 0 / 8%), 0 3px 6px -4px rgb(0 0 0 / 12%),
-    0 9px 28px 8px rgb(0 0 0 / 5%);
-  --shadow-soft: 0 1px 2px rgb(0 0 0 / 3%);
-  --shadow-composer: 0 6px 16px rgb(0 0 0 / 8%);
+  --shadow-floating: 0 14px 36px rgb(2 6 12 / 34%);
+  --shadow-soft: 0 1px 2px rgb(2 6 12 / 30%);
+  --shadow-composer: 0 10px 28px rgb(2 6 12 / 28%);
   --shadow-composer-focus:
-    0 0 0 2px rgb(22 119 255 / 12%), 0 6px 16px rgb(0 0 0 / 8%);
+    0 0 0 2px rgb(64 150 255 / 18%), 0 10px 28px rgb(2 6 12 / 30%);
   --shadow-card: none;
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * {
@@ -181,6 +179,28 @@ body {
   overflow-y: hidden;
 }
 
+/* 技能安装范围使用整行可点击选项，暗色选中态与其他导航保持一致。 */
+.ant-radio-card {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  margin-inline-end: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg-subtle);
+  transition:
+    background-color var(--motion-fast),
+    border-color var(--motion-fast);
+}
+
+.ant-radio-card:hover,
+.ant-radio-card.ant-radio-wrapper-checked {
+  border-color: var(--border-emphasis);
+  background: var(--accent-soft);
+}
+
 @layer base {
   button,
   input,
@@ -188,7 +208,7 @@ body {
     color: inherit;
     font: inherit;
   }
-  /* 原生 select 下拉选项保持白色底，避免继承控件底色 */
+  /* 原生下拉选项显式使用暗色浮层，避免操作系统回退为浅色。 */
   select option {
     background: var(--bg-elevated);
     color: var(--text);
@@ -284,85 +304,37 @@ body {
   }
 }
 
-/* ── Pipeline 工作台设计 Token ──
-   独立的 --pl-* CSS 变量命名空间，不依赖聊天工作区的变量。
-   参考 LumenX 的玻璃质感和 border 分割风格，但配色更克制。 */
-:root {
-  --pl-surface: #1a1a2e;
-  --pl-surface-glass: rgba(26, 26, 46, 0.6);
-  --pl-surface-elevated: #222238;
-  --pl-surface-subtle: #16162a;
-  --pl-surface-hover: #2a2a44;
-  --pl-border: rgba(255, 255, 255, 0.08);
-  --pl-border-glass: rgba(255, 255, 255, 0.06);
-  --pl-border-strong: rgba(255, 255, 255, 0.15);
-  --pl-text: #f3f4f6;
-  --pl-text-secondary: #9ca3af;
-  --pl-text-muted: #6b7280;
-  --pl-accent: #818cf8;
-  --pl-accent-hover: #a5b4fc;
-  --pl-accent-soft: rgba(129, 140, 248, 0.1);
-  --pl-ready: #34d399;
-  --pl-warn: #fbbf24;
-  --pl-idle: #4b5563;
-  --pl-error: #f87171;
-  --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
-  --pl-z-resource-picker: 1150;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --pl-surface: #1a1a2e;
-    --pl-surface-glass: rgba(26, 26, 46, 0.6);
-    --pl-surface-elevated: #222238;
-    --pl-surface-subtle: #16162a;
-    --pl-surface-hover: #2a2a44;
-    --pl-border: rgba(255, 255, 255, 0.08);
-    --pl-border-glass: rgba(255, 255, 255, 0.06);
-    --pl-border-strong: rgba(255, 255, 255, 0.15);
-    --pl-text: #f3f4f6;
-    --pl-text-secondary: #9ca3af;
-    --pl-text-muted: #6b7280;
-    --pl-accent: #818cf8;
-    --pl-accent-hover: #a5b4fc;
-    --pl-accent-soft: rgba(129, 140, 248, 0.1);
-    --pl-ready: #34d399;
-    --pl-warn: #fbbf24;
-    --pl-idle: #4b5563;
-    --pl-error: #f87171;
-    --pl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
-    --pl-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-}
-
-/* Pipeline Studio 使用独立深色工作台主题，避免跟随 Agent 工作区的浅色变量。 */
+/* Pipeline 保留兼容变量名，但值全部桥接到统一语义 Token。 */
 .pipeline-studio-shell {
-  --pl-sidebar: #0d0f12;
-  --pl-surface: #101214;
-  --pl-surface-glass: #111419;
-  --pl-surface-elevated: #171a1f;
-  --pl-surface-subtle: #0c0e11;
-  --pl-surface-hover: #1c222a;
-  --pl-project-card: #14171b;
-  --pl-border: #252a32;
-  --pl-border-glass: #20252c;
-  --pl-border-strong: #39414c;
-  --pl-text: #f5f8fc;
-  --pl-text-secondary: #aab4c0;
-  --pl-text-muted: #6f7b89;
-  --pl-accent: #168cff;
-  --pl-accent-hover: #3da2ff;
-  --pl-accent-soft: rgb(22 140 255 / 14%);
-  --pl-ready: #49c98f;
-  --pl-warn: #e9b949;
-  --pl-idle: #586473;
-  --pl-error: #ff7875;
-  --pl-edge: #575c64;
-  --pl-edge-hover: #9299a3;
-  --pl-edge-flow: #e3e7ec;
-  --pl-shadow-card: 0 10px 28px rgb(0 0 0 / 18%);
-  --pl-shadow-hover: 0 18px 44px rgb(0 0 0 / 28%);
+  --pl-sidebar: var(--workspace-bg);
+  --pl-surface: var(--bg);
+  --pl-surface-glass: var(--bg-panel);
+  --pl-surface-elevated: var(--bg-elevated);
+  --pl-surface-subtle: var(--bg-subtle);
+  --pl-surface-hover: var(--bg-hover);
+  --pl-project-card: var(--bg-panel);
+  --pl-border: var(--border-subtle);
+  --pl-border-glass: var(--border-subtle);
+  --pl-border-strong: var(--border-strong);
+  --pl-text: var(--text);
+  --pl-text-secondary: var(--text-muted);
+  --pl-text-muted: var(--text-dim);
+  --pl-accent: var(--accent);
+  --pl-accent-hover: var(--accent-hover);
+  --pl-accent-soft: var(--accent-soft);
+  --pl-ready: var(--success);
+  --pl-warn: var(--warning);
+  --pl-idle: var(--text-dim);
+  --pl-error: var(--destructive);
+  --pl-danger: var(--destructive-text);
+  --pl-edge: #4d5662;
+  --pl-edge-hover: #8d98a5;
+  --pl-edge-flow: #d9dee5;
+  --pl-canvas-dot: #343c46;
+  --pl-minimap-mask: rgb(13 15 18 / 72%);
+  --pl-shadow-card: var(--shadow-soft);
+  --pl-shadow-hover: var(--shadow-floating);
+  --pl-z-resource-picker: 1150;
   color-scheme: dark;
 }
 
@@ -375,16 +347,16 @@ body {
 .pipeline-studio-shell .react-flow__nodesselection-rect::before {
   position: absolute;
   inset: -20px;
-  border: 1px dashed rgb(22 140 255 / 88%);
+  border: 1px dashed var(--pl-accent);
   border-radius: 10px;
-  background: rgb(22 140 255 / 10%);
+  background: var(--pl-accent-soft);
   content: "";
   pointer-events: none;
 }
 
 .pipeline-studio-shell .react-flow__selection {
-  border: 1px dashed rgb(22 140 255 / 88%);
-  background: rgb(22 140 255 / 10%);
+  border: 1px dashed var(--pl-accent);
+  background: var(--pl-accent-soft);
 }
 
 .pipeline-studio-edge .pipeline-studio-edge__base {
@@ -495,8 +467,8 @@ body {
 
 .pipeline-rich-text-editor .tiptap {
   overflow-y: auto;
-  border-radius: 20px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 16px;
   color: var(--pl-text-secondary);
   caret-color: var(--pl-text);
   outline: none;

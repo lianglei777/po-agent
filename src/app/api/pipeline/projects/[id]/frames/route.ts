@@ -4,7 +4,6 @@ import type {
   FrameResponse,
 } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
-import { AppError } from "@/server/domain/app-error";
 import { handleRoute, readJson } from "@/server/transport/http/api-response";
 
 export const runtime = "nodejs";

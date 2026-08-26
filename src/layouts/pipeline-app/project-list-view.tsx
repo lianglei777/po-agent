@@ -26,7 +26,7 @@ export function ProjectListView({
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[var(--pl-surface)]">
-      <header className="flex min-h-16 items-center justify-between border-b border-[var(--pl-border)] px-8">
+      <header className="flex min-h-12 items-center justify-between border-b border-[var(--pl-border)] px-6">
         <h1 className="text-lg font-semibold tracking-[-0.02em] text-[var(--pl-text)]">
           {t.pipeline.projectListTitle}
         </h1>
@@ -35,7 +35,7 @@ export function ProjectListView({
         </Button>
       </header>
 
-      <section className="min-h-0 flex-1 overflow-y-auto px-8 py-8" aria-labelledby="pipeline-project-list">
+      <section className="min-h-0 flex-1 overflow-y-auto px-6 py-6" aria-labelledby="pipeline-project-list">
         <h2 id="pipeline-project-list" className="sr-only">{t.pipeline.projectListTitle}</h2>
 
         {loading ? (
@@ -44,18 +44,18 @@ export function ProjectListView({
           </div>
         ) : (
           <>
-            <div className="grid max-w-[1280px] grid-cols-[repeat(auto-fill,minmax(250px,290px))] gap-x-5 gap-y-8">
+            <div className="grid max-w-[1280px] grid-cols-[repeat(auto-fill,minmax(240px,280px))] gap-x-5 gap-y-6">
               <button
                 type="button"
                 onClick={onNewProject}
                 className="group text-left focus-visible:outline-none"
               >
-                <div className="flex aspect-[16/10] items-center justify-center rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] transition-colors group-hover:border-[var(--pl-accent)] group-hover:bg-[var(--pl-surface-hover)] group-focus-visible:border-[var(--pl-accent)]">
+                <div className="flex aspect-[16/10] items-center justify-center rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] transition-colors group-hover:border-[var(--pl-accent)] group-hover:bg-[var(--pl-surface-hover)] group-focus-visible:border-[var(--pl-accent)]">
                   <span className="flex flex-col items-center gap-3 text-[var(--pl-text-secondary)] transition-colors group-hover:text-[var(--pl-text)]">
                     <span className="flex size-11 items-center justify-center rounded-full border border-[var(--pl-border-strong)] bg-[var(--pl-surface)]">
                       <Plus className="size-5" />
                     </span>
-                    <span className="text-base font-semibold">{t.pipeline.startCreating}</span>
+                    <span className="text-sm font-semibold">{t.pipeline.startCreating}</span>
                   </span>
                 </div>
                 <div className="px-1 pt-3">
@@ -106,7 +106,7 @@ function ProjectCard({
   return (
     <article className="group relative min-w-0">
       <button type="button" onClick={onOpen} className="block w-full text-left focus-visible:outline-none">
-        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-2xl border border-[var(--pl-border)] bg-[var(--pl-project-card)] transition-colors group-hover:border-[var(--pl-border-strong)] group-focus-within:border-[var(--pl-accent)]">
+        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-xl border border-[var(--pl-border)] bg-[var(--pl-project-card)] transition-colors group-hover:border-[var(--pl-border-strong)] group-focus-within:border-[var(--pl-accent)]">
           <div className="absolute left-5 top-5 h-9 w-14 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
           <div className="absolute bottom-5 right-5 h-12 w-20 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
           <span className="flex size-12 items-center justify-center rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-accent)]">

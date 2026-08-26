@@ -23,7 +23,7 @@ export function ContentGenerationSettings({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useI18n();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const labels = t.contentGeneration;
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -143,7 +143,17 @@ export function ContentGenerationSettings({
   }
 
   async function removeCredential() {
-    if (saving || !window.confirm(labels.removeCredentialConfirm)) return;
+    if (saving || !await modal.confirm({
+      cancelText: t.common.cancel,
+      centered: true,
+      content: labels.removeCredentialConfirm,
+      focusable: { autoFocusButton: "cancel" },
+      keyboard: false,
+      mask: { closable: false },
+      okButtonProps: { danger: true },
+      okText: t.common.delete,
+      title: labels.runningHubCredential,
+    })) return;
     setSavingCredential(true);
     setSettingsError("");
     try {
@@ -188,7 +198,7 @@ export function ContentGenerationSettings({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-3xl space-y-8">
+      <div className="mx-auto max-w-3xl space-y-6">
         <header className="border-b border-line-subtle pb-4">
           <h2 className="text-lg font-semibold text-primary">{labels.title}</h2>
           <p className="mt-1 text-body-sm text-muted">{labels.description}</p>

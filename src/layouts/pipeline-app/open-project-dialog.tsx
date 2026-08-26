@@ -53,6 +53,8 @@ export function OpenProjectDialog({ open, onClose, onOpened }: OpenProjectDialog
       cancelText={t.pipeline.dialogCancel}
       width={560}
       destroyOnHidden
+      keyboard={false}
+      mask={{ closable: false }}
     >
       <Form form={form} layout="vertical" className="mt-4">
         <Form.Item

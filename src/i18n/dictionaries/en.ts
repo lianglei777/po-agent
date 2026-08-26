@@ -2,6 +2,7 @@ export const en = {
   common: {
     cancel: "Cancel",
     close: "Close",
+    confirm: "Confirm",
     delete: "Delete",
     global: "Global",
     loading: "Loading...",
@@ -90,6 +91,8 @@ export const en = {
     apiKeyPlaceholder: "Enter API Key",
     moveUp: "Move provider up",
     moveDown: "Move provider down",
+    providerEnabled: "Enabled",
+    providerDisabled: "Disabled",
     fallback: "Fallback conditions",
     fallbackDescription:
       "Try the next enabled provider when one of these failures occurs.",
@@ -224,6 +227,9 @@ export const en = {
     removeFile: "Remove file",
     textOnly: "This API accepts text only",
     generate: "Generate",
+    generateBusy: "Wait for the current generation task to finish before submitting another.",
+    generatePromptRequired: "Enter a generation prompt first.",
+    generateAssetsRequired: "Add all required reference assets first.",
     taskId: "Task ID",
     copyTaskId: "Copy task ID",
     copied: "Copied",

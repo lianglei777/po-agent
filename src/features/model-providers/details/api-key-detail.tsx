@@ -64,7 +64,7 @@ export default function ApiKeyDetail({ provider, onRefresh }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-2xl flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <SectionTitle>{t.models.apiKey}</SectionTitle>

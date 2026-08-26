@@ -70,7 +70,7 @@ export function CanvasAssetBrowser({
               key={value}
               type="button"
               onClick={() => setFilter(value)}
-              className={`h-6 shrink-0 rounded-md px-2 text-[10px] transition-colors ${filter === value ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"}`}
+              className={`h-6 shrink-0 rounded-md px-2 text-caption transition-colors ${filter === value ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"}`}
             >
               {mediaFilterLabel(value, t.pipeline)}
             </button>
@@ -114,7 +114,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`h-9 border-b-2 px-2 text-[11px] font-medium transition-colors ${active ? "border-[var(--pl-accent)] text-[var(--pl-text)]" : "border-transparent text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"}`}
+      className={`h-9 border-b-2 px-2 text-caption font-medium transition-colors ${active ? "border-[var(--pl-accent)] text-[var(--pl-text)]" : "border-transparent text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"}`}
     >
       {children}
     </button>
@@ -139,8 +139,8 @@ function ResourceRow({ mediaType, label, meta, previewNode, disabled = false, on
     >
       <ResourceThumbnail node={previewNode} mediaType={mediaType} label={label} fallback={<Icon className="size-3.5 text-[var(--pl-text-secondary)]" />} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[11px] font-medium leading-4 text-[var(--pl-text)]">{label}</span>
-        {meta ? <span className="block truncate text-[9px] leading-3.5 text-[var(--pl-text-muted)]">{meta}</span> : null}
+        <span className="block truncate text-caption font-medium leading-4 text-[var(--pl-text)]">{label}</span>
+        {meta ? <span className="block truncate text-caption leading-3.5 text-[var(--pl-text-muted)]">{meta}</span> : null}
       </span>
     </button>
   );
@@ -167,7 +167,7 @@ function ResourceThumbnail({ node, mediaType, label, fallback }: {
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-3 py-10 text-center text-[11px] text-[var(--pl-text-muted)]">
+    <div className="flex flex-col items-center gap-2 px-3 py-10 text-center text-caption text-[var(--pl-text-muted)]">
       <Images className="size-5" />
       {label}
     </div>

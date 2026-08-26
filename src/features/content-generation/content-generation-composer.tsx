@@ -2,7 +2,7 @@
 
 import { FileImage, FileMusic, FileVideo, Send, X } from "@/components/icons";
 import { useState } from "react";
-import { Alert, Button, Input, Select } from "antd";
+import { Alert, Button, Input, Select, Tooltip } from "antd";
 import type {
   GenerationAssetSlot,
   GenerationRouteDto,
@@ -53,6 +53,13 @@ export function ContentGenerationComposer({
     slot.required && !assets.some((asset) => asset.slot === slot.key));
   const promptMissing = schema.prompt.required && !prompt.trim();
   const disabled = busy || promptMissing || missingRequiredAsset;
+  const disabledReason = busy
+    ? t.contentGeneration.generateBusy
+    : promptMissing
+      ? t.contentGeneration.generatePromptRequired
+      : missingRequiredAsset
+        ? t.contentGeneration.generateAssetsRequired
+        : null;
 
   async function submit() {
     if (disabled) return;
@@ -66,7 +73,7 @@ export function ContentGenerationComposer({
   const allFields = schema.parameters ?? [];
 
   return (
-    <div className="mx-auto max-w-[820px] rounded-[22px] border border-line-strong bg-canvas p-3 shadow-floating">
+    <div className="mx-auto max-w-[820px] rounded-composer border border-line-strong bg-panel p-3 shadow-composer">
       <div className="mb-3 flex flex-col gap-2 border-b border-line-subtle pb-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1 px-1">
           <p className="text-caption font-medium text-primary">
@@ -153,16 +160,20 @@ export function ContentGenerationComposer({
         <span className="px-1 text-caption text-muted">
           {assetSlots.length ? t.contentGeneration.assetsReady : t.contentGeneration.textOnly}
         </span>
-        <Button
-          aria-label={t.contentGeneration.generate}
-          disabled={disabled}
-          htmlType="button"
-          icon={<Send />}
-          loading={busy}
-          onClick={() => void submit()}
-          shape="circle"
-          type="primary"
-        />
+        <Tooltip title={disabledReason ?? t.contentGeneration.generate}>
+          <span className="inline-flex">
+            <Button
+              aria-label={t.contentGeneration.generate}
+              disabled={disabled}
+              htmlType="button"
+              icon={<Send />}
+              loading={busy}
+              onClick={() => void submit()}
+              shape="circle"
+              type="primary"
+            />
+          </span>
+        </Tooltip>
       </div>
       {error ? <Alert className="mt-2" showIcon title={error} type="error" /> : null}
     </div>

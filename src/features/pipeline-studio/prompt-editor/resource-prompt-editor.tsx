@@ -450,7 +450,7 @@ export function ResourcePromptEditor({
           style={{ left: pickerPosition.left, top: pickerPosition.top }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <div className="flex h-9 items-center gap-2 border-b border-[var(--pl-border)] px-3 text-[11px] text-[var(--pl-text-muted)]">
+          <div className="flex h-9 items-center gap-2 border-b border-[var(--pl-border)] px-3 text-caption text-[var(--pl-text-muted)]">
             <AtSign className="size-3.5" />
             {t.pipeline.promptReferencePicker}
           </div>
@@ -480,7 +480,7 @@ export function ResourcePromptEditor({
                     size="inline"
                   />
                   <span className="min-w-0 flex-1 truncate text-[var(--pl-text)]">{option.label}</span>
-                  <span className="text-[10px] text-[var(--pl-text-muted)]">{option.sourceType === "asset" ? t.pipeline.promptResourceAsset : t.pipeline.promptResourceCanvas}</span>
+                  <span className="text-caption text-[var(--pl-text-muted)]">{option.sourceType === "asset" ? t.pipeline.promptResourceAsset : t.pipeline.promptResourceCanvas}</span>
                 </button>
               );
             }) : (
@@ -509,7 +509,7 @@ function ResourceReferenceView({ node }: ReactNodeViewProps) {
       data-invalid={!preview.available || undefined}
       className={`mx-0.5 inline-flex items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1.5 align-middle font-medium ${preview.available
         ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]"
-        : "bg-red-500/10 text-red-300 ring-1 ring-inset ring-red-400/30"}`}
+        : "bg-[color-mix(in_srgb,var(--pl-error)_10%,transparent)] text-[var(--pl-danger)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--pl-error)_30%,transparent)]"}`}
       data-resource-reference=""
     >
       <ResourcePreviewThumbnail

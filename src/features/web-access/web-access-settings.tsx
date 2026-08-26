@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff } from "@/components/icons";
+import { ArrowDown, ArrowUp, Eye, EyeOff } from "@/components/icons";
 import {
   WEB_SEARCH_FALLBACK_KINDS,
   type WebAccessSettingsResponse,
@@ -16,6 +16,7 @@ import {
   Segmented,
   Skeleton,
   Switch,
+  Tooltip,
 } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { loadWebAccessSettings, saveWebAccessSettings } from "./api";
@@ -213,23 +214,34 @@ export function WebAccessSettings({
                       <div className="flex items-center gap-2">
                         {settings.mode === "custom" ? (
                           <>
-                            <Button
-                              aria-label={labels.moveUp}
-                              disabled={index === 0}
-                              onClick={() => moveProvider(index, -1)}
-                              size="small"
-                            >
-                              ↑
-                            </Button>
-                            <Button
-                              aria-label={labels.moveDown}
-                              disabled={index === settings.providers.length - 1}
-                              onClick={() => moveProvider(index, 1)}
-                              size="small"
-                            >
-                              ↓
-                            </Button>
+                            <Tooltip title={labels.moveUp}>
+                              <span className="inline-flex">
+                                <Button
+                                  aria-label={labels.moveUp}
+                                  disabled={index === 0}
+                                  icon={<ArrowUp />}
+                                  onClick={() => moveProvider(index, -1)}
+                                  shape="circle"
+                                  size="small"
+                                  type="text"
+                                />
+                              </span>
+                            </Tooltip>
+                            <Tooltip title={labels.moveDown}>
+                              <span className="inline-flex">
+                                <Button
+                                  aria-label={labels.moveDown}
+                                  disabled={index === settings.providers.length - 1}
+                                  icon={<ArrowDown />}
+                                  onClick={() => moveProvider(index, 1)}
+                                  shape="circle"
+                                  size="small"
+                                  type="text"
+                                />
+                              </span>
+                            </Tooltip>
                             <Switch
+                              aria-label={`${PROVIDER_NAMES[provider.id]} ${provider.enabled ? labels.providerEnabled : labels.providerDisabled}`}
                               checked={provider.enabled}
                               onChange={(enabled) =>
                                 updateProvider(provider.id, { enabled })

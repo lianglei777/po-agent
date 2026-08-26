@@ -88,7 +88,7 @@ describe("Model Provider page", () => {
 
   it("uses Ant Design for standard page feedback and actions", () => {
     expect(source).toContain('import { Alert, Empty, Skeleton } from "antd"');
-    expect(sidebarSource).toContain('import { Button } from "antd"');
+    expect(sidebarSource).toContain('import { Button, Tooltip } from "antd"');
     expect(source).not.toContain("<Alert message=");
     expect(sidebarSource).not.toContain('from "@/components/ui/button"');
   });

@@ -10,7 +10,7 @@ export function CanvasNodeContextToolbar({ children, offset = 14 }: { children: 
       position={Position.Top}
       offset={offset}
       align="center"
-      className="nodrag nowheel flex items-center gap-1 whitespace-nowrap rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--pl-shadow-hover)]"
+      className="nodrag nowheel flex items-center gap-1 whitespace-nowrap rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-1 shadow-[var(--pl-shadow-hover)]"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
