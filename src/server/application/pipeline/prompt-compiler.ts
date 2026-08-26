@@ -38,11 +38,19 @@ export function collectPromptResourceReferences(document: CanvasPromptDocument):
 export function compileCanvasPrompt(
   document: CanvasPromptDocument,
   resolvedByReferenceId: ReadonlyMap<string, CanvasMediaReference>,
+  leadingReferences: CanvasMediaReference[] = [],
 ): CompiledCanvasPrompt {
   const counters: Record<CanvasMediaType, number> = { text: 0, image: 0, video: 0, audio: 0 };
   const bindingByResource = new Map<string, { token: string; reference: CanvasMediaReference }>();
-  const references: CanvasMediaReference[] = [];
+  // 连线资源先占据最终绑定序号，随后出现的 @ token 才能与实际上传数组使用同一编号。
+  const references: CanvasMediaReference[] = leadingReferences.map((reference, order) => ({ ...reference, order }));
   const issues: PromptCompileIssue[] = [];
+
+  for (const reference of references) {
+    counters[reference.mediaType] += 1;
+    const token = `${MEDIA_LABELS[reference.mediaType]}${counters[reference.mediaType]}`;
+    bindingByResource.set(referenceBindingKey(reference), { token, reference });
+  }
 
   const body = renderNode(document.content, (attrs) => {
     const resolved = resolvedByReferenceId.get(attrs.referenceId);
@@ -52,7 +60,7 @@ export function compileCanvasPrompt(
     }
 
     // 同一资源重复出现时复用编号；不同首尾帧角色仍保留独立绑定。
-    const bindingKey = `${attrs.sourceType}:${attrs.sourceId}:${attrs.role}`;
+    const bindingKey = referenceBindingKey(attrs);
     const existing = bindingByResource.get(bindingKey);
     if (existing) return existing.token;
 
@@ -83,6 +91,15 @@ export function compileCanvasPrompt(
     references,
     issues,
   };
+}
+
+function referenceBindingKey(reference: {
+  sourceType?: CanvasResourceReferenceAttrs["sourceType"];
+  sourceId?: string;
+  nodeId?: string;
+  role?: CanvasResourceReferenceAttrs["role"];
+}) {
+  return `${reference.sourceType ?? "canvas-node"}:${reference.sourceId ?? reference.nodeId}:${reference.role ?? "reference"}`;
 }
 
 function renderNode(node: CanvasRichTextNode, renderReference: (attrs: CanvasResourceReferenceAttrs) => string): string {

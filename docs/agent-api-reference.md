@@ -2908,7 +2908,7 @@ interface CanvasSnapshot {
 
 通过 `multipart/form-data` 将本地素材导入项目。字段包括 `file`、`positionX`、`positionY`，以及可选的
 `nodeId`。未提供 `nodeId` 时创建新的媒体节点；提供后，文件媒体类型必须与目标节点一致，服务端会把
-素材写入该节点并保留节点位置、尺寸、分组和已有参数。图片节点使用该能力完成空节点导入和安全替换。
+素材写入该节点并保留节点位置、尺寸、分组和已有参数。图片和视频节点使用该能力完成空节点导入和安全替换；目标节点已有入边时拒绝本地上传，避免“上游引用”和“本地文件”同时成为隐式主输入。
 
 #### 文本节点富文本数据
 
@@ -3024,6 +3024,29 @@ interface GenerateCanvasNodeResponse {
 
 取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点没有活动 Run 时返回冲突错误。
 
+### 视频节点 Generation Run / Take
+
+视频节点不复制生成历史。每次生成仍创建标准 Generation Run 和 Artifact，节点只在
+`data.videoSelection` 中保存当前 Take 的 `runId`、`artifactId` 和完成时间，并在
+`data.videoMetadata` 中保存浏览器从媒体 metadata 读取的时长和分辨率。
+
+```text
+GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs
+POST /api/pipeline/canvas-nodes/{nodeId}/generation-runs/{runId}/select
+POST /api/pipeline/canvas-nodes/{nodeId}/generation-runs/{runId}/retry
+GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/{runId}/artifacts/{artifactId}/media
+POST /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/select
+GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/media
+```
+
+- 列表接口只返回 `sourceRef === pipeline:canvas:{nodeId}` 的 Run，并按创建时间倒序返回标准 `GenerationRunViewDto[]`。
+- `select` 请求体为 `{ artifactId: string }`。Run 必须属于该节点，Artifact 必须属于该 Run 且媒体类型与节点一致；选择仅移动当前 Take 指针，不修改或删除历史。
+- `retry` 请求体为 `{ idempotencyKey: string }`。它复用原 Run 的输入创建下一次 Provider Job，并把节点任务状态恢复为 `processing`；重试可能产生费用。
+- Artifact media 接口同样校验 Run 与节点的 `sourceRef` 归属，只读取项目已注册 workspace root 内的本地结果。
+- 节点保留本地上传源时，历史面板将其与生成 Take 统一展示；`upload-source/select` 可无损切回上传源，media 接口始终读取原上传文件，不受当前 Take 影响。
+- 切换 Take 后 `/api/pipeline/canvas-nodes/{nodeId}/media` 优先读取当前选中的 `artifactIds[0]`，不会被最后一次失败或重试 Run 覆盖。
+- 上游节点内容更新时，服务端会重建直接下游节点的引用快照并发出 `node_updated` SSE；前端将当前 Take 标记为旧版本，但保留视频供比较和再次生成。
+
 ### `GET /api/pipeline/assets/{assetId}/media`
 
 返回项目资产当前选中 Artifact 的本地媒体内容，供画布资产管理和提示词资源引用显示预览。服务端按资产所属项目注册的 workspace root 读取文件；资产不存在、没有选中 Artifact 或文件不再可用时返回 `404`。响应携带真实 `Content-Type`，并使用私有缓存。
@@ -3050,9 +3073,13 @@ type CanvasMutation =
   | { type: "node.update"; nodeId: string; patch: CanvasNodePatch }
   | { type: "node.delete"; nodeId: string }
   | { type: "edge.create"; edge: CanvasEdge; intent?: "connect" | "restore" }
+  | { type: "edge.update"; edgeId: string; patch: { role?: CanvasResourceRole; order?: number } }
   | { type: "edge.delete"; edgeId: string }
   | { type: "viewport.update"; viewport: CanvasViewport };
 ```
+
+`CanvasEdge.role` 可选值为 `reference`、`first-frame`、`last-frame`，旧边默认按
+`reference` 处理；`CanvasEdge.order` 是目标节点入边中的稳定非负顺序。首帧和尾帧角色只允许图片连接到视频节点，一个视频节点最多各一个，且尾帧不能脱离首帧存在。角色和顺序通过 `edge.update` 持久化，不依赖 Composer 本地状态。
 
 行为：
 

@@ -267,6 +267,11 @@ export class LocalPipelineRepository implements PipelineRepository {
     return (await this.requireProject(projectId)).repository.listCanvasEdges(projectId);
   }
 
+  async updateCanvasEdge(id: string, patch: { role?: CanvasEdge["role"]; order?: number }) {
+    const owner = await this.find((repository) => repository.getCanvasEdge(id));
+    return owner ? owner.repository.updateCanvasEdge(id, patch) : null;
+  }
+
   async deleteCanvasEdge(id: string) {
     const owner = await this.find((repository) => repository.getCanvasEdge(id));
     return owner ? owner.repository.deleteCanvasEdge(id) : false;

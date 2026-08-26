@@ -38,6 +38,25 @@ describe("resolveCanvasMediaSource", () => {
     expect(first).not.toEqual(replacement);
   });
 
+  it("uses the selected generated Take ahead of a retained video upload", () => {
+    expect(resolveCanvasMediaSource("video-1", {
+      type: "video",
+      name: "Video",
+      action: "video_generate",
+      workspaceFile: {
+        relativePath: "assets/imports/original.mp4",
+        contentType: "video/mp4",
+        name: "original.mp4",
+      },
+      artifactIds: ["take-2"],
+      videoSelection: {
+        runId: "run-2",
+        artifactId: "take-2",
+        completedAt: "2026-08-25T00:00:00.000Z",
+      },
+    })?.assetKey).toBe("artifact:take-2");
+  });
+
   it("does not request an unfinished generation run as readable media", () => {
     expect(resolveCanvasMediaSource("node-1", {
       type: "image",

@@ -1,4 +1,4 @@
-import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
+import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, CanvasResourceRole, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 
 const NODE_TYPES = new Set(["text", "image", "video", "audio", "script", "character", "scene", "prop", "storyboard"]);
@@ -116,6 +116,12 @@ function parseMutation(value: unknown, index: number): CanvasMutationBatch["muta
       throw validationError(`mutations[${index}].edge identifiers are invalid`);
     }
     if (!EDGE_TYPES.has(String(edge.edgeType))) throw validationError(`mutations[${index}].edgeType is invalid`);
+    if (edge.role !== undefined && !RESOURCE_ROLES.has(String(edge.role))) {
+      throw validationError(`mutations[${index}].edge.role is invalid`);
+    }
+    if (edge.order !== undefined && (!Number.isInteger(edge.order) || Number(edge.order) < 0)) {
+      throw validationError(`mutations[${index}].edge.order is invalid`);
+    }
     if (value.intent !== undefined && value.intent !== "connect" && value.intent !== "restore") {
       throw validationError(`mutations[${index}].intent is invalid`);
     }
@@ -128,8 +134,29 @@ function parseMutation(value: unknown, index: number): CanvasMutationBatch["muta
         sourceNodeId: edge.sourceNodeId,
         targetNodeId: edge.targetNodeId,
         edgeType: edge.edgeType as "references" | "source_of" | "generates" | "derives_from",
+        role: edge.role as CanvasResourceRole | undefined,
+        order: typeof edge.order === "number" ? edge.order : undefined,
         createdAt: typeof edge.createdAt === "string" ? edge.createdAt : undefined,
         updatedAt: typeof edge.updatedAt === "string" ? edge.updatedAt : undefined,
+      },
+    };
+  }
+  if (value.type === "edge.update") {
+    if (!validId(value.edgeId) || !isRecord(value.patch)) {
+      throw validationError(`mutations[${index}] edge update is invalid`);
+    }
+    if (value.patch.role !== undefined && !RESOURCE_ROLES.has(String(value.patch.role))) {
+      throw validationError(`mutations[${index}].patch.role is invalid`);
+    }
+    if (value.patch.order !== undefined && (!Number.isInteger(value.patch.order) || Number(value.patch.order) < 0)) {
+      throw validationError(`mutations[${index}].patch.order is invalid`);
+    }
+    return {
+      type: "edge.update",
+      edgeId: value.edgeId,
+      patch: {
+        role: value.patch.role as CanvasResourceRole | undefined,
+        order: typeof value.patch.order === "number" ? value.patch.order : undefined,
       },
     };
   }
@@ -178,6 +205,33 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
     if (value.type !== "text") throw validationError(`mutations[${index}].node.data.textDocument is only valid for text nodes`);
     validateTextDocument(value.textDocument, `mutations[${index}].node.data.textDocument`);
   }
+  if (value.videoMetadata !== undefined) {
+    if (value.type !== "video" || !isRecord(value.videoMetadata)) {
+      throw validationError(`mutations[${index}].node.data.videoMetadata is invalid`);
+    }
+    const metadata = value.videoMetadata;
+    if (!Number.isFinite(metadata.durationSeconds)
+      || Number(metadata.durationSeconds) < 0
+      || Number(metadata.durationSeconds) > 86_400
+      || !Number.isInteger(metadata.width)
+      || Number(metadata.width) < 1
+      || Number(metadata.width) > 16_384
+      || !Number.isInteger(metadata.height)
+      || Number(metadata.height) < 1
+      || Number(metadata.height) > 16_384) {
+      throw validationError(`mutations[${index}].node.data.videoMetadata is invalid`);
+    }
+  }
+  if (value.videoSelection !== undefined) {
+    if (value.type !== "video" || !isRecord(value.videoSelection)
+      || !validId(value.videoSelection.runId)
+      || !validId(value.videoSelection.artifactId)
+      || typeof value.videoSelection.completedAt !== "string"
+      || !Number.isFinite(Date.parse(value.videoSelection.completedAt))
+      || (value.videoSelection.historical !== undefined && typeof value.videoSelection.historical !== "boolean")) {
+      throw validationError(`mutations[${index}].node.data.videoSelection is invalid`);
+    }
+  }
   return value as unknown as CanvasNodeData;
 }
 
@@ -202,6 +256,24 @@ function validateTextDocument(value: unknown, path: string) {
   if (!isRecord(value.content) || value.content.type !== "doc") {
     throw validationError(`${path}.content must be a document`);
   }
+}
+
+export function parseSelectCanvasArtifactRequest(value: unknown): { artifactId: string } {
+  if (!isRecord(value) || !validId(value.artifactId)) {
+    throw validationError("artifactId is invalid");
+  }
+  return { artifactId: value.artifactId };
+}
+
+export function parseRetryCanvasGenerationRequest(value: unknown): { idempotencyKey: string } {
+  if (!isRecord(value) || typeof value.idempotencyKey !== "string") {
+    throw validationError("idempotencyKey is invalid");
+  }
+  const idempotencyKey = value.idempotencyKey.trim();
+  if (!idempotencyKey || idempotencyKey.length > 200) {
+    throw validationError("idempotencyKey is invalid");
+  }
+  return { idempotencyKey };
 }
 
 function parseGenerationSettings(value: Record<string, unknown>): NonNullable<GenerateCanvasNodeRequest["settings"]> {

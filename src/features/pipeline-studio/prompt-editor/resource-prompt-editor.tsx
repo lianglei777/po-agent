@@ -13,6 +13,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { createPortal } from "react-dom";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  CanvasEdge,
   CanvasMediaType,
   CanvasPromptDocument,
   CanvasResourceReferenceAttrs,
@@ -20,7 +21,8 @@ import type {
   CanvasResourceSourceType,
   PipelineAsset,
 } from "@/contracts/pipeline";
-import { AtSign, X } from "@/components/icons";
+import { AtSign, MoreHorizontal, X } from "@/components/icons";
+import { Dropdown } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resourcePickerPosition, type CursorRect } from "../model/floating-panel";
@@ -110,6 +112,7 @@ export function ResourcePromptEditor({
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const canvasEdges = useCanvasStore((state) => state.edges);
   const deleteEdges = useCanvasStore((state) => state.deleteEdges);
+  const updateEdgeBinding = useCanvasStore((state) => state.updateEdgeBinding);
   const [assets, setAssets] = useState<PipelineAsset[]>([]);
   const [mention, setMention] = useState<{ from: number; to: number; query: string; cursor: CursorRect } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -358,6 +361,12 @@ export function ResourcePromptEditor({
               : binding.edgeIds.length
                 ? t.pipeline.promptResourceRemoveConnection.replace("{label}", preview.reference.label)
                 : t.pipeline.promptResourceRemoveMentions.replace("{label}", preview.reference.label);
+            const roleMenu = connectedTargetNodeId
+              && binding.edgeIds.length
+              && preview.reference.mediaType === "image"
+              && canvasNodes.find((node) => node.id === connectedTargetNodeId)?.data?.type === "video"
+              ? connectedRoleMenu(binding.edgeIds[0]!, canvasEdges, t.pipeline, updateEdgeBinding)
+              : null;
             return (
             <span
               key={binding.key}
@@ -411,6 +420,21 @@ export function ResourcePromptEditor({
               >
                 <X className="size-3" />
               </button>
+              {roleMenu ? (
+                <Dropdown menu={roleMenu} trigger={["click"]} placement="bottomRight">
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    title={t.pipeline.promptReferenceChangeRole}
+                    aria-label={t.pipeline.promptReferenceChangeRole}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                    className="absolute -bottom-1 -right-1 z-10 flex size-5 items-center justify-center rounded-full border border-white/25 bg-black/80 text-white hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:opacity-45"
+                  >
+                    <MoreHorizontal className="size-3" />
+                  </button>
+                </Dropdown>
+              ) : null}
             </span>
             );
           })}
@@ -507,4 +531,39 @@ function resourceRoleLabel(
   if (role === "first-frame") return pipeline.promptReferenceRoleFirstFrame;
   if (role === "last-frame") return pipeline.promptReferenceRoleLastFrame;
   return pipeline.promptReferenceRoleReference;
+}
+
+function connectedRoleMenu(
+  edgeId: string,
+  edges: CanvasEdge[],
+  pipeline: ReturnType<typeof useI18n>["t"]["pipeline"],
+  updateEdgeBinding: (edgeId: string, patch: { role?: CanvasResourceRole; order?: number }) => void,
+) {
+  const edge = edges.find((candidate) => candidate.id === edgeId);
+  const incoming = edges.filter((candidate) => candidate.targetNodeId === edge?.targetNodeId);
+  const currentRole = edge?.role ?? "reference";
+  const otherRoles = new Set(incoming.filter((candidate) => candidate.id !== edgeId).map((candidate) => candidate.role ?? "reference"));
+  const changingOnlyFirstFrame = currentRole === "first-frame" && otherRoles.has("last-frame");
+  return {
+    selectable: true,
+    selectedKeys: [currentRole],
+    onClick: ({ key }: { key: string }) => updateEdgeBinding(edgeId, { role: key as CanvasResourceRole }),
+    items: [
+      {
+        key: "reference",
+        label: pipeline.promptReferenceRoleReference,
+        disabled: changingOnlyFirstFrame,
+      },
+      {
+        key: "first-frame",
+        label: pipeline.promptReferenceRoleFirstFrame,
+        disabled: otherRoles.has("first-frame"),
+      },
+      {
+        key: "last-frame",
+        label: pipeline.promptReferenceRoleLastFrame,
+        disabled: otherRoles.has("last-frame") || !otherRoles.has("first-frame"),
+      },
+    ],
+  };
 }

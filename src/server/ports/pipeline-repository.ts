@@ -59,6 +59,7 @@ export interface PipelineRepository {
   createCanvasEdge(input: Omit<CanvasEdge, "id" | "createdAt" | "updatedAt">): Promise<CanvasEdge>;
   getCanvasEdge(id: string): Promise<CanvasEdge | null>;
   listCanvasEdges(projectId: string): Promise<CanvasEdge[]>;
+  updateCanvasEdge(id: string, patch: { role?: CanvasEdge["role"]; order?: number }): Promise<CanvasEdge | null>;
   deleteCanvasEdge(id: string): Promise<boolean>;
   deleteCanvasEdgesByNode(nodeId: string): Promise<void>;
 

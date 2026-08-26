@@ -51,7 +51,9 @@ export function connectedCanvasReferences(
   edges: CanvasEdge[],
 ): CanvasResourceReferenceAttrs[] {
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
-  return edges.flatMap((edge) => {
+  return [...edges]
+    .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
+    .flatMap((edge) => {
     if (edge.targetNodeId !== targetNodeId) return [];
     const source = nodesById.get(edge.sourceNodeId);
     if (!source?.data) return [];
@@ -62,9 +64,9 @@ export function connectedCanvasReferences(
       sourceId: source.id,
       mediaType: source.data.type,
       label: source.data.name,
-      role: "reference" as const,
+      role: edge.role ?? "reference",
     }];
-  });
+    });
 }
 
 export function connectedCanvasEdgeIds(

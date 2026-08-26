@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { App, Modal, Spin, Tooltip } from "antd";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { App, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, FileVideo, PlayCircle, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { AlertTriangle, Clock3, Copy, Download, FileVideo, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
-import { useCanvasStore } from "../state/canvas-store";
+import { videoNodeToolbarPresentation } from "../model/node-interaction";
+import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 import { VideoAiComposer } from "./video-ai-composer";
+import { VideoGenerationHistory } from "./video-generation-history";
 import { CanvasNodeConnectionHandle } from "./shared/canvas-node-connection-handle";
 import { CanvasNodeContextToolbar, CanvasNodeToolbarButton } from "./shared/canvas-node-context-toolbar";
 import { CanvasNodeResizeControl } from "./shared/canvas-node-resize-control";
@@ -37,7 +39,18 @@ export function VideoCanvasNode({
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
-  const hasIncomingConnection = useCanvasStore((state) => state.edges.some((edge) => edge.targetNodeId === id));
+  const canvasEdges = useCanvasStore((state) => state.edges);
+  const canvasNodes = useCanvasStore((state) => state.nodes);
+  const incomingEdges = useMemo(
+    () => canvasEdges.filter((edge) => edge.targetNodeId === id),
+    [canvasEdges, id],
+  );
+  const incomingSources = useMemo(() => {
+    const sourceIds = new Set(incomingEdges.map((edge) => edge.sourceNodeId));
+    return canvasNodes.filter((candidate) => sourceIds.has(candidate.id));
+  }, [canvasNodes, incomingEdges]);
+  const hasIncomingConnection = incomingEdges.length > 0;
+  const videoDraft = useCanvasStore((state) => state.composerDrafts[composerDraftKey(id, "video")]);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
   )));
@@ -47,15 +60,45 @@ export function VideoCanvasNode({
   )));
   const canvas = node.data;
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [composerInputDirty, setComposerInputDirty] = useState(false);
+  const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
   const mediaSource = resolveCanvasMediaSource(id, canvas);
   const mediaUrl = mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
   const hasVideo = Boolean(mediaUrl);
+  const hasGenerationHistory = Boolean(canvas?.workspaceFile || canvas?.artifactIds?.length || canvas?.taskInfo?.runId);
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
+  const selectedAt = canvas?.videoSelection?.completedAt;
+  const outputStale = Boolean(selectedAt && (
+    canvas?.videoSelection?.historical
+    || incomingSources.some((source) => source.updatedAt > selectedAt)
+    || incomingEdges.some((edge) => Boolean(edge.updatedAt && edge.updatedAt > selectedAt))
+    || (videoDraft && JSON.stringify(videoDraft) !== JSON.stringify(canvas?.params?.promptDocument))
+    || composerInputDirty
+  ));
+  const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
+  const toolbarPresentation = videoNodeToolbarPresentation({
+    selected: singleSelected,
+    dragging,
+    mediaDeferred: deferMediaLoad,
+    hasVideo,
+    hasHistory: hasGenerationHistory,
+  });
+
+  const playVideoOnHover = useCallback(() => {
+    if (mediaFailed) return;
+    const playAttempt = videoRef.current?.play();
+    if (playAttempt) void playAttempt.catch(() => undefined);
+  }, [mediaFailed]);
+
+  const pauseVideoOnLeave = useCallback(() => {
+    videoRef.current?.pause();
+  }, []);
 
   const uploadVideo = useCallback(async (file: File) => {
     if (hasIncomingConnection) {
@@ -141,16 +184,27 @@ export function VideoCanvasNode({
       <CanvasNodeConnectionHandle type="target" position={Position.Left} label={t.pipeline.nodeVideoInputHandle} />
       <CanvasNodeConnectionHandle type="source" position={Position.Right} label={t.pipeline.nodeVideoOutputHandle} />
 
-      {singleSelected && hasVideo && !dragging && !deferMediaLoad ? (
+      {toolbarPresentation.showToolbar ? (
         <CanvasNodeContextToolbar offset={54}>
-          <CanvasNodeToolbarButton
-            label={t.pipeline.videoAiGenerate}
-            icon={<Sparkles className="size-4" />}
-            onClick={() => {
-              activateNodeComposer(id);
-              setComposerOpen(true);
-            }}
-          />
+          {toolbarPresentation.showGenerateAction ? (
+            <CanvasNodeToolbarButton
+              label={t.pipeline.videoAiGenerate}
+              icon={<Sparkles className="size-4" />}
+              onClick={() => {
+                activateNodeComposer(id);
+                setComposerOpen(true);
+              }}
+            />
+          ) : null}
+          {hasGenerationHistory ? (
+            <CanvasNodeToolbarButton
+              label={t.pipeline.videoHistoryOpen}
+              icon={<Clock3 className="size-4" />}
+              onClick={() => setHistoryOpen(true)}
+            />
+          ) : null}
+          {hasVideo ? (
+            <>
           <CanvasNodeToolbarButton
             label={t.pipeline.nodeVideoReplace}
             icon={<RefreshCw className="size-4" />}
@@ -161,6 +215,8 @@ export function VideoCanvasNode({
           <CanvasNodeToolbarButton label={t.pipeline.nodeVideoDownload} icon={<Download className="size-4" />} onClick={downloadVideo} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
           <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
+            </>
+          ) : null}
         </CanvasNodeContextToolbar>
       ) : null}
 
@@ -170,25 +226,40 @@ export function VideoCanvasNode({
           name={canvas.name}
           ariaLabel={t.pipeline.nodeNameAria.replace("{type}", t.pipeline.nodeVideo)}
           onRename={(name) => updateNodeData(id, { ...canvas, name })}
-          actions={!hasVideo ? (
-            <Tooltip title={hasIncomingConnection ? t.pipeline.canvasUploadBlockedByConnection : undefined}>
-              <span className="inline-flex">
-                <button
-                  type="button"
-                  disabled={hasIncomingConnection}
-                  onClick={() => inputRef.current?.click()}
-                  className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <FileVideo className="size-3.5" />
-                  {t.pipeline.canvasUploadMedia}
-                </button>
-              </span>
-            </Tooltip>
-          ) : null}
+          actions={(
+            <>
+              {canvas.videoMetadata && hasVideo ? (
+                <span className="text-caption tabular-nums text-[var(--pl-text-muted)]">
+                  {t.pipeline.videoMetadata
+                    .replace("{duration}", formatDuration(canvas.videoMetadata.durationSeconds))
+                    .replace("{resolution}", `${canvas.videoMetadata.width} × ${canvas.videoMetadata.height}`)}
+                </span>
+              ) : null}
+              {!hasVideo ? (
+                <Tooltip title={hasIncomingConnection ? t.pipeline.canvasUploadBlockedByConnection : undefined}>
+                  <span className="inline-flex">
+                    <button
+                      type="button"
+                      disabled={hasIncomingConnection}
+                      onClick={() => inputRef.current?.click()}
+                      className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <FileVideo className="size-3.5" />
+                      {t.pipeline.canvasUploadMedia}
+                    </button>
+                  </span>
+                </Tooltip>
+              ) : null}
+            </>
+          )}
         />
       </div>
 
-      <section className={`nowheel relative h-full overflow-hidden rounded-[20px] border bg-black shadow-[var(--pl-shadow-card)] ${selected || dragging ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]" : "border-transparent group-hover:border-[var(--pl-border)]"} ${dragActive ? "!border-[var(--pl-accent)]" : ""}`}>
+      <section
+        className={`nowheel relative h-full overflow-hidden rounded-[20px] border bg-black shadow-[var(--pl-shadow-card)] ${selected || dragging ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]" : "border-transparent group-hover:border-[var(--pl-border)]"} ${dragActive ? "!border-[var(--pl-accent)]" : ""}`}
+        onPointerEnter={playVideoOnHover}
+        onPointerLeave={pauseVideoOnLeave}
+      >
         {uploading ? (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[var(--pl-surface-elevated)]/90 text-sm text-[var(--pl-text-secondary)]">
             <Spin />
@@ -206,26 +277,58 @@ export function VideoCanvasNode({
           ) : (
             <>
               <video
+                ref={videoRef}
                 src={mediaUrl}
-                aria-hidden="true"
+                aria-label={canvas.name}
+                controls
                 draggable={false}
                 muted
                 playsInline
                 preload="metadata"
-                className="pointer-events-none h-full min-h-[180px] w-full object-contain"
-              />
-              <button
-                type="button"
-                aria-label={t.pipeline.nodeVideoPreview}
-                className="nodrag absolute left-1/2 top-1/2 z-10 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/65 text-white shadow-[var(--pl-shadow-floating)] transition-colors hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 active:bg-black/90"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setPreviewOpen(true);
+                className="h-full min-h-[180px] w-full object-contain"
+                onPointerDown={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  // 原生控制条需要优先接收指针；视频其余区域仍交给画布处理节点拖拽。
+                  if (event.clientY >= bounds.bottom - 48) event.stopPropagation();
                 }}
-              >
-                <PlayCircle className="size-6" />
-              </button>
+                onLoadedMetadata={(event) => {
+                  setFailedMediaKey(null);
+                  const element = event.currentTarget;
+                  const metadata = {
+                    durationSeconds: Math.max(0, Math.round(element.duration * 10) / 10),
+                    width: element.videoWidth,
+                    height: element.videoHeight,
+                  };
+                  if (metadata.width > 0 && metadata.height > 0 && (
+                    canvas.videoMetadata?.durationSeconds !== metadata.durationSeconds
+                    || canvas.videoMetadata.width !== metadata.width
+                    || canvas.videoMetadata.height !== metadata.height
+                  )) updateNodeData(id, { ...canvas, videoMetadata: metadata });
+                }}
+                onError={() => setFailedMediaKey(mediaSource?.assetKey ?? "unknown")}
+              />
+              {mediaFailed ? (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/80 px-5 text-center text-xs text-white/80">
+                  <AlertTriangle className="size-5 text-amber-400" />
+                  {t.pipeline.nodeVideoUnavailable}
+                </div>
+              ) : null}
+              {outputStale ? (
+                <Tooltip title={t.pipeline.videoOutputStale}>
+                  <span className="nodrag absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500/90 px-2 py-1 text-[11px] font-medium text-black">
+                    <AlertTriangle className="size-3" />
+                    {t.pipeline.videoOutputStaleBadge}
+                  </span>
+                </Tooltip>
+              ) : null}
+              {canvas.taskInfo?.status === "failed" ? (
+                <Tooltip title={canvas.taskInfo.errorMessage ?? t.pipeline.videoHistoryFailed}>
+                  <span className="nodrag absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-red-500/90 px-2 py-1 text-[11px] font-medium text-white">
+                    <AlertTriangle className="size-3" />
+                    {t.pipeline.videoHistoryFailed}
+                  </span>
+                </Tooltip>
+              ) : null}
             </>
           )
         ) : (
@@ -235,6 +338,13 @@ export function VideoCanvasNode({
                 <Spin size="small" />
                 {t.pipeline.videoAiGenerating}
               </span>
+            ) : canvas.taskInfo?.status === "failed" ? (
+              <Tooltip title={canvas.taskInfo.errorMessage}>
+                <span className="flex flex-col items-center gap-2 px-5 text-center text-xs text-[var(--pl-danger)]">
+                  <AlertTriangle className="size-6" />
+                  {t.pipeline.videoHistoryFailed}
+                </span>
+              </Tooltip>
             ) : <FileVideo className="size-10 opacity-45" />}
           </div>
         )}
@@ -248,34 +358,27 @@ export function VideoCanvasNode({
           waitingForSave={waitingForSave}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+            setComposerInputDirty(false);
             setComposerOpen(false);
           }}
+          onInputDirtyChange={setComposerInputDirty}
         />
       ) : null}
 
-      <Modal
-        open={previewOpen}
-        title={canvas.name}
-        footer={null}
-        width="min(1180px, calc(100vw - 80px))"
-        onCancel={() => setPreviewOpen(false)}
-        mask={{ closable: false }}
-        keyboard={false}
-        destroyOnHidden
-      >
-        {mediaUrl ? (
-          <div className="grid h-[min(72vh,820px)] w-full place-items-center bg-black">
-            <video
-              src={mediaUrl}
-              aria-label={canvas.name}
-              controls
-              playsInline
-              preload="metadata"
-              className="max-h-full max-w-full"
-            />
-          </div>
-        ) : null}
-      </Modal>
+      <VideoGenerationHistory
+        node={node}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onNodeUpdate={(serverNode) => {
+          if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+        }}
+      />
     </article>
   );
+}
+
+function formatDuration(seconds: number) {
+  const wholeSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(wholeSeconds / 60);
+  return `${minutes}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }

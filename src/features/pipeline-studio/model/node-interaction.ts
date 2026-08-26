@@ -16,3 +16,19 @@ export function imageNodePresentation(input: {
     showUploadAction: input.selected && !input.hasImage && !input.dragging,
   };
 }
+
+export function videoNodeToolbarPresentation(input: {
+  selected: boolean;
+  dragging: boolean;
+  mediaDeferred: boolean;
+  hasVideo: boolean;
+  hasHistory: boolean;
+}) {
+  return {
+    showToolbar: input.selected
+      && !input.dragging
+      && !input.mediaDeferred
+      && (input.hasVideo || input.hasHistory),
+    showGenerateAction: input.hasVideo,
+  };
+}

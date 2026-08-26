@@ -49,6 +49,43 @@ describe("prompt compiler", () => {
     expect(result.references).toHaveLength(1);
   });
 
+  it("numbers @ references after connected bindings and reuses an identical connected resource", () => {
+    const connected = {
+      nodeId: "node-connected",
+      sourceType: "canvas-node" as const,
+      sourceId: "node-connected",
+      referenceId: "edge:edge-1",
+      mediaType: "image" as const,
+      label: "Connected",
+      role: "reference" as const,
+      artifactId: "artifact-connected",
+    } satisfies CanvasMediaReference;
+    const input = document(
+      resource("mention-connected", "node-connected", "image"),
+      { type: "text", text: "和" },
+      resource("mention-new", "node-new", "image"),
+    );
+    const resolved = new Map<string, CanvasMediaReference>([
+      ["mention-connected", connected],
+      ["mention-new", {
+        nodeId: "node-new",
+        sourceType: "canvas-node",
+        sourceId: "node-new",
+        mediaType: "image",
+        label: "New",
+        artifactId: "artifact-new",
+      }],
+    ]);
+
+    const result = compileCanvasPrompt(input, resolved, [connected]);
+
+    expect(result.prompt).toBe("图片1和图片2");
+    expect(result.references.map((reference) => [reference.referenceId, reference.order])).toEqual([
+      ["edge:edge-1", 0],
+      ["mention-new", 1],
+    ]);
+  });
+
   it("reports broken references without silently changing their meaning", () => {
     const input = document(resource("missing", "node-missing", "image"));
     expect(collectPromptResourceReferences(input)).toHaveLength(1);

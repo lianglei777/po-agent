@@ -10,6 +10,7 @@ import type {
   CanvasNode,
   CanvasNodeData,
   CanvasPromptDocument,
+  CanvasResourceRole,
   CanvasSnapshot,
   CanvasViewport,
 } from "@/contracts/pipeline";
@@ -67,6 +68,7 @@ type CanvasStoreState = CanvasDocument & {
   deleteNodes: (nodeIds: string[]) => void;
   duplicateNodes: (nodeIds: string[], offset?: { x: number; y: number }) => string[];
   createEdge: (sourceNodeId: string, targetNodeId: string, intent?: "connect" | "restore") => void;
+  updateEdgeBinding: (edgeId: string, patch: { role?: CanvasResourceRole; order?: number }) => void;
   deleteEdges: (edgeIds: string[]) => void;
   setViewport: (viewport: CanvasViewport, persist?: boolean) => void;
   undo: () => void;
@@ -426,10 +428,29 @@ export function createCanvasStore(projectId: string) {
         sourceNodeId,
         targetNodeId,
         edgeType: "references",
+        role: "reference",
+        order: state.edges
+          .filter((candidate) => candidate.targetNodeId === targetNodeId)
+          .reduce((highest, candidate) => Math.max(highest, candidate.order ?? -1), -1) + 1,
         createdAt: now,
         updatedAt: now,
       };
       commitDocument(set, get, state.nodes, [...state.edges, edge], [{ type: "edge.create", edge, intent }]);
+    },
+
+    updateEdgeBinding: (edgeId, patch) => {
+      const state = get();
+      const current = state.edges.find((edge) => edge.id === edgeId);
+      if (!current) return;
+      commitDocument(
+        set,
+        get,
+        state.nodes,
+        state.edges.map((edge) => edge.id === edgeId
+          ? { ...edge, ...patch, updatedAt: new Date().toISOString() }
+          : edge),
+        [{ type: "edge.update", edgeId, patch }],
+      );
     },
 
     deleteEdges: (edgeIds) => {
@@ -604,6 +625,12 @@ function diffDocuments(from: CanvasDocument, to: CanvasDocument, projectId: stri
   }
   for (const [id, node] of toNodes) if (!fromNodes.has(id)) mutations.push({ type: "node.create", node: { ...node, projectId } });
   for (const id of fromEdges.keys()) if (!toEdges.has(id)) mutations.push({ type: "edge.delete", edgeId: id });
+  for (const [id, edge] of toEdges) {
+    const previous = fromEdges.get(id);
+    if (previous && (previous.role !== edge.role || previous.order !== edge.order)) {
+      mutations.push({ type: "edge.update", edgeId: id, patch: { role: edge.role, order: edge.order } });
+    }
+  }
   for (const [id, edge] of toEdges) if (!fromEdges.has(id)) {
     mutations.push({ type: "edge.create", edge: { ...edge, projectId }, intent: "restore" });
   }

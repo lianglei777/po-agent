@@ -33,7 +33,7 @@ export function promptResourceBindings(
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
   if (targetNodeId) {
-    for (const edge of edges) {
+    for (const edge of [...edges].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))) {
       if (edge.targetNodeId !== targetNodeId) continue;
       const source = nodesById.get(edge.sourceNodeId);
       if (!source?.data) continue;
@@ -43,7 +43,7 @@ export function promptResourceBindings(
         sourceId: source.id,
         mediaType: source.data.type,
         label: source.data.name,
-        role: "reference",
+        role: edge.role ?? "reference",
       };
       const key = promptResourceSourceKey(reference);
       const current = bindings.get(key);

@@ -313,8 +313,8 @@ export class SqlitePipelineRepository implements PipelineRepository {
     const ts = nowIso();
     const edge: CanvasEdge = { ...input, id: randomId(), createdAt: ts, updatedAt: ts };
     this.database.prepare(
-      "INSERT INTO pipeline_canvas_edges(id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-    ).run(edge.id, edge.projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, ts, ts);
+      "INSERT INTO pipeline_canvas_edges(id, project_id, source_node_id, target_node_id, edge_type, role, sort_order, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+    ).run(edge.id, edge.projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, edge.role ?? "reference", edge.order ?? 0, ts, ts);
     return edge;
   }
 
@@ -324,8 +324,18 @@ export class SqlitePipelineRepository implements PipelineRepository {
   }
 
   async listCanvasEdges(projectId: string): Promise<CanvasEdge[]> {
-    const rows = this.database.prepare("SELECT * FROM pipeline_canvas_edges WHERE project_id = ? ORDER BY created_at ASC").all(projectId) as SqliteRow[];
+    const rows = this.database.prepare("SELECT * FROM pipeline_canvas_edges WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC").all(projectId) as SqliteRow[];
     return rows.map(canvasEdgeFromRow);
+  }
+
+  async updateCanvasEdge(id: string, patch: { role?: CanvasEdge["role"]; order?: number }): Promise<CanvasEdge | null> {
+    const current = await this.getCanvasEdge(id);
+    if (!current) return null;
+    const updated = { ...current, ...patch, updatedAt: nowIso() };
+    this.database.prepare(
+      "UPDATE pipeline_canvas_edges SET role = ?, sort_order = ?, updated_at = ? WHERE id = ?",
+    ).run(updated.role ?? "reference", updated.order ?? 0, updated.updatedAt, id);
+    return updated;
   }
 
   async deleteCanvasEdge(id: string): Promise<boolean> {
@@ -437,9 +447,18 @@ export class SqlitePipelineRepository implements PipelineRepository {
           if (Number(endpoints.count) !== 2) throw new Error("Canvas edge endpoints are invalid");
           this.database.prepare(`
             INSERT INTO pipeline_canvas_edges(
-              id, project_id, source_node_id, target_node_id, edge_type, created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?)
-          `).run(edge.id, projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, timestamp, timestamp);
+              id, project_id, source_node_id, target_node_id, edge_type, role, sort_order, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?)
+          `).run(edge.id, projectId, edge.sourceNodeId, edge.targetNodeId, edge.edgeType, edge.role ?? "reference", edge.order ?? 0, timestamp, timestamp);
+          continue;
+        }
+
+        if (mutation.type === "edge.update") {
+          this.database.prepare(`
+            UPDATE pipeline_canvas_edges
+            SET role = COALESCE(?, role), sort_order = COALESCE(?, sort_order), updated_at = ?
+            WHERE id = ? AND project_id = ?
+          `).run(mutation.patch.role ?? null, mutation.patch.order ?? null, timestamp, mutation.edgeId, projectId);
           continue;
         }
 
@@ -598,6 +617,8 @@ function canvasEdgeFromRow(row: SqliteRow): CanvasEdge {
     sourceNodeId: row.source_node_id as string,
     targetNodeId: row.target_node_id as string,
     edgeType: row.edge_type as CanvasEdge["edgeType"],
+    role: (row.role as CanvasEdge["role"] | undefined) ?? "reference",
+    order: row.sort_order == null ? 0 : Number(row.sort_order),
     createdAt: row.created_at as string | undefined,
     updatedAt: row.updated_at as string | undefined,
   };

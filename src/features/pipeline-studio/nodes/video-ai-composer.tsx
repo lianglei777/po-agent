@@ -33,11 +33,13 @@ export function VideoAiComposer({
   data,
   waitingForSave,
   onNodeUpdate,
+  onInputDirtyChange,
 }: {
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
   onNodeUpdate: (node: CanvasNode) => void;
+  onInputDirtyChange?: (dirty: boolean) => void;
 }) {
   const { t } = useI18n();
   const draftKey = composerDraftKey(nodeId, "video");
@@ -126,7 +128,12 @@ export function VideoAiComposer({
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
     setSelectedRouteId(routeId);
-    if (route) setSettings(resolvedGenerationParameters(route));
+    const nextSettings = route ? resolvedGenerationParameters(route) : {};
+    if (route) setSettings(nextSettings);
+    onInputDirtyChange?.(
+      routeId !== data.params?.routeId
+      || JSON.stringify(nextSettings) !== JSON.stringify(data.params?.settings ?? {}),
+    );
   };
 
   const submit = async () => {
@@ -186,7 +193,13 @@ export function VideoAiComposer({
       }}
       onResourceRoleChange={setResourceRole}
       onRouteChange={changeRoute}
-      onSettingsChange={setSettings}
+      onSettingsChange={(nextSettings) => {
+        setSettings(nextSettings);
+        onInputDirtyChange?.(
+          selectedRouteId !== data.params?.routeId
+          || JSON.stringify(nextSettings) !== JSON.stringify(data.params?.settings ?? {}),
+        );
+      }}
       onSubmit={() => void submit()}
       onCancel={() => void cancel()}
       onExpand={() => setExpanded(true)}

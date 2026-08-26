@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasNodeDragHandle, imageNodePresentation } from "./node-interaction";
+import { canvasNodeDragHandle, imageNodePresentation, videoNodeToolbarPresentation } from "./node-interaction";
 
 describe("canvas node interaction", () => {
   it("allows visual nodes to be dragged from their non-control body", () => {
@@ -28,5 +28,22 @@ describe("canvas node interaction", () => {
       showUploadAction: true,
     });
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: false }).showComposer).toBe(false);
+  });
+
+  it("keeps video history reachable after an empty node generation fails", () => {
+    expect(videoNodeToolbarPresentation({
+      selected: true,
+      dragging: false,
+      mediaDeferred: false,
+      hasVideo: false,
+      hasHistory: true,
+    })).toEqual({ showToolbar: true, showGenerateAction: false });
+    expect(videoNodeToolbarPresentation({
+      selected: true,
+      dragging: false,
+      mediaDeferred: false,
+      hasVideo: false,
+      hasHistory: false,
+    }).showToolbar).toBe(false);
   });
 });

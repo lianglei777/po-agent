@@ -259,6 +259,19 @@ export interface CanvasTextDocument {
   plainText: string;
 }
 
+export interface CanvasVideoMetadata {
+  durationSeconds: number;
+  width: number;
+  height: number;
+}
+
+export interface CanvasVideoSelection {
+  runId: string;
+  artifactId: string;
+  completedAt: string;
+  historical?: boolean;
+}
+
 export interface CanvasResourceReferenceAttrs {
   referenceId: string;
   sourceType: CanvasResourceSourceType;
@@ -303,6 +316,8 @@ export interface CanvasNodeData {
   workspaceFile?: CanvasWorkspaceFileRef;
   params?: CanvasGenerationParams;
   taskInfo?: CanvasNodeTaskInfo;
+  videoMetadata?: CanvasVideoMetadata;
+  videoSelection?: CanvasVideoSelection;
   group?: {
     id: string;
     name: string;
@@ -343,6 +358,8 @@ export interface CanvasEdge {
   sourceNodeId: string;
   targetNodeId: string;
   edgeType: CanvasEdgeType;
+  role?: CanvasResourceRole;
+  order?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -364,6 +381,7 @@ export type CanvasMutation =
   | { type: "node.update"; nodeId: string; patch: { positionX?: number; positionY?: number; width?: number | null; height?: number | null; data?: CanvasNodeData | null } }
   | { type: "node.delete"; nodeId: string }
   | { type: "edge.create"; edge: CanvasEdge; intent?: "connect" | "restore" }
+  | { type: "edge.update"; edgeId: string; patch: { role?: CanvasResourceRole; order?: number } }
   | { type: "edge.delete"; edgeId: string }
   | { type: "viewport.update"; viewport: CanvasViewport };
 
@@ -393,6 +411,8 @@ export interface CanvasWorkflowEdgeTemplate {
   sourceIndex: number;
   targetIndex: number;
   edgeType: CanvasEdgeType;
+  role?: CanvasResourceRole;
+  order?: number;
 }
 
 export interface CanvasWorkflow {

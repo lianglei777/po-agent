@@ -11,7 +11,7 @@ import type {
   GenerateTextNodeResponse,
 } from "@/contracts/pipeline";
 import type { ModelsResponse } from "@/contracts/models";
-import type { GenerationComposerOptionsResponse } from "@/contracts/generation";
+import type { GenerationComposerOptionsResponse, GenerationRunViewDto, ListGenerationRunsResponse } from "@/contracts/generation";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -67,6 +67,29 @@ export const pipelineStudioApi = {
     { method: "POST" },
   ),
 
+  getCanvasNodeGenerationRuns: (nodeId: string, signal?: AbortSignal) => request<ListGenerationRunsResponse>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs`,
+    { signal },
+  ),
+
+  selectCanvasNodeGenerationArtifact: (nodeId: string, runId: string, artifactId: string) => request<{ node: CanvasNode }>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/${encodeURIComponent(runId)}/select`,
+    { method: "POST", body: JSON.stringify({ artifactId }) },
+  ),
+
+  selectCanvasNodeUploadSource: (nodeId: string) => request<{ node: CanvasNode }>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/upload-source/select`,
+    { method: "POST" },
+  ),
+
+  retryCanvasNodeGeneration: (nodeId: string, runId: string, idempotencyKey: string) => request<{
+    node: CanvasNode;
+    generation: GenerationRunViewDto;
+  }>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/${encodeURIComponent(runId)}/retry`,
+    { method: "POST", body: JSON.stringify({ idempotencyKey }) },
+  ),
+
   generateText: (nodeId: string, input: GenerateTextNodeRequest) => request<GenerateTextNodeResponse>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generate-text`,
     { method: "POST", body: JSON.stringify(input) },
@@ -86,3 +109,11 @@ export const pipelineStudioApi = {
     return response.json() as Promise<{ node: CanvasNode }>;
   },
 };
+
+export function canvasNodeGenerationArtifactUrl(nodeId: string, runId: string, artifactId: string) {
+  return `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}/media`;
+}
+
+export function canvasNodeUploadSourceUrl(nodeId: string) {
+  return `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/upload-source/media`;
+}

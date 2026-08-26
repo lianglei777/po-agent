@@ -393,4 +393,15 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
       ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 11,
+    name: "pipeline_canvas_edge_bindings",
+    sql: `
+      ALTER TABLE pipeline_canvas_edges
+      ADD COLUMN role TEXT NOT NULL DEFAULT 'reference'
+        CHECK (role IN ('reference', 'first-frame', 'last-frame'));
+      ALTER TABLE pipeline_canvas_edges
+      ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0);
+    `,
+  },
 ];

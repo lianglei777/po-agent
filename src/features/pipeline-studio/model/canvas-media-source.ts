@@ -12,6 +12,15 @@ export function resolveCanvasMediaSource(
 ): CanvasMediaSource | null {
   if (!data || data.type === "text") return null;
 
+  const selectedVideoArtifactId = data.videoSelection?.artifactId;
+  if (selectedVideoArtifactId) {
+    const selectedUrl = data.url?.[0];
+    if (selectedUrl && !selectedUrl.startsWith("/api/pipeline/canvas-nodes/")) {
+      return { assetKey: `url:${selectedUrl}`, kind: "external", url: selectedUrl };
+    }
+    return localMediaSource(nodeId, `artifact:${selectedVideoArtifactId}`);
+  }
+
   const workspacePath = data.workspaceFile?.relativePath;
   if (workspacePath) return localMediaSource(nodeId, `workspace:${workspacePath}`);
 

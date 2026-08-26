@@ -44,6 +44,34 @@ describe("pipeline studio canvas store", () => {
     ]);
   });
 
+  it("persists and undoes connected resource roles", () => {
+    const store = createCanvasStore("project-1");
+    const edge = {
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: "image-1",
+      targetNodeId: "video-1",
+      edgeType: "references" as const,
+      role: "reference" as const,
+      order: 0,
+    };
+    store.getState().hydrate({ revision: 1, nodes: [], edges: [edge], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().updateEdgeBinding(edge.id, { role: "first-frame" });
+    expect(store.getState().edges[0]?.role).toBe("first-frame");
+    expect(store.getState().pendingMutations).toEqual([
+      { type: "edge.update", edgeId: edge.id, patch: { role: "first-frame" } },
+    ]);
+
+    store.getState().undo();
+    expect(store.getState().edges[0]?.role).toBe("reference");
+    expect(store.getState().pendingMutations.at(-1)).toEqual({
+      type: "edge.update",
+      edgeId: edge.id,
+      patch: { role: "reference", order: 0 },
+    });
+  });
+
   it("keeps only the latest viewport mutation", () => {
     const store = createCanvasStore("project-1");
     store.getState().hydrate({ revision: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });

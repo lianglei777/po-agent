@@ -29,10 +29,10 @@ describe("canvas connection policy", () => {
     const text = node("text", "text");
     const target = node("target", "video");
     expect(connectedCanvasReferences(target.id, [image, text, target], [
-      edge("image-edge", image.id, target.id),
+      { ...edge("image-edge", image.id, target.id), role: "first-frame", order: 0 },
       edge("text-edge", text.id, target.id),
     ])).toEqual([
-      expect.objectContaining({ referenceId: "edge:image-edge", sourceId: image.id, mediaType: "image" }),
+      expect.objectContaining({ referenceId: "edge:image-edge", sourceId: image.id, mediaType: "image", role: "first-frame" }),
       expect.objectContaining({ referenceId: "edge:text-edge", sourceId: text.id, mediaType: "text" }),
     ]);
   });

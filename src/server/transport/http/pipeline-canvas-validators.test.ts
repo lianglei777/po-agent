@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseCanvasMutationBatch, parseGenerateCanvasNodeRequest, parseGenerateTextNodeRequest } from "./pipeline-canvas-validators";
+import {
+  parseCanvasMutationBatch,
+  parseGenerateCanvasNodeRequest,
+  parseGenerateTextNodeRequest,
+  parseRetryCanvasGenerationRequest,
+  parseSelectCanvasArtifactRequest,
+} from "./pipeline-canvas-validators";
 
 const node = {
   id: "node-1",
@@ -14,6 +20,18 @@ const node = {
   createdAt: "2026-08-19T00:00:00.000Z",
   updatedAt: "2026-08-19T00:00:00.000Z",
 };
+
+describe("canvas generation history validators", () => {
+  it("accepts stable artifact and retry identifiers", () => {
+    expect(parseSelectCanvasArtifactRequest({ artifactId: "artifact-1" })).toEqual({ artifactId: "artifact-1" });
+    expect(parseRetryCanvasGenerationRequest({ idempotencyKey: " retry-1 " })).toEqual({ idempotencyKey: "retry-1" });
+  });
+
+  it("rejects missing identifiers", () => {
+    expect(() => parseSelectCanvasArtifactRequest({ artifactId: "" })).toThrow("artifactId is invalid");
+    expect(() => parseRetryCanvasGenerationRequest({ idempotencyKey: " " })).toThrow("idempotencyKey is invalid");
+  });
+});
 
 describe("parseCanvasMutationBatch", () => {
   it("accepts a bounded node creation batch", () => {
@@ -101,6 +119,44 @@ describe("parseGenerateTextNodeRequest", () => {
   it("rejects an empty instruction", () => {
     expect(() => parseGenerateTextNodeRequest({ instruction: "   ", mode: "generate" }))
       .toThrow("instruction is invalid");
+  });
+
+  it("accepts a persisted edge role update", () => {
+    expect(parseCanvasMutationBatch({
+      baseRevision: 3,
+      requestId: "request-edge-role",
+      mutations: [{ type: "edge.update", edgeId: "edge-1", patch: { role: "first-frame", order: 1 } }],
+    }).mutations[0]).toEqual({
+      type: "edge.update",
+      edgeId: "edge-1",
+      patch: { role: "first-frame", order: 1 },
+    });
+  });
+
+  it("validates persisted video metadata", () => {
+    const videoNode = {
+      ...node,
+      type: "video" as const,
+      data: {
+        type: "video" as const,
+        name: "Video",
+        action: "video_generate",
+        videoMetadata: { durationSeconds: 5.2, width: 1920, height: 1080 },
+      },
+    };
+    expect(parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "video-metadata",
+      mutations: [{ type: "node.create", node: videoNode }],
+    }).mutations).toHaveLength(1);
+    expect(() => parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "invalid-video-metadata",
+      mutations: [{
+        type: "node.create",
+        node: { ...videoNode, data: { ...videoNode.data, videoMetadata: { durationSeconds: -1, width: 0, height: 1080 } } },
+      }],
+    })).toThrow("videoMetadata is invalid");
   });
 
   it("accepts restore intent and rejects unknown edge creation intents", () => {
