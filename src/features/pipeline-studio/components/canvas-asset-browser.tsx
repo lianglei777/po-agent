@@ -48,12 +48,12 @@ export function CanvasAssetBrowser({
     : [])), [nodes]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="grid grid-cols-2 border-b border-[var(--pl-border)]">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--pl-surface)]">
+      <div className="flex h-12 items-center gap-1 border-b border-[var(--pl-border)] px-3">
         <TabButton active={tab === "canvas"} onClick={() => setTab("canvas")}>{t.pipeline.canvasElements}</TabButton>
         <TabButton active={tab === "assets"} onClick={() => setTab("assets")}>{t.pipeline.canvasProjectAssets}</TabButton>
       </div>
-      <label className="mx-2.5 mt-2.5 flex h-8 items-center gap-2 rounded-md border border-[var(--pl-border)] bg-[var(--pl-surface)] px-2.5 focus-within:border-[var(--pl-accent)]">
+      <label className="mx-3 mt-3 flex h-8 items-center gap-2 rounded-md bg-[var(--pl-surface-subtle)] px-2.5 transition-colors hover:bg-[var(--pl-surface-hover)] focus-within:ring-1 focus-within:ring-[var(--pl-accent-hover)]">
         <Search className="size-3.5 text-[var(--pl-text-muted)]" />
         <span className="sr-only">{t.pipeline.canvasAssetSearch}</span>
         <input
@@ -64,20 +64,20 @@ export function CanvasAssetBrowser({
         />
       </label>
       {tab === "canvas" ? (
-        <div className="flex gap-0.5 overflow-x-auto px-2.5 py-2">
+        <div className="flex gap-0.5 overflow-x-auto px-3 py-2.5">
           {(["all", "text", "image", "video", "audio"] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setFilter(value)}
-              className={`h-6 shrink-0 rounded-md px-2 text-caption transition-colors ${filter === value ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)]"}`}
+              className={`h-6 shrink-0 rounded-md px-2 text-caption font-medium transition-colors ${filter === value ? "bg-[var(--pl-surface-hover)] text-[var(--pl-text)]" : "text-[var(--pl-text-muted)] hover:text-[var(--pl-text-secondary)]"}`}
             >
               {mediaFilterLabel(value, t.pipeline)}
             </button>
           ))}
         </div>
       ) : <div className="h-2" />}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2.5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {tab === "canvas" ? (
           canvasItems.length ? canvasItems.map((node) => (
             <ResourceRow
@@ -114,7 +114,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     <button
       type="button"
       onClick={onClick}
-      className={`h-9 border-b-2 px-2 text-caption font-medium transition-colors ${active ? "border-[var(--pl-accent)] text-[var(--pl-text)]" : "border-transparent text-[var(--pl-text-muted)] hover:text-[var(--pl-text)]"}`}
+      className={`h-8 rounded-md px-3 text-xs font-medium transition-colors ${active ? "bg-[var(--pl-surface-hover)] text-[var(--pl-text)]" : "text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-subtle)] hover:text-[var(--pl-text)]"}`}
     >
       {children}
     </button>
@@ -135,11 +135,11 @@ function ResourceRow({ mediaType, label, meta, previewNode, disabled = false, on
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="group flex h-11 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-[var(--pl-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-default disabled:opacity-45"
+      className="group flex h-11 w-full items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-[var(--pl-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent-hover)] disabled:cursor-default disabled:opacity-45"
     >
-      <ResourceThumbnail node={previewNode} mediaType={mediaType} label={label} fallback={<Icon className="size-3.5 text-[var(--pl-text-secondary)]" />} />
+      <ResourceThumbnail node={previewNode} mediaType={mediaType} label={label} fallback={<Icon className="size-3.5 text-[var(--pl-text-muted)]" />} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-caption font-medium leading-4 text-[var(--pl-text)]">{label}</span>
+        <span className="block truncate text-xs font-medium leading-4 text-[var(--pl-text)]">{label}</span>
         {meta ? <span className="block truncate text-caption leading-3.5 text-[var(--pl-text-muted)]">{meta}</span> : null}
       </span>
     </button>

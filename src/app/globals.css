@@ -338,6 +338,26 @@ body {
   color-scheme: dark;
 }
 
+/* Drawer 通过 Portal 挂到 body，无法继承 Pipeline 容器变量；在面板根节点重新建立暖黑主题桥接。 */
+.pipeline-asset-drawer {
+  --pl-surface: #151515;
+  --pl-surface-glass: #151515;
+  --pl-surface-elevated: #1b1b1b;
+  --pl-surface-subtle: #1d1d1d;
+  --pl-surface-hover: #262626;
+  --pl-border: #303030;
+  --pl-border-strong: #444;
+  --pl-text: #f2f2f2;
+  --pl-text-secondary: #c4c4c4;
+  --pl-text-muted: #7f7f7f;
+  --pl-accent: #1668dc;
+  --pl-accent-hover: #4096ff;
+  --pl-accent-soft: rgb(64 150 255 / 14%);
+  background: var(--pl-surface);
+  color: var(--pl-text);
+  color-scheme: dark;
+}
+
 /* 持久选区使用独立伪元素外扩，避免 React Flow 的缩放变换让 outline 在松手后丢失。 */
 .pipeline-studio-shell .react-flow__nodesselection-rect {
   border: 0;

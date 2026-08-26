@@ -1,8 +1,8 @@
 "use client";
 
-import { Button, Popconfirm, Spin } from "antd";
+import { Button, Popconfirm, Spin, Tooltip } from "antd";
 import type { ProjectSummary } from "@/contracts/pipeline";
-import { FolderOpen, Plus, Project, Trash2 } from "@/components/icons";
+import { Folder, FolderOpen, Plus, Project, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 
 export type ProjectListViewProps = {
@@ -44,24 +44,19 @@ export function ProjectListView({
           </div>
         ) : (
           <>
-            <div className="grid max-w-[1280px] grid-cols-[repeat(auto-fill,minmax(240px,280px))] gap-x-5 gap-y-6">
+            <div className="grid max-w-[1280px] grid-cols-[repeat(auto-fill,minmax(260px,280px))] items-start gap-4">
               <button
                 type="button"
                 onClick={onNewProject}
-                className="group text-left focus-visible:outline-none"
+                className="group flex h-[152px] w-full flex-col rounded-xl border border-dashed border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-4 text-left transition-[background-color,border-color,transform] hover:border-[var(--pl-accent)] hover:bg-[var(--pl-surface-hover)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent)]"
               >
-                <div className="flex aspect-[16/10] items-center justify-center rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] transition-colors group-hover:border-[var(--pl-accent)] group-hover:bg-[var(--pl-surface-hover)] group-focus-visible:border-[var(--pl-accent)]">
-                  <span className="flex flex-col items-center gap-3 text-[var(--pl-text-secondary)] transition-colors group-hover:text-[var(--pl-text)]">
-                    <span className="flex size-11 items-center justify-center rounded-full border border-[var(--pl-border-strong)] bg-[var(--pl-surface)]">
-                      <Plus className="size-5" />
-                    </span>
-                    <span className="text-sm font-semibold">{t.pipeline.startCreating}</span>
-                  </span>
-                </div>
-                <div className="px-1 pt-3">
-                  <div className="text-sm font-medium text-[var(--pl-text)]">{t.pipeline.newProject}</div>
-                  <div className="mt-1 text-xs text-[var(--pl-text-muted)]">{t.pipeline.createProjectHint}</div>
-                </div>
+                <span className="flex size-10 items-center justify-center rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-text-secondary)] transition-colors group-hover:text-[var(--pl-accent-hover)]">
+                  <Plus className="size-[18px]" />
+                </span>
+                <span className="mt-auto block min-w-0">
+                  <span className="block text-sm font-semibold text-[var(--pl-text)]">{t.pipeline.newProject}</span>
+                  <span className="mt-1 block text-caption text-[var(--pl-text-muted)]">{t.pipeline.createProjectHint}</span>
+                </span>
               </button>
 
               {projects.map((project) => (
@@ -75,9 +70,6 @@ export function ProjectListView({
               ))}
             </div>
 
-            <p className="max-w-[1280px] py-12 text-center text-xs text-[var(--pl-text-muted)]">
-              {projects.length ? t.pipeline.noMoreProjects : t.pipeline.emptyTitle}
-            </p>
           </>
         )}
       </section>
@@ -104,28 +96,31 @@ function ProjectCard({
   }).format(new Date(project.updatedAt));
 
   return (
-    <article className="group relative min-w-0">
-      <button type="button" onClick={onOpen} className="block w-full text-left focus-visible:outline-none">
-        <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden rounded-xl border border-[var(--pl-border)] bg-[var(--pl-project-card)] transition-colors group-hover:border-[var(--pl-border-strong)] group-focus-within:border-[var(--pl-accent)]">
-          <div className="absolute left-5 top-5 h-9 w-14 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
-          <div className="absolute bottom-5 right-5 h-12 w-20 rounded-lg border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]" aria-hidden="true" />
-          <span className="flex size-12 items-center justify-center rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-accent)]">
-            <Project className="size-5" />
-          </span>
-        </div>
-        <div className="px-1 pt-3">
+    <article className="group relative h-[152px] min-w-0">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-full w-full flex-col rounded-xl border border-[var(--pl-border)] bg-[var(--pl-project-card)] p-4 pr-12 text-left transition-[background-color,border-color,transform] hover:border-[var(--pl-border-strong)] hover:bg-[var(--pl-surface-elevated)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent)]"
+      >
+        <span className="flex size-10 items-center justify-center rounded-lg border border-[var(--pl-border-strong)] bg-[var(--pl-surface)] text-[var(--pl-accent)]">
+          <Project className="size-[18px]" />
+        </span>
+        <span className="mt-auto block min-w-0 w-full">
           <h3 className="truncate text-sm font-semibold text-[var(--pl-text)]">{project.title}</h3>
           <time
             dateTime={project.updatedAt}
             aria-label={`${t.pipeline.updatedAt} ${updatedAt}`}
-            className="mt-1 block text-xs tabular-nums text-[var(--pl-text-muted)]"
+            className="mt-1 block text-caption tabular-nums text-[var(--pl-text-muted)]"
           >
             {updatedAt}
           </time>
-          <p className="mt-1 truncate text-xs text-[var(--pl-text-muted)]" title={project.rootPath}>
-            {project.rootPath}
-          </p>
-        </div>
+          <Tooltip mouseEnterDelay={0.35} placement="bottomLeft" title={project.rootPath}>
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 text-caption text-[var(--pl-text-muted)]">
+              <Folder className="size-3.5 shrink-0" />
+              <span className="truncate font-ui-mono">{project.rootPath}</span>
+            </span>
+          </Tooltip>
+        </span>
       </button>
 
       <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">

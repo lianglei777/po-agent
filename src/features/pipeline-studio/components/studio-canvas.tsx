@@ -557,9 +557,14 @@ export function StudioCanvas({
       <Drawer
         open={assetsOpen}
         onClose={() => setAssetsOpen(false)}
-        title={t.pipeline.canvasAssetManagement}
+        classNames={{ section: "pipeline-asset-drawer" }}
+        title={(
+          <span className="text-sm font-medium text-[var(--pl-text-secondary)]">
+            {t.pipeline.canvasAssetManagement}
+          </span>
+        )}
         closable={false}
-        size={312}
+        size={288}
         placement="left"
         mask={false}
         footer={(
@@ -574,15 +579,16 @@ export function StudioCanvas({
                 <ArrowLeft className="size-5" />
               </button>
             </Tooltip>
-            <span className="text-meta tabular-nums text-[var(--pl-text-secondary)]">
+            <span className="text-caption tabular-nums text-[var(--pl-text-muted)]">
               {t.pipeline.canvasNodeCount.replace("{count}", String(nodes.length))}
             </span>
           </div>
         )}
         styles={{
-          header: { minHeight: 44, padding: "8px 12px" },
-          body: { padding: 0 },
-          footer: { height: 64, padding: "0 16px", borderTopColor: "var(--pl-border)" },
+          section: { background: "var(--pl-surface)", borderRight: "1px solid var(--pl-border)", boxShadow: "none" },
+          header: { minHeight: 48, padding: "8px 16px", background: "var(--pl-surface)", borderBottom: "1px solid var(--pl-border)" },
+          body: { padding: 0, background: "var(--pl-surface)" },
+          footer: { height: 52, padding: "0 12px", background: "var(--pl-surface)", borderTop: "1px solid var(--pl-border)" },
         }}
       >
         <CanvasAssetBrowser projectId={projectId} nodes={nodes} onLocateNode={locateNode} />
@@ -688,7 +694,7 @@ function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisib
   const { t } = useI18n();
   const zoomPercentage = Math.round(zoom * 100);
   return (
-    <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${assetsOpen ? "translate-x-[308px]" : "translate-x-0"}`}>
+    <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${assetsOpen ? "translate-x-[284px]" : "translate-x-0"}`}>
       {!assetsOpen ? <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} /> : null}
       <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<Project className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
       <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<LineSquiggle className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />

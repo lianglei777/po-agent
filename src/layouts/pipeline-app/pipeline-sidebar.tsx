@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Tooltip } from "antd";
 import {
-  ArrowLeft,
+  Bot,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -58,16 +58,6 @@ export function PipelineSidebar({
         ) : null}
 
         <div className={"flex shrink-0 " + (collapsed ? "flex-col gap-1" : "gap-1")}>
-          <Tooltip mouseEnterDelay={0.35} placement="bottom" title={t.pipeline.backToAgent}>
-            <button
-              type="button"
-              onClick={() => setMode("agent")}
-              aria-label={t.pipeline.backToAgent}
-              className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent)]"
-            >
-              <ArrowLeft className="size-[17px]" />
-            </button>
-          </Tooltip>
           <Tooltip
             mouseEnterDelay={0.35}
             placement="bottom"
@@ -136,6 +126,27 @@ export function PipelineSidebar({
           })}
         </div>
       </nav>
+
+      <div className={"mt-auto border-t border-[var(--pl-border)] " + (collapsed ? "p-2" : "p-3")}>
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement="right"
+          title={collapsed ? t.pipeline.backToAgent : undefined}
+        >
+          <button
+            type="button"
+            onClick={() => setMode("agent")}
+            aria-label={t.pipeline.backToAgent}
+            className={
+              "flex min-h-9 w-full items-center rounded-lg text-[var(--pl-text-secondary)] transition-[background-color,color,transform] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)] " +
+              (collapsed ? "justify-center px-2" : "gap-3 px-3")
+            }
+          >
+            <Bot className="size-[17px] shrink-0" />
+            {!collapsed ? <span className="truncate text-sm font-medium">{t.pipeline.backToAgent}</span> : null}
+          </button>
+        </Tooltip>
+      </div>
     </aside>
   );
 }
