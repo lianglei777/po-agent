@@ -129,20 +129,26 @@ describe("QianwenAdapter", () => {
     });
   });
 
-  it("rejects assets until the OSS preparation stage is implemented", async () => {
-    const adapter = new QianwenAdapter(vi.fn() as unknown as typeof fetch);
-
+  it("uploads assets with a model-bound policy and no API authorization on OSS", async () => {
+    const imageRoute = createQianwenRoutes().find((route) => route.capability === "image-to-video")!;
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ data: { policy: "policy", signature: "signature", upload_dir: "dashscope-instant/account/day/id", upload_host: "https://dashscope-file-bj.oss-cn-beijing.aliyuncs.com", expire_in_seconds: 300, max_file_size_mb: 100, oss_access_key_id: "access", x_oss_object_acl: "private", x_oss_forbid_overwrite: "true" } }))
+      .mockResolvedValueOnce(new Response("", { status: 200 }));
+    const adapter = new QianwenAdapter(fetcher, () => new Date("2026-08-27T00:00:00.000Z"));
     await expect(adapter.prepareAssets({
-      operation: ROUTE.providerOperation,
-      executionConfig: ROUTE.adapterConfig,
+      operation: imageRoute.providerOperation,
+      executionConfig: imageRoute.adapterConfig,
       assets: [{
         slot: "firstFrameUrl",
-        name: "frame.png",
+        name: "../frame.png",
         mimeType: "image/png",
         data: new Uint8Array([1]),
       }],
       credential: "secret-key",
-    })).rejects.toMatchObject({ code: "GENERATION_OPERATION_UNSUPPORTED" });
+    })).resolves.toMatchObject([{ reference: { kind: "dashscope-oss", url: "oss://dashscope-instant/account/day/id/frame.png", vendorModel: "wan3.0-video" }, expiresAt: "2026-08-28T23:00:00.000Z" }]);
+    expect(fetcher.mock.calls[0][0]).toContain("model=wan3.0-video");
+    expect(fetcher.mock.calls[1][1]?.headers).toBeUndefined();
+    expect(fetcher.mock.calls[1][1]?.body).toBeInstanceOf(FormData);
   });
 
   it("downloads only allowlisted DashScope result hosts without redirects", async () => {

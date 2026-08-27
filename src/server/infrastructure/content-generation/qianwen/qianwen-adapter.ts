@@ -16,6 +16,7 @@ import {
   buildQianwenRequest,
   resolveQianwenExecutionConfig,
 } from "./qianwen-request-builder";
+import { QianwenUploadClient } from "./qianwen-upload-client";
 
 const API_ORIGIN = "https://dashscope.aliyuncs.com/api/v1";
 const VIDEO_SYNTHESIS_URL = `${API_ORIGIN}/services/aigc/video-generation/video-synthesis`;
@@ -24,7 +25,8 @@ const DOWNLOAD_LIMIT_BYTES = 500 * 1024 * 1024;
 export class QianwenAdapter implements GenerationProvider {
   readonly providerId = QIANWEN_PROVIDER_ID;
 
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  private readonly uploads: QianwenUploadClient;
+  constructor(private readonly fetcher: typeof fetch = fetch, now: () => Date = () => new Date()) { this.uploads = new QianwenUploadClient(fetcher, now); }
 
   async prepareAssets(input: {
     operation: string;
@@ -33,15 +35,9 @@ export class QianwenAdapter implements GenerationProvider {
     credential: string;
   }): Promise<PreparedGenerationAsset[]> {
     resolveQianwenExecutionConfig(input.operation, input.executionConfig);
-    if (input.assets.length > 0) {
-      // 首阶段只开放文生视频；素材上传必须等 OSS 临时 URL 生命周期完整实现后再启用。
-      throw new AppError(
-        "GENERATION_OPERATION_UNSUPPORTED",
-        "Qianwen Wan 3.0 text-to-video does not accept input assets",
-        400,
-      );
-    }
-    return [];
+    const prepared: PreparedGenerationAsset[]=[];
+    for(const asset of input.assets)prepared.push(await this.uploads.upload(asset,input.credential,"wan3.0-video"));
+    return prepared;
   }
 
   async submit(input: {
@@ -52,19 +48,12 @@ export class QianwenAdapter implements GenerationProvider {
     credential: string;
   }): Promise<ProviderSubmitResult> {
     const config = resolveQianwenExecutionConfig(input.operation, input.executionConfig);
-    if (input.assets.length > 0) {
-      throw new AppError(
-        "GENERATION_OPERATION_UNSUPPORTED",
-        "Qianwen Wan 3.0 text-to-video does not accept prepared assets",
-        400,
-      );
-    }
-    const body = buildQianwenRequest(config, input.generation);
+    const body = buildQianwenRequest(config, input.generation, input.assets);
     const response = await this.requestJson(VIDEO_SYNTHESIS_URL, input.credential, {
       method: "POST",
       headers: { "X-DashScope-Async": "enable" },
       body: JSON.stringify(body),
-    });
+    }, input.assets.length > 0);
     return {
       ...normalizeResponse(response, config.pollIntervalMs),
       requestSnapshot: createGenerationProviderSnapshot(body),
@@ -125,12 +114,14 @@ export class QianwenAdapter implements GenerationProvider {
     url: string,
     credential: string,
     init: Pick<RequestInit, "method" | "body" | "headers">,
+    resolvesOss = false,
   ): Promise<unknown> {
     const response = await this.fetcher(url, {
       ...init,
       headers: {
         Authorization: `Bearer ${credential}`,
         "Content-Type": "application/json",
+        ...(resolvesOss ? { "X-DashScope-OssResourceResolve": "enable" } : {}),
         ...init.headers,
       },
       redirect: "error",

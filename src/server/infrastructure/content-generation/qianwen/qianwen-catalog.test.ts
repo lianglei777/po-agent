@@ -16,7 +16,7 @@ describe("Qianwen catalog", () => {
       capability: "text-to-video",
       enabled: false,
       isDefault: false,
-      revision: 1,
+      revision: 2,
       credentialRef: "qianwen:default",
       defaults: {
         resolution: "1080P",
@@ -31,7 +31,7 @@ describe("Qianwen catalog", () => {
         protocol: "dashscope-media-v1",
         endpointId: "video-synthesis",
         vendorModel: "wan3.0-video",
-        requestProfile: "wan-3-text-to-video-v1",
+        requestProfile: "wan-3-video-v1",
         resultProfile: "video-url-v1",
         pollIntervalMs: 15_000,
       },

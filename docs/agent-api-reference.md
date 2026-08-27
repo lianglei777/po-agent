@@ -2518,7 +2518,7 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
 
-千问AI平台当前内置 `qianwen-wan-3-0-text-to-video` Route，对应 `wan3.0-video` 文生视频。该 Route 使用 `text-to-video` capability，支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数。`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长；当前阶段不接受输入素材。
+千问AI平台当前内置 `qianwen-wan-3-0-text-to-video`、`qianwen-wan-3-0-image-to-video` 和 `qianwen-wan-3-0-multimodal-to-video` Route，对应 `wan3.0-video` 的文生、首帧/首尾帧和图视音多模态生成。Route 支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数；`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长。
 
 各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
 
@@ -2693,6 +2693,7 @@ DELETE /api/generation/credentials/:providerId
 - Worker 使用 lease claim 推进到期 Job，页面断开不会取消 Run。
 - 轮询失败保留 remote task ID 并延迟重试。
 - 千问 Wan 3.0 视频任务按供应商建议使用 15 秒轮询间隔；成功 URL 会立即下载到 workspace，不能把供应商的 24 小时 URL 当作长期产物。
+- 千问本地素材使用与冻结模型绑定的临时 OSS Policy 逐文件上传；prepared asset 记录 47 小时安全有效期，过期且尚未提交时由 Worker 重新准备。Policy、Signature 和临时 AccessKey 不进入 Job 快照。
 - `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
 - 成功产物下载到 `<workspace>/.po-agent/generated/<runId>/`。
 
