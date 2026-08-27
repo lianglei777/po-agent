@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "antd";
+import { Button, Tooltip } from "antd";
 import type {
   ApiKeyProvider,
   ModelsJson,
   Selection,
 } from "../types";
 import { useI18n } from "@/i18n/use-i18n";
-import { ChevronRight, Plus, Server } from "@/components/icons";
+import { Brain, ChevronRight, Plus, Server } from "@/components/icons";
 import {
   getSelectionKey,
   isProviderCollapsed,
@@ -151,9 +151,13 @@ export function ModelProviderSidebar({
                     <span className="truncate text-meta text-muted">
                       {model.id}
                     </span>
-                    {model.reasoning !== false && (
-                      <span className="ml-auto text-meta text-accent-deep">T</span>
-                    )}
+                    {model.reasoning !== false ? (
+                      <Tooltip title={t.models.reasoningThinking}>
+                        <span className="ml-auto inline-flex text-accent-hover">
+                          <Brain aria-hidden="true" className="size-3.5" />
+                        </span>
+                      </Tooltip>
+                    ) : null}
                   </NavButton>
                 ))}
             </div>

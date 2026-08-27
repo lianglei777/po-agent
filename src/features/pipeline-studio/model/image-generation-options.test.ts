@@ -5,6 +5,8 @@ import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute }
 const route = (id: string, capability: GenerationRouteDto["capability"], isDefault = false): GenerationRouteDto => ({
   id,
   name: id,
+  description: `${id} description`,
+  tags: [id],
   capability,
   product: "Product",
   providerId: "provider",

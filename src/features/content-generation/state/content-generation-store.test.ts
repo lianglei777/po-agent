@@ -8,6 +8,8 @@ import { createContentGenerationStore } from "./content-generation-store";
 const route = (id: string, enabled = true): GenerationRouteDto => ({
   id,
   name: id,
+  description: `${id} description`,
+  tags: [id],
   capability: "text-to-image",
   product: "Test Product",
   providerId: "provider",
@@ -72,6 +74,32 @@ describe("content generation store", () => {
     });
     store.getState().updateRoute(route("route-a", false));
     expect(store.getState().selectedRouteId).toBe("route-b");
+  });
+
+  it("demotes the previous local default when a new default response arrives", () => {
+    const first = { ...route("route-a"), isDefault: true };
+    const second = route("route-b");
+    const store = createContentGenerationStore({ routes: [first, second] });
+
+    store.getState().updateRoute({ ...second, isDefault: true });
+
+    expect(store.getState().routes).toMatchObject([
+      { id: "route-a", isDefault: false },
+      { id: "route-b", isDefault: true },
+    ]);
+  });
+
+  it("mirrors the server fallback when the active default is disabled", () => {
+    const first = { ...route("route-a"), isDefault: true };
+    const second = route("route-b");
+    const store = createContentGenerationStore({ routes: [first, second] });
+
+    store.getState().updateRoute({ ...first, enabled: false, isDefault: false });
+
+    expect(store.getState().routes).toMatchObject([
+      { id: "route-a", enabled: false, isDefault: false },
+      { id: "route-b", enabled: true, isDefault: true },
+    ]);
   });
 
   it("starts a fresh settings load without clearing shared route data", () => {

@@ -58,7 +58,13 @@ export async function planGenerationTurn(
     return generationPlan(selected, input.message, decision.effectivePrompt, decision.parameters);
   }
 
-  const route = candidates.find((candidate) => candidate.isDefault) ?? candidates[0];
+  // 模型只提供候选建议；服务端仍验证启用状态和 capability，非法建议回退到稳定默认 Route。
+  const suggested = decision.routeId
+    ? candidates.find((candidate) => candidate.id === decision.routeId)
+    : undefined;
+  const route = suggested
+    ?? candidates.find((candidate) => candidate.isDefault)
+    ?? candidates[0];
   if (!route) {
     return { type: "invalid", message: `No enabled API supports ${decision.capability}` };
   }

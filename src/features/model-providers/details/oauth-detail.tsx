@@ -134,7 +134,7 @@ export default function OAuthDetail({
 
   const working = !["idle", "success", "error"].includes(state.phase);
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <SectionTitle>{t.models.subscription}</SectionTitle>
         <span className="text-meta text-dim">

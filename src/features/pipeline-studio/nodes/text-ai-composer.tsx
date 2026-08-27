@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import type { ModelInfo } from "@/contracts/models";
 import type { CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
-import { LoaderCircle, Maximize2, Send, Sparkles } from "@/components/icons";
+import { Brain, LoaderCircle, Maximize2, Send } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
+import { CanvasModelPicker } from "./shared/canvas-model-picker";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 
 export function TextAiComposer({
@@ -217,20 +218,29 @@ function ComposerSurface({
       )}
       footer={(
         <>
-        <Sparkles className="size-4 shrink-0 text-[var(--pl-accent)]" />
-        <label className="sr-only" htmlFor={`text-ai-model-${large ? "large" : "inline"}`}>{t.pipeline.textAiModel}</label>
-        <select
-          id={`text-ai-model-${large ? "large" : "inline"}`}
+        <CanvasModelPicker
+          ariaLabel={t.pipeline.textAiModel}
           value={selectedModel}
           disabled={loadingModels || generating || !models.length}
-          onChange={(event) => onModelChange(event.target.value)}
-          className="nodrag h-8 min-w-0 max-w-64 rounded-lg border border-transparent bg-transparent px-2 text-xs text-[var(--pl-text-secondary)] outline-none hover:border-[var(--pl-border)] focus:border-[var(--pl-accent)] disabled:opacity-50"
-        >
-          {!models.length ? <option value="">{loadingModels ? t.pipeline.textAiModelLoading : t.pipeline.textAiNoModels}</option> : null}
-          {models.map((model) => <option key={modelValue(model)} value={modelValue(model)}>{model.name} · {model.provider}</option>)}
-        </select>
+          emptyLabel={loadingModels ? t.pipeline.textAiModelLoading : t.pipeline.textAiNoModels}
+          onChange={onModelChange}
+          getPopupContainer={tooltipContainer}
+          items={models.map((model) => ({
+            id: modelValue(model),
+            name: model.name,
+            group: model.provider,
+            meta: model.provider,
+            description: t.pipeline.generationTextModelDescription.replace("{provider}", model.provider),
+            tags: [
+              ...(model.input?.includes("image") ? [t.pipeline.generationVisionInput] : []),
+              ...(model.thinkingLevels.length ? [t.pipeline.generationReasoning] : []),
+              ...(model.contextWindow ? [t.pipeline.generationContextWindow.replace("{count}", formatCompactNumber(model.contextWindow))] : []),
+            ],
+            icon: <Brain className="size-3.5" />,
+          }))}
+        />
         {referenceCount ? (
-          <span className="hidden truncate text-[10px] text-[var(--pl-text-muted)] sm:block">
+          <span className="hidden truncate text-caption text-[var(--pl-text-muted)] sm:block">
             {t.pipeline.textAiReferences.replace("{count}", String(referenceCount))}
           </span>
         ) : null}
@@ -242,7 +252,7 @@ function ComposerSurface({
             disabled={Boolean(disabledReason) || generating}
             aria-label={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
             onClick={onSubmit}
-            className="flex size-9 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
+            className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
           >
             {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
           </button>
@@ -255,4 +265,12 @@ function ComposerSurface({
 
 function modelValue(model: ModelInfo | undefined) {
   return model ? `${model.provider}:${model.id}` : "";
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+function tooltipContainer(trigger: HTMLElement) {
+  return trigger.closest<HTMLElement>(".pipeline-studio-shell") ?? document.body;
 }

@@ -20,11 +20,12 @@ Rules:
 - Resolve references such as "it", "that image", or a named character from conversation context.
 - For generation, write effectivePrompt as a self-contained instruction for the selected media API. Preserve all concrete user constraints and relevant context. Do not invent major creative requirements.
 - Keep effectivePrompt under 1200 Chinese characters or 2400 Latin characters.
-- Choose exactly one capability from the supplied routes. Return only parameters declared by routes supporting that capability.
+- Choose exactly one enabled route from the supplied routes and return both its capability and routeId. Use the route description, tags, accepted assets, and parameters to match the user's stated quality, duration, input, output, and feature requirements. Do not select a route for brand preference the user did not express.
+- Return only parameters declared by the selected route.
 - Return one JSON object and no markdown.
 
 Schema:
-{"intent":"chat|attachment-understanding|generation|clarification","capability":"text-to-image|image-to-image|text-to-video|image-to-video|multimodal-to-video","effectivePrompt":"string","parameters":{},"question":"string"}`;
+{"intent":"chat|attachment-understanding|generation|clarification","capability":"text-to-image|image-to-image|text-to-video|image-to-video|multimodal-to-video","routeId":"one supplied route id","effectivePrompt":"string","parameters":{},"question":"string"}`;
 
 export class PiGenerationIntentClassifier implements GenerationIntentClassifier {
   constructor(private readonly runtime: Promise<ModelRuntime>) {}
@@ -52,7 +53,11 @@ export class PiGenerationIntentClassifier implements GenerationIntentClassifier 
       recentGenerationRuns: input.recentRuns,
       availableRoutes: input.routes.map((route) => ({
         id: route.id,
+        name: route.name,
+        product: route.product,
         capability: route.capability,
+        description: route.description,
+        tags: route.tags,
         parameterSchema: route.inputSchema.parameters ?? [],
         assetSchema: route.inputSchema.assets ?? [],
       })),
@@ -175,6 +180,9 @@ function decisionFromJson(value: PiJsonValue): GenerationIntentDecision | null {
   return {
     intent,
     capability,
+    routeId: typeof (value.routeId ?? value.route_id) === "string"
+      ? String(value.routeId ?? value.route_id)
+      : undefined,
     effectivePrompt: typeof (value.effectivePrompt ?? value.effective_prompt ?? value.prompt) === "string"
       ? String(value.effectivePrompt ?? value.effective_prompt ?? value.prompt)
       : undefined,

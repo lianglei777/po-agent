@@ -77,9 +77,9 @@ describe("chat execution process visual contract", () => {
   });
 
   it("uses Codex-like neutral message and tool surfaces", () => {
-    expect(source).toContain("max-w-[78%] rounded-2xl bg-[var(--user-bg)]");
+    expect(source).toContain("max-w-[78%] rounded-floating bg-[var(--user-bg)]");
     expect(source).toContain(
-      "rounded-2xl border border-line-subtle bg-[var(--tool-bg)]",
+      "rounded-floating border border-line-subtle bg-[var(--tool-bg)]",
     );
     expect(source).toContain("[&_code]:rounded");
     expect(source).not.toContain("border border-line-subtle bg-[var(--user-bg)]");

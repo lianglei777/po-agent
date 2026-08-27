@@ -283,6 +283,95 @@ describe("RunningHubAdapter", () => {
       seed: 42,
     });
   });
+
+  it.each([
+    ["minimax-hailuo-h3-text-to-video", "/openapi/v2/minimax/hailuo-h3/text-to-video"],
+    ["minimax-hailuo-h3-image-to-video", "/openapi/v2/minimax/hailuo-h3/image-to-video"],
+    ["minimax-hailuo-h3-multimodal-video", "/openapi/v2/minimax/hailuo-h3/multimodal-to-video"],
+    ["pixverse-v6-text-to-video", "/openapi/v2/pixverse-v6/text-to-video"],
+    ["pixverse-v6-image-to-video", "/openapi/v2/pixverse-v6/image-to-video"],
+    ["wan-2-7-text-to-video", "/openapi/v2/alibaba/wan-2.7/text-to-video"],
+    ["wan-2-7-image-to-video", "/openapi/v2/alibaba/wan-2.7/image-to-video"],
+    ["wan-2-7-reference-to-video", "/openapi/v2/alibaba/wan-2.7/reference-to-video"],
+    ["wan-3-image-to-video", "/openapi/v2/alibaba/wan-3.0/image-to-video"],
+    ["wan-3-reference-to-video", "/openapi/v2/alibaba/wan-3.0/reference-to-video"],
+  ])("submits %s to its trusted endpoint", async (operation, path) => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      taskId: "new-operation",
+      status: "RUNNING",
+    }));
+    const adapter = new RunningHubAdapter(fetcher as typeof fetch);
+
+    await adapter.submit({
+      operation,
+      generation: { prompt: "complete generation prompt" },
+      assets: [],
+      credential: "secret-key",
+    });
+
+    expect(fetcher.mock.calls[0][0]).toBe(`https://www.runninghub.cn${path}`);
+  });
+
+  it("maps MiniMax, PixVerse, Wan 2.7 and Wan 3.0 semantic fields", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      taskId: "mapped-operation",
+      status: "RUNNING",
+    }));
+    const adapter = new RunningHubAdapter(fetcher as typeof fetch);
+    const image = { slot: "firstFrameUrl", name: "first.png", mimeType: "image/png", url: "https://assets.test/first.png" };
+    const audio = { slot: "audioUrls", name: "music.mp3", mimeType: "audio/mpeg", url: "https://assets.test/music.mp3" };
+
+    await adapter.submit({
+      operation: "minimax-hailuo-h3-image-to-video",
+      generation: { prompt: "move", parameters: { resolution: "2K", durationSeconds: 12, watermark: true } },
+      assets: [image],
+      credential: "secret-key",
+    });
+    await adapter.submit({
+      operation: "pixverse-v6-text-to-video",
+      generation: { prompt: "move", parameters: { resolution: "1080p", durationSeconds: 7, generateAudio: false, aspectRatio: "21:9" } },
+      assets: [],
+      credential: "secret-key",
+    });
+    await adapter.submit({
+      operation: "wan-2-7-image-to-video",
+      generation: { prompt: "move", parameters: { resolution: "1080P", durationSeconds: 8, negativePrompt: "blur", promptExtend: true, seed: 9 } },
+      assets: [image, audio],
+      credential: "secret-key",
+    });
+    await adapter.submit({
+      operation: "wan-3-reference-to-video",
+      generation: { prompt: "视频1中的人物看向图1", parameters: { resolution: "1080P", durationSeconds: "auto", aspectRatio: "adaptive", generateAudio: true, fileUrl: "https://docs.test/brief.pdf" } },
+      assets: [audio],
+      credential: "secret-key",
+    });
+
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toMatchObject({
+      resolution: "2K",
+      duration: "12",
+      aigc_watermark: true,
+      firstFrameUrl: "https://assets.test/first.png",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toMatchObject({
+      duration: 7,
+      generateAudioSwitch: false,
+      aspectRatio: "21:9",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toMatchObject({
+      firstImageUrl: "https://assets.test/first.png",
+      audioUrl: "https://assets.test/music.mp3",
+      negativePrompt: "blur",
+      promptExtend: true,
+      seed: 9,
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toMatchObject({
+      duration: "auto",
+      audio: true,
+      audioUrls: ["https://assets.test/music.mp3"],
+      fileUrl: "https://docs.test/brief.pdf",
+      linkUrl: null,
+    });
+  });
 });
 
 function jsonResponse(value: unknown): Response {

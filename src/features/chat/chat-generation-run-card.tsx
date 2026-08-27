@@ -48,7 +48,7 @@ export function ChatGenerationRunCard({
   const inputAssets = view.run.input.assets ?? [];
   return (
     <section className="mb-5 space-y-3" aria-live="polite">
-      <div className="ml-auto max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] text-primary">
+      <div className="ml-auto max-w-[78%] rounded-floating bg-[var(--user-bg)] px-3.5 py-2 text-sm leading-[1.6] text-primary">
         <p className="whitespace-pre-wrap">{originalPrompt}</p>
         {inputAssets.length && cwd ? (
           <div className="mt-2 flex flex-wrap gap-2">

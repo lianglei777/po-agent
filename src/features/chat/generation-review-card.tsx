@@ -20,6 +20,10 @@ import {
 } from "@/lib/client/generation-run-api";
 import { rawFileUrl } from "@/lib/raw-file-url";
 import { generationArtifactPath } from "./generation-tool-presentation";
+import {
+  GenerationRouteDetails,
+  GenerationRouteTags,
+} from "@/components/generation/generation-route-presentation";
 
 const ACTIVE_STATUSES = new Set(["queued", "running", "cancel_requested"]);
 
@@ -98,11 +102,19 @@ export function GenerationReviewCard({
           <p className="mt-0.5 text-caption text-muted">
             {review.route.name} · {review.route.product}
           </p>
+          <GenerationRouteTags className="mt-1.5" limit={3} tags={review.route.tags} />
         </div>
         <Tag color="warning" variant="filled">
           {t.contentGeneration.runStatuses.awaiting_confirmation}
         </Tag>
       </div>
+
+      <details className="group rounded-control border border-line-subtle bg-panel px-2.5 py-2">
+        <summary className="cursor-pointer list-none text-caption font-medium text-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          {t.contentGeneration.routeInfo}
+        </summary>
+        <GenerationRouteDetails className="mt-2" route={review.route} />
+      </details>
 
       <label className="block space-y-1 text-caption text-muted">
         <span>{t.contentGeneration.prompt}</span>

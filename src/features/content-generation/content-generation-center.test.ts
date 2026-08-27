@@ -37,8 +37,22 @@ describe("content generation conversation", () => {
       "runninghub-seedance-2-5-text-to-video",
       "runninghub-seedance-2-5-image-to-video",
       "runninghub-seedance-2-5-multimodal-video",
+      "runninghub-minimax-hailuo-h3-text-to-video",
+      "runninghub-minimax-hailuo-h3-image-to-video",
+      "runninghub-minimax-hailuo-h3-multimodal-video",
+      "runninghub-pixverse-v6-text-to-video",
+      "runninghub-pixverse-v6-image-to-video",
+      "runninghub-wan-2-7-text-to-video",
+      "runninghub-wan-2-7-image-to-video",
+      "runninghub-wan-2-7-reference-to-video",
+      "runninghub-wan-3-image-to-video",
+      "runninghub-wan-3-reference-to-video",
     ]);
-    expect(routes.every((route) => route.revision === 5)).toBe(true);
+    expect(routes.every((route) => route.revision >= 6)).toBe(true);
+    expect(routes.find((route) => route.id === "runninghub-wan-3-reference-to-video")?.revision)
+      .toBe(7);
+    expect(routes.every((route) => route.description.length > 20)).toBe(true);
+    expect(routes.every((route) => route.tags.length >= 3)).toBe(true);
     expect(JSON.stringify(routes.map((route) => route.inputSchema)))
       .not.toContain('"advanced"');
     expect(routes[2].inputSchema.parameters?.map((field) => field.key)).toContain("aspectRatio");
@@ -85,7 +99,8 @@ describe("content generation conversation", () => {
     expect(source).not.toContain("<header");
     expect(composerSource).toContain("routes: GenerationRouteDto[]");
     expect(composerSource).toContain("onChange={onRouteChange}");
-    expect(composerSource).toContain("options={routes.map((item)");
+    expect(composerSource).toContain("<GenerationRouteSelect");
+    expect(composerSource).toContain("<GenerationRouteDetails");
     expect(composerSource.indexOf("t.contentGeneration.capability"))
       .toBeLessThan(composerSource.indexOf("<AssetSlotInput"));
     expect(source).not.toContain("contentGenerationApiId");

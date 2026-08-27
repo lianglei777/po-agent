@@ -16,7 +16,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     private readonly repo: PipelineRepository,
   ) {}
 
-  getTools(_input: { sessionId: string; cwd: string }): AgentToolDefinition[] {
+  getTools(): AgentToolDefinition[] {
     return [
       this.analyzeScriptTool(),
       this.extractStoryboardTool(),

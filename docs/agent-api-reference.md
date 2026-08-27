@@ -2512,7 +2512,11 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 GET /api/generation/routes
 ```
 
-返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。供应商 operation、credential reference 和 adapter 配置不会返回。
+返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、面向用户决策的 `description` 与 `tags`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。`tags` 是可独立展示的短标签数组，不是使用分隔符拼接的文本。供应商 operation、credential reference 和 adapter 配置不会返回。
+
+Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。
+
+当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
 
 Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
 
@@ -2547,6 +2551,18 @@ Content-Type: application/json
 { "enabled": true }
 ```
 
+启用 Route 不会隐式替换同 capability 的当前默认项；当该 capability 尚无已启用默认 Route 时，首次启用的 Route 自动成为默认。显式切换默认 Route 使用：
+
+```http
+PATCH /api/generation/routes/:id
+Content-Type: application/json
+
+{ "isDefault": true }
+```
+
+只有已启用 Route 可以设为默认。关闭当前默认 Route 时，服务端按稳定顺序选择另一个已启用 Route；不存在候选时该 capability 暂无默认 Route。
+停用 Route 与设为默认是互斥操作，不能在同一次 PATCH 请求中同时提交 `{ "enabled": false, "isDefault": true }`。
+
 RunningHub 另有默认关闭的付费能力总开关：
 
 ```http
@@ -2559,7 +2575,9 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。
 
-`inputSchema` 定义 Prompt 规则、语义参数和素材槽位。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+
+Wan 3.0 参考生视频的 `fileUrl` 与 `linkUrl` 互斥，只接受不含凭证的公网 HTTPS URL。RunningHub 文档允许部分参考视频达到 100 MB，但 Po Agent 当前文件读取和上传链路统一限制为 50 MiB；Route Schema 返回的是应用实际可接受的上限。
 
 ### 12.2 注册素材并创建或列出 Run
 
@@ -2701,7 +2719,7 @@ Chat Prompt 可带可选的 `generation`：
     }],
     "plan": {
       "toolName": "generate_image",
-      "routeId": "runninghub-seedream-image-to-image",
+      "routeId": "runninghub-seedream-v5-pro-image-to-image",
       "prompt": "生成一张与参考图风格一致的全新女性角色海报",
       "parameters": {}
     }

@@ -16,13 +16,13 @@ export function CanvasNodeComposerShell({
   return (
     <section
       className={
-        "flex flex-col overflow-hidden rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-hover)] " +
+        "flex flex-col overflow-hidden rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-hover)] " +
         (large ? "h-[min(68vh,680px)]" : "h-56")
       }
       aria-label={ariaLabel}
     >
       <div className="flex min-h-0 flex-1">{body}</div>
-      {error ? <div role="alert" className="border-t border-red-400/20 bg-red-500/10 px-4 py-2 text-xs text-red-200">{error}</div> : null}
+      {error ? <div role="alert" className="border-t border-[color-mix(in_srgb,var(--pl-error)_24%,transparent)] bg-[color-mix(in_srgb,var(--pl-error)_10%,transparent)] px-4 py-2 text-xs text-[var(--pl-danger)]">{error}</div> : null}
       <footer className="flex h-14 shrink-0 items-center gap-3 border-t border-[var(--pl-border)] px-3">
         {footer}
       </footer>

@@ -256,7 +256,7 @@ export function VideoCanvasNode({
       </div>
 
       <section
-        className={`nowheel relative h-full overflow-hidden rounded-[20px] border bg-black shadow-[var(--pl-shadow-card)] ${selected || dragging ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]" : "border-transparent group-hover:border-[var(--pl-border)]"} ${dragActive ? "!border-[var(--pl-accent)]" : ""}`}
+        className={`nowheel relative h-full overflow-hidden rounded-xl border bg-black shadow-[var(--pl-shadow-card)] ${selected || dragging ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]" : "border-transparent group-hover:border-[var(--pl-border)]"} ${dragActive ? "!border-[var(--pl-accent)]" : ""}`}
         onPointerEnter={playVideoOnHover}
         onPointerLeave={pauseVideoOnLeave}
       >
@@ -267,7 +267,7 @@ export function VideoCanvasNode({
           </div>
         ) : null}
         {dragActive && !uploading ? (
-          <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)]/90 px-5 text-center text-sm font-medium text-[var(--pl-accent)]">
+          <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)] px-5 text-center text-sm font-medium text-[var(--pl-accent-hover)]">
             {hasVideo ? t.pipeline.nodeVideoDropReplace : t.pipeline.nodeVideoDropHere}
           </div>
         ) : null}
@@ -309,13 +309,13 @@ export function VideoCanvasNode({
               />
               {mediaFailed ? (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/80 px-5 text-center text-xs text-white/80">
-                  <AlertTriangle className="size-5 text-amber-400" />
+                  <AlertTriangle className="size-5 text-[var(--pl-warn)]" />
                   {t.pipeline.nodeVideoUnavailable}
                 </div>
               ) : null}
               {outputStale ? (
                 <Tooltip title={t.pipeline.videoOutputStale}>
-                  <span className="nodrag absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500/90 px-2 py-1 text-[11px] font-medium text-black">
+                  <span className="nodrag absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-warn)] px-2 py-1 text-caption font-medium text-[var(--workspace-bg)]">
                     <AlertTriangle className="size-3" />
                     {t.pipeline.videoOutputStaleBadge}
                   </span>
@@ -323,7 +323,7 @@ export function VideoCanvasNode({
               ) : null}
               {canvas.taskInfo?.status === "failed" ? (
                 <Tooltip title={canvas.taskInfo.errorMessage ?? t.pipeline.videoHistoryFailed}>
-                  <span className="nodrag absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-red-500/90 px-2 py-1 text-[11px] font-medium text-white">
+                  <span className="nodrag absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-error)] px-2 py-1 text-caption font-medium text-[var(--workspace-bg)]">
                     <AlertTriangle className="size-3" />
                     {t.pipeline.videoHistoryFailed}
                   </span>

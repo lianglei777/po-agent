@@ -69,7 +69,7 @@ const CodeBlock = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="my-3 h-16 rounded-2xl border border-line-subtle bg-[var(--tool-bg)]" />
+      <div className="my-3 h-16 rounded-floating border border-line-subtle bg-[var(--tool-bg)]" />
     ),
   },
 );
@@ -132,7 +132,7 @@ export function MessageList({
           return (
             <article
               className={cn(
-                "group relative mb-8 scroll-mt-4 px-2 py-1 transition-[background-color,outline-color] duration-[var(--motion-fast)] -mx-2",
+                "group relative mb-6 scroll-mt-4 px-2 py-1 transition-[background-color,outline-color] duration-[var(--motion-fast)] -mx-2",
                 highlighted &&
                   "bg-subtle outline outline-1 outline-line-strong",
               )}
@@ -183,7 +183,7 @@ export function MessageList({
         return (
           <article
             className={cn(
-              "group relative mb-8 scroll-mt-4 px-2 py-1 transition-[background-color,outline-color] duration-[var(--motion-fast)] -mx-2",
+              "group relative mb-6 scroll-mt-4 px-2 py-1 transition-[background-color,outline-color] duration-[var(--motion-fast)] -mx-2",
               highlighted && "bg-subtle outline outline-1 outline-line-strong",
             )}
             data-message-role="assistant"
@@ -251,7 +251,7 @@ function UserMessageView({
     : undefined;
   return (
     <div className="flex flex-col items-end">
-      <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] break-words whitespace-pre-wrap">
+      <div className="max-w-[78%] rounded-floating bg-[var(--user-bg)] px-3.5 py-2 text-sm leading-[1.6] break-words whitespace-pre-wrap">
        {message.generationAssets?.length ? (
           <div className="mb-2 flex flex-wrap gap-2 first:mb-0">
            {message.generationAssets.map((asset, index) => {
@@ -281,14 +281,14 @@ function UserMessageView({
                   {asset.mimeType.startsWith("video/") ? (
                       <>
                       <video className="size-full object-cover" muted playsInline preload="metadata" src={source} />
-                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/70 px-1 py-0.5 text-caption font-medium text-white/90">
                         {asset.mimeType.split("/")[1]?.toUpperCase()}
                       </span>
                       </>
                   ) : (
                     <div className="flex size-full items-center justify-center text-muted">
                       <FileMusic className="size-7" />
-                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+                      <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/70 px-1 py-0.5 text-caption font-medium text-white/90">
                         {asset.mimeType.split("/")[1]?.toUpperCase()}
                       </span>
                     </div>
@@ -658,7 +658,7 @@ function AssistantTurnView({
                   <summary className="cursor-pointer text-xs font-medium text-muted hover:text-primary">
                     {t.chat.error.technicalDetails}
                   </summary>
-                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-2xl border border-line-subtle bg-[var(--tool-bg)] p-2 font-ui-mono text-meta text-muted">
+                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-floating border border-line-subtle bg-[var(--tool-bg)] p-2 font-ui-mono text-meta text-muted">
                     {error.technicalMessage}
                   </pre>
                   <Button
@@ -1139,7 +1139,7 @@ function GenerationArtifactGallery({
              type="button"
           >
               <video className="size-full object-cover" muted playsInline preload="metadata" src={src} />
-              <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 py-0.5 text-[10px] font-medium text-white/90">
+              <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/70 px-1 py-0.5 text-caption font-medium text-white/90">
                 {artifact.contentType?.split("/")[1]?.toUpperCase()}
               </span>
           </button>
@@ -1220,7 +1220,7 @@ function failureSummary(
 
 function Markdown({ text }: { text: string }) {
   return (
-    <div className="text-sm leading-[1.7] text-primary [&_a]:text-accent-deep [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-line-subtle [&_blockquote]:pl-3 [&_code]:rounded [&_code]:font-ui-mono [&_li]:my-1 [&_ol]:my-3 [&_ol]:pl-6 [&_p]:my-3 [&_table]:my-3 [&_table]:w-full [&_td]:border [&_td]:border-line-subtle [&_td]:p-2 [&_th]:border [&_th]:border-line-subtle [&_th]:p-2 [&_ul]:my-3 [&_ul]:pl-6">
+    <div className="text-prose leading-[1.65] text-primary [&_a]:text-accent-hover [&_a]:underline [&_blockquote]:border-l [&_blockquote]:border-line-subtle [&_blockquote]:pl-3 [&_code]:rounded [&_code]:font-ui-mono [&_li]:my-1 [&_ol]:my-2.5 [&_ol]:pl-6 [&_p]:my-2.5 [&_table]:my-3 [&_table]:w-full [&_td]:border [&_td]:border-line-subtle [&_td]:p-2 [&_th]:border [&_th]:border-line-subtle [&_th]:p-2 [&_ul]:my-2.5 [&_ul]:pl-6">
       <ReactMarkdown
         components={{
           code({ className, children, ...props }) {

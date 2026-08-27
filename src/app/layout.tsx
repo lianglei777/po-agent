@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh"
-      className={notoSansMono.variable}
+      className={`${notoSansMono.variable} dark`}
       suppressHydrationWarning
     >
       <body>

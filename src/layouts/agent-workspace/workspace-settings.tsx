@@ -20,6 +20,7 @@ import { ContentGenerationSettings } from "@/features/content-generation/content
 import { useAgentSettings } from "@/features/agent-settings/use-agent-settings";
 import { WebAccessSettings } from "@/features/web-access/web-access-settings";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
+import { SettingsRow } from "@/components/ui/settings-form";
 
 type SettingsSection =
   "models" | "web-access" | "content-generation" | "instructions" | "general";
@@ -191,10 +192,11 @@ export function WorkspaceSettings({
               description={t.settings.generalDescription}
               title={t.settings.general}
             >
-              <div className="space-y-8">
+              <div className="overflow-hidden rounded-floating border border-line-subtle bg-panel">
                 <SettingsRow
                   description={t.settings.languageDescription}
                   label={t.common.language}
+                  contentMaxWidth={220}
                 >
                   <Segmented
                     onChange={(nextLocale) => {
@@ -212,6 +214,7 @@ export function WorkspaceSettings({
                 <SettingsRow
                   description={t.settings.autoCompactDescription}
                   label={t.settings.autoCompact}
+                  contentMaxWidth={220}
                 >
                   <div className="flex flex-col items-end">
                     <Switch
@@ -250,7 +253,6 @@ export function WorkspaceSettings({
     </div>
   );
 }
-
 function SettingsNavButton({
   icon,
   label,
@@ -277,7 +279,6 @@ function SettingsNavButton({
     </Button>
   );
 }
-
 function SettingsReadingColumn({
   children,
   description,
@@ -298,30 +299,8 @@ function SettingsReadingColumn({
             {description}
           </p>
         </header>
-        <section className="py-6">{children}</section>
+        <section className="py-5">{children}</section>
       </div>
     </main>
-  );
-}
-
-function SettingsRow({
-  children,
-  description,
-  label,
-}: {
-  children: React.ReactNode;
-  description: string;
-  label: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-6">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-primary">{label}</p>
-        <p className="mt-1 max-w-[55ch] text-body-sm leading-6 text-muted">
-          {description}
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center pt-0.5">{children}</div>
-    </div>
   );
 }

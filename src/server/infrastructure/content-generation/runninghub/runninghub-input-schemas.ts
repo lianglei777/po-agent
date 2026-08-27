@@ -11,6 +11,28 @@ export function runningHubInputSchema(
   capability: GenerationCapability,
   operation?: string,
 ): GenerationInputSchema {
+  switch (operation) {
+    case "minimax-hailuo-h3-text-to-video":
+      return minimaxH3TextSchema();
+    case "minimax-hailuo-h3-image-to-video":
+      return minimaxH3ImageSchema();
+    case "minimax-hailuo-h3-multimodal-video":
+      return minimaxH3MultimodalSchema();
+    case "pixverse-v6-text-to-video":
+      return pixVerseTextSchema();
+    case "pixverse-v6-image-to-video":
+      return pixVerseImageSchema();
+    case "wan-2-7-text-to-video":
+      return wan27TextSchema();
+    case "wan-2-7-image-to-video":
+      return wan27ImageSchema();
+    case "wan-2-7-reference-to-video":
+      return wan27ReferenceSchema();
+    case "wan-3-image-to-video":
+      return wan3ImageSchema();
+    case "wan-3-reference-to-video":
+      return wan3ReferenceSchema();
+  }
   const isSeedance25 = operation?.startsWith("seedance-2-5") ?? false;
   switch (capability) {
     case "text-to-image":
@@ -27,6 +49,171 @@ export function runningHubInputSchema(
     case "multimodal-to-video":
       return isSeedance25 ? multimodalVideo25Schema() : multimodalVideoSchema();
   }
+}
+
+// ── 2026-08-26 新增模型 schemas ──
+
+function minimaxH3TextSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      selectField("resolution", "分辨率", ["768P", "2K"], "768P"),
+      durationField(5, 15, 5),
+      optionalSelectField("aspectRatio", "画面比例", ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]),
+      booleanField("watermark", "AIGC 水印", false),
+    ],
+  };
+}
+
+function minimaxH3ImageSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      selectField("resolution", "分辨率", ["768P", "2K"], "768P"),
+      durationField(5, 15, 5),
+      booleanField("watermark", "AIGC 水印", false),
+    ],
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 30 * 1024 * 1024, IMAGE_TYPES),
+    ],
+    constraints: [{
+      kind: "at-least-one-asset",
+      slots: ["firstFrameUrl", "lastFrameUrl"],
+    }],
+  };
+}
+
+function minimaxH3MultimodalSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      selectField("resolution", "分辨率", ["768P", "2K"], "768P"),
+      durationField(5, 15, 5),
+      optionalSelectField("aspectRatio", "画面比例", ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"], "adaptive"),
+      booleanField("watermark", "AIGC 水印", false),
+    ],
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 9, 30 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("videoUrls", "参考视频", "video", 3, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
+      mediaSlot("audioUrls", "参考音频", "audio", 3, 15 * 1024 * 1024, ["audio/mpeg", "audio/wav"]),
+    ],
+  };
+}
+
+function pixVerseTextSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      selectField("resolution", "分辨率", ["360p", "540p", "720p", "1080p"], "720p"),
+      durationField(1, 15, 5),
+      booleanField("generateAudio", "生成音频", true),
+      optionalSelectField("aspectRatio", "画面比例", ["16:9", "4:3", "1:1", "3:4", "9:16", "2:3", "3:2", "21:9"], "16:9"),
+    ],
+  };
+}
+
+function pixVerseImageSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      selectField("resolution", "分辨率", ["360p", "540p", "720p", "1080p"], "720p"),
+      durationField(1, 15, 5),
+      booleanField("generateAudio", "生成音频", true),
+    ],
+    assets: [
+      mediaSlot("firstFrameUrl", "参考图片", "image", 1, 10 * 1024 * 1024, IMAGE_TYPES, true),
+    ],
+  };
+}
+
+function wan27TextSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 5_000 },
+    parameters: wan27Fields(15, true),
+    assets: [
+      mediaSlot("audioUrls", "背景音频", "audio", 1, 15 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+  };
+}
+
+function wan27ImageSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: false, maxLength: 5_000 },
+    parameters: wan27Fields(15, false),
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 20 * 1024 * 1024, IMAGE_TYPES, true),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 20 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("audioUrls", "背景音频", "audio", 1, 15 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+  };
+}
+
+function wan27ReferenceSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 5_000 },
+    parameters: wan27Fields(10, true),
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 5, 20 * 1024 * 1024, IMAGE_TYPES),
+      // 当前文件存储为内存缓冲链路，先使用项目安全上限 50 MiB，而不是供应商的 100 MB 上限。
+      mediaSlot("videoUrls", "参考视频", "video", 5, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
+      mediaSlot("audioUrls", "参考音频", "audio", 1, 15 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+  };
+}
+
+function wan27Fields(maxDuration: number, withAspectRatio: boolean): GenerationParameterField[] {
+  return [
+    textField("negativePrompt", "负面提示词", 500),
+    selectField("resolution", "分辨率", ["720P", "1080P"], "720P"),
+    durationField(2, maxDuration, 5),
+    ...(withAspectRatio
+      ? [selectField("aspectRatio", "画面比例", ["16:9", "9:16", "1:1", "4:3", "3:4"], "16:9")]
+      : []),
+    booleanField("promptExtend", "提示词智能改写", false),
+    optionalSeedField(),
+  ];
+}
+
+function wan3ImageSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: false, maxLength: 20_480 },
+    parameters: wan3Fields(),
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 20 * 1024 * 1024, IMAGE_TYPES, true),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 20 * 1024 * 1024, IMAGE_TYPES),
+    ],
+  };
+}
+
+function wan3ReferenceSchema(): GenerationInputSchema {
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...wan3Fields(),
+      urlField("fileUrl", "文档 URL"),
+      urlField("linkUrl", "网页 URL"),
+    ],
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 10, 20 * 1024 * 1024, IMAGE_TYPES),
+      mediaSlot("videoUrls", "参考视频", "video", 5, 50 * 1024 * 1024, ["video/mp4", "video/quicktime"]),
+      mediaSlot("audioUrls", "参考音频", "audio", 5, 15 * 1024 * 1024, ["audio/mpeg", "audio/wav", "audio/mp4"]),
+    ],
+    constraints: [{
+      kind: "mutually-exclusive-parameters",
+      keys: ["fileUrl", "linkUrl"],
+    }],
+  };
+}
+
+function wan3Fields(): GenerationParameterField[] {
+  return [
+    selectField("resolution", "分辨率", ["480P", "720P", "1080P"], "720P"),
+    selectField("aspectRatio", "画面比例", ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16"], "adaptive"),
+    selectField("durationSeconds", "时长", ["auto", ...Array.from({ length: 29 }, (_, index) => index + 2)], "auto"),
+    booleanField("generateAudio", "生成音轨", true),
+    optionalSeedField(),
+  ];
 }
 
 function imageSchema(): GenerationInputSchema {
@@ -226,6 +413,53 @@ function selectField(
   };
 }
 
+function optionalSelectField(
+  key: string,
+  label: string,
+  values: Array<string | number>,
+  defaultValue?: string | number,
+): GenerationParameterField {
+  return {
+    key,
+    label,
+    type: "select",
+    defaultValue,
+    options: values.map((value) => ({ label: String(value), value })),
+  };
+}
+
+function durationField(
+  min: number,
+  max: number,
+  defaultValue: number,
+): GenerationParameterField {
+  return selectField(
+    "durationSeconds",
+    "时长",
+    Array.from({ length: max - min + 1 }, (_, index) => index + min),
+    defaultValue,
+  );
+}
+
+function textField(
+  key: string,
+  label: string,
+  maxLength: number,
+): GenerationParameterField {
+  return { key, label, type: "text", maxLength };
+}
+
+function urlField(key: string, label: string): GenerationParameterField {
+  return {
+    key,
+    label,
+    description: "仅支持可公开访问的 HTTPS URL。",
+    type: "text",
+    format: "url",
+    maxLength: 2_048,
+  };
+}
+
 function booleanField(
   key: string,
   label: string,
@@ -256,6 +490,17 @@ function seedField(): GenerationParameterField {
     type: "number",
     defaultValue: -1,
     min: -1,
+    max: 2_147_483_647,
+  };
+}
+
+function optionalSeedField(): GenerationParameterField {
+  return {
+    key: "seed",
+    label: "随机种子",
+    description: "留空时由供应商随机生成。",
+    type: "number",
+    min: 0,
     max: 2_147_483_647,
   };
 }

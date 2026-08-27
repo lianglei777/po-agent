@@ -8,6 +8,10 @@ import type {
   GenerationRouteDto,
 } from "@/contracts/generation";
 import { useI18n } from "@/i18n/use-i18n";
+import {
+  GenerationRouteDetails,
+  GenerationRouteTags,
+} from "@/components/generation/generation-route-presentation";
 
 type EnabledGenerationMode = Exclude<
   ComposerGenerationMode,
@@ -72,7 +76,6 @@ export function ChatGenerationControl({
     setLastSpecificRouteId(value);
     setLastEnabledMode(next);
     onModeChange(next);
-    setOpen(false);
   }
 
   function toggleAutomatic(checked: boolean) {
@@ -93,7 +96,7 @@ export function ChatGenerationControl({
   }
 
   const content = (
-    <div className="w-80">
+    <div className="w-96">
       <div className="flex items-center gap-4">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <p className="text-xs font-semibold text-primary">{t.chat.input.generationControl}</p>
@@ -160,22 +163,23 @@ export function ChatGenerationControl({
                 onChange={(event) => selectMode(String(event.target.value))}
                 value={mode.routeId}
               >
-                {Array.from(new Set(routes.map((route) => route.providerId))).map(
-                  (providerId) => (
-                    <div className="mt-2" key={providerId}>
+                {Array.from(new Set(routes.map((route) => route.product))).map(
+                  (product) => (
+                    <div className="mt-2" key={product}>
                       <p className="px-2 py-1 text-caption font-medium text-dim">
-                        {providerId}
+                        {product}
                       </p>
                       {routes
-                        .filter((route) => route.providerId === providerId)
+                        .filter((route) => route.product === product)
                         .map((route) => (
                           <label
-                            className="flex cursor-pointer items-center gap-2 rounded-control px-2 py-1.5 hover:bg-hover"
+                            className="flex cursor-pointer items-start gap-2 rounded-control px-2 py-2 transition-colors hover:bg-hover"
                             key={route.id}
                           >
-                            <Radio value={route.id} />
-                            <span className="min-w-0 truncate text-xs text-primary">
-                              {route.name}
+                            <Radio className="mt-0.5" value={route.id} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-xs text-primary">{route.name}</span>
+                              <GenerationRouteTags className="mt-1" limit={2} tags={route.tags} />
                             </span>
                           </label>
                         ))}
@@ -183,6 +187,13 @@ export function ChatGenerationControl({
                   ),
                 )}
               </Radio.Group>
+              {selectedRoute ? (
+                <GenerationRouteDetails
+                  className="mt-3 border-t border-line-subtle px-2 pt-3"
+                  route={selectedRoute}
+                  tagLimit={3}
+                />
+              ) : null}
             </>
           ) : null}
         </>
@@ -195,34 +206,39 @@ export function ChatGenerationControl({
   );
 
   return (
-    <Popover
-      arrow={false}
-      content={content}
-      destroyOnHidden
-      onOpenChange={setOpen}
-      open={open}
-      placement="topLeft"
-      trigger="click"
+    <Tooltip
+      mouseEnterDelay={0.35}
+      placement="top"
+      title={disabled ? t.chat.input.generationUnavailableWhileBusy : summary}
     >
-      <span
-        className="inline-flex"
-        title={disabled ? t.chat.input.generationUnavailableWhileBusy : summary}
-      >
-        <Button
-          aria-label={t.chat.input.generationControl}
-          aria-pressed={enabled}
-          className="h-8 px-2.5 text-xs"
-          color={enabled ? "primary" : "default"}
-          disabled={disabled}
-          htmlType="button"
-          icon={<Images />}
-          size="small"
-          variant={enabled ? "filled" : "text"}
+      <span className="inline-flex">
+        <Popover
+          arrow={false}
+          content={content}
+          destroyOnHidden
+          onOpenChange={setOpen}
+          open={open}
+          placement="topLeft"
+          trigger="click"
         >
-          {t.chat.input.generationControl}
-        </Button>
+          <span className="inline-flex">
+            <Button
+              aria-label={t.chat.input.generationControl}
+              aria-pressed={enabled}
+              className="h-8 px-2.5 text-xs"
+              color={enabled ? "primary" : "default"}
+              disabled={disabled}
+              htmlType="button"
+              icon={<Images />}
+              size="small"
+              variant={enabled ? "filled" : "text"}
+            >
+              {t.chat.input.generationControl}
+            </Button>
+          </span>
+        </Popover>
       </span>
-    </Popover>
+    </Tooltip>
   );
 }
 

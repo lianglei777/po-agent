@@ -47,7 +47,7 @@ function StudioNodeComponent({ id, data, selected, dragging }: NodeProps<StudioF
     : undefined);
 
   return (
-    <article className="group h-full min-h-[140px] w-full min-w-[260px] overflow-hidden rounded-2xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] data-[selected=true]:border-[var(--pl-accent)]" data-selected={selected}>
+    <article className="group h-full min-h-[140px] w-full min-w-[260px] overflow-hidden rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] data-[selected=true]:border-[var(--pl-accent)]" data-selected={selected}>
       <NodeResizer
         minWidth={260}
         minHeight={canvas.type === "audio" ? 140 : 180}

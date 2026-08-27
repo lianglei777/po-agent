@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ConfigProvider, message, theme as antdTheme } from "antd";
+import { App } from "antd";
 import type { PipelineProject, ProjectSummary } from "@/contracts/pipeline";
 import { PipelineSidebar, type PipelineSidebarItemId } from "./pipeline-sidebar";
 import { ProjectListView } from "./project-list-view";
@@ -11,6 +11,7 @@ import { OpenProjectDialog } from "./open-project-dialog";
 import { pipelineApi } from "./pipeline-api";
 
 export function PipelineApp() {
+  const { message } = App.useApp();
   const [activeSidebarItem, setActiveSidebarItem] = useState<PipelineSidebarItemId>("projects");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -36,7 +37,7 @@ export function PipelineApp() {
     return () => {
       cancelled = true;
     };
-  }, [projectsRefreshKey]);
+  }, [message, projectsRefreshKey]);
 
   const handleProjectCreated = useCallback(() => {
     setNewProjectOpen(false);
@@ -71,7 +72,7 @@ export function PipelineApp() {
     } catch (error) {
       message.error(error instanceof Error ? error.message : String(error));
     }
-  }, []);
+  }, [message]);
 
   const handleBackToList = useCallback(() => {
     setSelectedProjectId(null);
@@ -82,23 +83,7 @@ export function PipelineApp() {
   }, []);
 
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: antdTheme.darkAlgorithm,
-        token: {
-          colorPrimary: "#168cff",
-          colorInfo: "#168cff",
-          colorBgBase: "#101214",
-          colorBgContainer: "#171a1f",
-          colorBgElevated: "#1d2127",
-          colorBorder: "#303640",
-          colorText: "#f4f7fb",
-          colorTextSecondary: "#a8b2bf",
-          borderRadius: 10,
-        },
-      }}
-    >
-      <div className="pipeline-studio-shell flex h-dvh min-w-[1024px] overflow-hidden bg-[var(--pl-surface)]">
+    <div className="pipeline-studio-shell flex h-dvh min-w-[1024px] overflow-hidden bg-[var(--pl-surface)]">
         {!selectedProjectId ? (
           <PipelineSidebar
             activeItem={activeSidebarItem}
@@ -136,7 +121,6 @@ export function PipelineApp() {
           onClose={() => setOpenProjectOpen(false)}
           onOpened={handleExistingProjectOpened}
         />
-      </div>
-    </ConfigProvider>
+    </div>
   );
 }

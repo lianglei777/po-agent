@@ -110,13 +110,25 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
             409,
           );
         }
-        const capability = turn.assets.length
-          ? generationCapabilityFromMedia(video, turn.assets.map((asset) => asset.mediaType))
-          : generationCapability(video, parsed.assets);
         const service = this.getRunService();
         const requestedRouteId = turn.plan?.routeId ?? (turn.mode.type === "generation-route"
           ? turn.mode.routeId
           : parsed.routeId);
+        const requestedRoute = requestedRouteId
+          ? await service.getRoute(requestedRouteId)
+          : null;
+        const capability = requestedRoute?.enabled
+          ? requestedRoute.capability
+          : turn.assets.length
+            ? generationCapabilityFromMedia(video, turn.assets.map((asset) => asset.mediaType))
+            : generationCapability(video, parsed.assets);
+        if (video !== capability.endsWith("to-video")) {
+          throw new AppError(
+            "VALIDATION_ERROR",
+            `The selected generation API does not match ${name}`,
+            400,
+          );
+        }
         const route = await resolveGenerationRoute(service, capability, requestedRouteId);
         const assets = turn.assets.length
           ? bindTurnAssets(turn.assets, route)
@@ -385,19 +397,24 @@ function bindTurnAssets(
   assets: NonNullable<ReturnType<GenerationReviewRegistry["current"]>>["assets"],
   route: GenerationRouteDto,
 ): GenerationInputAsset[] {
+  const counts = new Map<string, number>();
   return assets.map((asset) => {
     if (!asset.slot.startsWith("auto-")) return { slot: asset.slot, ref: asset.ref };
     const candidates = (route.inputSchema.assets ?? []).filter(
-      (slot) => slot.mediaType === asset.mediaType,
+      (slot) => slot.mediaType === asset.mediaType &&
+        (counts.get(slot.key) ?? 0) < (slot.maxFiles ?? (slot.multiple ? Number.POSITIVE_INFINITY : 1)),
     );
-    if (candidates.length !== 1) {
+    if (!candidates.length) {
       throw new AppError(
         "VALIDATION_ERROR",
-        `The selected generation API cannot unambiguously bind ${asset.name}`,
+        `The selected generation API cannot bind ${asset.name}`,
         400,
       );
     }
-    return { slot: candidates[0]!.key, ref: asset.ref };
+    // 首尾帧等同媒体类型槽位按 Route 声明顺序绑定，避免前端猜测供应商字段。
+    const selected = candidates[0]!;
+    counts.set(selected.key, (counts.get(selected.key) ?? 0) + 1);
+    return { slot: selected.key, ref: asset.ref };
   });
 }
 
@@ -407,6 +424,8 @@ function generationRouteDetails(
   return {
     id: route.id,
     name: route.name,
+    description: route.description,
+    tags: route.tags,
     capability: route.capability,
     product: route.product,
     providerId: route.providerId,

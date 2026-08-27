@@ -327,7 +327,7 @@ export function ImageCanvasNode({
 
       <section
         className={
-          "nowheel relative h-full overflow-hidden rounded-[20px] border bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] transition-[border-color,box-shadow] duration-200 " +
+          "nowheel relative h-full overflow-hidden rounded-xl border bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-card)] transition-[border-color,box-shadow] duration-200 " +
           (editing
             ? "nodrag !border-[var(--pl-accent)] shadow-[0_0_0_1px_var(--pl-accent)] "
             : selected || dragging
@@ -348,7 +348,7 @@ export function ImageCanvasNode({
           </div>
         ) : null}
         {dragActive && !uploading ? (
-          <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)]/90 px-5 text-center text-sm font-medium text-[var(--pl-accent)]">
+          <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)] px-5 text-center text-sm font-medium text-[var(--pl-accent-hover)]">
             {hasImage ? t.pipeline.nodeImageDropReplace : t.pipeline.nodeImageDropHere}
           </div>
         ) : null}

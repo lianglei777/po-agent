@@ -45,7 +45,13 @@ export function ResourcePreviewThumbnail({
   const failed = !url || failedSource === url;
   const Icon = mediaType === "text" ? FileText : mediaType === "image" ? FileImage : mediaType === "video" ? FileVideo : FileMusic;
   // next/image fill 不参与父元素尺寸计算；缩略图框必须始终生成可计算的布局盒子。
-  const frameClass = `relative inline-flex shrink-0 items-center justify-center overflow-hidden border border-[var(--pl-border)] bg-[var(--pl-surface)] ${SIZE_CLASS[size]}`;
+  // 资产浏览器采用无描边缩略图，其余场景仍保留内容边界，并降低兜底图标的存在感。
+  const frameTone = size === "browser"
+    ? "border border-transparent bg-[var(--pl-surface-hover)]"
+    : failed
+      ? "border border-transparent bg-[var(--pl-surface-subtle)]"
+      : "border border-[var(--pl-border)] bg-[var(--pl-surface)]";
+  const frameClass = `relative inline-flex shrink-0 items-center justify-center overflow-hidden ${frameTone} ${SIZE_CLASS[size]}`;
 
   let content: ReactNode;
   if (mediaType === "image" && !failed) {
@@ -87,7 +93,7 @@ export function ResourcePreviewThumbnail({
     <span className={frameClass}>
       {content}
       {badge ? (
-        <span className="absolute left-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-black/75 text-[9px] font-semibold tabular-nums text-white">
+        <span className="absolute left-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-black/75 text-caption font-semibold tabular-nums text-white">
           {badge}
         </span>
       ) : null}
@@ -132,7 +138,7 @@ export function ResourcePreviewPopover({
       </div>
       <figcaption className="flex items-center gap-2 px-1 pb-0.5 pt-2">
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--pl-text)]">{label}</span>
-        <span className="shrink-0 text-[10px] text-[var(--pl-text-muted)]">{detail}</span>
+        <span className="shrink-0 text-caption text-[var(--pl-text-muted)]">{detail}</span>
       </figcaption>
     </figure>
   );

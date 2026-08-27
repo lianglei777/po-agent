@@ -10,12 +10,13 @@ describe("parseGenerationIntentDecision", () => {
   it("uses the final valid object when a model emits an example before its answer", () => {
     const text = [
       'Example: {"intent":"chat"}',
-      'Answer: {"intent":"generation","capability":"image-to-image","effective_prompt":"create a new poster","parameters":{"width":1024}}',
+      'Answer: {"intent":"generation","capability":"image-to-image","routeId":"image-image","effective_prompt":"create a new poster","parameters":{"width":1024}}',
     ].join("\n");
 
     expect(parseGenerationIntentDecision(text)).toEqual({
       intent: "generation",
       capability: "image-to-image",
+      routeId: "image-image",
       effectivePrompt: "create a new poster",
       parameters: { width: 1024 },
       question: undefined,
@@ -117,6 +118,8 @@ describe("PiGenerationIntentClassifier", () => {
 const route: GenerationRouteDto = {
   id: "image-image",
   name: "Image to image",
+  description: "Create a new image from a reference image",
+  tags: ["Reference image"],
   capability: "image-to-image",
   product: "Product",
   providerId: "provider",

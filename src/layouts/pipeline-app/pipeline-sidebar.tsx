@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Tooltip } from "antd";
 import {
-  ArrowLeft,
+  Bot,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -41,33 +41,23 @@ export function PipelineSidebar({
     <aside
       className={
         "flex h-full shrink-0 flex-col border-r border-[var(--pl-border)] bg-[var(--pl-sidebar)] transition-[width] duration-200 " +
-        (collapsed ? "w-[72px]" : "w-[252px]")
+        (collapsed ? "w-14" : "w-[216px]")
       }
       data-testid="pipeline-sidebar"
     >
       <header
         className={
-          "flex min-h-16 border-b border-[var(--pl-border)] px-3 py-3 " +
+          "flex min-h-12 border-b border-[var(--pl-border)] px-3 py-2 " +
           (collapsed ? "flex-col items-center gap-2" : "items-center justify-between gap-2")
         }
       >
         {!collapsed ? (
-          <span className="min-w-0 truncate text-xl font-semibold tracking-[-0.035em] text-[var(--pl-text)]">
+          <span className="min-w-0 truncate text-base font-semibold tracking-[-0.02em] text-[var(--pl-text)]">
             {t.pipeline.brandName}
           </span>
         ) : null}
 
         <div className={"flex shrink-0 " + (collapsed ? "flex-col gap-1" : "gap-1")}>
-          <Tooltip mouseEnterDelay={0.35} placement="bottom" title={t.pipeline.backToAgent}>
-            <button
-              type="button"
-              onClick={() => setMode("agent")}
-              aria-label={t.pipeline.backToAgent}
-              className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent)]"
-            >
-              <ArrowLeft className="size-[17px]" />
-            </button>
-          </Tooltip>
           <Tooltip
             mouseEnterDelay={0.35}
             placement="bottom"
@@ -86,14 +76,14 @@ export function PipelineSidebar({
         </div>
       </header>
 
-      <div className={collapsed ? "px-3 py-4" : "px-4 py-4"}>
+      <div className={collapsed ? "px-2 py-3" : "px-3 py-3"}>
         <Tooltip placement="right" title={collapsed ? t.pipeline.newProject : undefined}>
           <button
             type="button"
             onClick={onNewProject}
             aria-label={t.pipeline.newProject}
             className={
-              "flex min-h-11 w-full items-center justify-center rounded-xl bg-[var(--pl-accent)] font-medium text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white " +
+              "flex min-h-9 w-full items-center justify-center rounded-lg bg-[var(--pl-accent)] font-medium text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pl-accent-hover)] " +
               (collapsed ? "px-0" : "gap-2 px-4")
             }
           >
@@ -114,7 +104,7 @@ export function PipelineSidebar({
                 onClick={() => onItemChange(id)}
                 aria-current={active ? "page" : undefined}
                 className={
-                  "flex min-h-11 w-full items-center rounded-xl font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)] " +
+                  "flex min-h-9 w-full items-center rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)] " +
                   (collapsed ? "justify-center px-2" : "gap-3 px-3") +
                   (active
                     ? " bg-[var(--pl-accent-soft)] text-[var(--pl-text)]"
@@ -136,6 +126,27 @@ export function PipelineSidebar({
           })}
         </div>
       </nav>
+
+      <div className={"mt-auto border-t border-[var(--pl-border)] " + (collapsed ? "p-2" : "p-3")}>
+        <Tooltip
+          mouseEnterDelay={0.35}
+          placement="right"
+          title={collapsed ? t.pipeline.backToAgent : undefined}
+        >
+          <button
+            type="button"
+            onClick={() => setMode("agent")}
+            aria-label={t.pipeline.backToAgent}
+            className={
+              "flex min-h-9 w-full items-center rounded-lg text-[var(--pl-text-secondary)] transition-[background-color,color,transform] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)] " +
+              (collapsed ? "justify-center px-2" : "gap-3 px-3")
+            }
+          >
+            <Bot className="size-[17px] shrink-0" />
+            {!collapsed ? <span className="truncate text-sm font-medium">{t.pipeline.backToAgent}</span> : null}
+          </button>
+        </Tooltip>
+      </div>
     </aside>
   );
 }

@@ -81,6 +81,8 @@ function route(capability: GenerationCapability, assets: NonNullable<GenerationR
   return {
     id: "route-1",
     name: "Route",
+    description: "Route description",
+    tags: ["Route"],
     capability,
     product: "Product",
     providerId: "provider",

@@ -72,6 +72,8 @@ export function generationRouteDto(route: GenerationRoute): GenerationRouteDto {
   return {
     id: route.id,
     name: route.name,
+    description: route.description,
+    tags: route.tags,
     capability: route.capability,
     product: route.product,
     providerId: route.providerId,

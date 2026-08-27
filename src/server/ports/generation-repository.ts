@@ -32,6 +32,7 @@ export interface GenerationRepository {
   ): Promise<GenerationRoute | null>;
   listRoutes(): Promise<GenerationRoute[]>;
   setRouteEnabled(id: string, enabled: boolean, updatedAt: string): Promise<boolean>;
+  setDefaultRoute(id: string, updatedAt: string): Promise<boolean>;
   isProviderEnabled(providerId: string): Promise<boolean>;
   setProviderEnabled(providerId: string, enabled: boolean, updatedAt: string): Promise<void>;
 

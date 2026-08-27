@@ -27,8 +27,8 @@ describe("chat input visual contract", () => {
     expect(source).not.toContain("backdrop-blur");
   });
 
-  it("keeps composer controls in one compact toolbar", () => {
-    expect(source).toContain("flex h-12 items-center");
+  it("keeps composer controls in one compact responsive toolbar", () => {
+    expect(source).toContain("flex min-h-12 flex-wrap items-center");
     expect(source).toContain("gap-1.5 px-3 py-1.5");
     expect(source).not.toContain("border-t border-line-subtle bg-subtle");
     expect(source).not.toContain("id=\"composer-shortcut\"");

@@ -11,7 +11,7 @@ import {
   Square,
 } from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Empty, Skeleton, Tag, Tooltip } from "antd";
+import { Alert, App, Button, Empty, Skeleton, Tag, Tooltip } from "antd";
 import { useShallow } from "zustand/react/shallow";
 import type {
   GenerationArtifactDto,
@@ -54,6 +54,7 @@ export function ContentGenerationCenter({
   onChanged?: () => void;
 }) {
   const { t } = useI18n();
+  const { modal } = App.useApp();
   const {
     activateCenterSession,
     applyCenterData,
@@ -201,7 +202,16 @@ export function ContentGenerationCenter({
     assets: SelectedGenerationAsset[];
   }) {
     if (!route || activeRun || submitting) return false;
-    if (!window.confirm(t.contentGeneration.paidGenerationConfirm)) return false;
+    if (!await modal.confirm({
+      cancelText: t.common.cancel,
+      centered: true,
+      content: t.contentGeneration.paidGenerationConfirm,
+      focusable: { autoFocusButton: "cancel" },
+      keyboard: false,
+      mask: { closable: false },
+      okText: t.common.confirm,
+      title: t.contentGeneration.title,
+    })) return false;
     const revision = centerRevisionRef.current;
     if (!setSubmitting(session.id, revision, true)) return false;
     setCenterError(session.id, revision, "");
@@ -256,7 +266,16 @@ export function ContentGenerationCenter({
   }
 
   async function retry(runId: string) {
-    if (!window.confirm(t.contentGeneration.paidGenerationRetryConfirm)) return;
+    if (!await modal.confirm({
+      cancelText: t.common.cancel,
+      centered: true,
+      content: t.contentGeneration.paidGenerationRetryConfirm,
+      focusable: { autoFocusButton: "cancel" },
+      keyboard: false,
+      mask: { closable: false },
+      okText: t.common.confirm,
+      title: t.contentGeneration.retryRun,
+    })) return;
     const revision = centerRevisionRef.current;
     if (!setPendingActionId(session.id, revision, runId)) return;
     setCenterError(session.id, revision, "");
@@ -297,7 +316,7 @@ export function ContentGenerationCenter({
         <div className="mx-auto max-w-[820px]">
           <h1 className="sr-only">{t.contentGeneration.mode}</h1>
           {orderedRuns.length ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
               {orderedRuns.map((view) => (
                 <GenerationTurn
                   route={routes.find((item) => item.id === view.run.routeId) ?? selectedRoute}
@@ -361,9 +380,9 @@ function GenerationTurn({
   const parameterEntries = Object.entries(view.run.input.parameters ?? {});
   const latestJob = view.jobs.at(-1);
   return (
-    <section className="space-y-5">
+    <section className="space-y-4">
       <div className="flex justify-end">
-        <div className="max-w-[78%] rounded-2xl bg-[var(--user-bg)] px-4 py-2.5 text-sm leading-[1.65] whitespace-pre-wrap text-primary">
+        <div className="max-w-[78%] rounded-floating bg-[var(--user-bg)] px-3.5 py-2 text-sm leading-[1.6] whitespace-pre-wrap text-primary">
           {view.run.prompt}
           {parameterEntries.length || view.run.input.assets?.length ? (
             <div className="mt-2 border-t border-line-subtle pt-2 text-caption text-muted">
@@ -417,6 +436,7 @@ function GenerationResult({
   status: GenerationRunStatus;
 }) {
   const { t } = useI18n();
+  const { modal } = App.useApp();
   const [copied, setCopied] = useState(false);
   const active = ACTIVE_STATUSES.has(status);
   return (
@@ -436,9 +456,20 @@ function GenerationResult({
       ) : null}
       {errorMessage ? <p className="mt-3 text-xs text-destructive-text">{errorMessage}</p> : null}
       {active ? (
-        <Button className="mt-2" danger disabled={busy} htmlType="button" icon={<Square />} loading={busy} onClick={() => {
-          if (window.confirm(t.contentGeneration.cancelRunConfirm)) onCancel();
-        }} size="small" type="text">
+        <Button className="mt-2" danger disabled={busy} htmlType="button" icon={<Square />} loading={busy} onClick={() => void (async () => {
+          const confirmed = await modal.confirm({
+            cancelText: t.common.cancel,
+            centered: true,
+            content: t.contentGeneration.cancelRunConfirm,
+            focusable: { autoFocusButton: "cancel" },
+            keyboard: false,
+            mask: { closable: false },
+            okButtonProps: { danger: true },
+            okText: t.contentGeneration.cancelRun,
+            title: t.contentGeneration.cancelRun,
+          });
+          if (confirmed) onCancel();
+        })()} size="small" type="text">
           {t.contentGeneration.cancelRun}
         </Button>
       ) : job && (status === "failed" || status === "cancelled") ? (

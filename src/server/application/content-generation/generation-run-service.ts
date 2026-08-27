@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   GenerationAssetSlot,
+  GenerationInputSchema,
   GenerationParameterField,
   JsonValue,
 } from "@/contracts/generation";
@@ -162,6 +163,11 @@ export class GenerationRunService {
       input.parameters,
     );
     validateAssets(route.inputSchema.assets ?? [], current.input.assets ?? []);
+    validateInputConstraints(
+      route.inputSchema.constraints ?? [],
+      parameters,
+      current.input.assets ?? [],
+    );
     const timestamp = this.now().toISOString();
     const run: GenerationRun = {
       ...current,
@@ -231,6 +237,25 @@ export class GenerationRunService {
     return (await this.repository.getRoute(routeId))!;
   }
 
+  async setDefaultRoute(routeId: string) {
+    await this.ready;
+    const route = await this.repository.getRoute(routeId);
+    if (!route) {
+      throw new AppError("GENERATION_ROUTE_NOT_FOUND", "Generation route was not found", 404);
+    }
+    if (!route.enabled) {
+      throw new AppError(
+        "GENERATION_ROUTE_UNAVAILABLE",
+        "Enable the generation route before making it the default",
+        409,
+      );
+    }
+    if (!await this.repository.setDefaultRoute(routeId, this.now().toISOString())) {
+      throw new AppError("GENERATION_ROUTE_UNAVAILABLE", "Generation route is not available", 409);
+    }
+    return (await this.repository.getRoute(routeId))!;
+  }
+
   async cancelRun(id: string): Promise<GenerationRunView> {
     await this.ready;
     const run = await this.repository.getRun(id);
@@ -284,12 +309,17 @@ export class GenerationRunService {
     await this.requireProviderEnabled(route);
     // 重试仍可能产生新费用；旧 Run 也必须通过当前 Route 契约，避免重新提交历史上的无效输入。
     validatePrompt(run.prompt, route.inputSchema.prompt);
-    validateParameters(
+    const parameters = validateParameters(
       route.inputSchema.parameters ?? [],
       route.defaults,
       run.input.parameters,
     );
     validateAssets(route.inputSchema.assets ?? [], run.input.assets ?? []);
+    validateInputConstraints(
+      route.inputSchema.constraints ?? [],
+      parameters,
+      run.input.assets ?? [],
+    );
     const jobs = await this.repository.listJobsByRun(id);
     const previous = jobs.at(-1);
     if (!previous) throw new Error(`Generation run ${id} has no provider job`);
@@ -383,6 +413,11 @@ export class GenerationRunService {
       input.parameters,
     );
     validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
+    validateInputConstraints(
+      route.inputSchema.constraints ?? [],
+      parameters,
+      input.assets ?? [],
+    );
     const timestamp = this.now().toISOString();
     const run: GenerationRun = {
       id: this.createId(),
@@ -513,8 +548,19 @@ function validateParameters(
 }
 
 function validateParameter(field: GenerationParameterField, value: JsonValue) {
-  if (field.type === "text" && typeof value !== "string") {
-    invalidInput(`Generation parameter must be text: ${field.key}`);
+  if (field.type === "text") {
+    if (typeof value !== "string") {
+      invalidInput(`Generation parameter must be text: ${field.key}`);
+    }
+    if (field.minLength !== undefined && value.length < field.minLength) {
+      invalidInput(`Generation parameter is shorter than allowed: ${field.key}`);
+    }
+    if (field.maxLength !== undefined && value.length > field.maxLength) {
+      invalidInput(`Generation parameter is longer than allowed: ${field.key}`);
+    }
+    if (field.format === "url" && value && !isSafePublicUrl(value)) {
+      invalidInput(`Generation parameter must be a public HTTPS URL: ${field.key}`);
+    }
   }
   if (field.type === "number") {
     if (typeof value !== "number") invalidInput(`Generation parameter must be a number: ${field.key}`);
@@ -533,6 +579,47 @@ function validateParameter(field: GenerationParameterField, value: JsonValue) {
     if (!Array.isArray(value) || value.some((item) => !options.has(item as string))) {
       invalidInput(`Generation parameter has unsupported options: ${field.key}`);
     }
+  }
+}
+
+function validateInputConstraints(
+  constraints: NonNullable<GenerationInputSchema["constraints"]>,
+  parameters: Record<string, JsonValue>,
+  assets: NonNullable<GenerationInput["assets"]>,
+) {
+  for (const constraint of constraints) {
+    if (constraint.kind === "at-least-one-asset") {
+      const count = assets.filter((asset) => constraint.slots.includes(asset.slot)).length;
+      if (count < (constraint.minFiles ?? 1)) {
+        invalidInput(`At least one generation asset is required from: ${constraint.slots.join(", ")}`);
+      }
+      continue;
+    }
+    const populated = constraint.keys.filter((key) => {
+      const value = parameters[key];
+      return value !== undefined && value !== null && value !== "";
+    });
+    if (populated.length > 1) {
+      invalidInput(`Generation parameters are mutually exclusive: ${constraint.keys.join(", ")}`);
+    }
+  }
+}
+
+function isSafePublicUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return host.includes(".") && !host.endsWith(".local") && !host.endsWith(".internal") &&
+      host !== "localhost" && host !== "::1" &&
+      !/^127\./.test(host) && !/^10\./.test(host) &&
+      !/^169\.254\./.test(host) && !/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) &&
+      !/^192\.168\./.test(host) &&
+      !/^172\.(1[6-9]|2\d|3[01])\./.test(host) &&
+      !/^(fc|fd|fe8|fe9|fea|feb)/.test(host) &&
+      host !== "0.0.0.0";
+  } catch {
+    return false;
   }
 }
 

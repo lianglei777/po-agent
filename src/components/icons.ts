@@ -3,6 +3,8 @@ import {
   AlertTriangle as AlertTriangleIcon,
   Aperture as ApertureIcon,
   ArrowLeft as ArrowLeftIcon,
+  ArrowDown as ArrowDownIcon,
+  ArrowUp as ArrowUpIcon,
   AtSign as AtSignIcon,
   Bot as BotIcon,
   Box as BoxIcon,
@@ -110,6 +112,8 @@ function createAppIcon(Icon: LucideIcon): LucideIcon {
 export const AlertTriangle = createAppIcon(AlertTriangleIcon);
 export const Aperture = createAppIcon(ApertureIcon);
 export const ArrowLeft = createAppIcon(ArrowLeftIcon);
+export const ArrowDown = createAppIcon(ArrowDownIcon);
+export const ArrowUp = createAppIcon(ArrowUpIcon);
 export const AtSign = createAppIcon(AtSignIcon);
 export const Bot = createAppIcon(BotIcon);
 export const Box = createAppIcon(BoxIcon);
