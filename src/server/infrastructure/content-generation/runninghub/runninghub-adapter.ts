@@ -167,16 +167,32 @@ export class RunningHubAdapter implements GenerationProvider {
     }
     if (!response.ok) {
       const record = objectValue(value);
+      if (response.status === 429) {
+        throw new AppError(
+          "GENERATION_PROVIDER_RATE_LIMITED",
+          stringValue(record.errorMessage) ?? stringValue(record.message) ?? "RunningHub rate limit was reached",
+          429,
+          { retryAfterMs: parseRetryAfter(response.headers.get("retry-after")) },
+        );
+      }
       throw new AppError(
         "GENERATION_PROVIDER_ERROR",
         stringValue(record.errorMessage) ??
           stringValue(record.message) ??
           `RunningHub request failed (${response.status})`,
-        502,
+        response.status,
       );
     }
     return value;
   }
+}
+
+function parseRetryAfter(value:string|null):number|undefined {
+  if (!value) return undefined;
+  const seconds=Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds*1000;
+  const timestamp=Date.parse(value);
+  return Number.isFinite(timestamp)?Math.max(0,timestamp-Date.now()):undefined;
 }
 
 function normalizeResponse(value: unknown): ProviderSubmitResult {

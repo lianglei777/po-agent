@@ -34,6 +34,7 @@
 | 文档 | 用途 |
 | --- | --- |
 | [RunningHub API 接入手册](./guides/runninghub-api-onboarding-guide.md) | 添加新的 RunningHub 内容生成 API |
+| [千问内容生成故障排查](./guides/qianwen-generation-troubleshooting.md) | 千问并发、退避、限流恢复和显式付费 Smoke |
 | [Skill Pack 格式规范](./guides/skill-pack-format.md) | Skill Pack 权威格式和校验要求 |
 | [Skill Pack 使用与命名](./guides/skill-packs.md) | Skill Pack 设计、使用方式与命名说明 |
 

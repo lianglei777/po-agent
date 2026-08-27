@@ -89,6 +89,7 @@ export interface ProviderJob {
   leaseExpiresAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  transientFailureCount?: number;
   requestSnapshot?: JsonValue;
   responseSnapshot?: JsonValue;
   createdAt: string;

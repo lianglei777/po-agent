@@ -41,6 +41,9 @@ export function buildQianwenRequest(
     if(parameters.seed!==undefined&&parameters.seed!==null)imageParameters.seed=parameters.seed;
     return{model:config.vendorModel,input:{messages:[{role:"user",content:[{text:generation.prompt}]}]},parameters:imageParameters};
   }
+  if(config.requestProfile==="legacy-prompt-image-v1"){
+    return{model:config.vendorModel,input:{prompt:generation.prompt,...(parameters.negativePrompt?{negative_prompt:parameters.negativePrompt}:{})},parameters:{size:parameters.size,n:parameters.imageCount,prompt_extend:parameters.promptExtend,watermark:parameters.watermark,...(parameters.seed!==undefined?{seed:parameters.seed}:{})}};
+  }
   const vendorParameters: Record<string, JsonValue> = {
     resolution: parameters.resolution ?? defaultResolution(config.requestProfile),
     duration: parameters.durationSeconds ?? 5,
@@ -84,6 +87,8 @@ function validProfile(operation:string,record:Record<string,JsonValue>):boolean{
   if([QIANWEN_WAN_3_TEXT_TO_VIDEO_OPERATION,QIANWEN_WAN_3_IMAGE_TO_VIDEO_OPERATION,QIANWEN_WAN_3_MULTIMODAL_VIDEO_OPERATION].includes(operation as never))return record.endpointId==="video-synthesis"&&record.vendorModel==="wan3.0-video"&&record.requestProfile==="wan-3-video-v1"&&record.resultProfile==="video-url-v1"&&record.pollIntervalMs===15_000&&record.submitMode==="async-task";
   if(operation===QIANWEN_Z_IMAGE_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="multimodal-generation"&&record.vendorModel==="z-image-turbo"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="sync";
   if(operation===QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="image-generation"&&record.vendorModel==="wan2.6-t2i"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===5_000;
+  const legacy=LEGACY_IMAGE_PROFILES[operation];
+  if(legacy)return record.endpointId==="legacy-image-synthesis"&&record.vendorModel===legacy&&record.requestProfile==="legacy-prompt-image-v1"&&record.resultProfile==="legacy-results-image-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===5_000;
   const expected=VIDEO_PROFILES[operation];
   if(expected)return record.endpointId==="video-synthesis"&&record.vendorModel===expected.model&&record.requestProfile===expected.profile&&record.resultProfile==="video-url-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===15_000;
   return false;
@@ -99,6 +104,15 @@ const VIDEO_PROFILES:Record<string,{model:string;profile:string}>={
   "minimax-h3-text-to-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
   "minimax-h3-image-to-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
   "minimax-h3-multimodal-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
+};
+
+const LEGACY_IMAGE_PROFILES:Record<string,string>={
+  "wan-2-5-text-to-image":"wan2.5-t2i-preview",
+  "wan-2-2-plus-text-to-image":"wan2.2-t2i-plus",
+  "wan-2-2-flash-text-to-image":"wan2.2-t2i-flash",
+  "wanx-2-1-plus-text-to-image":"wanx2.1-t2i-plus",
+  "wanx-2-1-turbo-text-to-image":"wanx2.1-t2i-turbo",
+  "wanx-2-0-turbo-text-to-image":"wanx2.0-t2i-turbo",
 };
 
 function defaultResolution(profile:QianwenExecutionConfig["requestProfile"]):string {

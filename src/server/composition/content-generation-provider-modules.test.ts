@@ -3,6 +3,7 @@ import {
   createGenerationProviderDescriptors,
   createGenerationProviders,
   createGenerationRoutes,
+  createGenerationWorkerPolicies,
 } from "./content-generation-provider-modules";
 
 describe("content generation provider modules", () => {
@@ -28,5 +29,9 @@ describe("content generation provider modules", () => {
     expect(createGenerationRoutes().some((route) => (
       route.id === "qianwen-wan-3-0-text-to-video"
     ))).toBe(true);
+    expect(createGenerationWorkerPolicies()).toEqual({
+      runninghub:{maxConcurrent:2},
+      qianwen:{maxConcurrent:2},
+    });
   });
 });

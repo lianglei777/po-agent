@@ -13,4 +13,5 @@ export const runningHubProviderModule = {
   },
   createProvider: () => new RunningHubAdapter(),
   createRoutes: createRunningHubRoutes,
+  workerPolicy: { maxConcurrent: 2 },
 };

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AppError } from "@/server/domain/app-error";
 import type { GenerationProvider } from "@/server/ports/generation-provider";
 import type { GenerationFileStore } from "@/server/ports/generation-file-store";
 import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
@@ -129,6 +130,63 @@ describe("GenerationWorker", () => {
     expect(provider.submit).toHaveBeenCalledOnce();
     expect(provider.poll).toHaveBeenCalledOnce();
     expect(provider.download).toHaveBeenCalledOnce();
+    expect(worker.getMetrics()).toMatchObject({
+      claimedJobs:2,
+      completedAdvances:2,
+      failedAdvances:0,
+      activeByProvider:{runninghub:0},
+      maxObservedByProvider:{runninghub:1},
+    });
+  });
+
+  it("persists Retry-After and exponential backoff across poll failures", async () => {
+    const created=await runService.createRun({sessionId:"session-1",capability:"text-to-video",prompt:"backoff",source:"api",idempotencyKey:"backoff"});
+    await worker.runOnce();
+    now=new Date("2026-08-06T00:00:05.000Z");
+    vi.mocked(provider.poll).mockRejectedValueOnce(new AppError("GENERATION_PROVIDER_RATE_LIMITED","slow down",429,{retryAfterMs:120_000}));
+    await worker.runOnce();
+    await expect(repository.getJob(created.jobs[0].id)).resolves.toMatchObject({status:"polling",transientFailureCount:1,nextPollAt:"2026-08-06T00:02:05.000Z",lastErrorCode:"GENERATION_PROVIDER_RATE_LIMITED"});
+
+    now=new Date("2026-08-06T00:02:05.000Z");
+    vi.mocked(provider.poll).mockRejectedValueOnce(new Error("temporary network failure"));
+    await worker.runOnce();
+    await expect(repository.getJob(created.jobs[0].id)).resolves.toMatchObject({status:"polling",transientFailureCount:2,nextPollAt:"2026-08-06T00:02:15.000Z"});
+  });
+
+  it("fails a job after eight consecutive recoverable errors", async () => {
+    const created=await runService.createRun({sessionId:"session-1",capability:"text-to-video",prompt:"retry cap",source:"api",idempotencyKey:"retry-cap"});
+    await worker.runOnce();
+    const submitted=await repository.getJob(created.jobs[0].id);
+    if(!submitted)throw new Error("Expected submitted job");
+    now=new Date("2026-08-06T00:00:05.000Z");
+    await repository.updateJob({...submitted,transientFailureCount:7,nextPollAt:now.toISOString(),updatedAt:now.toISOString()});
+    vi.mocked(provider.poll).mockRejectedValueOnce(new Error("still unavailable"));
+
+    await worker.runOnce();
+
+    await expect(runService.getRun(created.run.id)).resolves.toMatchObject({run:{status:"failed",errorCode:"GENERATION_PROVIDER_ERROR"},jobs:[{status:"failed"}]});
+  });
+
+  it("limits concurrent advances independently per provider", async () => {
+    for(const id of ["session-2","session-3"]){await repository.upsertSession({id,cwd:`D:\\${id}`,origin:"chat",createdAt:now.toISOString(),updatedAt:now.toISOString()});}
+    await Promise.all(["session-1","session-2","session-3"].map((sessionId,index)=>runService.createRun({sessionId,capability:"text-to-video",prompt:`job ${index}`,source:"api",idempotencyKey:`concurrent-${index}`})));
+    let release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    let active=0;
+    let maximum=0;
+    vi.mocked(provider.submit).mockImplementation(async()=>{
+      active+=1;maximum=Math.max(maximum,active);
+      await gate;
+      active-=1;
+      return{state:"pending",remoteTaskId:"remote",outputs:[]};
+    });
+    worker=new GenerationWorker(repository,execution,"worker-concurrent",()=>now,1_000,180_000,{runninghub:{maxConcurrent:2}});
+    const running=worker.runOnce(3);
+    await vi.waitFor(()=>expect(active).toBe(2));
+    release();
+    await expect(running).resolves.toBe(3);
+    expect(maximum).toBe(2);
+    expect(worker.getMetrics()).toMatchObject({claimedJobs:3,completedAdvances:3,maxObservedByProvider:{runninghub:2}});
   });
 
   it("executes the provider config frozen when the job was created", async () => {
@@ -212,6 +270,17 @@ describe("GenerationWorker", () => {
       run: { status: "failed", errorCode: "FILE_TOO_LARGE" },
     });
     expect(provider.prepareAssets).not.toHaveBeenCalled();
+  });
+
+  it("backs off a rate-limited asset preparation without submitting paid work", async () => {
+    vi.mocked(files.readInput).mockResolvedValueOnce({slot:"firstFrameUrl",name:"frame.png",mimeType:"image/png",data:new Uint8Array([1])});
+    vi.mocked(provider.prepareAssets).mockRejectedValueOnce(new AppError("GENERATION_PROVIDER_RATE_LIMITED","upload limited",429,{retryAfterMs:30_000}));
+    const created=await runService.createRun({sessionId:"session-1",capability:"image-to-video",routeId:"runninghub-pixverse-v6-image-to-video",prompt:"animate",assets:[{slot:"firstFrameUrl",ref:{type:"workspace-file",relativePath:"frame.png"}}],source:"api",idempotencyKey:"upload-backoff"});
+
+    await worker.runOnce();
+
+    await expect(repository.getJob(created.jobs[0].id)).resolves.toMatchObject({status:"uploading",transientFailureCount:1,nextPollAt:"2026-08-06T00:00:30.000Z"});
+    expect(provider.submit).not.toHaveBeenCalled();
   });
 
   it("recovers an expired submitting job as unknown instead of retrying", async () => {

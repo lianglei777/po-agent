@@ -174,6 +174,8 @@ export interface ProviderJobDto {
   nextPollAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  /** 连续可恢复错误次数，用于展示当前退避强度和排障。 */
+  transientFailureCount?: number;
   requestSnapshot?: JsonValue;
   responseSnapshot?: JsonValue;
   createdAt: string;

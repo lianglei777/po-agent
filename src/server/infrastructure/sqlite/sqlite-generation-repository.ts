@@ -380,6 +380,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
       job.leaseExpiresAt ?? null,
       job.lastErrorCode ?? null,
       job.lastErrorMessage ?? null,
+      job.transientFailureCount ?? 0,
       job.requestSnapshot === undefined ? null : JSON.stringify(job.requestSnapshot),
       job.responseSnapshot === undefined ? null : JSON.stringify(job.responseSnapshot),
       job.updatedAt,
@@ -393,7 +394,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         retry_key = ?, prepared_assets_json = ?, status = ?,
         remote_task_id = ?, remote_status = ?, next_poll_at = ?,
         lease_owner = ?, lease_expires_at = ?, last_error_code = ?,
-        last_error_message = ?, request_snapshot_json = ?,
+        last_error_message = ?, transient_failure_count = ?, request_snapshot_json = ?,
         response_snapshot_json = ?, updated_at = ?
       WHERE id = ?${where}
     `).run(...values);
@@ -531,9 +532,9 @@ export class SqliteGenerationRepository implements GenerationRepository {
         resolved_config_json, credential_ref, retry_key, prepared_assets_json, status,
         remote_task_id, remote_status,
         next_poll_at, lease_owner, lease_expires_at, last_error_code,
-        last_error_message, request_snapshot_json, response_snapshot_json,
+        last_error_message, transient_failure_count, request_snapshot_json, response_snapshot_json,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       job.id,
       job.runId,
@@ -553,6 +554,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
       job.leaseExpiresAt ?? null,
       job.lastErrorCode ?? null,
       job.lastErrorMessage ?? null,
+      job.transientFailureCount ?? 0,
       job.requestSnapshot === undefined ? null : JSON.stringify(job.requestSnapshot),
       job.responseSnapshot === undefined ? null : JSON.stringify(job.responseSnapshot),
       job.createdAt,
@@ -649,6 +651,7 @@ function jobFromRow(row: SqliteRow): ProviderJob {
     leaseExpiresAt: optionalString(row, "lease_expires_at"),
     lastErrorCode: optionalString(row, "last_error_code"),
     lastErrorMessage: optionalString(row, "last_error_message"),
+    transientFailureCount: (optionalNumber(row, "transient_failure_count") ?? 0) || undefined,
     requestSnapshot: optionalJson<ProviderJob["requestSnapshot"]>(
       row,
       "request_snapshot_json",

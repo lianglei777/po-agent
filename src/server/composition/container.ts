@@ -20,6 +20,7 @@ import {
   createGenerationProviders,
   createGenerationProviderDescriptors,
   createGenerationRoutes,
+  createGenerationWorkerPolicies,
 } from "@/server/composition/content-generation-provider-modules";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
@@ -215,6 +216,10 @@ function createContainer() {
       repository,
       execution,
       `generation-worker-${randomUUID()}`,
+      undefined,
+      undefined,
+      undefined,
+      createGenerationWorkerPolicies(),
     );
     void ready.then(() => worker.start());
     return generationRunService;
@@ -512,7 +517,7 @@ const globalContainer = globalThis as typeof globalThis & {
 };
 
 // 开发热更新会保留全局容器，而 Provider descriptor 在容器创建时已冻结；注册表变化必须使旧容器失效。
-const CONTAINER_VERSION = "generation-qianwen-video-batch-v9";
+const CONTAINER_VERSION = "generation-qianwen-production-v10";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

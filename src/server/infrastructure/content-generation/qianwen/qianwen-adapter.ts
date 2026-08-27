@@ -139,10 +139,18 @@ export class QianwenAdapter implements GenerationProvider {
     }
     if (!response.ok) {
       const root = objectValue(value);
+      if (response.status === 429) {
+        throw new AppError(
+          "GENERATION_PROVIDER_RATE_LIMITED",
+          stringValue(root.message) ?? "Qianwen rate limit was reached",
+          429,
+          { retryAfterMs: parseRetryAfter(response.headers.get("retry-after")) },
+        );
+      }
       throw new AppError(
         "GENERATION_PROVIDER_ERROR",
         stringValue(root.message) ?? `Qianwen request failed (${response.status})`,
-        502,
+        response.status,
       );
     }
     return value;
@@ -154,7 +162,11 @@ function normalizeResponse(value: unknown, config: ReturnType<typeof resolveQian
   const output = objectValue(root.output);
   const remoteTaskId = stringValue(output.task_id);
   const status = (stringValue(output.task_status) ?? "UNKNOWN").toUpperCase();
-  const urls=config.resultProfile==="video-url-v1" ? [stringValue(output.video_url)].filter((url):url is string=>Boolean(url)) : choiceImageUrls(output);
+  const urls=config.resultProfile==="video-url-v1"
+    ? [stringValue(output.video_url)].filter((url):url is string=>Boolean(url))
+    : config.resultProfile==="legacy-results-image-v1"
+      ? (Array.isArray(output.results)?output.results:[]).map(item=>stringValue(objectValue(item).url)).filter((url):url is string=>Boolean(url))
+      : choiceImageUrls(output);
   const synchronous=config.submitMode==="sync";
   const effectiveStatus=synchronous&&urls.length?"SUCCEEDED":status;
   const missingSucceededOutput = effectiveStatus === "SUCCEEDED" && urls.length===0;
@@ -216,6 +228,14 @@ function rejectedDownloadUrl(): AppError {
   );
 }
 
+function parseRetryAfter(value:string|null):number|undefined {
+  if (!value) return undefined;
+  const seconds=Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds*1000;
+  const timestamp=Date.parse(value);
+  return Number.isFinite(timestamp)?Math.max(0,timestamp-Date.now()):undefined;
+}
+
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -225,5 +245,5 @@ function objectValue(value: unknown): Record<string, unknown> {
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
-function submitUrl(endpointId:string){const paths:Record<string,string>={"video-synthesis":"/services/aigc/video-generation/video-synthesis","multimodal-generation":"/services/aigc/multimodal-generation/generation","image-generation":"/services/aigc/image-generation/generation"};const path=paths[endpointId];if(!path)throw new AppError("GENERATION_OPERATION_UNSUPPORTED","Qianwen endpoint is not supported",400);return API_ORIGIN+path;}
+function submitUrl(endpointId:string){const paths:Record<string,string>={"video-synthesis":"/services/aigc/video-generation/video-synthesis","multimodal-generation":"/services/aigc/multimodal-generation/generation","image-generation":"/services/aigc/image-generation/generation","legacy-image-synthesis":"/services/aigc/text2image/image-synthesis"};const path=paths[endpointId];if(!path)throw new AppError("GENERATION_OPERATION_UNSUPPORTED","Qianwen endpoint is not supported",400);return API_ORIGIN+path;}
 function choiceImageUrls(output:Record<string,unknown>):string[]{const choices=Array.isArray(output.choices)?output.choices:[];return choices.flatMap(choice=>{const content=objectValue(objectValue(choice).message).content;return Array.isArray(content)?content.map(item=>stringValue(objectValue(item).image)).filter((url):url is string=>Boolean(url)):[];});}

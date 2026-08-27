@@ -15,4 +15,5 @@ export const qianwenProviderModule = {
   },
   createProvider: () => new QianwenAdapter(),
   createRoutes: createQianwenRoutes,
+  workerPolicy: { maxConcurrent: 2 },
 };

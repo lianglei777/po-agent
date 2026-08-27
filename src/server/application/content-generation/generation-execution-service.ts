@@ -18,6 +18,8 @@ import type { GenerationRepository } from "@/server/ports/generation-repository"
 import { generationOutputName } from "./generation-output-name";
 
 const POLL_INTERVAL_MS = 5_000;
+const MAX_TRANSIENT_FAILURES = 8;
+const MAX_RETRY_DELAY_MS = 5 * 60_000;
 
 export class GenerationExecutionService {
   private readonly providers: Map<string, GenerationProvider>;
@@ -133,7 +135,7 @@ export class GenerationExecutionService {
         };
         if (!await this.repository.updateJob(job, ["uploading"])) return;
       } catch (error) {
-        await this.fail(job, run, errorCode(error, "GENERATION_UPLOAD_FAILED"), errorMessage(error));
+        await this.retryTransient(job,run,error,"uploading","GENERATION_UPLOAD_FAILED");
         return;
       }
     }
@@ -208,16 +210,7 @@ export class GenerationExecutionService {
       });
       await this.handleProviderResult(job, run, provider, result);
     } catch (error) {
-      await this.repository.updateJob({
-        ...job,
-        status: "polling",
-        nextPollAt: this.after(POLL_INTERVAL_MS),
-        leaseOwner: undefined,
-        leaseExpiresAt: undefined,
-        lastErrorCode: errorCode(error, "GENERATION_PROVIDER_ERROR"),
-        lastErrorMessage: errorMessage(error),
-        updatedAt: this.timestamp(),
-      }, ["polling"]);
+      await this.retryTransient(job, run, error, "polling", "GENERATION_PROVIDER_ERROR");
     }
   }
 
@@ -262,6 +255,7 @@ export class GenerationExecutionService {
         leaseExpiresAt: undefined,
         lastErrorCode: undefined,
         lastErrorMessage: undefined,
+        transientFailureCount: 0,
         updatedAt: this.timestamp(),
       }, ["submitting", "polling"]);
       return;
@@ -360,17 +354,31 @@ export class GenerationExecutionService {
         // 回调失败不影响 Run 完成流程
       }
     } catch (error) {
-      await this.repository.updateJob({
-        ...job,
-        status: "downloading",
-        nextPollAt: this.after(POLL_INTERVAL_MS),
-        leaseOwner: undefined,
-        leaseExpiresAt: undefined,
-        lastErrorCode: errorCode(error, "GENERATION_DOWNLOAD_FAILED"),
-        lastErrorMessage: errorMessage(error),
-        updatedAt: this.timestamp(),
-      }, ["downloading"]);
+      await this.retryTransient(job, run, error, "downloading", "GENERATION_DOWNLOAD_FAILED");
     }
+  }
+
+  private async retryTransient(
+    job: ProviderJob,
+    run: GenerationRun,
+    error: unknown,
+    status: "uploading" | "polling" | "downloading",
+    fallbackCode: string,
+  ): Promise<void> {
+    const failureCount=(job.transientFailureCount??0)+1;
+    if (!isTransient(error) || failureCount >= MAX_TRANSIENT_FAILURES) {
+      await this.fail(job,run,errorCode(error,fallbackCode),errorMessage(error));
+      return;
+    }
+    // 退避计数持久化到 Job，进程重启后不会重新从最短间隔开始冲击供应商。
+    const exponential=Math.min(POLL_INTERVAL_MS*2**(failureCount-1),MAX_RETRY_DELAY_MS);
+    const delay=Math.max(exponential,retryAfterMs(error)??0);
+    await this.repository.updateJob({
+      ...job,status,nextPollAt:this.after(Math.min(delay,MAX_RETRY_DELAY_MS)),
+      leaseOwner:undefined,leaseExpiresAt:undefined,
+      lastErrorCode:errorCode(error,fallbackCode),lastErrorMessage:errorMessage(error),
+      transientFailureCount:failureCount,updatedAt:this.timestamp(),
+    },[status]);
   }
 
   private async resolveInputAssets(run: GenerationRun): Promise<ProviderInputAsset[]> {
@@ -523,6 +531,20 @@ function errorCode(error: unknown, fallback: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown generation error";
+}
+
+function isTransient(error:unknown):boolean {
+  if (!(error instanceof AppError)) return true;
+  if (error.code === "GENERATION_PROVIDER_PROTOCOL_ERROR"
+    || error.code === "GENERATION_DOWNLOAD_URL_REJECTED"
+    || error.code === "GENERATION_DOWNLOAD_TOO_LARGE") return false;
+  return error.status === 429 || error.status >= 500;
+}
+
+function retryAfterMs(error:unknown):number|undefined {
+  if (!(error instanceof AppError) || !error.details || typeof error.details !== "object") return undefined;
+  const value=(error.details as {retryAfterMs?:unknown}).retryAfterMs;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function artifactKind(

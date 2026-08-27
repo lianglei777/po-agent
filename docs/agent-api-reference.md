@@ -2522,6 +2522,8 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 千问图片 Route 包括同步的 `qianwen-z-image-text-to-image` 与异步的 `qianwen-wan-2-6-text-to-image`。Z-Image 固定单张 PNG 输出且不进入轮询；Wan 2.6 支持 `imageCount` 1–4、负向提示词和 5 秒轮询。两者均使用供应商无关的 `size`、`promptExtend` 与可选 `seed` 参数。
 
+兼容目录还提供 Wan 2.5、Wan 2.2 Plus/Flash、WanX 2.1 Plus/Turbo 和 WanX 2.0 Turbo 六条 Legacy 文生图 Route。它们使用固定的旧版 `input.prompt` / `output.results[].url` Profile，始终以 `enabled: false`、`isDefault: false` 初始化，并标记 `Legacy`；新工作流应优先使用 Wan 2.6 或 Z-Image。
+
 千问视频目录还包括 Wan 2.7、HappyHorse 1.1 和 MiniMax-H3 的文生视频、图生视频与参考/多模态生视频 Route。Wan 2.7 固定到文档对应的模型快照；HappyHorse 与 MiniMax-H3 使用各自有限参数 Profile。All-in-One 供应商接口按 capability 拆成独立 Route，前端不需要理解模型内部模式。Wan 2.7 参考生视频的图片与视频素材合计最多 5 个，服务端会跨素材槽统一校验。
 
 各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
@@ -2698,6 +2700,8 @@ DELETE /api/generation/credentials/:providerId
 - 轮询失败保留 remote task ID 并延迟重试。
 - 千问 Wan 3.0 视频任务按供应商建议使用 15 秒轮询间隔；成功 URL 会立即下载到 workspace，不能把供应商的 24 小时 URL 当作长期产物。
 - 千问本地素材使用与冻结模型绑定的临时 OSS Policy 逐文件上传；prepared asset 记录 47 小时安全有效期，过期且尚未提交时由 Worker 重新准备。Policy、Signature 和临时 AccessKey 不进入 Job 快照。
+- Worker 按 Provider 独立限制并发，千问与 RunningHub 当前各最多同时推进 2 个 Job。素材准备、查询或下载的网络错误、HTTP 429 和 5xx 使用持久化指数退避，5 秒起步、5 分钟封顶，并遵守受限的 `Retry-After`；连续 8 次可恢复错误后任务失败。`ProviderJobDto.transientFailureCount`、`nextPollAt` 和最近错误用于运行诊断。
+- `GENERATION_PROVIDER_RATE_LIMITED` 表示供应商返回 HTTP 429。该错误不会触发付费提交的盲目重试；查询与下载阶段会进入上述安全退避。
 - `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
 - 成功产物下载到 `<workspace>/.po-agent/generated/<runId>/`。
 

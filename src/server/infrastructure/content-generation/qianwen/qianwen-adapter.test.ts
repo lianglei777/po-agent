@@ -21,6 +21,16 @@ describe("QianwenAdapter", () => {
     const result=await new QianwenAdapter(fetcher).poll({operation:route.providerOperation,executionConfig:route.adapterConfig,remoteTaskId:"image-task",credential:"secret"});
     expect(result).toMatchObject({state:"succeeded",outputs:[{outputType:"png"},{outputType:"png"}]});
   });
+
+  it("submits and normalizes the legacy image protocol", async () => {
+    const route=createQianwenRoutes().find(item=>item.id==="qianwen-wan-2-5-text-to-image")!;
+    const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({output:{task_id:"legacy-task",task_status:"SUCCEEDED",results:[{url:"https://dashscope-result-wlcb.oss-cn-wulanchabu.aliyuncs.com/1.png"},{url:"https://dashscope-result-wlcb.oss-cn-wulanchabu.aliyuncs.com/2.png"}]}}));
+    const adapter=new QianwenAdapter(fetcher);
+    const submitted=await adapter.submit({operation:route.providerOperation,executionConfig:route.adapterConfig,generation:{prompt:"江南水乡",parameters:route.defaults},assets:[],credential:"secret"});
+    expect(fetcher.mock.calls[0][0]).toBe("https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis");
+    expect(fetcher.mock.calls[0][1]?.headers).toMatchObject({"X-DashScope-Async":"enable"});
+    expect(submitted).toMatchObject({state:"succeeded",outputs:[{outputType:"png"},{outputType:"png"}]});
+  });
   it("submits an async Wan 3.0 task with the required headers", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       request_id: "request-1",
@@ -188,6 +198,13 @@ describe("QianwenAdapter", () => {
     expect(fetcher.mock.calls[1][1]?.body).toBeInstanceOf(FormData);
   });
 
+  it("preserves upload-policy Retry-After for the durable worker", async () => {
+    const imageRoute=createQianwenRoutes().find(route=>route.capability==="image-to-video")!;
+    const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({message:"upload policy limited"},429,{"retry-after":"30"}));
+    await expect(new QianwenAdapter(fetcher).prepareAssets({operation:imageRoute.providerOperation,executionConfig:imageRoute.adapterConfig,assets:[{slot:"firstFrameUrl",name:"frame.png",mimeType:"image/png",data:new Uint8Array([1])}],credential:"secret-key"}))
+      .rejects.toMatchObject({code:"GENERATION_PROVIDER_RATE_LIMITED",details:{retryAfterMs:30_000}});
+  });
+
   it("downloads only allowlisted Alibaba OSS result hosts without redirects", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(
       new Uint8Array([1, 2, 3]),
@@ -234,12 +251,20 @@ describe("QianwenAdapter", () => {
       code: "GENERATION_PROVIDER_ERROR",
       message: "invalid API key",
     });
+
+    const rateLimited = new QianwenAdapter(vi.fn<typeof fetch>(async () => jsonResponse(
+      { message: "too many requests" },
+      429,
+      { "retry-after": "45" },
+    )));
+    await expect(rateLimited.poll({operation:ROUTE.providerOperation,executionConfig:ROUTE.adapterConfig,remoteTaskId:"task-limited",credential:"secret-key"}))
+      .rejects.toMatchObject({code:"GENERATION_PROVIDER_RATE_LIMITED",status:429,details:{retryAfterMs:45_000}});
   });
 });
 
-function jsonResponse(value: unknown, status = 200): Response {
+function jsonResponse(value: unknown, status = 200, headers:Record<string,string> = {}): Response {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }

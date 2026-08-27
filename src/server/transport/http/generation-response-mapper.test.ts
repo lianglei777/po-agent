@@ -27,6 +27,7 @@ describe("generationRunViewDto", () => {
         resolvedConfigSnapshot: { internal: true },
         credentialRef: "runninghub:default",
         status: "polling",
+        transientFailureCount: 2,
         leaseOwner: "worker-secret",
         leaseExpiresAt: "later",
         createdAt: "now",
@@ -42,6 +43,7 @@ describe("generationRunViewDto", () => {
       providerId: "runninghub",
       providerOperation: "text-to-video",
       status: "polling",
+      transientFailureCount: 2,
       createdAt: "now",
       updatedAt: "now",
     }]);

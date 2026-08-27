@@ -64,6 +64,7 @@ function providerJobDto(job: ProviderJob): ProviderJobDto {
     nextPollAt: job.nextPollAt,
     lastErrorCode: job.lastErrorCode,
     lastErrorMessage: job.lastErrorMessage,
+    transientFailureCount: job.transientFailureCount,
     requestSnapshot: job.requestSnapshot,
     responseSnapshot: job.responseSnapshot,
     createdAt: job.createdAt,

@@ -414,4 +414,13 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
       ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
     `,
   },
+  {
+    version: 13,
+    name: "generation_transient_failure_count",
+    sql: `
+      ALTER TABLE provider_jobs
+      ADD COLUMN transient_failure_count INTEGER NOT NULL DEFAULT 0
+        CHECK (transient_failure_count >= 0);
+    `,
+  },
 ];

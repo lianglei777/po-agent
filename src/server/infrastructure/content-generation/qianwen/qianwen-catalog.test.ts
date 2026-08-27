@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { JsonValue } from "@/contracts/generation";
 import { createQianwenRoutes } from "./qianwen-catalog";
 import {
   buildQianwenRequest,
@@ -40,6 +41,25 @@ describe("Qianwen catalog", () => {
     expect(buildQianwenRequest(resolveQianwenExecutionConfig(horse.providerOperation,horse.adapterConfig),{prompt:"纸板城市",parameters:{resolution:"720P",aspectRatio:"21:9",durationSeconds:5,watermark:true}},[])).toMatchObject({model:"happyhorse-1.1-t2v",parameters:{resolution:"720P",ratio:"21:9",duration:5,watermark:true}});
     const mini=routes.find(route=>route.id==="qianwen-minimax-h3-text-to-video")!;
     expect(buildQianwenRequest(resolveQianwenExecutionConfig(mini.providerOperation,mini.adapterConfig),{prompt:"太空舰队",parameters:{resolution:"2K",aspectRatio:"adaptive",durationSeconds:10,watermark:false}},[])).toMatchObject({model:"MiniMax/MiniMax-H3",parameters:{resolution:"2K",ratio:"adaptive",duration:10,watermark:false}});
+  });
+
+  it("registers legacy image routes as disabled non-default compatibility options", () => {
+    const routes=createQianwenRoutes();
+    const legacy=routes.filter(route=>route.tags.includes("Legacy"));
+    expect(legacy).toHaveLength(6);
+    expect(legacy.every(route=>!route.enabled&&!route.isDefault&&route.capability==="text-to-image")).toBe(true);
+    expect(legacy.map(route=>route.inputSchema.prompt.maxLength)).toEqual([2000,500,500,500,500,800]);
+  });
+
+  it("builds and validates the fixed legacy image request profile", () => {
+    const route=createQianwenRoutes().find(item=>item.id==="qianwen-wan-2-5-text-to-image")!;
+    const config=resolveQianwenExecutionConfig(route.providerOperation,route.adapterConfig);
+    expect(buildQianwenRequest(config,{prompt:"江南水乡",parameters:{size:"1280*1280",negativePrompt:"模糊",imageCount:2,promptExtend:true,watermark:false,seed:17}},[])).toEqual({
+      model:"wan2.5-t2i-preview",
+      input:{prompt:"江南水乡",negative_prompt:"模糊"},
+      parameters:{size:"1280*1280",n:2,prompt_extend:true,watermark:false,seed:17},
+    });
+    expect(()=>resolveQianwenExecutionConfig(route.providerOperation,{...(route.adapterConfig as Record<string, JsonValue>),vendorModel:"untrusted-model"})).toThrowError(/not supported/);
   });
   it("compiles the Wan 3.0 text-to-video route with semantic input fields", () => {
     const [route] = createQianwenRoutes("2026-08-27T00:00:00.000Z");

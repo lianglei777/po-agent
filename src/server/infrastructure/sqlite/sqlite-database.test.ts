@@ -24,11 +24,16 @@ describe("SqliteDatabase", () => {
       { version: 10, name: "pipeline_canvas_revision" },
       { version: 11, name: "pipeline_canvas_edge_bindings" },
       { version: 12, name: "generation_route_presentation" },
+      { version: 13, name: "generation_transient_failure_count" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ name: "role", dflt_value: "'reference'" }),
         expect.objectContaining({ name: "sort_order", dflt_value: "0" }),
+      ]));
+    expect(database.prepare("PRAGMA table_info(provider_jobs)").all())
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "transient_failure_count", dflt_value: "0" }),
       ]));
     expect(database.prepare(`
       SELECT name FROM sqlite_master
