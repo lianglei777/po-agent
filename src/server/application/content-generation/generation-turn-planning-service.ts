@@ -3,7 +3,7 @@ import type {
   PlanGenerationTurnRequest,
 } from "@/contracts/generation";
 import type { GenerationRoute } from "@/server/domain/generation";
-import type { GenerationCredentialStore } from "@/server/ports/generation-provider";
+import type { GenerationCredentialReader } from "@/server/ports/generation-provider";
 import type { GenerationIntentClassifier } from "@/server/ports/generation-intent-classifier";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { planGenerationTurn } from "./generation-turn-planner";
@@ -14,7 +14,7 @@ export class GenerationTurnPlanningService {
     private readonly runs: GenerationRunService,
     private readonly sessions: SessionRepository,
     private readonly classifier: GenerationIntentClassifier,
-    private readonly credentials: GenerationCredentialStore,
+    private readonly credentials: GenerationCredentialReader,
   ) {}
 
   async plan(input: PlanGenerationTurnRequest) {

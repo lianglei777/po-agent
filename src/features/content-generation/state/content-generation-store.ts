@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import type {
   GenerationRouteDto,
   GenerationRunViewDto,
+  GenerationProviderDescriptorDto,
 } from "@/contracts/generation";
 
 type StateUpdater<T> = T | ((current: T) => T);
@@ -17,11 +18,10 @@ export type ContentGenerationState = {
   submitting: boolean;
   pendingActionId: string | null;
   centerError: string;
-  hasCredential: boolean;
-  providerEnabled: boolean;
+  providers: GenerationProviderDescriptorDto[];
   updatingId: string | null;
   settingsLoading: boolean;
-  savingCredential: boolean;
+  savingCredentialId: string | null;
   settingsError: string;
 };
 
@@ -76,16 +76,15 @@ export type ContentGenerationActions = {
   ) => boolean;
   applySettingsData: (
     routes: GenerationRouteDto[],
-    hasCredential: boolean,
-    providerEnabled: boolean,
+    providers: GenerationProviderDescriptorDto[],
   ) => void;
   beginSettingsLoad: () => void;
   updateRoute: (next: GenerationRouteDto) => void;
-  setHasCredential: (next: boolean) => void;
-  setProviderEnabled: (next: boolean) => void;
+  updateProvider: (next: GenerationProviderDescriptorDto) => void;
+  setProviderCredentialStatus: (providerId: string, next: boolean) => void;
   setUpdatingId: (next: string | null) => void;
   setSettingsLoading: (next: boolean) => void;
-  setSavingCredential: (next: boolean) => void;
+  setSavingCredentialId: (next: string | null) => void;
   setSettingsError: (next: string) => void;
 };
 
@@ -106,11 +105,10 @@ export const DEFAULT_CONTENT_GENERATION_STATE: ContentGenerationState = {
   submitting: false,
   pendingActionId: null,
   centerError: "",
-  hasCredential: false,
-  providerEnabled: false,
+  providers: [],
   updatingId: null,
   settingsLoading: true,
-  savingCredential: false,
+  savingCredentialId: null,
   settingsError: "",
 };
 
@@ -188,15 +186,14 @@ export function createContentGenerationStore(
       updateCenterSession(get, set, sessionId, revision, () => ({
         centerError,
       })),
-    applySettingsData: (routes, hasCredential, providerEnabled) =>
+    applySettingsData: (routes, providers) =>
       set((state) => ({
         routes,
         selectedRouteId: reconcileSelectedRoute(
           routes,
           state.selectedRouteId,
         ),
-        hasCredential,
-        providerEnabled,
+        providers,
         settingsError: "",
         settingsLoading: false,
       })),
@@ -230,11 +227,26 @@ export function createContentGenerationStore(
           ),
         };
       }),
-    setHasCredential: (hasCredential) => set({ hasCredential }),
-    setProviderEnabled: (providerEnabled) => set({ providerEnabled }),
+    updateProvider: (next) =>
+      set((state) => ({
+        providers: state.providers.map((provider) =>
+          provider.providerId === next.providerId ? next : provider,
+        ),
+      })),
+    setProviderCredentialStatus: (providerId, hasCredential) =>
+      set((state) => ({
+        providers: state.providers.map((provider) =>
+          provider.providerId === providerId && provider.credential
+            ? {
+                ...provider,
+                credential: { ...provider.credential, hasCredential },
+              }
+            : provider,
+        ),
+      })),
     setUpdatingId: (updatingId) => set({ updatingId }),
     setSettingsLoading: (settingsLoading) => set({ settingsLoading }),
-    setSavingCredential: (savingCredential) => set({ savingCredential }),
+    setSavingCredentialId: (savingCredentialId) => set({ savingCredentialId }),
     setSettingsError: (settingsError) => set({ settingsError }),
   }));
 }

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadGenerationRoutes } from "./api";
+import {
+  loadGenerationProviders,
+  loadGenerationRoutes,
+  saveGenerationProviderCredential,
+  updateGenerationProviderSettings,
+} from "./api";
 
 describe("content generation API client", () => {
   afterEach(() => {
@@ -42,5 +47,35 @@ describe("content generation API client", () => {
     await expect(loadGenerationRoutes()).rejects.toThrow(
       "RunningHub content generation is not enabled",
     );
+  });
+
+  it("uses encoded provider IDs with the generic settings endpoints", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      providerId: "provider/name",
+      enabled: true,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateGenerationProviderSettings("provider/name", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/generation/providers/provider%2Fname",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("loads provider descriptors and saves credentials without vendor-specific clients", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json([]))
+      .mockResolvedValueOnce(Response.json({ hasCredential: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loadGenerationProviders();
+    await saveGenerationProviderCredential("qianwen", "secret");
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/generation/providers",
+      "/api/generation/credentials/qianwen",
+    ]);
   });
 });

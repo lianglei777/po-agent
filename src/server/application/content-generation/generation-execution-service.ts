@@ -8,7 +8,7 @@ import type {
 } from "@/server/domain/generation";
 import type { GenerationFileStore } from "@/server/ports/generation-file-store";
 import type {
-  GenerationCredentialStore,
+  GenerationCredentialReader,
   GenerationProvider,
   ProviderInputAsset,
   ProviderOutput,
@@ -27,7 +27,7 @@ export class GenerationExecutionService {
   constructor(
     private readonly repository: GenerationRepository,
     providers: GenerationProvider[],
-    private readonly credentials: GenerationCredentialStore,
+    private readonly credentials: GenerationCredentialReader,
     private readonly files: GenerationFileStore,
     private readonly now: () => Date = () => new Date(),
   ) {

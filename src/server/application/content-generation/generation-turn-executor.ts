@@ -4,7 +4,7 @@ import type {
 } from "@/contracts/agent";
 import type { GenerationAssetSlot } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
-import type { GenerationCredentialStore } from "@/server/ports/generation-provider";
+import type { GenerationCredentialReader } from "@/server/ports/generation-provider";
 import type { GenerationRunService } from "./generation-run-service";
 
 type GenerationPlan = NonNullable<AgentGenerationPolicy["plan"]>;
@@ -12,7 +12,7 @@ type GenerationPlan = NonNullable<AgentGenerationPolicy["plan"]>;
 export class GenerationTurnExecutor {
   constructor(
     private readonly runs: GenerationRunService,
-    private readonly credentials: GenerationCredentialStore,
+    private readonly credentials: GenerationCredentialReader,
   ) {}
 
   async execute(input: {

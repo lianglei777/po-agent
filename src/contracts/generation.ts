@@ -246,6 +246,18 @@ export interface GenerationProviderSettingsDto {
   enabled: boolean;
 }
 
+export interface GenerationProviderDescriptorDto
+  extends GenerationProviderSettingsDto {
+  displayName: string;
+  credential?: {
+    kind: "api-key";
+    hasCredential: boolean;
+    environmentVariable: string;
+  };
+}
+
+export type ListGenerationProvidersResponse = GenerationProviderDescriptorDto[];
+
 export interface UpdateGenerationEnabledRequest {
   enabled: boolean;
 }

@@ -2565,17 +2565,25 @@ Content-Type: application/json
 只有已启用 Route 可以设为默认。关闭当前默认 Route 时，服务端按稳定顺序选择另一个已启用 Route；不存在候选时该 capability 暂无默认 Route。
 停用 Route 与设为默认是互斥操作，不能在同一次 PATCH 请求中同时提交 `{ "enabled": false, "isDefault": true }`。
 
-RunningHub 另有默认关闭的付费能力总开关：
+受信 Provider 由应用内置 Module 注册。设置页先读取 Provider 描述：
 
 ```http
-GET   /api/generation/providers/runninghub
-PATCH /api/generation/providers/runninghub
+GET /api/generation/providers
+```
+
+返回数组项包含 `providerId`、`displayName`、`enabled` 和可选的 `credential`。凭据描述只返回 `kind`、`hasCredential` 与可用的环境变量名，不返回 credential ref 或凭据值。
+
+每个 Provider 有独立且默认关闭的付费能力总开关：
+
+```http
+GET   /api/generation/providers/:providerId
+PATCH /api/generation/providers/:providerId
 Content-Type: application/json
 
 { "enabled": true }
 ```
 
-总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。
+总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。`:providerId` 必须存在于服务端受信 Provider Directory；未知值返回 `404 GENERATION_PROVIDER_NOT_FOUND`。现有 `/api/generation/providers/runninghub` URL 保持兼容。
 
 `inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
@@ -2667,15 +2675,15 @@ succeeded | failed | submission_unknown | cancelled
 
 RunningHub 当前不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
 
-### 12.4 RunningHub 凭证
+### 12.4 Provider 凭证
 
 ```http
-GET    /api/generation/credentials/runninghub
-PUT    /api/generation/credentials/runninghub
-DELETE /api/generation/credentials/runninghub
+GET    /api/generation/credentials/:providerId
+PUT    /api/generation/credentials/:providerId
+DELETE /api/generation/credentials/:providerId
 ```
 
-响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可使用服务端 `RUNNINGHUB_API_KEY` 环境变量。
+响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 当前使用 `RUNNINGHUB_API_KEY`，后续千问 Provider 使用 `DASHSCOPE_API_KEY`。
 
 ### 12.5 持久化执行行为
 

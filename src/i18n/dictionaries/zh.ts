@@ -102,18 +102,18 @@ export const zh = {
     paidGenerationConfirm:
       "此操作将调用付费内容生成接口。确认提交本次生成任务？",
     paidGenerationRetryConfirm: "重试会再次调用付费内容生成接口。确认重试？",
-    runningHubEnabled: "启用 RunningHub 内容生成",
-    runningHubEnabledDescription:
+    providerEnabled: "启用 {provider} 内容生成",
+    providerEnabledDescription:
       "总开关。关闭后不会提交新的付费生成任务。每次生成仍需用户明确授权。",
-    enableProviderFirst: "请先启用 RunningHub 总开关。",
+    enableProviderFirst: "请先启用 {provider} 总开关。",
     title: "内容生成",
     description: "管理图像和视频生成使用的凭证。生成路由由应用内置维护。",
-    runningHubCredential: "RunningHub 凭证",
-    runningHubCredentialDescription:
-      "API Key 保存在本地，保存后接口不会返回其明文。",
+    providerCredential: "{provider} 凭证",
+    providerCredentialDescription:
+      "API Key 保存在本地，保存后接口不会返回其明文。也可以通过 {environment} 环境变量配置。",
     credentialMissing: "尚未配置 API Key。",
     removeCredential: "移除 API Key",
-    removeCredentialConfirm: "确定移除已保存的 RunningHub API Key？",
+    removeCredentialConfirm: "确定移除已保存的 {provider} API Key？",
     availableRoutes: "多模态API",
     availableRoutesDescription:
       "这些只读路由由应用维护，用于定义支持的能力和输入。",

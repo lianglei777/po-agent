@@ -29,13 +29,28 @@ describe("FileGenerationCredentialStore", () => {
   });
 
   it("uses the environment as a non-persistent fallback", async () => {
-    const store = new FileGenerationCredentialStore(filePath, {
-      RUNNINGHUB_API_KEY: "environment-key",
-    });
+    const store = new FileGenerationCredentialStore(
+      filePath,
+      { RUNNINGHUB_API_KEY: "environment-key" },
+      { "runninghub:default": "RUNNINGHUB_API_KEY" },
+    );
 
     await expect(store.getCredential("runninghub:default")).resolves.toBe(
       "environment-key",
     );
     await expect(fs.stat(filePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("uses the trusted provider mapping for additional environment fallbacks", async () => {
+    const store = new FileGenerationCredentialStore(
+      filePath,
+      { DASHSCOPE_API_KEY: "qianwen-environment-key" },
+      { "qianwen:default": "DASHSCOPE_API_KEY" },
+    );
+
+    await expect(store.getCredential("qianwen:default")).resolves.toBe(
+      "qianwen-environment-key",
+    );
+    await expect(store.getCredential("unknown:default")).resolves.toBeNull();
   });
 });

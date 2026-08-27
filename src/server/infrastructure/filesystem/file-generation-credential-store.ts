@@ -16,15 +16,16 @@ export class FileGenerationCredentialStore
     private readonly filePath: string,
     private readonly environment: Readonly<Record<string, string | undefined>> =
       process.env,
+    private readonly credentialEnvironment: Readonly<Record<string, string>> = {},
   ) {}
 
   async getCredential(reference: string): Promise<string | null> {
     const stored = (await this.read()).credentials[reference]?.trim();
     if (stored) return stored;
-    if (reference === "runninghub:default") {
-      return this.environment.RUNNINGHUB_API_KEY?.trim() || null;
-    }
-    return null;
+    const environmentVariable = this.credentialEnvironment[reference];
+    return environmentVariable
+      ? this.environment[environmentVariable]?.trim() || null
+      : null;
   }
 
   async hasCredential(reference: string): Promise<boolean> {

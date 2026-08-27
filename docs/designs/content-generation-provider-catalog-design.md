@@ -75,6 +75,12 @@ Provider Module 是 composition 元数据，不属于 domain 或 application：
 ```ts
 interface GenerationProviderModule {
   providerId: string;
+  displayName: string;
+  credential?: {
+    reference: string;
+    kind: "api-key";
+    environmentVariable: string;
+  };
   createProvider(): GenerationProvider;
   createRoutes(now?: string): GenerationRoute[];
 }
@@ -89,6 +95,8 @@ const providers = modules.map((module) => module.createProvider());
 ```
 
 未来加入千问 AI 时只增加 `qianwenProviderModule`。Provider Module 列表不能由客户端、数据库或未经审查的文件动态扩展。
+
+固定 Module 还会编译为只读 Provider Directory。Provider 设置与凭据 application service 必须通过该 Directory 校验 ID，并在服务端完成 `providerId -> credential reference` 映射；HTTP 客户端无权提交 credential ref 或环境变量名。
 
 ## 6. Provider 执行快照
 

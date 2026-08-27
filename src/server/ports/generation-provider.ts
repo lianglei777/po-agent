@@ -66,6 +66,11 @@ export interface GenerationProvider {
   }): Promise<void>;
 }
 
-export interface GenerationCredentialStore {
+export interface GenerationCredentialReader {
   getCredential(reference: string): Promise<string | null>;
+}
+
+export interface GenerationCredentialStore extends GenerationCredentialReader {
+  hasCredential(reference: string): Promise<boolean>;
+  setCredential(reference: string, value: string): Promise<void>;
 }

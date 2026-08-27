@@ -117,6 +117,8 @@ Composition Root 构造 infrastructure，实现依赖注入，并暴露 applicat
 
 内容生成 Provider Module 的固定列表也由 Composition 汇总。新增同协议模型只修改对应 infrastructure Catalog；新增供应商时增加一个 Provider Module，并在受信列表中注册一次。
 
+Provider Module 同时声明稳定 ID、展示名称和可选凭据描述。Composition 据此构造只读 Provider Directory；application 的 Provider Settings Service 负责校验受信 `providerId`、读写总开关并把 Provider 映射到服务端 credential ref。动态 Route Handler 和设置 UI 只传递 `providerId`，不能自行指定 credential ref、环境变量或供应商网络配置。Composer 的 Route 可用性也从同一 Directory 与凭据状态计算，不维护供应商专用 Map。
+
 ### Next.js Route Handlers
 
 位置：`src/app/api`

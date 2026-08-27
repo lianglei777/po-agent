@@ -5,6 +5,7 @@ import type {
   GenerationAssetUploadResponse,
   GenerationCredentialStatusResponse,
   GenerationProviderSettingsDto,
+  ListGenerationProvidersResponse,
   GenerationRouteDto,
   GenerationRunViewDto,
   ListGenerationRoutesResponse,
@@ -40,18 +41,17 @@ export function loadGenerationRoutes() {
   return requestJson<ListGenerationRoutesResponse>("/api/generation/routes");
 }
 
-export function loadRunningHubGenerationCredential() {
-  return requestJson<GenerationCredentialStatusResponse>(
-    "/api/generation/credentials/runninghub",
+export function loadGenerationProviders() {
+  return requestJson<ListGenerationProvidersResponse>(
+    "/api/generation/providers",
   );
 }
 
-export function loadRunningHubGenerationSettings() {
-  return requestJson<GenerationProviderSettingsDto>("/api/generation/providers/runninghub");
-}
-
-export function updateRunningHubGenerationSettings(enabled: boolean) {
-  return requestJson<GenerationProviderSettingsDto>("/api/generation/providers/runninghub", {
+export function updateGenerationProviderSettings(
+  providerId: string,
+  enabled: boolean,
+) {
+  return requestJson<GenerationProviderSettingsDto>(`/api/generation/providers/${encodeURIComponent(providerId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -69,9 +69,12 @@ export function updateGenerationRoute(
   });
 }
 
-export function saveRunningHubGenerationCredential(apiKey: string) {
+export function saveGenerationProviderCredential(
+  providerId: string,
+  apiKey: string,
+) {
   return requestJson<GenerationCredentialStatusResponse>(
-    "/api/generation/credentials/runninghub",
+    `/api/generation/credentials/${encodeURIComponent(providerId)}`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -80,9 +83,9 @@ export function saveRunningHubGenerationCredential(apiKey: string) {
   );
 }
 
-export function deleteRunningHubGenerationCredential() {
+export function deleteGenerationProviderCredential(providerId: string) {
   return requestJson<GenerationCredentialStatusResponse>(
-    "/api/generation/credentials/runninghub",
+    `/api/generation/credentials/${encodeURIComponent(providerId)}`,
     { method: "DELETE" },
   );
 }

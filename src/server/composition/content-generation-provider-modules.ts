@@ -1,9 +1,9 @@
 import type { GenerationRoute } from "@/server/domain/generation";
 import { runningHubProviderModule } from "@/server/infrastructure/content-generation/runninghub/runninghub-provider-module";
 import type { GenerationProvider } from "@/server/ports/generation-provider";
+import type { GenerationProviderDescriptor } from "@/server/ports/generation-provider-directory";
 
-export interface GenerationProviderModule {
-  providerId: string;
+export interface GenerationProviderModule extends GenerationProviderDescriptor {
   createProvider(): GenerationProvider;
   createRoutes(now?: string): GenerationRoute[];
 }
@@ -18,4 +18,12 @@ export function createGenerationProviders(): GenerationProvider[] {
 
 export function createGenerationRoutes(now?: string): GenerationRoute[] {
   return PROVIDER_MODULES.flatMap((module) => module.createRoutes(now));
+}
+
+export function createGenerationProviderDescriptors(): GenerationProviderDescriptor[] {
+  return PROVIDER_MODULES.map(({ providerId, displayName, credential }) => ({
+    providerId,
+    displayName,
+    credential,
+  }));
 }

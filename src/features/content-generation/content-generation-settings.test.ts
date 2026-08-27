@@ -8,17 +8,19 @@ const source = readFileSync(
 ).replace(/\r\n/g, "\n");
 
 describe("content generation settings", () => {
-  it("manages only the RunningHub credential", () => {
-    expect(source).toContain("loadRunningHubGenerationCredential");
-    expect(source).toContain("saveRunningHubGenerationCredential");
-    expect(source).toContain("deleteRunningHubGenerationCredential");
+  it("renders credentials from trusted provider descriptors", () => {
+    expect(source).toContain("loadGenerationProviders");
+    expect(source).toContain("saveGenerationProviderCredential");
+    expect(source).toContain("deleteGenerationProviderCredential");
+    expect(source).toContain("providers.map((provider) => {");
+    expect(source).not.toContain("RunningHub");
     expect(source).not.toContain("saveContentGenerationProvider");
     expect(source).not.toContain("saveContentGenerationApi");
   });
 
   it("keeps application-managed protocol details read-only", () => {
     expect(source).toContain("loadGenerationRoutes");
-    expect(source).toContain("groupRoutesByProduct(routes)");
+    expect(source).toContain("routes.filter((route) => route.providerId === provider.providerId)");
     expect(source).toContain("group.routes.map((route, routeIndex)");
     expect(source).not.toContain("bodyTemplate");
     expect(source).not.toContain("providerOperation");
@@ -52,8 +54,8 @@ describe("content generation settings", () => {
 
   it("uses the available settings width without stretching credential controls", () => {
     expect(source).toContain('className="mx-auto max-w-5xl space-y-6"');
-    expect(source).toContain('<section className="max-w-3xl space-y-4">');
-    expect(source).toContain('<p className="mt-1 text-xs text-muted">\n                                    {route.description}');
+    expect(source).toContain('className="max-w-3xl space-y-3 border-b border-line-subtle p-4"');
+    expect(source).toContain('<p className="mt-1 text-xs text-muted">{route.description}</p>');
     expect(source).not.toContain("max-w-2xl text-body-sm leading-5");
   });
 
@@ -62,7 +64,7 @@ describe("content generation settings", () => {
     expect(source).toContain("visibilityToggle={{");
     expect(source).toContain("Eye");
     expect(source).toContain("EyeOff");
-    expect(source).toContain("showApiKey");
+    expect(source).toContain("visibleApiKeys");
     expect(source).toContain("removeCredentialConfirm");
     expect(source).not.toContain('className="absolute right-1');
     expect(source).not.toContain('<Alert className="mt-3" message=');
@@ -71,7 +73,7 @@ describe("content generation settings", () => {
   it("returns to loading state whenever the persisted settings view mounts", () => {
     expect(source).toContain("beginSettingsLoad();");
     expect(source).toContain("loading || !settingsReady");
-    expect(source).toContain("disabled={displayLoading || saving}");
+    expect(source).toContain("disabled={saving}");
   });
 
   it("shows global feedback after automatically persisted switches", () => {

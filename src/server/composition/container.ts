@@ -6,6 +6,7 @@ import { ChatTurnService } from "@/server/application/chat-turn-service";
 import { AgentSettingsService } from "@/server/application/agent-settings-service";
 import { WebAccessSettingsService } from "@/server/application/web-access-settings-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
+import { GenerationProviderSettingsService } from "@/server/application/content-generation/generation-provider-settings-service";
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
@@ -17,6 +18,7 @@ import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import {
   createGenerationProviders,
+  createGenerationProviderDescriptors,
   createGenerationRoutes,
 } from "@/server/composition/content-generation-provider-modules";
 import { AuthService } from "@/server/application/auth-service";
@@ -30,6 +32,7 @@ import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
 import { FileGenerationCredentialStore } from "@/server/infrastructure/filesystem/file-generation-credential-store";
 import { NodeGenerationFileStore } from "@/server/infrastructure/filesystem/node-generation-file-store";
+import { StaticGenerationProviderDirectory } from "@/server/infrastructure/content-generation/static-generation-provider-directory";
 import { JsonProjectRepository } from "@/server/infrastructure/filesystem/json-project-repository";
 import { NodeDirectoryBrowser } from "@/server/infrastructure/filesystem/node-directory-browser";
 import { NodeInstructionStore } from "@/server/infrastructure/filesystem/node-instruction-store";
@@ -99,9 +102,14 @@ function createContainer() {
   );
   const instructionStore = new NodeInstructionStore(agentDir);
   let generationRunService: GenerationRunService | undefined;
+  let generationProviderSettingsService: GenerationProviderSettingsService | undefined;
   let generationAssetService: GenerationAssetService | undefined;
   let generationCredentialStore: FileGenerationCredentialStore | undefined;
   const generationReviews = new GenerationReviewRegistry();
+  const generationProviderDescriptors = createGenerationProviderDescriptors();
+  const generationProviderDirectory = new StaticGenerationProviderDirectory(
+    generationProviderDescriptors,
+  );
   const generationAgentTools = new GenerationAgentToolProvider(
     () => getGenerationRunService(),
     {},
@@ -123,6 +131,17 @@ function createContainer() {
     const ready = seedGenerationRoutes(repository, createGenerationRoutes());
     generationCredentialStore = new FileGenerationCredentialStore(
       path.join(agentDir, "generation-credentials.json"),
+      process.env,
+      Object.fromEntries(generationProviderDescriptors.flatMap((provider) =>
+        provider.credential
+          ? [[provider.credential.reference, provider.credential.environmentVariable]]
+          : [],
+      )),
+    );
+    generationProviderSettingsService = new GenerationProviderSettingsService(
+      repository,
+      generationCredentialStore,
+      generationProviderDirectory,
     );
     generationRunService = new GenerationRunService(repository, {
       ready,
@@ -207,6 +226,14 @@ function createContainer() {
       throw new Error("Generation credential store was not initialized");
     }
     return generationCredentialStore;
+  }
+
+  function getGenerationProviderSettingsService() {
+    getGenerationRunService();
+    if (!generationProviderSettingsService) {
+      throw new Error("Generation provider settings service was not initialized");
+    }
+    return generationProviderSettingsService;
   }
 
   let pipelineRepository: PipelineRepository | undefined;
@@ -327,6 +354,9 @@ function createContainer() {
     },
     get generationCredentialStore() {
       return getGenerationCredentialStore();
+    },
+    get generationProviderSettingsService() {
+      return getGenerationProviderSettingsService();
     },
     get generationAssetService() {
       return getGenerationAssetService();
@@ -481,7 +511,7 @@ const globalContainer = globalThis as typeof globalThis & {
   __piAgentContainerVersion?: string;
 };
 
-const CONTAINER_VERSION = "pipeline-workbench-v4";
+const CONTAINER_VERSION = "generation-provider-settings-v5";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

@@ -9,23 +9,23 @@ export async function GET() {
   return handleRoute<GenerationComposerOptionsResponse>(async () => {
     const routes = await container.generationRunService.listRoutes();
     const providerIds = [...new Set(routes.map((route) => route.providerId))];
-    const settings = new Map(
-      await Promise.all(providerIds.map(async (providerId) => [
-        providerId,
-        await container.generationRunService.getProviderSettings(providerId),
-      ] as const)),
+    const providers = new Map(
+      await Promise.all(providerIds.map(async (providerId) => {
+        const settings = await container.generationProviderSettingsService
+          .getProviderSettings(providerId);
+        return [providerId, {
+          enabled: settings.enabled,
+          hasCredential: await container.generationProviderSettingsService
+            .hasUsableCredential(providerId),
+        }] as const;
+      })),
     );
-    // 当前凭据存储按供应商引用；新增供应商时在组合层注册其 credential ref。
-    const credentialAvailable = new Map<string, boolean>([[
-      "runninghub",
-      await container.generationCredentialStore.hasCredential("runninghub:default"),
-    ]]);
     return {
       routes: routes
         .filter((route) =>
           route.enabled &&
-          settings.get(route.providerId)?.enabled &&
-          credentialAvailable.get(route.providerId) === true,
+          providers.get(route.providerId)?.enabled &&
+          providers.get(route.providerId)?.hasCredential,
         )
         .map(generationRouteDto),
     };

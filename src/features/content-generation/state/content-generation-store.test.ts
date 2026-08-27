@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  GenerationProviderDescriptorDto,
   GenerationRouteDto,
   GenerationRunViewDto,
 } from "@/contracts/generation";
@@ -18,6 +19,21 @@ const route = (id: string, enabled = true): GenerationRouteDto => ({
   revision: 1,
   defaults: {},
   inputSchema: { prompt: { required: true } },
+});
+
+const provider = (
+  providerId: string,
+  enabled = true,
+  hasCredential = true,
+): GenerationProviderDescriptorDto => ({
+  providerId,
+  displayName: providerId,
+  enabled,
+  credential: {
+    kind: "api-key",
+    hasCredential,
+    environmentVariable: `${providerId.toUpperCase()}_API_KEY`,
+  },
 });
 
 const run = (id: string, status: "queued" | "succeeded"): GenerationRunViewDto => ({
@@ -142,8 +158,7 @@ describe("content generation store", () => {
       routes: [route("route-a")],
       runs: [run("run-a", "queued")],
       selectedRouteId: "route-a",
-      providerEnabled: true,
-      hasCredential: true,
+      providers: [provider("provider")],
     });
     const revision = store.getState().activateCenterSession("session-b");
 
@@ -154,8 +169,7 @@ describe("content generation store", () => {
       runs: [],
       selectedRouteId: "",
       centerLoading: true,
-      providerEnabled: true,
-      hasCredential: true,
+      providers: [provider("provider")],
     });
   });
 
@@ -238,7 +252,21 @@ describe("content generation store", () => {
   it("isolates workspace instances", () => {
     const first = createContentGenerationStore();
     const second = createContentGenerationStore();
-    first.getState().setProviderEnabled(true);
-    expect(second.getState().providerEnabled).toBe(false);
+    first.getState().applySettingsData([], [provider("provider")]);
+    expect(second.getState().providers).toEqual([]);
+  });
+
+  it("updates provider and credential state independently", () => {
+    const store = createContentGenerationStore({
+      providers: [provider("first"), provider("second")],
+    });
+
+    store.getState().updateProvider(provider("first", false));
+    store.getState().setProviderCredentialStatus("second", false);
+
+    expect(store.getState().providers).toMatchObject([
+      { providerId: "first", enabled: false, credential: { hasCredential: true } },
+      { providerId: "second", enabled: true, credential: { hasCredential: false } },
+    ]);
   });
 });

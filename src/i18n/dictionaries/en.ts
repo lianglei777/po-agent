@@ -108,19 +108,19 @@ export const en = {
       "This action calls a paid content generation API. Submit this generation task?",
     paidGenerationRetryConfirm:
       "Retrying calls the paid content generation API again. Retry this task?",
-    runningHubEnabled: "Enable RunningHub generation",
-    runningHubEnabledDescription:
+    providerEnabled: "Enable {provider} generation",
+    providerEnabledDescription:
       "Master switch. When off, no new paid generation task is submitted. Every generation still requires explicit user approval.",
-    enableProviderFirst: "Enable the RunningHub master switch first.",
+    enableProviderFirst: "Enable the {provider} master switch first.",
     title: "Content generation",
     description:
       "Manage the credential used for image and video generation. Generation routes are built into the application.",
-    runningHubCredential: "RunningHub credential",
-    runningHubCredentialDescription:
-      "The API key is stored locally and is never returned by the API after it is saved.",
+    providerCredential: "{provider} credential",
+    providerCredentialDescription:
+      "The API key is stored locally and is never returned after it is saved. It can also be configured with the {environment} environment variable.",
     credentialMissing: "No API key is configured.",
     removeCredential: "Remove API key",
-    removeCredentialConfirm: "Remove the saved RunningHub API key?",
+    removeCredentialConfirm: "Remove the saved {provider} API key?",
     availableRoutes: "Multimodal APIs",
     availableRoutesDescription:
       "These application-managed routes define the supported capabilities and inputs. They are read-only.",

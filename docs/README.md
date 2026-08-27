@@ -21,6 +21,7 @@
 | [Chat Composer 内容生成](./designs/chat-content-generation-composer-design.md) | Chat Composer 与内容生成能力整合 |
 | [自动上下文压缩](./designs/compact-context-design.md) | 上下文压缩策略与生命周期 |
 | [Content Generation Provider Catalog](./designs/content-generation-provider-catalog-design.md) | 跨供应商 Provider Module、Catalog 与执行快照 |
+| [千问内容生成 Provider](./designs/qianwen-content-generation-provider-design.md) | 千问图像/视频 API、多供应商设置、DashScope Profile 与临时 OSS 集成 |
 | [模型配置可用性闭环](./designs/model-provider-configuration-validation-design.md) | Provider 与模型配置验证 |
 | [RunningHub API Catalog（已被替代）](./designs/runninghub-api-catalog-design.md) | RunningHub Catalog 的早期设计 |
 | [Skill Catalog Artifact 安装](./designs/skill-catalog-artifact-installation-design.md) | 自有 Skill 目录与单项 Artifact 安装 |
@@ -62,6 +63,7 @@
 | 目录 | 用途 |
 | --- | --- |
 | [`RunningHubAPIs/`](./RunningHubAPIs/) | RunningHub 原始 API 文档和模型说明；桌面构建会打包此目录 |
+| [`QwenApis/`](./QwenApis/) | 千问 AI 平台图像与视频 API 参考快照、资料索引与协议矩阵 |
 | [`pipline-studio/`](./pipline-studio/) | Pipeline Studio 专题设计与重构计划 |
 
 ## 归档规则
