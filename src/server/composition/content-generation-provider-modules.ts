@@ -1,5 +1,6 @@
 import type { GenerationRoute } from "@/server/domain/generation";
 import { runningHubProviderModule } from "@/server/infrastructure/content-generation/runninghub/runninghub-provider-module";
+import { qianwenProviderModule } from "@/server/infrastructure/content-generation/qianwen/qianwen-provider-module";
 import type { GenerationProvider } from "@/server/ports/generation-provider";
 import type { GenerationProviderDescriptor } from "@/server/ports/generation-provider-directory";
 
@@ -10,6 +11,7 @@ export interface GenerationProviderModule extends GenerationProviderDescriptor {
 
 const PROVIDER_MODULES = [
   runningHubProviderModule,
+  qianwenProviderModule,
 ] satisfies GenerationProviderModule[];
 
 export function createGenerationProviders(): GenerationProvider[] {

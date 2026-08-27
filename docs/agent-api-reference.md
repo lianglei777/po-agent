@@ -2518,7 +2518,9 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
 
-RunningHub Route 由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint 或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
+千问AI平台当前内置 `qianwen-wan-3-0-text-to-video` Route，对应 `wan3.0-video` 文生视频。该 Route 使用 `text-to-video` capability，支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数。`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长；当前阶段不接受输入素材。
+
+各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
 
 Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
 
@@ -2585,7 +2587,7 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。`:providerId` 必须存在于服务端受信 Provider Directory；未知值返回 `404 GENERATION_PROVIDER_NOT_FOUND`。现有 `/api/generation/providers/runninghub` URL 保持兼容。
 
-`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub 的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub、千问或其他供应商的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
 Wan 3.0 参考生视频的 `fileUrl` 与 `linkUrl` 互斥，只接受不含凭证的公网 HTTPS URL。RunningHub 文档允许部分参考视频达到 100 MB，但 Po Agent 当前文件读取和上传链路统一限制为 50 MiB；Route Schema 返回的是应用实际可接受的上限。
 
@@ -2673,7 +2675,7 @@ succeeded | failed | submission_unknown | cancelled
 
 `awaiting_confirmation` 表示 Agent 已解析生成意图并持久化 Run，但尚未创建 Provider Job，也不会被 Worker 领取。确认接口只接受该状态，Body 为 `{ "prompt": "...", "parameters": { ... } }`；服务端按 Run 绑定 Route 的当前 `inputSchema` 重新校验参数，并原子切换为 `queued`、创建首个 Provider Job。重复确认返回当前 Run，不会创建第二个 Job；Run 已取消时返回 `409 GENERATION_RUN_NOT_CONFIRMABLE`。
 
-RunningHub 当前不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
+RunningHub 与当前千问实现均不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
 
 ### 12.4 Provider 凭证
 
@@ -2683,13 +2685,14 @@ PUT    /api/generation/credentials/:providerId
 DELETE /api/generation/credentials/:providerId
 ```
 
-响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 当前使用 `RUNNINGHUB_API_KEY`，后续千问 Provider 使用 `DASHSCOPE_API_KEY`。
+响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 使用 `RUNNINGHUB_API_KEY`，千问AI平台使用 `DASHSCOPE_API_KEY`。
 
 ### 12.5 持久化执行行为
 
 - Session 元数据、Run、Provider Job、Route 和 Artifact 使用 `<agent-data-dir>/po-agent.sqlite`。
 - Worker 使用 lease claim 推进到期 Job，页面断开不会取消 Run。
 - 轮询失败保留 remote task ID 并延迟重试。
+- 千问 Wan 3.0 视频任务按供应商建议使用 15 秒轮询间隔；成功 URL 会立即下载到 workspace，不能把供应商的 24 小时 URL 当作长期产物。
 - `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
 - 成功产物下载到 `<workspace>/.po-agent/generated/<runId>/`。
 
@@ -2704,7 +2707,7 @@ get_generation
 cancel_generation
 ```
 
-生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收 RunningHub workflow、HTTP 字段、上传 URL 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
+生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收供应商 workflow、HTTP 字段、上传 URL、模型 Endpoint 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
 
 `generate_image` 与 `generate_video` 不接受模型声明的 `userAuthorized`。Chat 只有在当前 Prompt 携带服务端校验过的 `generation` turn policy 时才允许执行生成工具；普通 Chat 回合即使模型构造了工具调用，也会被 application 层拒绝。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
 

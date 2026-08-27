@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-Po Agent 已通过 `GenerationProvider`、Provider Module、供应商 Catalog、Provider Job 和 execution config 快照建立了供应商无关的内容生成执行链路。RunningHub 已迁移到受信 TypeScript Catalog，但设置页、凭据接口和环境变量回退仍只认识 RunningHub。
+Po Agent 已通过 `GenerationProvider`、Provider Module、供应商 Catalog、Provider Job 和 execution config 快照建立了供应商无关的内容生成执行链路。RunningHub 已迁移到受信 TypeScript Catalog，设置页、凭据接口和环境变量回退也已完成多供应商泛化。
 
 千问 AI 平台的图像与视频 API 共享 DashScope 鉴权和任务协议，但存在以下差异：
 
@@ -603,6 +603,8 @@ GENERATION_DOWNLOAD_FAILED
 4. 多素材视频。
 
 ## 15. 实施阶段与验收
+
+当前进度（2026-08-27）：PR 1 已完成；PR 2 已实现千问 Module、Wan 3.0 文生视频 Catalog/Builder、异步提交、15 秒轮询、状态归一化、安全下载与审计快照。真实付费 Smoke 由开发者手动执行，不属于常规自动化检查。下一阶段从 PR 3 的 OSS 临时 URL 和素材准备开始。
 
 ### PR 1：通用 Provider 设置与凭据
 
