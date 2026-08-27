@@ -28,7 +28,21 @@ export interface GenerationParameterField {
   options?: GenerationParameterOption[];
   min?: number;
   max?: number;
+  minLength?: number;
+  maxLength?: number;
+  format?: "url";
 }
+
+export type GenerationInputConstraint =
+  | {
+      kind: "at-least-one-asset";
+      slots: string[];
+      minFiles?: number;
+    }
+  | {
+      kind: "mutually-exclusive-parameters";
+      keys: string[];
+    };
 
 export interface GenerationAssetSlot {
   key: string;
@@ -51,6 +65,7 @@ export interface GenerationInputSchema {
   };
   parameters?: GenerationParameterField[];
   assets?: GenerationAssetSlot[];
+  constraints?: GenerationInputConstraint[];
 }
 
 export const GENERATION_CAPABILITIES = [
@@ -235,6 +250,11 @@ export interface UpdateGenerationEnabledRequest {
   enabled: boolean;
 }
 
+export interface UpdateGenerationRouteRequest {
+  enabled?: boolean;
+  isDefault?: boolean;
+}
+
 export interface SaveGenerationCredentialRequest {
   apiKey: string;
 }
@@ -242,6 +262,8 @@ export interface SaveGenerationCredentialRequest {
 export interface GenerationRouteDto {
   id: string;
   name: string;
+  description: string;
+  tags: string[];
   capability: GenerationCapability;
   product: string;
   providerId: string;

@@ -34,6 +34,8 @@ export interface GenerationSession {
 export interface GenerationRoute {
   id: string;
   name: string;
+  description: string;
+  tags: string[];
   capability: GenerationCapability;
   product: string;
   providerId: string;

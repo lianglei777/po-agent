@@ -156,6 +156,34 @@ describe("GenerationWorker", () => {
     expect(provider.submit).toHaveBeenCalledOnce();
   });
 
+  it("rejects an asset that exceeds the selected Route limit before upload", async () => {
+    vi.mocked(files.readInput).mockResolvedValueOnce({
+      slot: "firstFrameUrl",
+      name: "large.png",
+      mimeType: "image/png",
+      data: new Uint8Array(10 * 1024 * 1024 + 1),
+    });
+    const created = await runService.createRun({
+      sessionId: "session-1",
+      capability: "image-to-video",
+      routeId: "runninghub-pixverse-v6-image-to-video",
+      prompt: "animate the image",
+      assets: [{
+        slot: "firstFrameUrl",
+        ref: { type: "workspace-file", relativePath: "large.png" },
+      }],
+      source: "api",
+      idempotencyKey: "oversized-pixverse-input",
+    });
+
+    await worker.runOnce();
+
+    await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
+      run: { status: "failed", errorCode: "FILE_TOO_LARGE" },
+    });
+    expect(provider.upload).not.toHaveBeenCalled();
+  });
+
   it("recovers an expired submitting job as unknown instead of retrying", async () => {
     const created = await runService.createRun({
       sessionId: "session-1",

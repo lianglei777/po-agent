@@ -369,10 +369,34 @@ export class CanvasStudioService {
     const audioRefs = refs.audioList ?? [];
     const generationAssets: GenerationInputAsset[] = [];
     let capability: "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video";
+    const requestedRoute = data.params?.routeId
+      ? await this.runs.getRoute(data.params.routeId)
+      : null;
+    const requestedVideoCapability = requestedRoute?.enabled && data.type === "video"
+      ? requestedRoute.capability
+      : undefined;
 
     if (data.type === "image") {
       capability = imageRefs.length ? "image-to-image" : "text-to-image";
       generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
+    } else if (requestedVideoCapability === "text-to-video") {
+      capability = requestedVideoCapability;
+      if (requestedRoute?.inputSchema.assets?.some((slot) => slot.key === "audioUrls")) {
+        generationAssets.push(...referenceAssets(audioRefs.slice(0, 1), "audioUrls"));
+      }
+    } else if (requestedVideoCapability === "image-to-video") {
+      capability = requestedVideoCapability;
+      const { firstFrame, lastFrame } = frameReferences(imageRefs);
+      generationAssets.push(...referenceAssets(firstFrame ? [firstFrame] : [], "firstFrameUrl"));
+      generationAssets.push(...referenceAssets(lastFrame ? [lastFrame] : [], "lastFrameUrl"));
+      if (requestedRoute?.inputSchema.assets?.some((slot) => slot.key === "audioUrls")) {
+        generationAssets.push(...referenceAssets(audioRefs.slice(0, 1), "audioUrls"));
+      }
+    } else if (requestedVideoCapability === "multimodal-to-video") {
+      capability = requestedVideoCapability;
+      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
+      generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
+      generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
     } else if (promptDocument && (videoRefs.length || audioRefs.length || imageRefs.some((reference) => reference.role === "reference"))) {
       capability = "multimodal-to-video";
       generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
@@ -400,7 +424,6 @@ export class CanvasStudioService {
 
     try {
       await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-      const requestedRoute = data.params?.routeId ? await this.runs.getRoute(data.params.routeId) : null;
       if (input?.routeId && (!requestedRoute?.enabled || requestedRoute.capability !== capability)) {
         throw new AppError("VALIDATION_ERROR", "The selected generation route is not available for this node", 400);
       }
@@ -1256,6 +1279,19 @@ function referenceAssets(refs: CanvasMediaReference[], slot: string): Generation
     }
   }
   return assets;
+}
+
+function frameReferences(refs: CanvasMediaReference[]): {
+  firstFrame?: CanvasMediaReference;
+  lastFrame?: CanvasMediaReference;
+} {
+  const explicitFirst = refs.find((reference) => reference.role === "first-frame");
+  const explicitLast = refs.find((reference) => reference.role === "last-frame");
+  const unassigned = refs.filter((reference) => reference.role === "reference");
+  // 明确标记的尾帧不能回退成首帧；只有旧画布中的普通引用按顺序补齐空槽位。
+  const firstFrame = explicitFirst ?? unassigned[0];
+  const lastFrame = explicitLast ?? unassigned.find((reference) => reference !== firstFrame);
+  return { firstFrame, lastFrame };
 }
 
 function referenceParams(references: CanvasMediaReference[]): Pick<CanvasGenerationParams, "textList" | "imageList" | "videoList" | "audioList" | "mixedListOrder"> {

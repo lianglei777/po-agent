@@ -23,6 +23,7 @@ describe("SqliteDatabase", () => {
       { version: 9, name: "pipeline_media_canvas" },
       { version: 10, name: "pipeline_canvas_revision" },
       { version: 11, name: "pipeline_canvas_edge_bindings" },
+      { version: 12, name: "generation_route_presentation" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([

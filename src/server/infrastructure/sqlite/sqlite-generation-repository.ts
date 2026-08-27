@@ -64,12 +64,14 @@ export class SqliteGenerationRepository implements GenerationRepository {
       }
       this.database.prepare(`
         INSERT INTO generation_routes(
-          id, name, capability, product, provider_id, provider_operation,
+          id, name, description, tags_json, capability, product, provider_id, provider_operation,
           enabled, is_default, revision, defaults_json, adapter_config_json,
           input_schema_json, credential_ref, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
+          description = excluded.description,
+          tags_json = excluded.tags_json,
           capability = excluded.capability,
           product = excluded.product,
           provider_id = excluded.provider_id,
@@ -85,6 +87,8 @@ export class SqliteGenerationRepository implements GenerationRepository {
       `).run(
         route.id,
         route.name,
+        route.description,
+        JSON.stringify(route.tags),
         route.capability,
         route.product,
         route.providerId,
@@ -129,23 +133,73 @@ export class SqliteGenerationRepository implements GenerationRepository {
 
   async setRouteEnabled(id: string, enabled: boolean, updatedAt: string): Promise<boolean> {
     return this.database.transaction(() => {
-      if (enabled) {
-        // 启用默认路由时，需先清除同 capability 下其他已启用默认路由的 is_default，
-        // 避免违反 generation_routes_default_capability_unique 部分唯一索引
-        const row = this.database.prepare(
-          "SELECT capability, is_default FROM generation_routes WHERE id = ?",
-        ).get(id);
-        if (row && requiredNumber(row, "is_default") === 1) {
-          this.database.prepare(`
-            UPDATE generation_routes
-            SET is_default = 0, updated_at = ?
-            WHERE capability = ? AND id <> ? AND is_default = 1 AND enabled = 1
-          `).run(updatedAt, requiredString(row, "capability"), id);
-        }
+      const row = this.database.prepare(
+        "SELECT capability, is_default FROM generation_routes WHERE id = ?",
+      ).get(id);
+      if (!row) return false;
+      const capability = requiredString(row, "capability");
+      const wasDefault = requiredNumber(row, "is_default") === 1;
+      const activeDefault = enabled
+        ? this.database.prepare(`
+            SELECT id FROM generation_routes
+            WHERE capability = ? AND enabled = 1 AND is_default = 1 AND id <> ?
+            LIMIT 1
+          `).get(capability, id)
+        : undefined;
+      if (enabled && wasDefault && activeDefault) {
+        // 旧目录中的停用 Route 可能也带 default 标记；启用不应静默抢占当前默认项。
+        this.database.prepare(`
+          UPDATE generation_routes SET is_default = 0, updated_at = ? WHERE id = ?
+        `).run(updatedAt, id);
       }
-      return this.database.prepare(`
+      const changed = this.database.prepare(`
         UPDATE generation_routes SET enabled = ?, updated_at = ? WHERE id = ?
       `).run(enabled ? 1 : 0, updatedAt, id).changes > 0;
+      if (enabled) {
+        const enabledDefault = this.database.prepare(`
+          SELECT id FROM generation_routes
+          WHERE capability = ? AND enabled = 1 AND is_default = 1
+          LIMIT 1
+        `).get(capability);
+        if (!enabledDefault) {
+          this.database.prepare(`
+            UPDATE generation_routes SET is_default = 1, updated_at = ? WHERE id = ?
+          `).run(updatedAt, id);
+        }
+      } else if (wasDefault) {
+        this.database.prepare(`
+          UPDATE generation_routes SET is_default = 0, updated_at = ? WHERE id = ?
+        `).run(updatedAt, id);
+        const fallback = this.database.prepare(`
+          SELECT id FROM generation_routes
+          WHERE capability = ? AND enabled = 1
+          ORDER BY name, id
+          LIMIT 1
+        `).get(capability);
+        if (fallback) {
+          this.database.prepare(`
+            UPDATE generation_routes SET is_default = 1, updated_at = ? WHERE id = ?
+          `).run(updatedAt, requiredString(fallback, "id"));
+        }
+      }
+      return changed;
+    });
+  }
+
+  async setDefaultRoute(id: string, updatedAt: string): Promise<boolean> {
+    return this.database.transaction(() => {
+      const row = this.database.prepare(`
+        SELECT capability FROM generation_routes WHERE id = ? AND enabled = 1
+      `).get(id);
+      if (!row) return false;
+      const capability = requiredString(row, "capability");
+      this.database.prepare(`
+        UPDATE generation_routes SET is_default = 0, updated_at = ?
+        WHERE capability = ? AND is_default = 1
+      `).run(updatedAt, capability);
+      return this.database.prepare(`
+        UPDATE generation_routes SET is_default = 1, updated_at = ? WHERE id = ?
+      `).run(updatedAt, id).changes > 0;
     });
   }
 
@@ -524,6 +578,8 @@ function routeFromRow(row: SqliteRow): GenerationRoute {
   return {
     id: requiredString(row, "id"),
     name: requiredString(row, "name"),
+    description: requiredString(row, "description"),
+    tags: parseJson<string[]>(row, "tags_json"),
     capability: requiredString(row, "capability") as GenerationCapability,
     product: requiredString(row, "product"),
     providerId: requiredString(row, "provider_id"),

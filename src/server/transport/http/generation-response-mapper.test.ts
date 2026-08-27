@@ -57,6 +57,8 @@ describe("generationRouteDto", () => {
     const dto = generationRouteDto({
       id: "route-1",
       name: "RunningHub video",
+      description: "Create a video from text",
+      tags: ["Text to video"],
       capability: "text-to-video",
       product: "Seedance 2.0",
       providerId: "runninghub",
@@ -75,6 +77,8 @@ describe("generationRouteDto", () => {
     expect(dto).toEqual({
       id: "route-1",
       name: "RunningHub video",
+      description: "Create a video from text",
+      tags: ["Text to video"],
       capability: "text-to-video",
       product: "Seedance 2.0",
       providerId: "runninghub",

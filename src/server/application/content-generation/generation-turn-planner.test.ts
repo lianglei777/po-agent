@@ -13,6 +13,8 @@ const route = (
 ): GenerationRouteDto => ({
   id,
   name: id,
+  description: `${id} description`,
+  tags: [id],
   capability,
   product: "Product",
   providerId: "provider",
@@ -90,6 +92,45 @@ describe("planGenerationTurn", () => {
       route: { id: "image-video" },
       effectivePrompt: "让所附人物海报中的角色自然眨眼并产生轻微衣摆运动，时长 8 秒",
       parameters: { durationSeconds: 8 },
+    });
+  });
+
+  it("uses a valid model-suggested route before the capability default", async () => {
+    const alternate = route("image-video-quality", "image-to-video", false);
+    await expect(planGenerationTurn(
+      {
+        ...baseRequest,
+        message: "使用更高质量的视频模型让图片动起来",
+        assets: [{ mediaType: "image", mimeType: "image/png" }],
+      },
+      [...routes, alternate],
+      classifier({
+        intent: "generation",
+        capability: "image-to-video",
+        routeId: alternate.id,
+        effectivePrompt: "让图片中的人物自然移动",
+      }),
+      context,
+    )).resolves.toMatchObject({
+      type: "generation",
+      route: { id: alternate.id },
+    });
+  });
+
+  it("ignores an unavailable model-suggested route and keeps the stable default", async () => {
+    await expect(planGenerationTurn(
+      { ...baseRequest, message: "生成视频" },
+      routes,
+      classifier({
+        intent: "generation",
+        capability: "text-to-video",
+        routeId: "missing-route",
+        effectivePrompt: "生成一段雨夜街道视频",
+      }),
+      context,
+    )).resolves.toMatchObject({
+      type: "generation",
+      route: { id: "text-video" },
     });
   });
 

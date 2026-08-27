@@ -458,6 +458,8 @@ function generationAuditContext(
             availableRoutes: routes.map((route) => ({
               id: route.id,
               name: route.name,
+              description: route.description,
+              tags: route.tags,
               product: route.product,
               providerId: route.providerId,
               capability: route.capability,

@@ -10,6 +10,8 @@ import { buildMessagePresentation, partitionAssistantTurn } from "./message-pres
 const route: GenerationRouteDto = {
   id: "image-to-image",
   name: "Image to image",
+  description: "Image route description",
+  tags: ["Image"],
   capability: "image-to-image",
   product: "Image",
   providerId: "provider",

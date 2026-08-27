@@ -546,6 +546,54 @@ describe("CanvasStudioService video AI", () => {
     }));
   });
 
+  it("does not duplicate an explicit last frame into the first-frame slot", async () => {
+    const target = videoNode();
+    const last = {
+      ...imageNode(),
+      id: "frame-last",
+      data: {
+        ...imageNode().data!,
+        name: "Ending",
+        workspaceFile: { relativePath: "assets/ending.png", contentType: "image/png", name: "ending.png" },
+      },
+    };
+    const nodes = new Map([[target.id, target], [last.id, last]]);
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-08-21T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-video-last-frame",
+      enabled: true,
+      isDefault: false,
+      capability: "image-to-video",
+      inputSchema: { prompt: { required: true } },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-video-last-frame" } }),
+    } as unknown as GenerationRunService;
+
+    await createService(repository, {} as LlmPort, runs).generate(target.id, {
+      prompt: "End on this frame",
+      promptDocument: lastFramePromptDocument(),
+      routeId: route.id,
+    });
+
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      assets: [
+        { slot: "lastFrameUrl", bindingId: "mention-last", order: 0, ref: { type: "workspace-file", relativePath: "assets/ending.png" } },
+      ],
+    }));
+  });
+
   it("lists only this node's runs newest first", async () => {
     const repository = {
       getCanvasNode: vi.fn().mockResolvedValue(videoNode()),
@@ -884,6 +932,24 @@ function videoPromptDocument(): CanvasPromptDocument {
           { type: "text", text: "Move from day to night " },
           { type: "resourceReference", attrs: { referenceId: "mention-first", sourceType: "canvas-node", sourceId: "frame-first", mediaType: "image", label: "Opening", role: "first-frame" } },
           { type: "text", text: " " },
+          { type: "resourceReference", attrs: { referenceId: "mention-last", sourceType: "canvas-node", sourceId: "frame-last", mediaType: "image", label: "Ending", role: "last-frame" } },
+        ],
+      }],
+    },
+  };
+}
+
+function lastFramePromptDocument(): CanvasPromptDocument {
+  return {
+    schemaVersion: 1,
+    format: "tiptap-json",
+    plainText: "End on this frame @Ending",
+    content: {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "text", text: "End on this frame " },
           { type: "resourceReference", attrs: { referenceId: "mention-last", sourceType: "canvas-node", sourceId: "frame-last", mediaType: "image", label: "Ending", role: "last-frame" } },
         ],
       }],

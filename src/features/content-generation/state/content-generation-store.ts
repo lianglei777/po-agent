@@ -204,9 +204,24 @@ export function createContentGenerationStore(
       set({ settingsLoading: true, settingsError: "" }),
     updateRoute: (next) =>
       set((state) => {
-        const routes = state.routes.map((route) =>
-          route.id === next.id ? next : route,
+        const previous = state.routes.find((route) => route.id === next.id);
+        let routes = state.routes.map((route) =>
+          route.id === next.id
+            ? next
+            : next.isDefault && route.capability === next.capability
+              ? { ...route, isDefault: false }
+              : route,
         );
+        if (previous?.isDefault && !next.enabled && !next.isDefault) {
+          const fallback = routes.find((route) =>
+            route.enabled && route.capability === next.capability
+          );
+          if (fallback) {
+            routes = routes.map((route) =>
+              route.id === fallback.id ? { ...route, isDefault: true } : route
+            );
+          }
+        }
         return {
           routes,
           selectedRouteId: reconcileSelectedRoute(

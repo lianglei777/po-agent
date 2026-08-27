@@ -19,6 +19,7 @@ export interface GenerationIntentRunSummary {
 export interface GenerationIntentDecision {
   intent: "chat" | "attachment-understanding" | "generation" | "clarification";
   capability?: GenerationCapability;
+  routeId?: string;
   effectivePrompt?: string;
   parameters?: Record<string, JsonValue>;
   question?: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Popover, Tooltip } from "antd";
+import { Modal, Tooltip } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type {
   CanvasGenerationSettingValue,
@@ -10,11 +10,7 @@ import type {
   CanvasPromptDocument,
   CanvasResourceRole,
 } from "@/contracts/pipeline";
-import { FileVideo, LoaderCircle, Maximize2, Send, Settings2, Sparkles, Square } from "@/components/icons";
-import {
-  GenerationParameterEditor,
-  resolvedGenerationParameters,
-} from "@/components/generation/generation-parameter-editor";
+import { FileVideo, LoaderCircle, Maximize2, Send, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
@@ -27,6 +23,10 @@ import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
+import { reconcileComposerSettings } from "../model/generation-composer-settings";
+import { CanvasGenerationConfig } from "./shared/canvas-generation-config";
+import { CanvasModelPicker } from "./shared/canvas-model-picker";
+import { generationParameterConflict } from "@/components/generation/generation-input-constraints";
 
 export function VideoAiComposer({
   nodeId,
@@ -73,6 +73,13 @@ export function VideoAiComposer({
   );
   const loadingRoutes = loadedCapability !== capability;
   const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
+  const parameterConflict = generationParameterConflict(
+    selectedRoute?.inputSchema.constraints ?? [],
+    settings,
+  );
+  const parameterConflictLabels = parameterConflict?.keys
+    .map((key) => (t.contentGeneration.inputs as Readonly<Record<string, string>>)[key] ?? key)
+    .join(" / ");
   const status = data.taskInfo?.status;
   const generating = status === "queued" || status === "processing" || submitting;
   const cancellable = Boolean(data.taskInfo?.runId) && (status === "queued" || status === "processing");
@@ -88,7 +95,7 @@ export function VideoAiComposer({
           ?? available[0];
         setRoutes(available);
         setSelectedRouteId(selected?.id ?? "");
-        setSettings(selected ? resolvedGenerationParameters(selected, data.params?.settings as Record<string, JsonValue>) : {});
+        setSettings(selected ? reconcileComposerSettings(selected, data.params?.settings as Record<string, JsonValue>) : {});
       })
       .catch((error) => {
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
@@ -114,6 +121,9 @@ export function VideoAiComposer({
     if (referenceProblem?.kind === "missing-required") {
       return t.pipeline.promptReferenceRequired.replace("{label}", referenceProblem.slot.label);
     }
+    if (parameterConflictLabels) {
+      return t.pipeline.generationParametersMutuallyExclusive.replace("{fields}", parameterConflictLabels);
+    }
     const length = promptDocument.plainText.trim().length;
     if (selectedRoute.inputSchema.prompt.required && !length) return t.pipeline.videoAiInstructionRequired;
     if (length < (selectedRoute.inputSchema.prompt.minLength ?? 0)) {
@@ -123,12 +133,12 @@ export function VideoAiComposer({
       return t.pipeline.videoAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [invalidReferenceCount, loadingRoutes, promptDocument.plainText, referenceProblem, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
+  }, [invalidReferenceCount, loadingRoutes, parameterConflictLabels, promptDocument.plainText, referenceProblem, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
 
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
     setSelectedRouteId(routeId);
-    const nextSettings = route ? resolvedGenerationParameters(route) : {};
+    const nextSettings = route ? reconcileComposerSettings(route, settings) : {};
     if (route) setSettings(nextSettings);
     onInputDirtyChange?.(
       routeId !== data.params?.routeId
@@ -300,15 +310,22 @@ function VideoComposerSurface({
       )}
       footer={(
         <>
-          <Sparkles className="size-4 shrink-0 text-[var(--pl-accent)]" />
-          <ComposerSelect
+          <CanvasModelPicker
             ariaLabel={t.pipeline.videoAiRoute}
             value={selectedRouteId}
             disabled={loadingRoutes || busy || !routes.length}
             onChange={onRouteChange}
-            options={routes.map((route) => ({ value: route.id, label: route.name }))}
-            emptyLabel={loadingRoutes ? t.pipeline.videoAiRoutesLoading : t.pipeline.imageAiNoRoutesShort}
-            className="max-w-56"
+            emptyLabel={loadingRoutes ? t.pipeline.videoAiRoutesLoading : t.pipeline.videoAiNoRoutes}
+            getPopupContainer={tooltipContainer}
+            items={routes.map((route) => ({
+              id: route.id,
+              name: route.name,
+              group: route.product,
+              meta: route.providerId,
+              description: route.description,
+              tags: route.tags,
+              icon: <FileVideo className="size-3.5" />,
+            }))}
           />
           <ComposerSelect
             ariaLabel={t.pipeline.videoAiImageRole}
@@ -321,33 +338,15 @@ function VideoComposerSurface({
               { value: "last-frame", label: t.pipeline.videoAiRoleLastFrame },
             ]}
           />
-          {parameterFields.length ? (
-            <Popover
-              placement="top"
-              trigger="click"
-              destroyOnHidden
-              classNames={{ container: "!max-w-none" }}
-              content={(
-                <section className="w-[min(620px,calc(100vw-48px))] p-2" aria-label={t.pipeline.videoAiParameters}>
-                  <GenerationParameterEditor
-                    disabled={busy}
-                    fields={parameterFields}
-                    values={settings}
-                    onChange={onSettingsChange}
-                  />
-                </section>
-              )}
-            >
-              <button
-                type="button"
-                aria-label={t.pipeline.videoAiParameters}
-                className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-              >
-                <Settings2 className="size-3.5" />
-                {t.pipeline.videoAiParameters}
-              </button>
-            </Popover>
-          ) : null}
+          <CanvasGenerationConfig
+            ariaLabel={t.pipeline.videoAiParameters}
+            constraints={selectedRoute?.inputSchema.constraints}
+            disabled={busy}
+            fields={parameterFields}
+            getPopupContainer={tooltipContainer}
+            onChange={onSettingsChange}
+            values={settings}
+          />
           <span className="flex-1" />
           {generating ? <LoaderCircle className="size-4 animate-spin text-[var(--pl-text-muted)]" /> : null}
           {generating ? (

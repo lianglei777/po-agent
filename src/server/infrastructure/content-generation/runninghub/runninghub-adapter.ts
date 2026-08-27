@@ -32,6 +32,19 @@ const OPERATION_PATHS: Record<string, string> = {
     "/openapi/v2/bytedance/seedance-2.5-token/image-to-video",
   "seedance-2-5-multimodal-video":
     "/openapi/v2/bytedance/seedance-2.5-token/multimodal-video",
+  "minimax-hailuo-h3-text-to-video":
+    "/openapi/v2/minimax/hailuo-h3/text-to-video",
+  "minimax-hailuo-h3-image-to-video":
+    "/openapi/v2/minimax/hailuo-h3/image-to-video",
+  "minimax-hailuo-h3-multimodal-video":
+    "/openapi/v2/minimax/hailuo-h3/multimodal-to-video",
+  "pixverse-v6-text-to-video": "/openapi/v2/pixverse-v6/text-to-video",
+  "pixverse-v6-image-to-video": "/openapi/v2/pixverse-v6/image-to-video",
+  "wan-2-7-text-to-video": "/openapi/v2/alibaba/wan-2.7/text-to-video",
+  "wan-2-7-image-to-video": "/openapi/v2/alibaba/wan-2.7/image-to-video",
+  "wan-2-7-reference-to-video": "/openapi/v2/alibaba/wan-2.7/reference-to-video",
+  "wan-3-image-to-video": "/openapi/v2/alibaba/wan-3.0/image-to-video",
+  "wan-3-reference-to-video": "/openapi/v2/alibaba/wan-3.0/reference-to-video",
 };
 
 export class RunningHubAdapter implements GenerationProvider {
@@ -275,6 +288,81 @@ function requestBody(
         realPersonMode: value(parameters, "realPersonMode", true),
         conversionSlots: value(parameters, "conversionSlots", ["all"]),
       };
+    case "minimax-hailuo-h3-text-to-video":
+      return {
+        ...common,
+        ...minimaxH3Parameters(parameters),
+        ratio: value(parameters, "aspectRatio", null),
+      };
+    case "minimax-hailuo-h3-image-to-video":
+      return {
+        ...common,
+        ...minimaxH3Parameters(parameters),
+        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
+        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
+      };
+    case "minimax-hailuo-h3-multimodal-video":
+      return {
+        ...common,
+        ...minimaxH3Parameters(parameters),
+        imageUrls: urlsForSlot(assets, "imageUrls"),
+        videoUrls: urlsForSlot(assets, "videoUrls"),
+        audioUrls: urlsForSlot(assets, "audioUrls"),
+        ratio: value(parameters, "aspectRatio", "adaptive"),
+      };
+    case "pixverse-v6-text-to-video":
+      return {
+        ...common,
+        ...pixVerseParameters(parameters),
+        aspectRatio: value(parameters, "aspectRatio", null),
+      };
+    case "pixverse-v6-image-to-video":
+      return {
+        ...common,
+        ...pixVerseParameters(parameters),
+        imageUrl: firstUrlForSlot(assets, "firstFrameUrl"),
+      };
+    case "wan-2-7-text-to-video":
+      return {
+        ...common,
+        ...wan27Parameters(parameters),
+        audioUrl: firstUrlForSlot(assets, "audioUrls"),
+        aspectRatio: value(parameters, "aspectRatio", "16:9"),
+      };
+    case "wan-2-7-image-to-video":
+      return {
+        ...common,
+        ...wan27Parameters(parameters),
+        firstImageUrl: firstUrlForSlot(assets, "firstFrameUrl"),
+        lastImageUrl: firstUrlForSlot(assets, "lastFrameUrl"),
+        audioUrl: firstUrlForSlot(assets, "audioUrls"),
+      };
+    case "wan-2-7-reference-to-video":
+      return {
+        ...common,
+        ...wan27Parameters(parameters),
+        imageUrls: urlsForSlot(assets, "imageUrls"),
+        videoUrls: urlsForSlot(assets, "videoUrls"),
+        audioUrl: firstUrlForSlot(assets, "audioUrls"),
+        aspectRatio: value(parameters, "aspectRatio", "16:9"),
+      };
+    case "wan-3-image-to-video":
+      return {
+        ...common,
+        ...wan3Parameters(parameters),
+        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
+        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
+      };
+    case "wan-3-reference-to-video":
+      return {
+        ...common,
+        ...wan3Parameters(parameters),
+        imageUrls: urlsForSlot(assets, "imageUrls"),
+        videoUrls: urlsForSlot(assets, "videoUrls"),
+        audioUrls: urlsForSlot(assets, "audioUrls"),
+        fileUrl: value(parameters, "fileUrl", null),
+        linkUrl: value(parameters, "linkUrl", null),
+      };
     default:
       throw new AppError(
         "GENERATION_OPERATION_UNSUPPORTED",
@@ -282,6 +370,42 @@ function requestBody(
         400,
       );
   }
+}
+
+function minimaxH3Parameters(parameters: Record<string, JsonValue>) {
+  return {
+    resolution: value(parameters, "resolution", "768P"),
+    duration: String(value(parameters, "durationSeconds", 5)),
+    aigc_watermark: value(parameters, "watermark", false),
+  };
+}
+
+function pixVerseParameters(parameters: Record<string, JsonValue>) {
+  return {
+    resolution: value(parameters, "resolution", "720p"),
+    duration: value(parameters, "durationSeconds", 5),
+    generateAudioSwitch: value(parameters, "generateAudio", true),
+  };
+}
+
+function wan27Parameters(parameters: Record<string, JsonValue>) {
+  return {
+    negativePrompt: value(parameters, "negativePrompt", null),
+    resolution: value(parameters, "resolution", "720P"),
+    duration: String(value(parameters, "durationSeconds", 5)),
+    promptExtend: value(parameters, "promptExtend", false),
+    seed: value(parameters, "seed", null),
+  };
+}
+
+function wan3Parameters(parameters: Record<string, JsonValue>) {
+  return {
+    resolution: value(parameters, "resolution", "720P"),
+    aspectRatio: value(parameters, "aspectRatio", "adaptive"),
+    duration: String(value(parameters, "durationSeconds", "auto")),
+    audio: value(parameters, "generateAudio", true),
+    seed: value(parameters, "seed", null),
+  };
 }
 
 function videoParameters(parameters: Record<string, JsonValue>) {

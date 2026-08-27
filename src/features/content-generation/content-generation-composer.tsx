@@ -2,7 +2,7 @@
 
 import { FileImage, FileMusic, FileVideo, Send, X } from "@/components/icons";
 import { useState } from "react";
-import { Alert, Button, Input, Select, Tooltip } from "antd";
+import { Alert, Button, Input, Tooltip } from "antd";
 import type {
   GenerationAssetSlot,
   GenerationRouteDto,
@@ -13,6 +13,11 @@ import {
   GenerationParameterEditor,
 } from "@/components/generation/generation-parameter-editor";
 import { useI18n } from "@/i18n/use-i18n";
+import {
+  GenerationRouteDetails,
+  GenerationRouteSelect,
+} from "@/components/generation/generation-route-presentation";
+import { generationParameterConflict } from "@/components/generation/generation-input-constraints";
 
 export interface SelectedGenerationAsset {
   id: string;
@@ -51,15 +56,26 @@ export function ContentGenerationComposer({
 
   const missingRequiredAsset = assetSlots.some((slot) =>
     slot.required && !assets.some((asset) => asset.slot === slot.key));
+  const missingConstrainedAsset = (schema.constraints ?? []).some((constraint) =>
+    constraint.kind === "at-least-one-asset" &&
+    assets.filter((asset) => constraint.slots.includes(asset.slot)).length <
+      (constraint.minFiles ?? 1));
   const promptMissing = schema.prompt.required && !prompt.trim();
-  const disabled = busy || promptMissing || missingRequiredAsset;
+  const parameterConflict = generationParameterConflict(schema.constraints ?? [], parameters);
+  const parameterConflictLabels = parameterConflict?.keys
+    .map((key) => inputLabels[key] ?? key)
+    .join(" / ");
+  const parameterConflictMessage = parameterConflictLabels
+    ? t.contentGeneration.generateParametersConflict.replace("{fields}", parameterConflictLabels)
+    : null;
+  const disabled = busy || promptMissing || missingRequiredAsset || missingConstrainedAsset || Boolean(parameterConflict);
   const disabledReason = busy
     ? t.contentGeneration.generateBusy
     : promptMissing
       ? t.contentGeneration.generatePromptRequired
-      : missingRequiredAsset
+      : missingRequiredAsset || missingConstrainedAsset
         ? t.contentGeneration.generateAssetsRequired
-        : null;
+        : parameterConflictMessage;
 
   async function submit() {
     if (disabled) return;
@@ -83,16 +99,20 @@ export function ContentGenerationComposer({
             {route.capability}
           </p>
         </div>
-        <Select
-          aria-label={t.contentGeneration.capability}
+        <GenerationRouteSelect
+          ariaLabel={t.contentGeneration.capability}
           className="w-full sm:w-72"
           disabled={busy}
           onChange={onRouteChange}
-          options={routes.map((item) => ({ label: item.name, value: item.id }))}
-          popupMatchSelectWidth={false}
+          routes={routes}
           value={route.id}
         />
       </div>
+
+      <GenerationRouteDetails
+        className="mb-3 border-b border-line-subtle px-1 pb-3"
+        route={route}
+      />
 
       {assetSlots.length ? (
         <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -154,6 +174,9 @@ export function ContentGenerationComposer({
             values={parameters}
           />
         </div>
+      ) : null}
+      {parameterConflictMessage ? (
+        <Alert className="mt-2" showIcon title={parameterConflictMessage} type="error" />
       ) : null}
 
       <div className="mt-3 flex items-center justify-between">

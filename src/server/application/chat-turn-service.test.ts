@@ -9,6 +9,8 @@ import { ChatTurnService } from "./chat-turn-service";
 const route: GenerationRouteDto = {
   id: "image-route",
   name: "Image",
+  description: "Image route description",
+  tags: ["Image"],
   capability: "image-to-image",
   product: "Image",
   providerId: "provider",

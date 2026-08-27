@@ -89,6 +89,55 @@ describe("GenerationRunService", () => {
     });
   });
 
+  it("validates cross-slot asset requirements before creating paid work", async () => {
+    const base = {
+      sessionId: "session-1",
+      capability: "image-to-video" as const,
+      routeId: "runninghub-minimax-hailuo-h3-image-to-video",
+      prompt: "camera moves toward the subject",
+      source: "direct-ui" as const,
+    };
+
+    await expect(service.createRun({
+      ...base,
+      idempotencyKey: "h3-missing-frame",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    await expect(service.createRun({
+      ...base,
+      assets: [{
+        slot: "lastFrameUrl",
+        ref: { type: "workspace-file", relativePath: "tail.png" },
+      }],
+      idempotencyKey: "h3-tail-only",
+    })).resolves.toMatchObject({ created: true });
+  });
+
+  it("validates Wan 3.0 public URL inputs and mutual exclusion", async () => {
+    const base = {
+      sessionId: "session-1",
+      capability: "multimodal-to-video" as const,
+      routeId: "runninghub-wan-3-reference-to-video",
+      prompt: "use the supplied creative brief",
+      source: "direct-ui" as const,
+    };
+
+    await expect(service.createRun({
+      ...base,
+      parameters: {
+        fileUrl: "https://docs.example/brief.pdf",
+        linkUrl: "https://example.com/brief",
+      },
+      idempotencyKey: "wan3-two-urls",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    await expect(service.createRun({
+      ...base,
+      parameters: { linkUrl: "https://127.0.0.1/private" },
+      idempotencyKey: "wan3-private-url",
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
   it("persists a reviewable run without creating provider work until confirmation", async () => {
     const prepared = await service.prepareRun({
       sessionId: "session-1",

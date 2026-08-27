@@ -358,6 +358,11 @@ export class GenerationExecutionService {
   private async resolveInputAssets(run: GenerationRun): Promise<ProviderInputAsset[]> {
     const session = await this.repository.getSession(run.sessionId);
     if (!session) throw new AppError("SESSION_NOT_FOUND", "Session was not found", 404);
+    const route = await this.repository.getRoute(run.routeId);
+    if (!route) {
+      throw new AppError("GENERATION_ROUTE_NOT_FOUND", "Generation route was not found", 404);
+    }
+    const slots = new Map((route.inputSchema.assets ?? []).map((slot) => [slot.key, slot]));
     const resolved: ProviderInputAsset[] = [];
     for (const asset of run.input.assets ?? []) {
       let relativePath: string;
@@ -383,6 +388,24 @@ export class GenerationExecutionService {
         relativePath,
         slot: asset.slot,
       });
+      const slot = slots.get(asset.slot);
+      if (!slot) {
+        throw new AppError("VALIDATION_ERROR", `Unknown generation asset slot: ${asset.slot}`, 400);
+      }
+      if (slot.maxFileSizeBytes !== undefined && inputFile.data.byteLength > slot.maxFileSizeBytes) {
+        throw new AppError(
+          "FILE_TOO_LARGE",
+          `Generation asset exceeds the limit for ${slot.label}`,
+          413,
+        );
+      }
+      if (slot.acceptedTypes?.length && !slot.acceptedTypes.includes(inputFile.mimeType)) {
+        throw new AppError(
+          "VALIDATION_ERROR",
+          `Generation asset has an unsupported content type for ${slot.label}`,
+          400,
+        );
+      }
       resolved.push({ ...inputFile, bindingId: asset.bindingId, order: asset.order });
     }
     return resolved;

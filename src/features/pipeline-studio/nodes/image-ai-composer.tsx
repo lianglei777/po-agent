@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Modal, Tooltip } from "antd";
-import type { GenerationRouteDto } from "@/contracts/generation";
-import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
-import { ImagePlus, LoaderCircle, Maximize2, Send, Sparkles, Square } from "@/components/icons";
+import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
+import type { CanvasEdge, CanvasGenerationSettingValue, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
+import { ImagePlus, LoaderCircle, Maximize2, Send, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
@@ -15,9 +15,14 @@ import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
-
-const ASPECT_RATIOS = ["1:1", "16:9", "9:16", "4:3", "3:4"] as const;
-const RESOLUTIONS = ["1k", "2k"] as const;
+import {
+  composerParameterFields,
+  IMAGE_ASPECT_RATIO_FIELD,
+  reconcileComposerSettings,
+} from "../model/generation-composer-settings";
+import { CanvasGenerationConfig } from "./shared/canvas-generation-config";
+import { CanvasModelPicker } from "./shared/canvas-model-picker";
+import { generationParameterConflict } from "@/components/generation/generation-input-constraints";
 
 export function ImageAiComposer({
   nodeId,
@@ -50,8 +55,10 @@ export function ImageAiComposer({
   const instruction = promptDocument.plainText;
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
-  const [aspectRatio, setAspectRatio] = useState(readOption(data.params?.settings?.aspectRatio, ASPECT_RATIOS, "1:1"));
-  const [resolution, setResolution] = useState(readOption(data.params?.settings?.resolution, RESOLUTIONS, "2k"));
+  const [settings, setSettings] = useState<Record<string, JsonValue>>({
+    aspectRatio: data.params?.settings?.aspectRatio ?? "1:1",
+    resolution: data.params?.settings?.resolution ?? "2k",
+  });
   const [loadedCapability, setLoadedCapability] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -77,6 +84,13 @@ export function ImageAiComposer({
     : "text-to-image";
   const loadingRoutes = loadedCapability !== capability;
   const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
+  const parameterConflict = generationParameterConflict(
+    selectedRoute?.inputSchema.constraints ?? [],
+    settings,
+  );
+  const parameterConflictLabels = parameterConflict?.keys
+    .map((key) => (t.contentGeneration.inputs as Readonly<Record<string, string>>)[key] ?? key)
+    .join(" / ");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,9 +101,10 @@ export function ImageAiComposer({
         const selected = selectImageGenerationRoute(available, data.params?.routeId);
         setRoutes(available);
         setSelectedRouteId(selected?.id ?? "");
-        if (selected && !data.params?.settings?.resolution) {
-          setResolution(readOption(selected.defaults.resolution, RESOLUTIONS, "2k"));
-        }
+        if (selected) setSettings((current) => reconcileComposerSettings(selected, {
+          ...current,
+          ...(data.params?.settings as Record<string, JsonValue> | undefined),
+        }, [IMAGE_ASPECT_RATIO_FIELD]));
       })
       .catch((error) => {
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
@@ -98,7 +113,13 @@ export function ImageAiComposer({
         if (!controller.signal.aborted) setLoadedCapability(capability);
       });
     return () => controller.abort();
-  }, [capability, data.params?.routeId, data.params?.settings?.resolution]);
+  }, [capability, data.params?.routeId, data.params?.settings]);
+
+  const changeRoute = (routeId: string) => {
+    const route = routes.find((candidate) => candidate.id === routeId);
+    setSelectedRouteId(routeId);
+    if (route) setSettings((current) => reconcileComposerSettings(route, current, [IMAGE_ASPECT_RATIO_FIELD]));
+  };
 
   const promptProblem = imagePromptProblem(selectedRoute, instruction);
   const disabledReason = useMemo(() => {
@@ -118,6 +139,9 @@ export function ImageAiComposer({
     if (referenceProblem?.kind === "missing-required") {
       return t.pipeline.promptReferenceRequired.replace("{label}", referenceProblem.slot.label);
     }
+    if (parameterConflictLabels) {
+      return t.pipeline.generationParametersMutuallyExclusive.replace("{fields}", parameterConflictLabels);
+    }
     if (promptProblem === "required") return t.pipeline.imageAiInstructionRequired;
     if (promptProblem === "too-short") {
       return t.pipeline.imageAiPromptTooShort.replace("{count}", String(selectedRoute.inputSchema.prompt.minLength ?? 1));
@@ -126,7 +150,7 @@ export function ImageAiComposer({
       return t.pipeline.imageAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [capability, invalidReferenceCount, loadingRoutes, promptProblem, referenceProblem, routes.length, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
+  }, [capability, invalidReferenceCount, loadingRoutes, parameterConflictLabels, promptProblem, referenceProblem, routes.length, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
 
   const submit = async () => {
     if (disabledReason || generating || cancelling || !selectedRoute) return;
@@ -137,7 +161,7 @@ export function ImageAiComposer({
         prompt: instruction.trim(),
         promptDocument,
         routeId: selectedRoute.id,
-        settings: { aspectRatio, resolution },
+        settings: generationRequestSettings(settings),
         createNewNode: mode === "modify",
       });
       if (onGenerationStarted) onGenerationStarted(response.node, response.edge);
@@ -170,9 +194,9 @@ export function ImageAiComposer({
       mode={mode}
       promptDocument={promptDocument}
       routes={routes}
+      selectedRoute={selectedRoute}
       selectedRouteId={selectedRouteId}
-      aspectRatio={aspectRatio}
-      resolution={resolution}
+      settings={settings}
       loadingRoutes={loadingRoutes}
       generating={generating}
       cancellable={Boolean(data.taskInfo?.runId) && (taskStatus === "queued" || taskStatus === "processing")}
@@ -184,9 +208,8 @@ export function ImageAiComposer({
         setInvalidReferenceCount(invalidCount);
         setUnsupportedReferenceCount(unsupportedCount);
       }}
-      onRouteChange={setSelectedRouteId}
-      onAspectRatioChange={(value) => setAspectRatio(readOption(value, ASPECT_RATIOS, "1:1"))}
-      onResolutionChange={(value) => setResolution(readOption(value, RESOLUTIONS, "2k"))}
+      onRouteChange={changeRoute}
+      onSettingsChange={setSettings}
       onSubmit={() => void submit()}
       onCancel={() => void cancel()}
       onExpand={() => setExpanded(true)}
@@ -216,9 +239,9 @@ export function ImageAiComposer({
 }
 
 function ComposerSurface({
-  large, mode, promptDocument, routes, selectedRouteId, aspectRatio, resolution,
+  large, mode, promptDocument, routes, selectedRoute, selectedRouteId, settings,
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
-  onPromptDocumentChange, onRouteChange, onAspectRatioChange, onResolutionChange,
+  onPromptDocumentChange, onRouteChange, onSettingsChange,
   onReferenceStateChange,
   onSubmit, onCancel, onExpand, nodeId,
 }: {
@@ -226,9 +249,9 @@ function ComposerSurface({
   mode: "create" | "modify";
   promptDocument: CanvasPromptDocument;
   routes: GenerationRouteDto[];
+  selectedRoute: GenerationRouteDto | undefined;
   selectedRouteId: string;
-  aspectRatio: string;
-  resolution: string;
+  settings: Record<string, JsonValue>;
   loadingRoutes: boolean;
   generating: boolean;
   cancellable: boolean;
@@ -238,8 +261,7 @@ function ComposerSurface({
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onRouteChange: (value: string) => void;
-  onAspectRatioChange: (value: string) => void;
-  onResolutionChange: (value: string) => void;
+  onSettingsChange: (value: Record<string, JsonValue>) => void;
   onSubmit: () => void;
   onCancel: () => void;
   onExpand: () => void;
@@ -247,6 +269,7 @@ function ComposerSurface({
 }) {
   const { t } = useI18n();
   const busy = generating || cancelling;
+  const parameterFields = composerParameterFields(selectedRoute, [IMAGE_ASPECT_RATIO_FIELD]);
   return (
     <CanvasNodeComposerShell
       ariaLabel={mode === "modify" ? t.pipeline.imageAiModifyTitle : t.pipeline.imageAiTitle}
@@ -290,29 +313,31 @@ function ComposerSurface({
       )}
       footer={(
         <>
-          <Sparkles className="size-4 shrink-0 text-[var(--pl-accent)]" />
-          <ComposerSelect
+          <CanvasModelPicker
             ariaLabel={t.pipeline.imageAiRoute}
             value={selectedRouteId}
             disabled={loadingRoutes || busy || !routes.length}
             onChange={onRouteChange}
-            options={routes.map((route) => ({ value: route.id, label: route.name }))}
             emptyLabel={loadingRoutes ? t.pipeline.imageAiRoutesLoading : t.pipeline.imageAiNoRoutesShort}
-            className="max-w-56"
+            getPopupContainer={tooltipContainer}
+            items={routes.map((route) => ({
+              id: route.id,
+              name: route.name,
+              group: route.product,
+              meta: route.providerId,
+              description: route.description,
+              tags: route.tags,
+              icon: <ImagePlus className="size-3.5" />,
+            }))}
           />
-          <ComposerSelect
-            ariaLabel={t.pipeline.imageAiAspectRatio}
-            value={aspectRatio}
+          <CanvasGenerationConfig
+            ariaLabel={t.pipeline.videoAiParameters}
+            constraints={selectedRoute?.inputSchema.constraints}
             disabled={busy}
-            onChange={onAspectRatioChange}
-            options={ASPECT_RATIOS.map((value) => ({ value, label: value }))}
-          />
-          <ComposerSelect
-            ariaLabel={t.pipeline.imageAiResolution}
-            value={resolution}
-            disabled={busy}
-            onChange={onResolutionChange}
-            options={RESOLUTIONS.map((value) => ({ value, label: value.toUpperCase() }))}
+            fields={parameterFields}
+            getPopupContainer={tooltipContainer}
+            onChange={onSettingsChange}
+            values={settings}
           />
           <span className="flex-1" />
           {generating ? (
@@ -362,34 +387,15 @@ function ComposerSurface({
   );
 }
 
-function ComposerSelect({
-  ariaLabel, value, disabled, options, emptyLabel, className = "", onChange,
-}: {
-  ariaLabel: string;
-  value: string;
-  disabled: boolean;
-  options: Array<{ value: string; label: string }>;
-  emptyLabel?: string;
-  className?: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      aria-label={ariaLabel}
-      title={ariaLabel}
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className={`nodrag h-8 min-w-0 rounded-lg border border-transparent bg-transparent px-2 text-xs text-[var(--pl-text-secondary)] outline-none hover:border-[var(--pl-border)] focus:border-[var(--pl-accent)] disabled:opacity-50 ${className}`}
-    >
-      {!options.length ? <option value="">{emptyLabel}</option> : null}
-      {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
-  );
-}
-
-function readOption<const T extends readonly string[]>(value: unknown, options: T, fallback: T[number]): T[number] {
-  return typeof value === "string" && options.includes(value) ? value as T[number] : fallback;
+function generationRequestSettings(values: Record<string, JsonValue>): Record<string, CanvasGenerationSettingValue> {
+  return Object.fromEntries(Object.entries(values).filter((entry): entry is [string, CanvasGenerationSettingValue] => (
+    typeof entry[1] === "string"
+    || typeof entry[1] === "number"
+    || typeof entry[1] === "boolean"
+    || (Array.isArray(entry[1]) && entry[1].every((item) => (
+      typeof item === "string" || typeof item === "number" || typeof item === "boolean"
+    )))
+  )));
 }
 
 function tooltipContainer(trigger: HTMLElement): HTMLElement {

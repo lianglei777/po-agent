@@ -5,6 +5,8 @@ import { bindGenerationAssets, composerGenerationSlots, missingGenerationSlots }
 const route: GenerationRouteDto = {
   id: "video",
   name: "Video",
+  description: "Video route",
+  tags: ["Video"],
   capability: "image-to-video",
   product: "Video",
   providerId: "provider",

@@ -404,4 +404,14 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
       ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order >= 0);
     `,
   },
+  {
+    version: 12,
+    name: "generation_route_presentation",
+    sql: `
+      ALTER TABLE generation_routes
+      ADD COLUMN description TEXT NOT NULL DEFAULT '';
+      ALTER TABLE generation_routes
+      ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
 ];

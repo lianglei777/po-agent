@@ -58,11 +58,14 @@ export function updateRunningHubGenerationSettings(enabled: boolean) {
   });
 }
 
-export function updateGenerationRoute(routeId: string, enabled: boolean) {
+export function updateGenerationRoute(
+  routeId: string,
+  update: { enabled?: boolean; isDefault?: boolean },
+) {
   return requestJson<GenerationRouteDto>(`/api/generation/routes/${encodeURIComponent(routeId)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(update),
   });
 }
 
