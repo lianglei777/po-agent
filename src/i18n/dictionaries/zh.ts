@@ -226,6 +226,7 @@ export const zh = {
     generateBusy: "当前生成任务结束后才能提交新任务。",
     generatePromptRequired: "请先填写生成提示词。",
     generateAssetsRequired: "请先添加所有必填参考素材。",
+    generateAssetsExceeded: "参考素材总数超过当前模型限制。",
     generateParametersConflict: "以下参数只能选择一个：{fields}",
     taskId: "任务 ID",
     copyTaskId: "复制任务 ID",

@@ -42,24 +42,39 @@ export function buildQianwenRequest(
     return{model:config.vendorModel,input:{messages:[{role:"user",content:[{text:generation.prompt}]}]},parameters:imageParameters};
   }
   const vendorParameters: Record<string, JsonValue> = {
-    resolution: parameters.resolution ?? "1080P",
-    ratio: parameters.aspectRatio ?? "adaptive",
+    resolution: parameters.resolution ?? defaultResolution(config.requestProfile),
     duration: parameters.durationSeconds ?? 5,
-    audio: parameters.generateAudio ?? true,
-    prompt_extend: parameters.promptExtend ?? true,
-    watermark: parameters.watermark ?? false,
+    watermark: parameters.watermark ?? (config.requestProfile === "happyhorse-video-v1"),
   };
+  if (parameters.aspectRatio !== undefined) vendorParameters.ratio = parameters.aspectRatio;
+  if (config.requestProfile === "wan-3-video-v1") {
+    vendorParameters.ratio ??= "adaptive";
+    vendorParameters.audio = parameters.generateAudio ?? true;
+    vendorParameters.prompt_extend = parameters.promptExtend ?? true;
+  }
+  if (config.requestProfile === "wan-2-7-video-v1") {
+    vendorParameters.prompt_extend = parameters.promptExtend ?? true;
+  }
   if (parameters.seed !== undefined && parameters.seed !== null) {
     vendorParameters.seed = parameters.seed;
   }
-  const media = config.assetBindings.flatMap((binding) =>
+  const mediaBindings = config.assetBindings.filter(binding => binding.mediaType !== "audio_url");
+  const media = mediaBindings.flatMap((binding) =>
     ordered(assets, binding.slot)
       .slice(0, binding.cardinality === "first" ? 1 : undefined)
       .map((asset) => ({ type: binding.mediaType, url: assetUrl(asset, config.vendorModel) })),
   );
+  const audioBinding = config.assetBindings.find(binding => binding.mediaType === "audio_url");
+  const audioAsset = audioBinding ? ordered(assets,audioBinding.slot)[0] : undefined;
+  const input:Record<string,JsonValue> = {
+    prompt: generation.prompt,
+    ...(parameters.negativePrompt ? { negative_prompt: parameters.negativePrompt } : {}),
+    ...(audioAsset ? { audio_url: assetUrl(audioAsset,config.vendorModel) } : {}),
+    ...(media.length ? { media } : {}),
+  };
   return {
     model: config.vendorModel,
-    input: { prompt: generation.prompt, ...(media.length ? { media } : {}) },
+    input,
     parameters: vendorParameters,
   };
 }
@@ -69,7 +84,25 @@ function validProfile(operation:string,record:Record<string,JsonValue>):boolean{
   if([QIANWEN_WAN_3_TEXT_TO_VIDEO_OPERATION,QIANWEN_WAN_3_IMAGE_TO_VIDEO_OPERATION,QIANWEN_WAN_3_MULTIMODAL_VIDEO_OPERATION].includes(operation as never))return record.endpointId==="video-synthesis"&&record.vendorModel==="wan3.0-video"&&record.requestProfile==="wan-3-video-v1"&&record.resultProfile==="video-url-v1"&&record.pollIntervalMs===15_000&&record.submitMode==="async-task";
   if(operation===QIANWEN_Z_IMAGE_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="multimodal-generation"&&record.vendorModel==="z-image-turbo"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="sync";
   if(operation===QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="image-generation"&&record.vendorModel==="wan2.6-t2i"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===5_000;
+  const expected=VIDEO_PROFILES[operation];
+  if(expected)return record.endpointId==="video-synthesis"&&record.vendorModel===expected.model&&record.requestProfile===expected.profile&&record.resultProfile==="video-url-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===15_000;
   return false;
+}
+
+const VIDEO_PROFILES:Record<string,{model:string;profile:string}>={
+  "wan-2-7-text-to-video":{model:"wan2.7-t2v-2026-06-12",profile:"wan-2-7-video-v1"},
+  "wan-2-7-image-to-video":{model:"wan2.7-i2v-2026-04-25",profile:"wan-2-7-video-v1"},
+  "wan-2-7-reference-to-video":{model:"wan2.7-r2v-2026-06-12",profile:"wan-2-7-video-v1"},
+  "happyhorse-text-to-video":{model:"happyhorse-1.1-t2v",profile:"happyhorse-video-v1"},
+  "happyhorse-image-to-video":{model:"happyhorse-1.1-i2v",profile:"happyhorse-video-v1"},
+  "happyhorse-reference-to-video":{model:"happyhorse-1.1-r2v",profile:"happyhorse-video-v1"},
+  "minimax-h3-text-to-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
+  "minimax-h3-image-to-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
+  "minimax-h3-multimodal-video":{model:"MiniMax/MiniMax-H3",profile:"minimax-h3-video-v1"},
+};
+
+function defaultResolution(profile:QianwenExecutionConfig["requestProfile"]):string {
+  return profile==="minimax-h3-video-v1"?"768P":"1080P";
 }
 
 function ordered(assets: PreparedGenerationAsset[], slot: string) {

@@ -158,22 +158,35 @@ function normalizeResponse(value: unknown, config: ReturnType<typeof resolveQian
   const synchronous=config.submitMode==="sync";
   const effectiveStatus=synchronous&&urls.length?"SUCCEEDED":status;
   const missingSucceededOutput = effectiveStatus === "SUCCEEDED" && urls.length===0;
-  const failed = effectiveStatus === "FAILED" || effectiveStatus === "CANCELED" || effectiveStatus === "UNKNOWN" || missingSucceededOutput;
   const succeeded = effectiveStatus === "SUCCEEDED" && urls.length>0;
+  const pending = effectiveStatus === "PENDING" || effectiveStatus === "RUNNING";
+  // 只接受文档明确声明的状态，避免供应商新增状态后被误判为可无限轮询。
+  const unknownStatus = !succeeded
+    && !pending
+    && effectiveStatus !== "FAILED"
+    && effectiveStatus !== "CANCELED"
+    && effectiveStatus !== "UNKNOWN";
+  const failed = effectiveStatus === "FAILED"
+    || effectiveStatus === "CANCELED"
+    || effectiveStatus === "UNKNOWN"
+    || missingSucceededOutput
+    || unknownStatus;
   return {
-    state: succeeded ? "succeeded" : failed || !remoteTaskId ? "failed" : "pending",
+    state: succeeded ? "succeeded" : pending && remoteTaskId ? "pending" : "failed",
     remoteTaskId,
     remoteStatus: effectiveStatus,
     outputs: urls.map(url=>({url,outputType:config.resultProfile==="video-url-v1"?"mp4":"png"})),
     errorCode: failed
-      ? stringValue(output.code) ?? (missingSucceededOutput
+      ? missingSucceededOutput || unknownStatus
         ? "GENERATION_PROVIDER_PROTOCOL_ERROR"
-        : `QIANWEN_TASK_${status}`)
+        : stringValue(output.code) ?? `QIANWEN_TASK_${status}`
       : !remoteTaskId ? "GENERATION_PROVIDER_PROTOCOL_ERROR" : undefined,
     errorMessage: failed
       ? stringValue(output.message) ?? (missingSucceededOutput
-        ? "Qianwen succeeded response did not include a video URL"
-        : `Qianwen task ended with status ${status}`)
+        ? "Qianwen succeeded response did not include an output URL"
+        : unknownStatus
+          ? `Qianwen returned an unsupported task status: ${status}`
+          : `Qianwen task ended with status ${status}`)
       : !remoteTaskId ? "Qianwen response did not include a task ID" : undefined,
     rawSnapshot: createGenerationProviderSnapshot(value),
     retryAfterMs: succeeded || failed ? undefined : config.pollIntervalMs,
@@ -187,7 +200,8 @@ function allowedDownloadUrl(value: string): string {
   } catch {
     throw rejectedDownloadUrl();
   }
-  const allowedHost = /^dashscope(?:-result)?(?:-[a-z0-9-]+)?\.oss(?:-accelerate|-cn-[a-z0-9-]+)\.aliyuncs\.com$/i.test(url.hostname);
+  // 不同视频模型返回不同的阿里云 OSS bucket；限制在 HTTPS OSS 服务域名内，仍拒绝任意外部主机。
+  const allowedHost = /^[a-z0-9][a-z0-9.-]*\.oss(?:-accelerate|-cn-[a-z0-9-]+)\.aliyuncs\.com$/i.test(url.hostname);
   if (url.protocol !== "https:" || !allowedHost || url.username || url.password) {
     throw rejectedDownloadUrl();
   }

@@ -145,6 +145,27 @@ describe("QianwenAdapter", () => {
     });
   });
 
+  it("rejects undocumented task statuses instead of polling forever", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      output: {
+        task_id: "task-unknown-status",
+        task_status: "QUEUED_FOR_REVIEW",
+      },
+    }));
+
+    await expect(new QianwenAdapter(fetcher).poll({
+      operation: ROUTE.providerOperation,
+      executionConfig: ROUTE.adapterConfig,
+      remoteTaskId: "task-unknown-status",
+      credential: "secret-key",
+    })).resolves.toMatchObject({
+      state: "failed",
+      errorCode: "GENERATION_PROVIDER_PROTOCOL_ERROR",
+      errorMessage: "Qianwen returned an unsupported task status: QUEUED_FOR_REVIEW",
+      retryAfterMs: undefined,
+    });
+  });
+
   it("uploads assets with a model-bound policy and no API authorization on OSS", async () => {
     const imageRoute = createQianwenRoutes().find((route) => route.capability === "image-to-video")!;
     const fetcher = vi.fn<typeof fetch>()
@@ -167,7 +188,7 @@ describe("QianwenAdapter", () => {
     expect(fetcher.mock.calls[1][1]?.body).toBeInstanceOf(FormData);
   });
 
-  it("downloads only allowlisted DashScope result hosts without redirects", async () => {
+  it("downloads only allowlisted Alibaba OSS result hosts without redirects", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(
       new Uint8Array([1, 2, 3]),
       { status: 200, headers: { "content-type": "video/mp4" } },
@@ -183,6 +204,9 @@ describe("QianwenAdapter", () => {
       data: new Uint8Array([1, 2, 3]),
       contentType: "video/mp4",
     });
+    await expect(adapter.download(
+      "https://model-result.oss-cn-shanghai.aliyuncs.com/video.mp4?Signature=signed",
+    )).resolves.toMatchObject({ contentType: "video/mp4" });
     expect(fetcher.mock.calls[0][1]).toMatchObject({ redirect: "error" });
   });
 

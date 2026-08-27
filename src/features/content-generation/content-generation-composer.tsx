@@ -60,6 +60,9 @@ export function ContentGenerationComposer({
     constraint.kind === "at-least-one-asset" &&
     assets.filter((asset) => constraint.slots.includes(asset.slot)).length <
       (constraint.minFiles ?? 1));
+  const exceedsConstrainedAssets = (schema.constraints ?? []).some((constraint) =>
+    constraint.kind === "max-total-assets" &&
+    assets.filter((asset) => constraint.slots.includes(asset.slot)).length > constraint.maxFiles);
   const promptMissing = schema.prompt.required && !prompt.trim();
   const parameterConflict = generationParameterConflict(schema.constraints ?? [], parameters);
   const parameterConflictLabels = parameterConflict?.keys
@@ -68,13 +71,15 @@ export function ContentGenerationComposer({
   const parameterConflictMessage = parameterConflictLabels
     ? t.contentGeneration.generateParametersConflict.replace("{fields}", parameterConflictLabels)
     : null;
-  const disabled = busy || promptMissing || missingRequiredAsset || missingConstrainedAsset || Boolean(parameterConflict);
+  const disabled = busy || promptMissing || missingRequiredAsset || missingConstrainedAsset || exceedsConstrainedAssets || Boolean(parameterConflict);
   const disabledReason = busy
     ? t.contentGeneration.generateBusy
     : promptMissing
       ? t.contentGeneration.generatePromptRequired
       : missingRequiredAsset || missingConstrainedAsset
         ? t.contentGeneration.generateAssetsRequired
+        : exceedsConstrainedAssets
+          ? t.contentGeneration.generateAssetsExceeded
         : parameterConflictMessage;
 
   async function submit() {

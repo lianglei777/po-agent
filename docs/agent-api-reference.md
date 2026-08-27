@@ -2522,6 +2522,8 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 千问图片 Route 包括同步的 `qianwen-z-image-text-to-image` 与异步的 `qianwen-wan-2-6-text-to-image`。Z-Image 固定单张 PNG 输出且不进入轮询；Wan 2.6 支持 `imageCount` 1–4、负向提示词和 5 秒轮询。两者均使用供应商无关的 `size`、`promptExtend` 与可选 `seed` 参数。
 
+千问视频目录还包括 Wan 2.7、HappyHorse 1.1 和 MiniMax-H3 的文生视频、图生视频与参考/多模态生视频 Route。Wan 2.7 固定到文档对应的模型快照；HappyHorse 与 MiniMax-H3 使用各自有限参数 Profile。All-in-One 供应商接口按 capability 拆成独立 Route，前端不需要理解模型内部模式。Wan 2.7 参考生视频的图片与视频素材合计最多 5 个，服务端会跨素材槽统一校验。
+
 各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
 
 Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
@@ -2589,7 +2591,7 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。`:providerId` 必须存在于服务端受信 Provider Directory；未知值返回 `404 GENERATION_PROVIDER_NOT_FOUND`。现有 `/api/generation/providers/runninghub` URL 保持兼容。
 
-`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub、千问或其他供应商的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”、“多个素材槽合计不超过指定数量”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub、千问或其他供应商的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
 Wan 3.0 参考生视频的 `fileUrl` 与 `linkUrl` 互斥，只接受不含凭证的公网 HTTPS URL。RunningHub 文档允许部分参考视频达到 100 MB，但 Po Agent 当前文件读取和上传链路统一限制为 50 MiB；Route Schema 返回的是应用实际可接受的上限。
 

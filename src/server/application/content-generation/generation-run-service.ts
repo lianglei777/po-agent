@@ -595,6 +595,13 @@ function validateInputConstraints(
       }
       continue;
     }
+    if (constraint.kind === "max-total-assets") {
+      const count = assets.filter((asset) => constraint.slots.includes(asset.slot)).length;
+      if (count > constraint.maxFiles) {
+        invalidInput(`Generation asset slots accept at most ${constraint.maxFiles} file(s) in total: ${constraint.slots.join(", ")}`);
+      }
+      continue;
+    }
     const populated = constraint.keys.filter((key) => {
       const value = parameters[key];
       return value !== undefined && value !== null && value !== "";

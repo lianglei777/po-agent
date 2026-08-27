@@ -241,6 +241,7 @@ export const en = {
     generateBusy: "Wait for the current generation task to finish before submitting another.",
     generatePromptRequired: "Enter a generation prompt first.",
     generateAssetsRequired: "Add all required reference assets first.",
+    generateAssetsExceeded: "The total number of reference assets exceeds this model's limit.",
     generateParametersConflict: "Choose only one: {fields}",
     taskId: "Task ID",
     copyTaskId: "Copy task ID",

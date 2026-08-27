@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GenerationSession } from "@/server/domain/generation";
 import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
+import { createQianwenRoutes } from "@/server/infrastructure/content-generation/qianwen/qianwen-catalog";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
 import { GenerationRunService } from "./generation-run-service";
@@ -136,6 +137,18 @@ describe("GenerationRunService", () => {
       parameters: { linkUrl: "https://127.0.0.1/private" },
       idempotencyKey: "wan3-private-url",
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("validates a cross-slot total asset limit before creating paid work", async () => {
+    const route=createQianwenRoutes(NOW).find(item=>item.id==="qianwen-wan-2-7-reference-to-video")!;
+    await repository.upsertRoute({...route,enabled:true});
+    await repository.setProviderEnabled("qianwen",true,NOW);
+    const assets=Array.from({length:6},(_,index)=>({
+      slot:index<3?"imageUrls":"videoUrls",
+      ref:{type:"workspace-file" as const,relativePath:`asset-${index}`},
+    }));
+    await expect(service.createRun({sessionId:"session-1",capability:"multimodal-to-video",routeId:route.id,prompt:"combine references",assets,source:"api",idempotencyKey:"too-many-references"}))
+      .rejects.toMatchObject({code:"VALIDATION_ERROR",status:400});
   });
 
   it("persists a reviewable run without creating provider work until confirmation", async () => {

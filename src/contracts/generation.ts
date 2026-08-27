@@ -42,6 +42,11 @@ export type GenerationInputConstraint =
   | {
       kind: "mutually-exclusive-parameters";
       keys: string[];
+    }
+  | {
+      kind: "max-total-assets";
+      slots: string[];
+      maxFiles: number;
     };
 
 export interface GenerationAssetSlot {

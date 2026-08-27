@@ -604,7 +604,7 @@ GENERATION_DOWNLOAD_FAILED
 
 ## 15. 实施阶段与验收
 
-当前进度（2026-08-27）：PR 1 至 PR 4 已完成；除 Wan 3.0 视频和临时 OSS 外，已实现 Z-Image 同步文生图与 Wan 2.6 异步多图 Profile。真实付费 Smoke 由开发者手动执行，不属于常规自动化检查。下一阶段进入 PR 5 视频模型扩充。
+当前进度（2026-08-27）：PR 1 至 PR 5 已完成；已实现通用 Provider 设置、Wan 3.0 视频、临时 OSS、Z-Image、Wan 2.6 图片，以及 Wan 2.7、HappyHorse 1.1、MiniMax-H3 的九条视频 Route。真实付费 Smoke 由开发者手动执行，不属于常规自动化检查。下一阶段进入 PR 6 Legacy 与生产加固。
 
 ### PR 1：通用 Provider 设置与凭据
 
