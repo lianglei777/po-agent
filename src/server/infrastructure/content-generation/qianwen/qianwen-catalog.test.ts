@@ -6,6 +6,12 @@ import {
 } from "./qianwen-request-builder";
 
 describe("Qianwen catalog", () => {
+  it("registers synchronous and asynchronous image profiles", () => {
+    const routes=createQianwenRoutes("2026-08-27T00:00:00.000Z");
+    expect(routes.map(route=>route.id)).toEqual(expect.arrayContaining(["qianwen-z-image-text-to-image","qianwen-wan-2-6-text-to-image"]));
+    expect(routes.find(route=>route.id==="qianwen-z-image-text-to-image")).toMatchObject({capability:"text-to-image",inputSchema:{prompt:{maxLength:800}},adapterConfig:{submitMode:"sync",vendorModel:"z-image-turbo"}});
+    expect(routes.find(route=>route.id==="qianwen-wan-2-6-text-to-image")).toMatchObject({defaults:{imageCount:1,size:"1280*1280"},adapterConfig:{submitMode:"async-task",pollIntervalMs:5000}});
+  });
   it("compiles the Wan 3.0 text-to-video route with semantic input fields", () => {
     const [route] = createQianwenRoutes("2026-08-27T00:00:00.000Z");
 

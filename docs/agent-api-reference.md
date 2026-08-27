@@ -2520,6 +2520,8 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 千问AI平台当前内置 `qianwen-wan-3-0-text-to-video`、`qianwen-wan-3-0-image-to-video` 和 `qianwen-wan-3-0-multimodal-to-video` Route，对应 `wan3.0-video` 的文生、首帧/首尾帧和图视音多模态生成。Route 支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数；`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长。
 
+千问图片 Route 包括同步的 `qianwen-z-image-text-to-image` 与异步的 `qianwen-wan-2-6-text-to-image`。Z-Image 固定单张 PNG 输出且不进入轮询；Wan 2.6 支持 `imageCount` 1–4、负向提示词和 5 秒轮询。两者均使用供应商无关的 `size`、`promptExtend` 与可选 `seed` 参数。
+
 各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
 
 Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：

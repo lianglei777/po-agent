@@ -5,6 +5,8 @@ import {
   QIANWEN_WAN_3_IMAGE_TO_VIDEO_OPERATION,
   QIANWEN_WAN_3_MULTIMODAL_VIDEO_OPERATION,
   QIANWEN_WAN_3_TEXT_TO_VIDEO_OPERATION,
+  QIANWEN_Z_IMAGE_TEXT_TO_IMAGE_OPERATION,
+  QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION,
   type QianwenExecutionConfig,
 } from "./qianwen-catalog";
 
@@ -14,15 +16,9 @@ export function resolveQianwenExecutionConfig(
 ): QianwenExecutionConfig {
   const record = objectValue(value);
   if (
-    ![QIANWEN_WAN_3_TEXT_TO_VIDEO_OPERATION,QIANWEN_WAN_3_IMAGE_TO_VIDEO_OPERATION,QIANWEN_WAN_3_MULTIMODAL_VIDEO_OPERATION].includes(operation as never) ||
     record.protocol !== "dashscope-media-v1" ||
     record.operation !== operation ||
-    record.endpointId !== "video-synthesis" ||
-    record.vendorModel !== "wan3.0-video" ||
-    record.requestProfile !== "wan-3-video-v1" ||
-    record.resultProfile !== "video-url-v1" ||
-    record.pollIntervalMs !== 15_000 ||
-    !Array.isArray(record.assetBindings)
+    !validProfile(operation,record)
   ) {
     throw new AppError(
       "GENERATION_OPERATION_UNSUPPORTED",
@@ -39,6 +35,12 @@ export function buildQianwenRequest(
   assets: PreparedGenerationAsset[] = [],
 ): JsonValue {
   const parameters = generation.parameters ?? {};
+  if(config.requestProfile==="messages-text-image-v1"){
+    const imageParameters:Record<string,JsonValue>={size:parameters.size??(config.vendorModel==="z-image-turbo"?"1024*1536":"1280*1280"),prompt_extend:parameters.promptExtend??(config.vendorModel!=="z-image-turbo")};
+    if(config.vendorModel==="wan2.6-t2i"){imageParameters.negative_prompt=parameters.negativePrompt??"";imageParameters.n=parameters.imageCount??1;imageParameters.watermark=parameters.watermark??false;}
+    if(parameters.seed!==undefined&&parameters.seed!==null)imageParameters.seed=parameters.seed;
+    return{model:config.vendorModel,input:{messages:[{role:"user",content:[{text:generation.prompt}]}]},parameters:imageParameters};
+  }
   const vendorParameters: Record<string, JsonValue> = {
     resolution: parameters.resolution ?? "1080P",
     ratio: parameters.aspectRatio ?? "adaptive",
@@ -60,6 +62,14 @@ export function buildQianwenRequest(
     input: { prompt: generation.prompt, ...(media.length ? { media } : {}) },
     parameters: vendorParameters,
   };
+}
+
+function validProfile(operation:string,record:Record<string,JsonValue>):boolean{
+  if(!Array.isArray(record.assetBindings))return false;
+  if([QIANWEN_WAN_3_TEXT_TO_VIDEO_OPERATION,QIANWEN_WAN_3_IMAGE_TO_VIDEO_OPERATION,QIANWEN_WAN_3_MULTIMODAL_VIDEO_OPERATION].includes(operation as never))return record.endpointId==="video-synthesis"&&record.vendorModel==="wan3.0-video"&&record.requestProfile==="wan-3-video-v1"&&record.resultProfile==="video-url-v1"&&record.pollIntervalMs===15_000&&record.submitMode==="async-task";
+  if(operation===QIANWEN_Z_IMAGE_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="multimodal-generation"&&record.vendorModel==="z-image-turbo"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="sync";
+  if(operation===QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION)return record.endpointId==="image-generation"&&record.vendorModel==="wan2.6-t2i"&&record.requestProfile==="messages-text-image-v1"&&record.resultProfile==="choices-content-image-v1"&&record.submitMode==="async-task"&&record.pollIntervalMs===5_000;
+  return false;
 }
 
 function ordered(assets: PreparedGenerationAsset[], slot: string) {

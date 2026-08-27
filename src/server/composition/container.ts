@@ -512,7 +512,7 @@ const globalContainer = globalThis as typeof globalThis & {
 };
 
 // 开发热更新会保留全局容器，而 Provider descriptor 在容器创建时已冻结；注册表变化必须使旧容器失效。
-const CONTAINER_VERSION = "generation-qianwen-assets-v7";
+const CONTAINER_VERSION = "generation-qianwen-images-v8";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

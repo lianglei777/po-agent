@@ -5,6 +5,22 @@ import { createQianwenRoutes } from "./qianwen-catalog";
 const [ROUTE] = createQianwenRoutes("2026-08-27T00:00:00.000Z");
 
 describe("QianwenAdapter", () => {
+  it("returns Z-Image synchronous outputs without polling", async () => {
+    const route=createQianwenRoutes().find(item=>item.id==="qianwen-z-image-text-to-image")!;
+    const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({output:{choices:[{message:{content:[{image:"https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/z.png?Signature=signed"}]}}]}}));
+    const result=await new QianwenAdapter(fetcher).submit({operation:route.providerOperation,executionConfig:route.adapterConfig,generation:{prompt:"一只橘猫",parameters:{size:"1024*1024",promptExtend:false,seed:7}},assets:[],credential:"secret"});
+    expect(result).toMatchObject({state:"succeeded",outputs:[{outputType:"png"}]});
+    expect(fetcher.mock.calls[0][0]).toBe("https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation");
+    expect(fetcher.mock.calls[0][1]?.headers).not.toHaveProperty("X-DashScope-Async");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({model:"z-image-turbo",input:{messages:[{role:"user",content:[{text:"一只橘猫"}]}]},parameters:{size:"1024*1024",prompt_extend:false,seed:7}});
+  });
+
+  it("normalizes all Wan 2.6 asynchronous image outputs", async () => {
+    const route=createQianwenRoutes().find(item=>item.id==="qianwen-wan-2-6-text-to-image")!;
+    const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({output:{task_id:"image-task",task_status:"SUCCEEDED",choices:[{message:{content:[{image:"https://dashscope-463f.oss-accelerate.aliyuncs.com/1.png"},{image:"https://dashscope-463f.oss-accelerate.aliyuncs.com/2.png"}]}}]}}));
+    const result=await new QianwenAdapter(fetcher).poll({operation:route.providerOperation,executionConfig:route.adapterConfig,remoteTaskId:"image-task",credential:"secret"});
+    expect(result).toMatchObject({state:"succeeded",outputs:[{outputType:"png"},{outputType:"png"}]});
+  });
   it("submits an async Wan 3.0 task with the required headers", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       request_id: "request-1",

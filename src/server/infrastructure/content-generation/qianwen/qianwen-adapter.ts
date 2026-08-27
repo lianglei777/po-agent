@@ -19,7 +19,6 @@ import {
 import { QianwenUploadClient } from "./qianwen-upload-client";
 
 const API_ORIGIN = "https://dashscope.aliyuncs.com/api/v1";
-const VIDEO_SYNTHESIS_URL = `${API_ORIGIN}/services/aigc/video-generation/video-synthesis`;
 const DOWNLOAD_LIMIT_BYTES = 500 * 1024 * 1024;
 
 export class QianwenAdapter implements GenerationProvider {
@@ -34,9 +33,9 @@ export class QianwenAdapter implements GenerationProvider {
     assets: ProviderInputAsset[];
     credential: string;
   }): Promise<PreparedGenerationAsset[]> {
-    resolveQianwenExecutionConfig(input.operation, input.executionConfig);
+    const config=resolveQianwenExecutionConfig(input.operation, input.executionConfig);
     const prepared: PreparedGenerationAsset[]=[];
-    for(const asset of input.assets)prepared.push(await this.uploads.upload(asset,input.credential,"wan3.0-video"));
+    for(const asset of input.assets)prepared.push(await this.uploads.upload(asset,input.credential,config.vendorModel));
     return prepared;
   }
 
@@ -49,13 +48,13 @@ export class QianwenAdapter implements GenerationProvider {
   }): Promise<ProviderSubmitResult> {
     const config = resolveQianwenExecutionConfig(input.operation, input.executionConfig);
     const body = buildQianwenRequest(config, input.generation, input.assets);
-    const response = await this.requestJson(VIDEO_SYNTHESIS_URL, input.credential, {
+    const response = await this.requestJson(submitUrl(config.endpointId), input.credential, {
       method: "POST",
-      headers: { "X-DashScope-Async": "enable" },
+      headers: config.submitMode==="async-task" ? { "X-DashScope-Async": "enable" } : {},
       body: JSON.stringify(body),
     }, input.assets.length > 0);
     return {
-      ...normalizeResponse(response, config.pollIntervalMs),
+      ...normalizeResponse(response, config),
       requestSnapshot: createGenerationProviderSnapshot(body),
     };
   }
@@ -72,7 +71,7 @@ export class QianwenAdapter implements GenerationProvider {
       input.credential,
       { method: "GET" },
     );
-    return normalizeResponse(response, config.pollIntervalMs);
+    return normalizeResponse(response, config);
   }
 
   async download(url: string): Promise<{ data: Uint8Array; contentType?: string }> {
@@ -150,20 +149,22 @@ export class QianwenAdapter implements GenerationProvider {
   }
 }
 
-function normalizeResponse(value: unknown, retryAfterMs: number): ProviderSubmitResult {
+function normalizeResponse(value: unknown, config: ReturnType<typeof resolveQianwenExecutionConfig>): ProviderSubmitResult {
   const root = objectValue(value);
   const output = objectValue(root.output);
   const remoteTaskId = stringValue(output.task_id);
   const status = (stringValue(output.task_status) ?? "UNKNOWN").toUpperCase();
-  const videoUrl = stringValue(output.video_url);
-  const missingSucceededOutput = status === "SUCCEEDED" && !videoUrl;
-  const failed = status === "FAILED" || status === "CANCELED" || status === "UNKNOWN" || missingSucceededOutput;
-  const succeeded = status === "SUCCEEDED" && Boolean(videoUrl);
+  const urls=config.resultProfile==="video-url-v1" ? [stringValue(output.video_url)].filter((url):url is string=>Boolean(url)) : choiceImageUrls(output);
+  const synchronous=config.submitMode==="sync";
+  const effectiveStatus=synchronous&&urls.length?"SUCCEEDED":status;
+  const missingSucceededOutput = effectiveStatus === "SUCCEEDED" && urls.length===0;
+  const failed = effectiveStatus === "FAILED" || effectiveStatus === "CANCELED" || effectiveStatus === "UNKNOWN" || missingSucceededOutput;
+  const succeeded = effectiveStatus === "SUCCEEDED" && urls.length>0;
   return {
     state: succeeded ? "succeeded" : failed || !remoteTaskId ? "failed" : "pending",
     remoteTaskId,
-    remoteStatus: status,
-    outputs: videoUrl ? [{ url: videoUrl, outputType: "mp4" }] : [],
+    remoteStatus: effectiveStatus,
+    outputs: urls.map(url=>({url,outputType:config.resultProfile==="video-url-v1"?"mp4":"png"})),
     errorCode: failed
       ? stringValue(output.code) ?? (missingSucceededOutput
         ? "GENERATION_PROVIDER_PROTOCOL_ERROR"
@@ -175,7 +176,7 @@ function normalizeResponse(value: unknown, retryAfterMs: number): ProviderSubmit
         : `Qianwen task ended with status ${status}`)
       : !remoteTaskId ? "Qianwen response did not include a task ID" : undefined,
     rawSnapshot: createGenerationProviderSnapshot(value),
-    retryAfterMs: succeeded || failed ? undefined : retryAfterMs,
+    retryAfterMs: succeeded || failed ? undefined : config.pollIntervalMs,
   };
 }
 
@@ -186,7 +187,7 @@ function allowedDownloadUrl(value: string): string {
   } catch {
     throw rejectedDownloadUrl();
   }
-  const allowedHost = /^dashscope-result(?:-[a-z0-9-]+)?\.oss(?:-accelerate|-cn-[a-z0-9-]+)\.aliyuncs\.com$/i.test(url.hostname);
+  const allowedHost = /^dashscope(?:-result)?(?:-[a-z0-9-]+)?\.oss(?:-accelerate|-cn-[a-z0-9-]+)\.aliyuncs\.com$/i.test(url.hostname);
   if (url.protocol !== "https:" || !allowedHost || url.username || url.password) {
     throw rejectedDownloadUrl();
   }
@@ -210,3 +211,5 @@ function objectValue(value: unknown): Record<string, unknown> {
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
 }
+function submitUrl(endpointId:string){const paths:Record<string,string>={"video-synthesis":"/services/aigc/video-generation/video-synthesis","multimodal-generation":"/services/aigc/multimodal-generation/generation","image-generation":"/services/aigc/image-generation/generation"};const path=paths[endpointId];if(!path)throw new AppError("GENERATION_OPERATION_UNSUPPORTED","Qianwen endpoint is not supported",400);return API_ORIGIN+path;}
+function choiceImageUrls(output:Record<string,unknown>):string[]{const choices=Array.isArray(output.choices)?output.choices:[];return choices.flatMap(choice=>{const content=objectValue(objectValue(choice).message).content;return Array.isArray(content)?content.map(item=>stringValue(objectValue(item).image)).filter((url):url is string=>Boolean(url)):[];});}
