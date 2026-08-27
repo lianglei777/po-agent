@@ -33,22 +33,22 @@
 
 - 本机 dev 与 Docker 容器**可同时运行**(端口不冲突)。
 - 生产容器与开发容器都占 51732,**不能同时运行**。
-- 如需改端口:改 [docker-compose.yml](../docker-compose.yml) 的 `ports` 映射(左是宿主机端口)和 `PORT` 环境变量,以及 [Dockerfile](../Dockerfile) 的 `ENV PORT` / `EXPOSE`。
+- 如需改端口:改 [docker-compose.yml](../../docker-compose.yml) 的 `ports` 映射(左是宿主机端口)和 `PORT` 环境变量,以及 [Dockerfile](../../Dockerfile) 的 `ENV PORT` / `EXPOSE`。
 
 ## 2. 涉及的仓库文件
 
 | 文件 | 作用 |
 |---|---|
-| [next.config.ts](../next.config.ts) | `output: "standalone"` 产出独立运行产物 |
-| [Dockerfile](../Dockerfile) | 生产镜像(多阶段构建) |
-| [Dockerfile.dev](../Dockerfile.dev) | 开发镜像(热更新) |
-| [.dockerignore](../.dockerignore) | 构建上下文排除 |
-| [docker-compose.yml](../docker-compose.yml) | 生产运行编排 |
-| [docker-compose.dev.yml](../docker-compose.dev.yml) | 开发运行编排 |
-| [scripts/docker-up.ps1](../scripts/docker-up.ps1) | Windows 启动脚本(自动挂工作区) |
-| [scripts/docker-up.sh](../scripts/docker-up.sh) | Mac/Linux 启动脚本(自动挂工作区) |
+| [next.config.ts](../../next.config.ts) | `output: "standalone"` 产出独立运行产物 |
+| [Dockerfile](../../Dockerfile) | 生产镜像(多阶段构建) |
+| [Dockerfile.dev](../../Dockerfile.dev) | 开发镜像(热更新) |
+| [.dockerignore](../../.dockerignore) | 构建上下文排除 |
+| [docker-compose.yml](../../docker-compose.yml) | 生产运行编排 |
+| [docker-compose.dev.yml](../../docker-compose.dev.yml) | 开发运行编排 |
+| [scripts/docker-up.ps1](../../scripts/docker-up.ps1) | Windows 启动脚本(自动挂工作区) |
+| [scripts/docker-up.sh](../../scripts/docker-up.sh) | Mac/Linux 启动脚本(自动挂工作区) |
 
-> 云服务器部署只需 [Dockerfile](../Dockerfile) 和 [.dockerignore](../.dockerignore),compose 文件在服务器上单独创建(见第 5 节)。
+> 云服务器部署只需 [Dockerfile](../../Dockerfile) 和 [.dockerignore](../../.dockerignore),compose 文件在服务器上单独创建(见第 5 节)。
 
 ## 3. 安全须知
 
@@ -131,7 +131,7 @@ compose 把宿主机目录挂进容器的 `/workspace`,宿主机路径由 `WORKS
 **本机:**
 
 - 已安装 Docker Desktop(Windows,WSL2 后端),用于构建 linux/amd64 镜像。
-- 仓库已包含 [Dockerfile](../Dockerfile)、[.dockerignore](../.dockerignore)。
+- 仓库已包含 [Dockerfile](../../Dockerfile)、[.dockerignore](../../.dockerignore)。
 
 **服务器:**
 
@@ -177,7 +177,7 @@ docker save po-agent:0.1.0 -o po-agent.tar
 
 > `--platform linux/amd64` 必须显式指定,否则本机可能构建出架构不匹配的镜像,服务器上跑不起来。
 >
-> [Dockerfile](../Dockerfile) 默认走 npmmirror 加速;如需切回官方源:
+> [Dockerfile](../../Dockerfile) 默认走 npmmirror 加速;如需切回官方源:
 > `docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.1.0 .`
 >
 > **想要更小的压缩文件**:Windows PowerShell 没有 `gzip`。若装了 Git for Windows,在 **Git Bash**(非 PowerShell)里执行 `docker save po-agent:0.1.0 | gzip > po-agent.tar.gz` 可得到压缩包,上传更快。`docker load` 对 `.tar` 和 `.tar.gz` 都能自动识别。
@@ -244,7 +244,7 @@ volumes:
   po-agent-data:
 ```
 
-与本机 [docker-compose.yml](../docker-compose.yml) 的两个关键区别:
+与本机 [docker-compose.yml](../../docker-compose.yml) 的两个关键区别:
 
 1. **`ports` 绑定 `127.0.0.1`**:`127.0.0.1:51732:51732` 表示只监听本机回环,公网访问不到。这是安全的核心。
 2. **工作区挂载**换成服务器目录(服务器没有 Desktop)。
@@ -366,7 +366,7 @@ services:
 
 ## 9. 国内镜像源
 
-[Dockerfile](../Dockerfile) 与 [Dockerfile.dev](../Dockerfile.dev) 通过 `NPM_REGISTRY` build-arg 控制 npm 源,默认 `https://registry.npmmirror.com`。
+[Dockerfile](../../Dockerfile) 与 [Dockerfile.dev](../../Dockerfile.dev) 通过 `NPM_REGISTRY` build-arg 控制 npm 源,默认 `https://registry.npmmirror.com`。
 
 **本机部署**切回官方源:
 

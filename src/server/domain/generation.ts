@@ -101,7 +101,9 @@ export interface PreparedGenerationAsset {
   order?: number;
   name: string;
   mimeType: string;
-  url: string;
+  /** 供应商准备后的引用保持不透明，避免把 URL、文件 ID 或临时 OSS 协议泄漏到领域层。 */
+  reference: JsonValue;
+  expiresAt?: string;
 }
 
 export interface GenerationArtifact {

@@ -15,6 +15,10 @@ import { GenerationTurnPlanningService } from "@/server/application/content-gene
 import { GenerationTurnExecutor } from "@/server/application/content-generation/generation-turn-executor";
 import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
+import {
+  createGenerationProviders,
+  createGenerationRoutes,
+} from "@/server/composition/content-generation-provider-modules";
 import { AuthService } from "@/server/application/auth-service";
 import { FileService } from "@/server/application/file-service";
 import { InstructionService } from "@/server/application/instruction-service";
@@ -44,8 +48,6 @@ import { PiWebAccessSettingsStore } from "@/server/infrastructure/pi/pi-web-acce
 import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-runner";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
 import { PendingInputRegistry } from "@/server/infrastructure/runtime/pending-input-registry";
-import { createRunningHubRoutes } from "@/server/infrastructure/content-generation/runninghub/runninghub-routes";
-import { RunningHubAdapter } from "@/server/infrastructure/content-generation/runninghub/runninghub-adapter";
 import { SqliteDatabase } from "@/server/infrastructure/sqlite/sqlite-database";
 import { SqliteGenerationRepository } from "@/server/infrastructure/sqlite/sqlite-generation-repository";
 import { InMemoryPipelineSse } from "@/server/infrastructure/runtime/in-memory-pipeline-sse";
@@ -118,7 +120,7 @@ function createContainer() {
     if (generationRunService) return generationRunService;
     const database = getDatabase();
     const repository = new SqliteGenerationRepository(database);
-    const ready = seedGenerationRoutes(repository, createRunningHubRoutes());
+    const ready = seedGenerationRoutes(repository, createGenerationRoutes());
     generationCredentialStore = new FileGenerationCredentialStore(
       path.join(agentDir, "generation-credentials.json"),
     );
@@ -133,7 +135,7 @@ function createContainer() {
     );
     const execution = new GenerationExecutionService(
       repository,
-      [new RunningHubAdapter()],
+      createGenerationProviders(),
       generationCredentialStore,
       generationFiles,
     );

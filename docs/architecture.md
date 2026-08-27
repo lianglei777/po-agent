@@ -93,6 +93,8 @@ Application Service 编排用例和业务流程，只依赖 domain 和 ports。�
 
 SDK 类型、文件格式和供应商差异必须在这一层转换成项目自己的 domain 类型。
 
+内容生成供应商在 infrastructure 内拥有各自的 Adapter、受信 Catalog、请求映射与资产准备协议。Catalog 编译为供应商无关的 `GenerationRoute` 和可持久化 execution config；不同供应商不共享任意 HTTP DSL，也不能从客户端或数据库动态注册生产 Provider。供应商准备后的素材引用对 domain/application 保持不透明，可以是 URL、文件 ID 或临时对象存储引用。
+
 Web 搜索和网页抓取由 infrastructure 内置的 `pi-web-access` Extension 提供。Po Agent 固定并随应用发布该依赖，由 Pi ResourceLoader 直接加载，不进入用户 Skill Pack 安装流程。正常 Session 始终开放 `web_search`、`fetch_content`、`get_search_content` 和 `source_check`；搜索供应商、API Key 和回退顺序保存在 `<PI_CODING_AGENT_DIR>/web-search.json`，由独立的 Web Access 设置端口管理并通过 `/api/web-access` 暴露给本机设置页。配置写入后，存活 Runtime 会在下一次 Prompt 前重新加载 Extension。远程内容按不可信数据处理，Po Agent 禁止 `fetch_content` 读取本地路径，本地文件仍必须经过已注册 workspace root 的文件能力。
 
 ### Transport
@@ -112,6 +114,8 @@ Transport 可以调用或描述 application 输入，但不直接访问 infrastr
 位置：`src/server/composition`
 
 Composition Root 构造 infrastructure，实现依赖注入，并暴露 application services。除测试外，具体 infrastructure 类只应在这里组装。
+
+内容生成 Provider Module 的固定列表也由 Composition 汇总。新增同协议模型只修改对应 infrastructure Catalog；新增供应商时增加一个 Provider Module，并在受信列表中注册一次。
 
 ### Next.js Route Handlers
 
@@ -231,7 +235,7 @@ Chat 的“执行前确认”是单轮执行策略，不是 Session 模式。Pla
 
 Chat 工作流生成由 Worker 独立推进并由 Run 轮询恢复，不占用一次长时间 Agent Prompt。确定性编排写入的 Assistant Tool Call 会触发 Pi Session 文件创建，随后无论 Run 创建成功或失败都会写入 Tool Result 闭合该步骤；因此仅执行内容生成、从未调用聊天模型的新 Session 也能在刷新后恢复完整过程。断开页面或 Agent SSE 不会取消持久化 Run；用户确认、取消和重试都直接作用于 Run 状态机。开放式 Agent Tool 仍可使用 `generate_image`、`generate_video`、`get_generation` 和 `cancel_generation`，但统一 Composer 已确认的生成 Plan 不再经过该模型决策链路。下载产物由 application 根据最终 Prompt 生成简短名称提示，filesystem adapter 负责过滤非法字符和 Windows 保留名，文件仍隔离在对应 Run 目录。
 
-Provider Job 持久化脱敏且有大小上限的 `requestSnapshot` 与 `responseSnapshot`。凭据、密码、Cookie 字段以及 URL 查询参数中的 token、secret、authorization、签名等值在 adapter 边界替换为 `[REDACTED]`；超过上限的协议内容保留截断标记、原始字节数和受限预览。Chat 的生成工具步骤可展开查看模型工具入参、最终 Route 输入和审计快照，而不暴露凭据。
+Provider Job 在创建时冻结 Route 的 execution config 与已解析参数；资产准备、提交和轮询都使用该快照，不能在恢复时重新读取当前 Catalog 的协议语义。准备后的供应商资产引用随 Job 持久化但对 application 保持不透明，新重试 Job 会重新准备资产。Provider Job 还持久化脱敏且有大小上限的 `requestSnapshot` 与 `responseSnapshot`。凭据、密码、Cookie 字段以及 URL 查询参数中的 token、secret、authorization、签名等值在 adapter 边界替换为 `[REDACTED]`；超过上限的协议内容保留截断标记、原始字节数和受限预览。Chat 的生成工具步骤可展开查看模型工具入参、最终 Route 输入和审计快照，而不暴露凭据。
 
 付费内容生成采用服务端纵深防护：供应商总开关与逐 Route 开关共同控制新 Run，默认关闭并持久化于 SQLite；种子 Route 升级不得覆盖用户开关。Agent 生成工具还要求本轮用户明确授权，直接 Generate UI 在创建和重试前进行费用确认。前端隐藏或 Prompt 约束不能替代 application 层的开关校验。
 

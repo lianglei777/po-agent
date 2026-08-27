@@ -3,7 +3,7 @@
 > 状态：已实施
 > 日期：2026-08-12
 > 目标版本：`pi-web-access@0.22.0`
-> 关联分析：[pi-web-access-integration-analysis.md](./pi-web-access-integration-analysis.md)
+> 关联分析：`pi-web-access-integration-analysis.md`（当前仓库未保留）
 
 ## 1. 目标
 

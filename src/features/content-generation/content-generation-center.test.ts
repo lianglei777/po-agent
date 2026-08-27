@@ -50,7 +50,7 @@ describe("content generation conversation", () => {
     ]);
     expect(routes.every((route) => route.revision >= 6)).toBe(true);
     expect(routes.find((route) => route.id === "runninghub-wan-3-reference-to-video")?.revision)
-      .toBe(7);
+      .toBe(8);
     expect(routes.every((route) => route.description.length > 20)).toBe(true);
     expect(routes.every((route) => route.tags.length >= 3)).toBe(true);
     expect(JSON.stringify(routes.map((route) => route.inputSchema)))

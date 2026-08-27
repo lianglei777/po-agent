@@ -37,7 +37,7 @@ describe("GenerationWorker", () => {
     });
     provider = {
       providerId: "runninghub",
-      upload: vi.fn(async () => []),
+      prepareAssets: vi.fn(async () => []),
       submit: vi.fn<GenerationProvider["submit"]>(async () => ({
         state: "pending",
         remoteTaskId: "remote-1",
@@ -131,6 +131,36 @@ describe("GenerationWorker", () => {
     expect(provider.download).toHaveBeenCalledOnce();
   });
 
+  it("executes the provider config frozen when the job was created", async () => {
+    const route = await repository.getRoute(
+      "runninghub-seedance-2-text-to-video",
+    );
+    if (!route) throw new Error("Expected seeded route");
+    await runService.createRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      routeId: route.id,
+      prompt: "frozen provider contract",
+      source: "api",
+      idempotencyKey: "frozen-config",
+    });
+    await repository.upsertRoute({
+      ...route,
+      revision: route.revision + 1,
+      adapterConfig: { protocol: "future-contract" },
+      updatedAt: now.toISOString(),
+    });
+
+    await worker.runOnce();
+
+    expect(provider.prepareAssets).toHaveBeenCalledWith(expect.objectContaining({
+      executionConfig: route.adapterConfig,
+    }));
+    expect(provider.submit).toHaveBeenCalledWith(expect.objectContaining({
+      executionConfig: route.adapterConfig,
+    }));
+  });
+
   it("marks an ambiguous provider submission without resubmitting", async () => {
     vi.mocked(provider.submit).mockRejectedValueOnce(new Error("connection reset"));
     const created = await runService.createRun({
@@ -181,7 +211,7 @@ describe("GenerationWorker", () => {
     await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
       run: { status: "failed", errorCode: "FILE_TOO_LARGE" },
     });
-    expect(provider.upload).not.toHaveBeenCalled();
+    expect(provider.prepareAssets).not.toHaveBeenCalled();
   });
 
   it("recovers an expired submitting job as unknown instead of retrying", async () => {

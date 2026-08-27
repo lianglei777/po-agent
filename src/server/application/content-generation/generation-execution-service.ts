@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { JsonValue } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import type {
   GenerationArtifact,
@@ -99,6 +100,16 @@ export class GenerationExecutionService {
   ): Promise<void> {
     await this.markRunRunning(run);
     let job = originalJob;
+    const executionConfig = providerExecutionConfig(job);
+    if (job.preparedAssets?.some((asset) => isExpired(asset.expiresAt, this.now()))) {
+      // 仅在尚未提交时重新准备过期资产；remote task 已存在的 Job 只会进入 poll 分支。
+      job = {
+        ...job,
+        preparedAssets: undefined,
+        updatedAt: this.timestamp(),
+      };
+      if (!await this.repository.updateJob(job, ["created", "uploading"])) return;
+    }
     if (!job.preparedAssets) {
       job = {
         ...job,
@@ -112,7 +123,12 @@ export class GenerationExecutionService {
         const assets = await this.resolveInputAssets(run);
         job = {
           ...job,
-          preparedAssets: await provider.upload({ assets, credential }),
+          preparedAssets: await provider.prepareAssets({
+            operation: job.providerOperation,
+            executionConfig,
+            assets,
+            credential,
+          }),
           updatedAt: this.timestamp(),
         };
         if (!await this.repository.updateJob(job, ["uploading"])) return;
@@ -133,6 +149,7 @@ export class GenerationExecutionService {
     try {
       result = await provider.submit({
         operation: job.providerOperation,
+        executionConfig,
         generation: run.input,
         assets: job.preparedAssets ?? [],
         credential,
@@ -185,6 +202,7 @@ export class GenerationExecutionService {
     try {
       const result = await provider.poll({
         operation: job.providerOperation,
+        executionConfig: providerExecutionConfig(job),
         remoteTaskId: originalJob.remoteTaskId,
         credential,
       });
@@ -239,7 +257,7 @@ export class GenerationExecutionService {
         status: "submitted",
         remoteTaskId,
         remoteStatus: result.remoteStatus,
-        nextPollAt: this.after(POLL_INTERVAL_MS),
+        nextPollAt: this.after(result.retryAfterMs ?? POLL_INTERVAL_MS),
         leaseOwner: undefined,
         leaseExpiresAt: undefined,
         lastErrorCode: undefined,
@@ -475,6 +493,24 @@ export class GenerationExecutionService {
   private after(milliseconds: number): string {
     return new Date(this.now().getTime() + milliseconds).toISOString();
   }
+}
+
+function providerExecutionConfig(job: ProviderJob) {
+  const snapshot = objectValue(job.resolvedConfigSnapshot);
+  // 旧版本 Job 使用 adapterConfig；兼容读取保证升级后仍能恢复。
+  return snapshot.executionConfig ?? snapshot.adapterConfig ?? {};
+}
+
+function objectValue(value: unknown): Record<string, JsonValue> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, JsonValue>
+    : {};
+}
+
+function isExpired(value: string | undefined, now: Date): boolean {
+  if (!value) return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp <= now.getTime();
 }
 
 function isTerminal(status: ProviderJob["status"]): boolean {

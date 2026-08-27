@@ -27,12 +27,12 @@
 
 | 文件                                                                | 作用                                                               |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [desktop/main.mjs](../desktop/main.mjs)                             | Electron 主进程:起 server、建窗口、IPC 目录选择                    |
-| [desktop/preload.cjs](../desktop/preload.cjs)                       | 预加载脚本:向渲染进程暴露 `window.poAgentDesktop`                  |
-| [desktop/desktop-runtime.mjs](../desktop/desktop-runtime.mjs)       | 运行时工具:端口、server 路径、环境变量、数据目录                   |
-| [desktop/prepare-standalone.mjs](../desktop/prepare-standalone.mjs) | 打包前把 `.next/static`、`public` 补进 standalone 产物             |
-| [next.config.ts](../next.config.ts)                                 | `output: "standalone"` 产出独立可运行的 server.js                  |
-| [package.json](../package.json)                                     | `scripts` 定义运行/打包命令,`build` 字段定义 electron-builder 配置 |
+| [desktop/main.mjs](../../desktop/main.mjs)                             | Electron 主进程:起 server、建窗口、IPC 目录选择                    |
+| [desktop/preload.cjs](../../desktop/preload.cjs)                       | 预加载脚本:向渲染进程暴露 `window.poAgentDesktop`                  |
+| [desktop/desktop-runtime.mjs](../../desktop/desktop-runtime.mjs)       | 运行时工具:端口、server 路径、环境变量、数据目录                   |
+| [desktop/prepare-standalone.mjs](../../desktop/prepare-standalone.mjs) | 打包前把 `.next/static`、`public` 补进 standalone 产物             |
+| [next.config.ts](../../next.config.ts)                                 | `output: "standalone"` 产出独立可运行的 server.js                  |
+| [package.json](../../package.json)                                     | `scripts` 定义运行/打包命令,`build` 字段定义 electron-builder 配置 |
 
 ## 4. 运行机制
 
@@ -61,7 +61,7 @@ Desktop 应用是"Electron 壳 + 内嵌 Next.js server"的结构。启动流程:
 关键点:
 
 - **Electron 自身当 Node 用**:`ELECTRON_RUN_AS_NODE=1` 让 Electron 可执行文件以纯 Node 模式运行 standalone 的 `server.js`,无需另装 Node。打包后的安装包里不含 Node 运行时,复用 Electron 自带的。
-- **server 路径自适应**:开发时用 `.next/standalone/server.js`,打包后用 `resources/server/server.js`(见 [desktop-runtime.mjs](../desktop/desktop-runtime.mjs) 的 `getStandaloneServerPath`)。
+- **server 路径自适应**:开发时用 `.next/standalone/server.js`,打包后用 `resources/server/server.js`(见 [desktop-runtime.mjs](../../desktop/desktop-runtime.mjs) 的 `getStandaloneServerPath`)。
 - **原生目录选择**:UI 里"添加项目"时,通过 `preload.cjs` 暴露的 `window.poAgentDesktop.selectProjectDirectory()` 调用 Electron 原生目录选择框,选中的路径注册为 workspace root,agent 即可读写该项目文件。
 
 ## 5. 开发模式运行
@@ -76,7 +76,7 @@ npm run desktop:dev
 2. `desktop:prepare` 把 `.next/static`、`public` 补进 standalone
 3. `electron .` 启动 Electron,加载本机的 standalone server
 
-适合开发 desktop 主进程代码([desktop/main.mjs](../desktop/main.mjs) 等)时验证。注意改 Next.js 源码需要重新 `build`(不像 `npm run dev` 有热更新);只改 desktop 主进程代码,重启 `electron .` 即可。
+适合开发 desktop 主进程代码([desktop/main.mjs](../../desktop/main.mjs) 等)时验证。注意改 Next.js 源码需要重新 `build`(不像 `npm run dev` 有热更新);只改 desktop 主进程代码,重启 `electron .` 即可。
 
 > 若只开发前端/后端逻辑、不需要 Electron 环境,直接 `npm run dev`(端口 51731)更快,有热更新。
 
@@ -91,7 +91,7 @@ npm run desktop:dev
 
 `pack` 不调用 NSIS,更快;`dist` 多一步下载 nsis 并编译安装包。两者都需要下载 `winCodeSign`(代码签名工具,`--dir` 模式也用)。
 
-打包配置见 [package.json](../package.json) 的 `build` 字段:
+打包配置见 [package.json](../../package.json) 的 `build` 字段:
 
 - `main: desktop/main.mjs` - Electron 入口
 - `files`: `desktop/**/*` + `package.json` + icon 打进 `app.asar`(主进程代码)
@@ -180,7 +180,7 @@ npm run desktop:dist
 
 ## 9. 数据持久化
 
-server 启动时环境变量 `PI_CODING_AGENT_DIR` 指向用户数据目录(见 [desktop-runtime.mjs](../desktop/desktop-runtime.mjs) 的 `getPiAgentDir`),路径按 OS 不同:
+server 启动时环境变量 `PI_CODING_AGENT_DIR` 指向用户数据目录(见 [desktop-runtime.mjs](../../desktop/desktop-runtime.mjs) 的 `getPiAgentDir`),路径按 OS 不同:
 
 | OS      | 路径                                                  |
 | ------- | ----------------------------------------------------- |
@@ -225,7 +225,7 @@ Desktop 每次启动由 `findFreePort` 分配空闲端口,不固定。与 dev(51
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | 打包报 `connect ETIMEDOUT 20.205.243.166:443` 或 `Timeout awaiting 'request'` | GitHub 直连超时,改用 `:cn` 后缀命令(见第 7 节)                                                                 |
 | `desktop:dev` 启动后白屏、窗口无响应                                          | server 没起来。确认 `.next/standalone\server.js` 存在(需先 `npm run build`);`waitForServer` 30s 超时会弹错误框 |
-| `next build` 报 NFT 警告(`Encountered unexpected file in NFT list`)           | 已知警告,源于 [next.config.ts](../next.config.ts) trace 链路,不影响产物,可忽略                                 |
+| `next build` 报 NFT 警告(`Encountered unexpected file in NFT list`)           | 已知警告,源于 [next.config.ts](../../next.config.ts) trace 链路,不影响产物,可忽略                                 |
 | 打包后运行报找不到 `server.js`                                                | 确认 `extraResources` 配置未改;打包产物 `resources\server\server.js` 应存在                                    |
 | 安装时 Windows SmartScreen 拦截                                               | 安装包未代码签名(无证书),`signtool` 跳过。点"更多信息"→"仍要运行"即可；详见第 8 节(分发安装包给他人)           |
 | 找不到 `cross-env`                                                            | `npm install` 重装依赖;`cross-env` 在 devDependencies                                                          |
@@ -247,8 +247,8 @@ Desktop 每次启动由 `findFreePort` 分配空闲端口,不固定。与 dev(51
 
 当前**未启用自动更新**(`--publish never`、无 `publish` 配置、未集成 `electron-updater`),`.blockmap` 文件生成了但闲置。将来要支持差量更新(用户升级时只下载变化的块,而非完整安装包),需完成以下 TODO:
 
-- [ ] 在 [package.json](../package.json) 的 `build` 字段加 `publish` 配置(GitHub Releases / S3 / 通用 server)
+- [ ] 在 [package.json](../../package.json) 的 `build` 字段加 `publish` 配置(GitHub Releases / S3 / 通用 server)
 - [ ] 安装 `electron-updater` 依赖
-- [ ] 在 [desktop/main.mjs](../desktop/main.mjs) 集成 `autoUpdater`(`autoUpdater.checkForUpdatesAndNotify()`)
+- [ ] 在 [desktop/main.mjs](../../desktop/main.mjs) 集成 `autoUpdater`(`autoUpdater.checkForUpdatesAndNotify()`)
 - [ ] 打包命令从 `--publish never` 改为 `always` 或 `onTagOrDraft`,发布时把安装包 + blockmap + `latest.yml` 推到 publish 目标
 - [ ] 验证:旧版本升级到新版本时,electron-updater 用 blockmap 差量下载,而非下载完整安装包

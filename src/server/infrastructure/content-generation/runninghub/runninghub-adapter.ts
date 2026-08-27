@@ -9,7 +9,11 @@ import type {
   ProviderPollResult,
   ProviderSubmitResult,
 } from "@/server/ports/generation-provider";
-import { RUNNINGHUB_PROVIDER_ID } from "./runninghub-routes";
+import { RUNNINGHUB_PROVIDER_ID } from "./runninghub-provider-constants";
+import {
+  buildRunningHubRequest,
+  resolveRunningHubExecutionConfig,
+} from "./runninghub-request-builder";
 
 const API_ORIGIN = "https://www.runninghub.cn";
 const UPLOAD_URL = `${API_ORIGIN}/openapi/v2/media/upload/binary`;
@@ -17,45 +21,18 @@ const QUERY_URL = `${API_ORIGIN}/openapi/v2/query`;
 const SNAPSHOT_LIMIT_BYTES = 64 * 1024;
 const SNAPSHOT_PREVIEW_BYTES = 60 * 1024;
 
-const OPERATION_PATHS: Record<string, string> = {
-  "seedream-v5-pro-text-to-image": "/openapi/v2/seedream-v5-pro/text-to-image",
-  "seedream-v5-pro-image-to-image": "/openapi/v2/seedream-v5-pro/image-to-image",
-  "seedance-2-text-to-video":
-    "/openapi/v2/rhart-video/sparkvideo-2.0/text-to-video",
-  "seedance-2-image-to-video":
-    "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video",
-  "seedance-2-multimodal-video":
-    "/openapi/v2/rhart-video/sparkvideo-2.0/multimodal-video",
-  "seedance-2-5-text-to-video":
-    "/openapi/v2/bytedance/seedance-2.5-token/text-to-video",
-  "seedance-2-5-image-to-video":
-    "/openapi/v2/bytedance/seedance-2.5-token/image-to-video",
-  "seedance-2-5-multimodal-video":
-    "/openapi/v2/bytedance/seedance-2.5-token/multimodal-video",
-  "minimax-hailuo-h3-text-to-video":
-    "/openapi/v2/minimax/hailuo-h3/text-to-video",
-  "minimax-hailuo-h3-image-to-video":
-    "/openapi/v2/minimax/hailuo-h3/image-to-video",
-  "minimax-hailuo-h3-multimodal-video":
-    "/openapi/v2/minimax/hailuo-h3/multimodal-to-video",
-  "pixverse-v6-text-to-video": "/openapi/v2/pixverse-v6/text-to-video",
-  "pixverse-v6-image-to-video": "/openapi/v2/pixverse-v6/image-to-video",
-  "wan-2-7-text-to-video": "/openapi/v2/alibaba/wan-2.7/text-to-video",
-  "wan-2-7-image-to-video": "/openapi/v2/alibaba/wan-2.7/image-to-video",
-  "wan-2-7-reference-to-video": "/openapi/v2/alibaba/wan-2.7/reference-to-video",
-  "wan-3-image-to-video": "/openapi/v2/alibaba/wan-3.0/image-to-video",
-  "wan-3-reference-to-video": "/openapi/v2/alibaba/wan-3.0/reference-to-video",
-};
-
 export class RunningHubAdapter implements GenerationProvider {
   readonly providerId = RUNNINGHUB_PROVIDER_ID;
 
   constructor(private readonly fetcher: typeof fetch = fetch) {}
 
-  async upload(input: {
+  async prepareAssets(input: {
+    operation: string;
+    executionConfig?: JsonValue;
     assets: ProviderInputAsset[];
     credential: string;
   }): Promise<PreparedGenerationAsset[]> {
+    resolveRunningHubExecutionConfig(input.operation, input.executionConfig ?? {});
     const uploaded: PreparedGenerationAsset[] = [];
     for (const asset of input.assets) {
       const form = new FormData();
@@ -88,7 +65,7 @@ export class RunningHubAdapter implements GenerationProvider {
         order: asset.order,
         name: asset.name,
         mimeType: asset.mimeType,
-        url: data.download_url,
+        reference: { kind: "url", url: data.download_url },
       });
     }
     return uploaded;
@@ -96,21 +73,18 @@ export class RunningHubAdapter implements GenerationProvider {
 
   async submit(input: {
     operation: string;
+    executionConfig?: JsonValue;
     generation: GenerationInput;
     assets: PreparedGenerationAsset[];
     credential: string;
   }): Promise<ProviderSubmitResult> {
-    const path = OPERATION_PATHS[input.operation];
-    if (!path) {
-      throw new AppError(
-        "GENERATION_OPERATION_UNSUPPORTED",
-        `RunningHub operation is not supported: ${input.operation}`,
-        400,
-      );
-    }
-    const body = requestBody(input.operation, input.generation, input.assets);
+    const config = resolveRunningHubExecutionConfig(
+      input.operation,
+      input.executionConfig ?? {},
+    );
+    const body = buildRunningHubRequest(config, input.generation, input.assets);
     const response = await this.requestJson(
-      `${API_ORIGIN}${path}`,
+      `${API_ORIGIN}${config.endpoint}`,
       input.credential,
       body,
     );
@@ -122,16 +96,11 @@ export class RunningHubAdapter implements GenerationProvider {
 
   async poll(input: {
     operation: string;
+    executionConfig?: JsonValue;
     remoteTaskId: string;
     credential: string;
   }): Promise<ProviderPollResult> {
-    if (!OPERATION_PATHS[input.operation]) {
-      throw new AppError(
-        "GENERATION_OPERATION_UNSUPPORTED",
-        `RunningHub operation is not supported: ${input.operation}`,
-        400,
-      );
-    }
+    resolveRunningHubExecutionConfig(input.operation, input.executionConfig ?? {});
     const response = await this.requestJson(QUERY_URL, input.credential, {
       taskId: input.remoteTaskId,
     });
@@ -209,253 +178,6 @@ export class RunningHubAdapter implements GenerationProvider {
     }
     return value;
   }
-}
-
-function requestBody(
-  operation: string,
-  generation: GenerationInput,
-  assets: PreparedGenerationAsset[],
-): JsonValue {
-  const parameters = generation.parameters ?? {};
-  const common = {
-    prompt: generation.prompt,
-  };
-  switch (operation) {
-    case "seedream-v5-pro-text-to-image":
-      return {
-        ...common,
-        resolution: value(parameters, "resolution", "2k"),
-        width: value(parameters, "width", null),
-        height: value(parameters, "height", null),
-        outputFormat: value(parameters, "outputFormat", "png"),
-      };
-    case "seedream-v5-pro-image-to-image":
-      return {
-        ...common,
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        resolution: value(parameters, "resolution", "2k"),
-        width: value(parameters, "width", null),
-        height: value(parameters, "height", null),
-        outputFormat: value(parameters, "outputFormat", "png"),
-      };
-    case "seedance-2-text-to-video":
-      return {
-        ...common,
-        ...videoParameters(parameters),
-        webSearch: value(parameters, "webSearch", false),
-      };
-    case "seedance-2-image-to-video":
-      return {
-        ...common,
-        ...videoParameters(parameters),
-        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
-        realPersonMode: value(parameters, "realPersonMode", true),
-        conversionSlots: value(parameters, "conversionSlots", ["all"]),
-      };
-    case "seedance-2-multimodal-video":
-      return {
-        ...common,
-        ...videoParameters(parameters),
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        videoUrls: urlsForSlot(assets, "videoUrls"),
-        audioUrls: urlsForSlot(assets, "audioUrls"),
-        realPersonMode: value(parameters, "realPersonMode", true),
-        conversionSlots: value(parameters, "conversionSlots", ["all"]),
-      };
-    case "seedance-2-5-text-to-video":
-      return {
-        ...common,
-        ...videoParameters25(parameters),
-        webSearch: value(parameters, "webSearch", false),
-      };
-    case "seedance-2-5-image-to-video":
-      return {
-        ...common,
-        ...videoParameters25(parameters),
-        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
-        realPersonMode: value(parameters, "realPersonMode", true),
-        conversionSlots: value(parameters, "conversionSlots", ["all"]),
-      };
-    case "seedance-2-5-multimodal-video":
-      return {
-        ...common,
-        ...videoParameters25(parameters),
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        videoUrls: urlsForSlot(assets, "videoUrls"),
-        audioUrls: urlsForSlot(assets, "audioUrls"),
-        realPersonMode: value(parameters, "realPersonMode", true),
-        conversionSlots: value(parameters, "conversionSlots", ["all"]),
-      };
-    case "minimax-hailuo-h3-text-to-video":
-      return {
-        ...common,
-        ...minimaxH3Parameters(parameters),
-        ratio: value(parameters, "aspectRatio", null),
-      };
-    case "minimax-hailuo-h3-image-to-video":
-      return {
-        ...common,
-        ...minimaxH3Parameters(parameters),
-        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
-      };
-    case "minimax-hailuo-h3-multimodal-video":
-      return {
-        ...common,
-        ...minimaxH3Parameters(parameters),
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        videoUrls: urlsForSlot(assets, "videoUrls"),
-        audioUrls: urlsForSlot(assets, "audioUrls"),
-        ratio: value(parameters, "aspectRatio", "adaptive"),
-      };
-    case "pixverse-v6-text-to-video":
-      return {
-        ...common,
-        ...pixVerseParameters(parameters),
-        aspectRatio: value(parameters, "aspectRatio", null),
-      };
-    case "pixverse-v6-image-to-video":
-      return {
-        ...common,
-        ...pixVerseParameters(parameters),
-        imageUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-      };
-    case "wan-2-7-text-to-video":
-      return {
-        ...common,
-        ...wan27Parameters(parameters),
-        audioUrl: firstUrlForSlot(assets, "audioUrls"),
-        aspectRatio: value(parameters, "aspectRatio", "16:9"),
-      };
-    case "wan-2-7-image-to-video":
-      return {
-        ...common,
-        ...wan27Parameters(parameters),
-        firstImageUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-        lastImageUrl: firstUrlForSlot(assets, "lastFrameUrl"),
-        audioUrl: firstUrlForSlot(assets, "audioUrls"),
-      };
-    case "wan-2-7-reference-to-video":
-      return {
-        ...common,
-        ...wan27Parameters(parameters),
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        videoUrls: urlsForSlot(assets, "videoUrls"),
-        audioUrl: firstUrlForSlot(assets, "audioUrls"),
-        aspectRatio: value(parameters, "aspectRatio", "16:9"),
-      };
-    case "wan-3-image-to-video":
-      return {
-        ...common,
-        ...wan3Parameters(parameters),
-        firstFrameUrl: firstUrlForSlot(assets, "firstFrameUrl"),
-        lastFrameUrl: firstUrlForSlot(assets, "lastFrameUrl"),
-      };
-    case "wan-3-reference-to-video":
-      return {
-        ...common,
-        ...wan3Parameters(parameters),
-        imageUrls: urlsForSlot(assets, "imageUrls"),
-        videoUrls: urlsForSlot(assets, "videoUrls"),
-        audioUrls: urlsForSlot(assets, "audioUrls"),
-        fileUrl: value(parameters, "fileUrl", null),
-        linkUrl: value(parameters, "linkUrl", null),
-      };
-    default:
-      throw new AppError(
-        "GENERATION_OPERATION_UNSUPPORTED",
-        `RunningHub operation is not supported: ${operation}`,
-        400,
-      );
-  }
-}
-
-function minimaxH3Parameters(parameters: Record<string, JsonValue>) {
-  return {
-    resolution: value(parameters, "resolution", "768P"),
-    duration: String(value(parameters, "durationSeconds", 5)),
-    aigc_watermark: value(parameters, "watermark", false),
-  };
-}
-
-function pixVerseParameters(parameters: Record<string, JsonValue>) {
-  return {
-    resolution: value(parameters, "resolution", "720p"),
-    duration: value(parameters, "durationSeconds", 5),
-    generateAudioSwitch: value(parameters, "generateAudio", true),
-  };
-}
-
-function wan27Parameters(parameters: Record<string, JsonValue>) {
-  return {
-    negativePrompt: value(parameters, "negativePrompt", null),
-    resolution: value(parameters, "resolution", "720P"),
-    duration: String(value(parameters, "durationSeconds", 5)),
-    promptExtend: value(parameters, "promptExtend", false),
-    seed: value(parameters, "seed", null),
-  };
-}
-
-function wan3Parameters(parameters: Record<string, JsonValue>) {
-  return {
-    resolution: value(parameters, "resolution", "720P"),
-    aspectRatio: value(parameters, "aspectRatio", "adaptive"),
-    duration: String(value(parameters, "durationSeconds", "auto")),
-    audio: value(parameters, "generateAudio", true),
-    seed: value(parameters, "seed", null),
-  };
-}
-
-function videoParameters(parameters: Record<string, JsonValue>) {
-  return {
-    resolution: value(parameters, "resolution", "720p"),
-    duration: String(value(parameters, "durationSeconds", 5)),
-    generateAudio: value(parameters, "generateAudio", true),
-    ratio: value(parameters, "aspectRatio", "adaptive"),
-    returnLastFrame: value(parameters, "returnLastFrame", false),
-    seed: value(parameters, "seed", -1),
-  };
-}
-
-// Seedance 2.5 在 2.0 基础上新增 bitrateMode 与 outputFormat
-function videoParameters25(parameters: Record<string, JsonValue>) {
-  return {
-    ...videoParameters(parameters),
-    bitrateMode: value(parameters, "bitrateMode", "standard"),
-    outputFormat: value(parameters, "outputFormat", "mp4"),
-  };
-}
-
-function value(
-  parameters: Record<string, JsonValue>,
-  key: string,
-  fallback: JsonValue,
-): JsonValue {
-  return parameters[key] ?? fallback;
-}
-
-function urlsForSlot(
-  assets: PreparedGenerationAsset[],
-  slot: string,
-): string[] {
-  return orderedAssetsForSlot(assets, slot).map((asset) => asset.url);
-}
-
-function firstUrlForSlot(
-  assets: PreparedGenerationAsset[],
-  slot: string,
-): string | null {
-  return orderedAssetsForSlot(assets, slot)[0]?.url ?? null;
-}
-
-function orderedAssetsForSlot(assets: PreparedGenerationAsset[], slot: string): PreparedGenerationAsset[] {
-  return assets
-    .map((asset, index) => ({ asset, index }))
-    .filter(({ asset }) => asset.slot === slot)
-    .sort((left, right) => (left.asset.order ?? left.index) - (right.asset.order ?? right.index))
-    .map(({ asset }) => asset);
 }
 
 function normalizeResponse(value: unknown): ProviderSubmitResult {

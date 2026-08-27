@@ -159,6 +159,7 @@ composition/transport/domain <- app/api
 
 | 文档 | 内容 |
 | --- | --- |
+| [docs/README.md](docs/README.md) | 完整文档导航与分类规则 |
 | [docs/architecture.md](docs/architecture.md) | 模块边界、依赖方向、分层职责 |
 | [docs/agent-api-reference.md](docs/agent-api-reference.md) | 完整 HTTP API 合同、数据结构、SSE 事件 |
 | [PRODUCT.md](PRODUCT.md) | 产品定位、目标用户、设计原则 |
@@ -167,7 +168,7 @@ composition/transport/domain <- app/api
 
 ## Desktop
 
-Desktop packaging notes are in [docs/desktop.md](docs/desktop.md).
+Desktop packaging notes are in [docs/operations/desktop-deploy.md](docs/operations/desktop-deploy.md).
 
 ## License
 

@@ -270,7 +270,7 @@ Skills。候选名称可以这样比较：
 ## 相关实现
 
 - `resources/official-packs/git-release-workflows`：当前官方技能包；
-- `docs/skill-pack-format.md`：技能包格式规范；
+- `docs/guides/skill-pack-format.md`：技能包格式规范；
 - `src/server/infrastructure/pi/pi-skill-pack-provider.ts`：Pi Package 适配与生命周期；
 - `src/server/infrastructure/pi/pi-resource-loader.ts`：会话资源加载；
 - `src/features/skills/skills-page.tsx`：技能与技能包的用户操作入口；

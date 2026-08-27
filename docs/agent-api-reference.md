@@ -2518,6 +2518,8 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
 
+RunningHub Route 由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint 或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
+
 Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
 
 ```http

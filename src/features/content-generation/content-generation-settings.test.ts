@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(
   fileURLToPath(new URL("./content-generation-settings.tsx", import.meta.url)),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("content generation settings", () => {
   it("manages only the RunningHub credential", () => {

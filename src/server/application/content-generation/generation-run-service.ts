@@ -463,7 +463,7 @@ export class GenerationRunService {
       routeRevision: route.revision,
       resolvedConfigSnapshot: {
         parameters,
-        adapterConfig: route.adapterConfig,
+        executionConfig: route.adapterConfig,
       },
       credentialRef: route.credentialRef,
       status: "created",

@@ -2,7 +2,7 @@
 
 本文件是技能包（Skill Pack）的权威格式规范。它规定一个目录或包必须满足哪些
 条件才能被 Po Agent 识别、安装和加载为合法技能包。设计与使用说明见
-[skill-packs.md](./skill-packs.md)，HTTP 合同见 [agent-api-reference.md](./agent-api-reference.md)。
+[skill-packs.md](./skill-packs.md)，HTTP 合同见 [agent-api-reference.md](../agent-api-reference.md)。
 
 技能包底层是 Pi Package。Po Agent 不自创包格式，格式要求由 Pi Package Manager
 的解析规则和 Po Agent 的安装校验共同决定。下文每条规则都标注了来源代码。
@@ -329,4 +329,4 @@ my-workflows/
 - `node_modules/@earendil-works/pi-coding-agent/dist/core/package-manager.js`：Pi 包解析、
   manifest 读取与约定目录发现的底层实现；
 - `resources/official-packs/git-release-workflows`：符合本规范的官方技能包示例；
-- `docs/skill-packs.md`：技能包的设计、使用与命名说明。
+- `docs/guides/skill-packs.md`：技能包的设计、使用与命名说明。

@@ -28,24 +28,29 @@ export interface ProviderSubmitResult {
   errorMessage?: string;
   requestSnapshot?: JsonValue;
   rawSnapshot?: JsonValue;
+  retryAfterMs?: number;
 }
 
 export type ProviderPollResult = ProviderSubmitResult;
 
 export interface GenerationProvider {
   readonly providerId: string;
-  upload(input: {
+  prepareAssets(input: {
+    operation: string;
+    executionConfig: JsonValue;
     assets: ProviderInputAsset[];
     credential: string;
   }): Promise<PreparedGenerationAsset[]>;
   submit(input: {
     operation: string;
+    executionConfig: JsonValue;
     generation: GenerationInput;
     assets: PreparedGenerationAsset[];
     credential: string;
   }): Promise<ProviderSubmitResult>;
   poll(input: {
     operation: string;
+    executionConfig: JsonValue;
     remoteTaskId: string;
     credential: string;
   }): Promise<ProviderPollResult>;
@@ -55,6 +60,7 @@ export interface GenerationProvider {
   }>;
   cancel?(input: {
     operation: string;
+    executionConfig: JsonValue;
     remoteTaskId: string;
     credential: string;
   }): Promise<void>;

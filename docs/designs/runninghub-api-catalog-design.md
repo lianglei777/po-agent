@@ -1,6 +1,6 @@
 # RunningHub API Catalog 设计方案
 
-> 状态：Draft，等待 Review  
+> 状态：Superseded；实施方案见 `docs/designs/content-generation-provider-catalog-design.md`
 > 日期：2026-08-26  
 > 范围：Po Agent 内置 RunningHub 内容生成 API 的注册、参数建模、请求映射与文档辅助接入
 

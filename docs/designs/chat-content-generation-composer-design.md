@@ -3,7 +3,7 @@
 > 状态：Draft，等待 Review
 > 日期：2026-08-13
 > 适用范围：Po Agent Chat、Content Generation 与统一 Session 工作区
-> 关联文档：`PRODUCT.md`、`DESIGN.md`、`docs/architecture.md`、`docs/ai-driven-content-generation-design.md`、`docs/adr/0001-unified-session-and-generation-runtime.md`
+> 关联文档：`PRODUCT.md`、`DESIGN.md`、`docs/architecture.md`、`docs/designs/ai-driven-content-generation-design.md`、`docs/adr/0001-unified-session-and-generation-runtime.md`
 
 ## 1. 摘要
 

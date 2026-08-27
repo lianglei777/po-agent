@@ -71,7 +71,9 @@ describe("RunningHubAdapter", () => {
       }));
     const adapter = new RunningHubAdapter(fetcher as typeof fetch);
 
-    const assets = await adapter.upload({
+    const assets = await adapter.prepareAssets({
+      operation: "seedance-2-image-to-video",
+      executionConfig: {},
       assets: [{
         slot: "firstFrameUrl",
         name: "first.png",
@@ -111,8 +113,8 @@ describe("RunningHubAdapter", () => {
       operation: "seedream-v5-pro-image-to-image",
       generation: { prompt: "让图片1模仿图片2" },
       assets: [
-        { slot: "imageUrls", bindingId: "ref-2", order: 1, name: "second.png", mimeType: "image/png", url: "https://example.test/second.png" },
-        { slot: "imageUrls", bindingId: "ref-1", order: 0, name: "first.png", mimeType: "image/png", url: "https://example.test/first.png" },
+        { slot: "imageUrls", bindingId: "ref-2", order: 1, name: "second.png", mimeType: "image/png", reference: { kind: "url", url: "https://example.test/second.png" } },
+        { slot: "imageUrls", bindingId: "ref-1", order: 0, name: "first.png", mimeType: "image/png", reference: { kind: "url", url: "https://example.test/first.png" } },
       ],
       credential: "secret-key",
     });
@@ -318,8 +320,8 @@ describe("RunningHubAdapter", () => {
       status: "RUNNING",
     }));
     const adapter = new RunningHubAdapter(fetcher as typeof fetch);
-    const image = { slot: "firstFrameUrl", name: "first.png", mimeType: "image/png", url: "https://assets.test/first.png" };
-    const audio = { slot: "audioUrls", name: "music.mp3", mimeType: "audio/mpeg", url: "https://assets.test/music.mp3" };
+    const image = { slot: "firstFrameUrl", name: "first.png", mimeType: "image/png", reference: { kind: "url", url: "https://assets.test/first.png" } };
+    const audio = { slot: "audioUrls", name: "music.mp3", mimeType: "audio/mpeg", reference: { kind: "url", url: "https://assets.test/music.mp3" } };
 
     await adapter.submit({
       operation: "minimax-hailuo-h3-image-to-video",

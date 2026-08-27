@@ -2,8 +2,8 @@
 
 本文描述 Po Agent 的持续集成与发布设计。实际工作流位于：
 
-- [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-- [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
+- [`.github/workflows/release.yml`](../../.github/workflows/release.yml)
 
 ## 1. 目标与范围
 
