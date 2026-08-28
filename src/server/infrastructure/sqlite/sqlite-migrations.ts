@@ -423,4 +423,16 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         CHECK (transient_failure_count >= 0);
     `,
   },
+  {
+    version: 14,
+    name: "generation_route_catalog_lifecycle",
+    sql: `
+      ALTER TABLE generation_routes
+      ADD COLUMN navigation_label TEXT NOT NULL DEFAULT '';
+      ALTER TABLE generation_routes
+      ADD COLUMN retired_at TEXT;
+      CREATE INDEX generation_routes_active_provider_idx
+        ON generation_routes(provider_id, retired_at, name, id);
+    `,
+  },
 ];

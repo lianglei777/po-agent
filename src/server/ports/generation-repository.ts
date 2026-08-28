@@ -26,6 +26,11 @@ export interface GenerationRepository {
   getSession(id: string): Promise<GenerationSession | null>;
 
   upsertRoute(route: GenerationRoute): Promise<void>;
+  retireRoutesMissingFromCatalog(input: {
+    providerIds: string[];
+    activeRouteIds: string[];
+    retiredAt: string;
+  }): Promise<void>;
   getRoute(id: string): Promise<GenerationRoute | null>;
   findDefaultRoute(
     capability: GenerationCapability,

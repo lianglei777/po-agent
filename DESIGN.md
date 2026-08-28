@@ -148,6 +148,7 @@ Codex blue (`#1668dc`) is the primary action color; `#4096ff` is reserved for fo
 
 - Settings replaces the workspace chrome with a quiet near-black navigation rail and a rounded dark panel surface. A visible Exit Settings action returns to the preserved workspace.
 - The model-provider editor stays mounted across Settings-section changes so pending configuration is not discarded.
+- Content generation settings uses a resizable provider → product → model API resource navigator beside one focused detail surface. Model API leaves use concise API-shape labels such as `text-to-image` and `reference-to-video`, while the detail surface retains the full model name. Provider details own credentials and the master switch; they identify whether a credential comes from the managed file or an environment variable and expose only the copyable location, never the key value. Model API details own availability, capability-specific default selection, and a read-only view of supported inputs. Navigation must preserve unsaved credential drafts and surface their pending state.
 - System Prompt is a directly embedded Settings workbench rather than a primary modal. It keeps effective-prompt preview, global append editing, project-instruction preview, reload state, conflict handling, and unsaved-change protection.
 - Settings are grouped into bordered sections with label and description on the left and the control on the right.
 - Rows use dividers instead of separate cards. Destructive actions remain visually separated and explicitly confirmed.

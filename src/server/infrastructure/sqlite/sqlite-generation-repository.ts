@@ -64,12 +64,13 @@ export class SqliteGenerationRepository implements GenerationRepository {
       }
       this.database.prepare(`
         INSERT INTO generation_routes(
-          id, name, description, tags_json, capability, product, provider_id, provider_operation,
+          id, name, navigation_label, description, tags_json, capability, product, provider_id, provider_operation,
           enabled, is_default, revision, defaults_json, adapter_config_json,
-          input_schema_json, credential_ref, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          input_schema_json, credential_ref, created_at, updated_at, retired_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           name = excluded.name,
+          navigation_label = excluded.navigation_label,
           description = excluded.description,
           tags_json = excluded.tags_json,
           capability = excluded.capability,
@@ -83,10 +84,12 @@ export class SqliteGenerationRepository implements GenerationRepository {
           adapter_config_json = excluded.adapter_config_json,
           input_schema_json = excluded.input_schema_json,
           credential_ref = excluded.credential_ref,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          retired_at = excluded.retired_at
       `).run(
         route.id,
         route.name,
+        route.navigationLabel ?? route.capability,
         route.description,
         JSON.stringify(route.tags),
         route.capability,
@@ -102,7 +105,56 @@ export class SqliteGenerationRepository implements GenerationRepository {
         route.credentialRef ?? null,
         route.createdAt,
         route.updatedAt,
+        route.retiredAt ?? null,
       );
+    });
+  }
+
+  async retireRoutesMissingFromCatalog(input: {
+    providerIds: string[];
+    activeRouteIds: string[];
+    retiredAt: string;
+  }): Promise<void> {
+    if (input.providerIds.length === 0) return;
+    this.database.transaction(() => {
+      const providerPlaceholders = input.providerIds.map(() => "?").join(", ");
+      const activeRouteClause = input.activeRouteIds.length > 0
+        ? `AND id NOT IN (${input.activeRouteIds.map(() => "?").join(", ")})`
+        : "";
+      const candidates = this.database.prepare(`
+        SELECT id, capability, is_default FROM generation_routes
+        WHERE provider_id IN (${providerPlaceholders})
+          AND retired_at IS NULL
+          ${activeRouteClause}
+      `).all(...input.providerIds, ...input.activeRouteIds);
+      if (candidates.length === 0) return;
+
+      const routeIds = candidates.map((row) => requiredString(row, "id"));
+      const routePlaceholders = routeIds.map(() => "?").join(", ");
+      this.database.prepare(`
+        UPDATE generation_routes
+        SET enabled = 0, is_default = 0, retired_at = ?, updated_at = ?
+        WHERE id IN (${routePlaceholders})
+      `).run(input.retiredAt, input.retiredAt, ...routeIds);
+
+      const affectedCapabilities = new Set(
+        candidates
+          .filter((row) => requiredNumber(row, "is_default") === 1)
+          .map((row) => requiredString(row, "capability")),
+      );
+      for (const capability of affectedCapabilities) {
+        const fallback = this.database.prepare(`
+          SELECT id FROM generation_routes
+          WHERE capability = ? AND enabled = 1 AND retired_at IS NULL
+          ORDER BY name, id
+          LIMIT 1
+        `).get(capability);
+        if (fallback) {
+          this.database.prepare(`
+            UPDATE generation_routes SET is_default = 1, updated_at = ? WHERE id = ?
+          `).run(input.retiredAt, requiredString(fallback, "id"));
+        }
+      }
     });
   }
 
@@ -118,7 +170,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
   ): Promise<GenerationRoute | null> {
     const row = this.database.prepare(`
       SELECT * FROM generation_routes
-      WHERE capability = ? AND enabled = 1 AND is_default = 1
+      WHERE capability = ? AND enabled = 1 AND is_default = 1 AND retired_at IS NULL
       LIMIT 1
     `).get(capability);
     return row ? routeFromRow(row) : null;
@@ -126,7 +178,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
 
   async listRoutes(): Promise<GenerationRoute[]> {
     return this.database
-      .prepare("SELECT * FROM generation_routes ORDER BY name, id")
+      .prepare("SELECT * FROM generation_routes WHERE retired_at IS NULL ORDER BY name, id")
       .all()
       .map(routeFromRow);
   }
@@ -134,7 +186,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
   async setRouteEnabled(id: string, enabled: boolean, updatedAt: string): Promise<boolean> {
     return this.database.transaction(() => {
       const row = this.database.prepare(
-        "SELECT capability, is_default FROM generation_routes WHERE id = ?",
+        "SELECT capability, is_default FROM generation_routes WHERE id = ? AND retired_at IS NULL",
       ).get(id);
       if (!row) return false;
       const capability = requiredString(row, "capability");
@@ -142,7 +194,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
       const activeDefault = enabled
         ? this.database.prepare(`
             SELECT id FROM generation_routes
-            WHERE capability = ? AND enabled = 1 AND is_default = 1 AND id <> ?
+            WHERE capability = ? AND enabled = 1 AND is_default = 1 AND retired_at IS NULL AND id <> ?
             LIMIT 1
           `).get(capability, id)
         : undefined;
@@ -158,7 +210,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
       if (enabled) {
         const enabledDefault = this.database.prepare(`
           SELECT id FROM generation_routes
-          WHERE capability = ? AND enabled = 1 AND is_default = 1
+          WHERE capability = ? AND enabled = 1 AND is_default = 1 AND retired_at IS NULL
           LIMIT 1
         `).get(capability);
         if (!enabledDefault) {
@@ -172,7 +224,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         `).run(updatedAt, id);
         const fallback = this.database.prepare(`
           SELECT id FROM generation_routes
-          WHERE capability = ? AND enabled = 1
+          WHERE capability = ? AND enabled = 1 AND retired_at IS NULL
           ORDER BY name, id
           LIMIT 1
         `).get(capability);
@@ -189,7 +241,8 @@ export class SqliteGenerationRepository implements GenerationRepository {
   async setDefaultRoute(id: string, updatedAt: string): Promise<boolean> {
     return this.database.transaction(() => {
       const row = this.database.prepare(`
-        SELECT capability FROM generation_routes WHERE id = ? AND enabled = 1
+        SELECT capability FROM generation_routes
+        WHERE id = ? AND enabled = 1 AND retired_at IS NULL
       `).get(id);
       if (!row) return false;
       const capability = requiredString(row, "capability");
@@ -580,6 +633,7 @@ function routeFromRow(row: SqliteRow): GenerationRoute {
   return {
     id: requiredString(row, "id"),
     name: requiredString(row, "name"),
+    navigationLabel: optionalString(row, "navigation_label"),
     description: requiredString(row, "description"),
     tags: parseJson<string[]>(row, "tags_json"),
     capability: requiredString(row, "capability") as GenerationCapability,
@@ -601,6 +655,7 @@ function routeFromRow(row: SqliteRow): GenerationRoute {
     credentialRef: optionalString(row, "credential_ref"),
     createdAt: requiredString(row, "created_at"),
     updatedAt: requiredString(row, "updated_at"),
+    retiredAt: optionalString(row, "retired_at"),
   };
 }
 

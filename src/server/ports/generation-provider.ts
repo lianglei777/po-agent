@@ -72,5 +72,10 @@ export interface GenerationCredentialReader {
 
 export interface GenerationCredentialStore extends GenerationCredentialReader {
   hasCredential(reference: string): Promise<boolean>;
+  inspectCredential(reference: string): Promise<{
+    hasCredential: boolean;
+    source: "stored-file" | "environment" | "missing";
+    location: string;
+  }>;
   setCredential(reference: string, value: string): Promise<void>;
 }

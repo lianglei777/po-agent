@@ -34,6 +34,7 @@ export interface GenerationSession {
 export interface GenerationRoute {
   id: string;
   name: string;
+  navigationLabel?: string;
   description: string;
   tags: string[];
   capability: GenerationCapability;
@@ -49,6 +50,7 @@ export interface GenerationRoute {
   credentialRef?: string;
   createdAt: string;
   updatedAt: string;
+  retiredAt?: string;
 }
 
 export interface GenerationRun {

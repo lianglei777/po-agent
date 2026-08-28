@@ -44,21 +44,13 @@ export class GenerationProviderSettingsService {
 
   async getCredentialStatus(providerId: string) {
     const credential = this.requiredCredential(providerId);
-    return {
-      hasCredential: await this.credentials.hasCredential(
-        credential.reference,
-      ),
-    };
+    return this.credentials.inspectCredential(credential.reference);
   }
 
   async setCredential(providerId: string, value: string) {
     const credential = this.requiredCredential(providerId);
     await this.credentials.setCredential(credential.reference, value);
-    return {
-      hasCredential: await this.credentials.hasCredential(
-        credential.reference,
-      ),
-    };
+    return this.credentials.inspectCredential(credential.reference);
   }
 
   async hasUsableCredential(providerId: string): Promise<boolean> {
@@ -69,19 +61,26 @@ export class GenerationProviderSettingsService {
   }
 
   private async providerView(provider: GenerationProviderDescriptor) {
+    if (!provider.credential) {
+      return {
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        enabled: await this.repository.isProviderEnabled(provider.providerId),
+        credential: undefined,
+      };
+    }
+    const credentialStatus = await this.credentials.inspectCredential(
+      provider.credential.reference,
+    );
     return {
       providerId: provider.providerId,
       displayName: provider.displayName,
       enabled: await this.repository.isProviderEnabled(provider.providerId),
-      credential: provider.credential
-        ? {
-            kind: provider.credential.kind,
-            environmentVariable: provider.credential.environmentVariable,
-            hasCredential: await this.credentials.hasCredential(
-              provider.credential.reference,
-            ),
-          }
-        : undefined,
+      credential: {
+        kind: provider.credential.kind,
+        environmentVariable: provider.credential.environmentVariable,
+        ...credentialStatus,
+      },
     };
   }
 

@@ -118,6 +118,35 @@ describe("SqliteGenerationRepository", () => {
     );
   });
 
+  it("retires removed catalog routes while preserving historical lookup", async () => {
+    await repository.upsertRoute({
+      ...route(),
+      id: "route-2",
+      name: "Second route",
+      isDefault: false,
+    });
+
+    await repository.retireRoutesMissingFromCatalog({
+      providerIds: ["runninghub"],
+      activeRouteIds: ["route-2"],
+      retiredAt: "2026-08-07T00:00:00.000Z",
+    });
+
+    await expect(repository.listRoutes()).resolves.toEqual([
+      expect.objectContaining({ id: "route-2", enabled: true, isDefault: true }),
+    ]);
+    await expect(repository.getRoute("route-1")).resolves.toEqual(
+      expect.objectContaining({
+        id: "route-1",
+        enabled: false,
+        isDefault: false,
+        retiredAt: "2026-08-07T00:00:00.000Z",
+      }),
+    );
+    await expect(repository.setRouteEnabled("route-1", true, NOW)).resolves.toBe(false);
+    await expect(repository.setDefaultRoute("route-1", NOW)).resolves.toBe(false);
+  });
+
   it("uses expected statuses to protect state transitions", async () => {
     await repository.createRun(run(), job());
     const next = { ...run(), status: "running" as const, updatedAt: "later" };

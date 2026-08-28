@@ -11,6 +11,7 @@ export function generationRouteDto(route: GenerationRoute): GenerationRouteDto {
   return {
     id: route.id,
     name: route.name,
+    navigationLabel: route.navigationLabel,
     description: route.description,
     tags: route.tags,
     capability: route.capability,

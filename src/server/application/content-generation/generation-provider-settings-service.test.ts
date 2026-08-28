@@ -18,6 +18,12 @@ class MemoryCredentialStore implements GenerationCredentialStore {
     return this.values.has(reference);
   }
 
+  async inspectCredential(reference: string) {
+    return this.values.has(reference)
+      ? { hasCredential: true, source: "stored-file" as const, location: "memory://credentials" }
+      : { hasCredential: false, source: "missing" as const, location: "memory://credentials" };
+  }
+
   async setCredential(reference: string, value: string) {
     if (value) this.values.set(reference, value);
     else this.values.delete(reference);
@@ -69,7 +75,11 @@ describe("GenerationProviderSettingsService", () => {
         providerId: "runninghub",
         displayName: "RunningHub",
         enabled: false,
-        credential: { hasCredential: false },
+        credential: {
+          hasCredential: false,
+          source: "missing",
+          location: "memory://credentials",
+        },
       },
       {
         providerId: "qianwen",
@@ -77,6 +87,8 @@ describe("GenerationProviderSettingsService", () => {
         enabled: true,
         credential: {
           hasCredential: true,
+          source: "stored-file",
+          location: "memory://credentials",
           environmentVariable: "DASHSCOPE_API_KEY",
         },
       },
@@ -88,9 +100,13 @@ describe("GenerationProviderSettingsService", () => {
 
     await expect(service.getCredentialStatus("qianwen")).resolves.toEqual({
       hasCredential: true,
+      source: "stored-file",
+      location: "memory://credentials",
     });
     await expect(service.setCredential("qianwen", "")).resolves.toEqual({
       hasCredential: false,
+      source: "missing",
+      location: "memory://credentials",
     });
   });
 

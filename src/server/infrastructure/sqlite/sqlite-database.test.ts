@@ -25,6 +25,7 @@ describe("SqliteDatabase", () => {
       { version: 11, name: "pipeline_canvas_edge_bindings" },
       { version: 12, name: "generation_route_presentation" },
       { version: 13, name: "generation_transient_failure_count" },
+      { version: 14, name: "generation_route_catalog_lifecycle" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([
@@ -34,6 +35,11 @@ describe("SqliteDatabase", () => {
     expect(database.prepare("PRAGMA table_info(provider_jobs)").all())
       .toEqual(expect.arrayContaining([
         expect.objectContaining({ name: "transient_failure_count", dflt_value: "0" }),
+      ]));
+    expect(database.prepare("PRAGMA table_info(generation_routes)").all())
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "navigation_label", dflt_value: "''" }),
+        expect.objectContaining({ name: "retired_at", dflt_value: null }),
       ]));
     expect(database.prepare(`
       SELECT name FROM sqlite_master

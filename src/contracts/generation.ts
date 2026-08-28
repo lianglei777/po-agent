@@ -253,8 +253,12 @@ export interface CreateGenerationRunResponse extends GenerationRunViewDto {
 export type ListGenerationRunsResponse = GenerationRunViewDto[];
 export type GetGenerationRunResponse = GenerationRunViewDto;
 
+export type GenerationCredentialSource = "stored-file" | "environment" | "missing";
+
 export interface GenerationCredentialStatusResponse {
   hasCredential: boolean;
+  source: GenerationCredentialSource;
+  location: string;
 }
 
 export interface GenerationProviderSettingsDto {
@@ -265,9 +269,8 @@ export interface GenerationProviderSettingsDto {
 export interface GenerationProviderDescriptorDto
   extends GenerationProviderSettingsDto {
   displayName: string;
-  credential?: {
+  credential?: GenerationCredentialStatusResponse & {
     kind: "api-key";
-    hasCredential: boolean;
     environmentVariable: string;
   };
 }
@@ -290,6 +293,7 @@ export interface SaveGenerationCredentialRequest {
 export interface GenerationRouteDto {
   id: string;
   name: string;
+  navigationLabel?: string;
   description: string;
   tags: string[];
   capability: GenerationCapability;

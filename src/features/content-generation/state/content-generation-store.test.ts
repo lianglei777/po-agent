@@ -32,6 +32,8 @@ const provider = (
   credential: {
     kind: "api-key",
     hasCredential,
+    source: hasCredential ? "stored-file" : "missing",
+    location: "C:\\credentials.json",
     environmentVariable: `${providerId.toUpperCase()}_API_KEY`,
   },
 });
@@ -262,7 +264,11 @@ describe("content generation store", () => {
     });
 
     store.getState().updateProvider(provider("first", false));
-    store.getState().setProviderCredentialStatus("second", false);
+    store.getState().setProviderCredentialStatus("second", {
+      hasCredential: false,
+      source: "missing",
+      location: "C:\\credentials.json",
+    });
 
     expect(store.getState().providers).toMatchObject([
       { providerId: "first", enabled: false, credential: { hasCredential: true } },

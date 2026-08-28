@@ -55,6 +55,7 @@ export interface RunningHubOperationDefinition {
     tags: string[];
     product: string;
     capability: GenerationCapability;
+    navigationLabel?: string;
     revision: number;
     catalogDefault?: boolean;
     defaultParameterKeys?: string[];
@@ -195,6 +196,7 @@ export function createRunningHubRoutes(
   return RUNNINGHUB_OPERATIONS.map((definition) => ({
     id: definition.route.id,
     name: definition.route.name,
+    navigationLabel: definition.route.navigationLabel ?? definition.route.capability,
     description: definition.route.description,
     tags: definition.route.tags,
     product: definition.route.product,
@@ -476,6 +478,7 @@ function wan27Operations(): RunningHubOperationDefinition[] {
         tags: ["1–5个参考素材", "角色一致性", "多模态参考", "720P/1080P", "负向提示词"],
         product: "Wan 2.7",
         capability: "multimodal-to-video",
+        navigationLabel: "reference-to-video",
       }),
       inputSchema: wan27Schema("reference"),
       protocol: standard("/openapi/v2/alibaba/wan-2.7/reference-to-video", [
@@ -513,6 +516,7 @@ function wan3Operations(): RunningHubOperationDefinition[] {
         tags: ["全能多模态", "最长30秒", "智能时长", "文档/网页解析", "有声输出"],
         product: "Wan 3.0",
         capability: "multimodal-to-video",
+        navigationLabel: "reference-to-video",
       }),
       inputSchema: wan3Schema("reference"),
       protocol: standard("/openapi/v2/alibaba/wan-3.0/reference-to-video", [

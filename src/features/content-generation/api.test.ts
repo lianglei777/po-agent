@@ -67,7 +67,11 @@ describe("content generation API client", () => {
   it("loads provider descriptors and saves credentials without vendor-specific clients", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(Response.json([]))
-      .mockResolvedValueOnce(Response.json({ hasCredential: true }));
+      .mockResolvedValueOnce(Response.json({
+        hasCredential: true,
+        source: "stored-file",
+        location: "C:\\credentials.json",
+      }));
     vi.stubGlobal("fetch", fetchMock);
 
     await loadGenerationProviders();

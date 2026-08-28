@@ -26,6 +26,11 @@ describe("FileGenerationCredentialStore", () => {
     await expect(store.getCredential("runninghub:default")).resolves.toBe(
       "secret-key",
     );
+    await expect(store.inspectCredential("runninghub:default")).resolves.toEqual({
+      hasCredential: true,
+      source: "stored-file",
+      location: filePath,
+    });
   });
 
   it("uses the environment as a non-persistent fallback", async () => {
@@ -38,7 +43,26 @@ describe("FileGenerationCredentialStore", () => {
     await expect(store.getCredential("runninghub:default")).resolves.toBe(
       "environment-key",
     );
+    await expect(store.inspectCredential("runninghub:default")).resolves.toEqual({
+      hasCredential: true,
+      source: "environment",
+      location: "RUNNINGHUB_API_KEY",
+    });
     await expect(fs.stat(filePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("reports the managed file as the location for a missing credential", async () => {
+    const store = new FileGenerationCredentialStore(
+      filePath,
+      {},
+      { "qianwen:default": "DASHSCOPE_API_KEY" },
+    );
+
+    await expect(store.inspectCredential("qianwen:default")).resolves.toEqual({
+      hasCredential: false,
+      source: "missing",
+      location: filePath,
+    });
   });
 
   it("uses the trusted provider mapping for additional environment fallbacks", async () => {

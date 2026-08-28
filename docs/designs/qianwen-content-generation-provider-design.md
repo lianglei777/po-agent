@@ -604,7 +604,7 @@ GENERATION_DOWNLOAD_FAILED
 
 ## 15. 实施阶段与验收
 
-当前进度（2026-08-27）：PR 1 至 PR 6 已完成；除前述主流图像与视频 Route 外，已增加六条默认关闭的 Legacy 图片 Route、Provider 级并发、持久化指数退避、`Retry-After` 限流恢复、运行诊断字段和显式付费 Smoke 入口。真实付费 Smoke 仍由开发者手动执行，不属于常规自动化检查。
+当前进度（2026-08-28）：PR 1 至 PR 6 已完成。产品 Catalog 现只保留 Z-Image 以及 Wan 3.0、Wan 2.7、HappyHorse 1.1、MiniMax-H3 视频 Route；Wan 2.0、2.1、2.2、2.5、2.6 图片 Route 已逻辑退役，不再出现在设置页或新任务选项中。旧 Route 数据与受限 execution Profile 仍保留用于历史任务兼容。Provider 级并发、持久化指数退避、`Retry-After` 限流恢复、运行诊断字段和显式付费 Smoke 入口保持不变。真实付费 Smoke 仍由开发者手动执行，不属于常规自动化检查。
 
 ### PR 1：通用 Provider 设置与凭据
 

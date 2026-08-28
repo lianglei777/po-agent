@@ -35,6 +35,30 @@ export class FileGenerationCredentialStore
     return Boolean(await this.getCredential(reference));
   }
 
+  async inspectCredential(reference: string) {
+    const stored = (await this.read()).credentials[reference]?.trim();
+    if (stored) {
+      return {
+        hasCredential: true,
+        source: "stored-file" as const,
+        location: this.filePath,
+      };
+    }
+    const environmentVariable = this.credentialEnvironment[reference];
+    if (environmentVariable && this.environment[environmentVariable]?.trim()) {
+      return {
+        hasCredential: true,
+        source: "environment" as const,
+        location: environmentVariable,
+      };
+    }
+    return {
+      hasCredential: false,
+      source: "missing" as const,
+      location: this.filePath,
+    };
+  }
+
   async setCredential(reference: string, value: string): Promise<void> {
     const write = this.writeQueue.then(() => this.writeCredential(reference, value));
     // 单次失败不能阻塞后续保存；调用方仍会收到当前 write 的原始异常。

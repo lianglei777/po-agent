@@ -3,6 +3,7 @@ import type {
   GenerationRouteDto,
   GenerationRunViewDto,
   GenerationProviderDescriptorDto,
+  GenerationCredentialStatusResponse,
 } from "@/contracts/generation";
 
 type StateUpdater<T> = T | ((current: T) => T);
@@ -81,7 +82,10 @@ export type ContentGenerationActions = {
   beginSettingsLoad: () => void;
   updateRoute: (next: GenerationRouteDto) => void;
   updateProvider: (next: GenerationProviderDescriptorDto) => void;
-  setProviderCredentialStatus: (providerId: string, next: boolean) => void;
+  setProviderCredentialStatus: (
+    providerId: string,
+    next: GenerationCredentialStatusResponse,
+  ) => void;
   setUpdatingId: (next: string | null) => void;
   setSettingsLoading: (next: boolean) => void;
   setSavingCredentialId: (next: string | null) => void;
@@ -233,13 +237,13 @@ export function createContentGenerationStore(
           provider.providerId === next.providerId ? next : provider,
         ),
       })),
-    setProviderCredentialStatus: (providerId, hasCredential) =>
+    setProviderCredentialStatus: (providerId, credentialStatus) =>
       set((state) => ({
         providers: state.providers.map((provider) =>
           provider.providerId === providerId && provider.credential
             ? {
                 ...provider,
-                credential: { ...provider.credential, hasCredential },
+                credential: { ...provider.credential, ...credentialStatus },
               }
             : provider,
         ),

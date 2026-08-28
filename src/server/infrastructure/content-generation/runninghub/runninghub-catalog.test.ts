@@ -14,6 +14,10 @@ describe("RunningHub catalog", () => {
 
     expect(RUNNINGHUB_OPERATIONS).toHaveLength(18);
     expect(routes).toHaveLength(18);
+    expect(routes.find((route) => route.id === "runninghub-wan-3-reference-to-video")?.navigationLabel)
+      .toBe("reference-to-video");
+    expect(routes.find((route) => route.id === "runninghub-seedream-v5-pro-text-to-image")?.navigationLabel)
+      .toBe("text-to-image");
     for (const route of routes) {
       expect(route.revision).toBeGreaterThanOrEqual(8);
       expect(route.adapterConfig).toMatchObject({

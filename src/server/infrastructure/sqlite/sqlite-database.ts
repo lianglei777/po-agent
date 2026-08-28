@@ -69,6 +69,11 @@ export class SqliteDatabase {
       }
       try {
         this.transaction(() => {
+          // Next.js 构建和桌面启动都可能并行创建容器；拿到写锁后必须复查，避免重复执行 ALTER。
+          const alreadyApplied = this.database.prepare(`
+            SELECT 1 FROM schema_migrations WHERE version = ?
+          `).get(migration.version);
+          if (alreadyApplied) return;
           this.database.exec(migration.sql);
           insert.run(migration.version, migration.name, new Date().toISOString());
         });

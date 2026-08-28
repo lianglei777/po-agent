@@ -2512,7 +2512,7 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 GET /api/generation/routes
 ```
 
-返回全部由应用管理的 Route，包括已停用 Route。每项包含 `id`、`name`、面向用户决策的 `description` 与 `tags`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。`tags` 是可独立展示的短标签数组，不是使用分隔符拼接的文本。供应商 operation、credential reference 和 adapter 配置不会返回。
+返回当前 Catalog 中由应用管理的 Route，包括仍在 Catalog 内但被用户停用的 Route，不返回已经从 Catalog 下线的 Route。每项包含 `id`、`name`、用于设置导航的短 `navigationLabel`、面向用户决策的 `description` 与 `tags`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。`navigationLabel` 表示 API 形态（如 `text-to-image` 或 `reference-to-video`），不改变运行时 capability；`tags` 是可独立展示的短标签数组，不是使用分隔符拼接的文本。供应商 operation、credential reference 和 adapter 配置不会返回。
 
 Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。
 
@@ -2520,9 +2520,9 @@ Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选�
 
 千问AI平台当前内置 `qianwen-wan-3-0-text-to-video`、`qianwen-wan-3-0-image-to-video` 和 `qianwen-wan-3-0-multimodal-to-video` Route，对应 `wan3.0-video` 的文生、首帧/首尾帧和图视音多模态生成。Route 支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数；`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长。
 
-千问图片 Route 包括同步的 `qianwen-z-image-text-to-image` 与异步的 `qianwen-wan-2-6-text-to-image`。Z-Image 固定单张 PNG 输出且不进入轮询；Wan 2.6 支持 `imageCount` 1–4、负向提示词和 5 秒轮询。两者均使用供应商无关的 `size`、`promptExtend` 与可选 `seed` 参数。
+千问图片 Catalog 当前只提供同步的 `qianwen-z-image-text-to-image`。Z-Image 固定单张 PNG 输出且不进入轮询，使用供应商无关的 `size`、`promptExtend` 与可选 `seed` 参数。
 
-兼容目录还提供 Wan 2.5、Wan 2.2 Plus/Flash、WanX 2.1 Plus/Turbo 和 WanX 2.0 Turbo 六条 Legacy 文生图 Route。它们使用固定的旧版 `input.prompt` / `output.results[].url` Profile，始终以 `enabled: false`、`isDefault: false` 初始化，并标记 `Legacy`；新工作流应优先使用 Wan 2.6 或 Z-Image。
+Wan 2.0、2.1、2.2、2.5、2.6 文生图 Route 已从可选 Catalog 下线。数据库升级会将曾经存在的对应 Route 标记为退役并关闭，设置页和新任务不再返回它们；Route 记录和旧 execution config 解析仍保留，以保证历史任务、运行中任务和既有审计记录可读取。
 
 千问视频目录还包括 Wan 2.7、HappyHorse 1.1 和 MiniMax-H3 的文生视频、图生视频与参考/多模态生视频 Route。Wan 2.7 固定到文档对应的模型快照；HappyHorse 与 MiniMax-H3 使用各自有限参数 Profile。All-in-One 供应商接口按 capability 拆成独立 Route，前端不需要理解模型内部模式。Wan 2.7 参考生视频的图片与视频素材合计最多 5 个，服务端会跨素材槽统一校验。
 
@@ -2579,7 +2579,7 @@ Content-Type: application/json
 GET /api/generation/providers
 ```
 
-返回数组项包含 `providerId`、`displayName`、`enabled` 和可选的 `credential`。凭据描述只返回 `kind`、`hasCredential` 与可用的环境变量名，不返回 credential ref 或凭据值。
+返回数组项包含 `providerId`、`displayName`、`enabled` 和可选的 `credential`。凭据描述返回 `kind`、`hasCredential`、`source`、`location` 与可用的环境变量名，不返回 credential ref 或凭据值。`source` 为 `stored-file`、`environment` 或 `missing`；`location` 对文件来源和未配置状态表示应用管理的凭据文件路径，对环境变量来源表示实际使用的环境变量名。
 
 每个 Provider 有独立且默认关闭的付费能力总开关：
 
@@ -2691,7 +2691,7 @@ PUT    /api/generation/credentials/:providerId
 DELETE /api/generation/credentials/:providerId
 ```
 
-响应只返回 `{ "hasCredential": true }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 使用 `RUNNINGHUB_API_KEY`，千问AI平台使用 `DASHSCOPE_API_KEY`。
+响应返回凭据是否存在、当前来源和位置，例如 `{ "hasCredential": true, "source": "stored-file", "location": "C:\\...\\generation-credentials.json" }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；只有不含 Key 的来源与位置元数据会返回。未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 使用 `RUNNINGHUB_API_KEY`，千问AI平台使用 `DASHSCOPE_API_KEY`。设置页展示该位置并允许复制，便于用户自行检查本地文件或环境变量。
 
 ### 12.5 持久化执行行为
 

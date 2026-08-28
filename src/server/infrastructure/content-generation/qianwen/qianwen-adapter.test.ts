@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { JsonValue } from "@/contracts/generation";
 import { QianwenAdapter } from "./qianwen-adapter";
-import { createQianwenRoutes } from "./qianwen-catalog";
+import {
+  createQianwenRoutes,
+  QIANWEN_WAN_2_5_TEXT_TO_IMAGE_OPERATION,
+  QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION,
+} from "./qianwen-catalog";
 
 const [ROUTE] = createQianwenRoutes("2026-08-27T00:00:00.000Z");
 
@@ -16,14 +21,14 @@ describe("QianwenAdapter", () => {
   });
 
   it("normalizes all Wan 2.6 asynchronous image outputs", async () => {
-    const route=createQianwenRoutes().find(item=>item.id==="qianwen-wan-2-6-text-to-image")!;
+    const route=compatImageRoute(QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION,"image-generation","wan2.6-t2i","messages-text-image-v1","choices-content-image-v1");
     const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({output:{task_id:"image-task",task_status:"SUCCEEDED",choices:[{message:{content:[{image:"https://dashscope-463f.oss-accelerate.aliyuncs.com/1.png"},{image:"https://dashscope-463f.oss-accelerate.aliyuncs.com/2.png"}]}}]}}));
     const result=await new QianwenAdapter(fetcher).poll({operation:route.providerOperation,executionConfig:route.adapterConfig,remoteTaskId:"image-task",credential:"secret"});
     expect(result).toMatchObject({state:"succeeded",outputs:[{outputType:"png"},{outputType:"png"}]});
   });
 
   it("submits and normalizes the legacy image protocol", async () => {
-    const route=createQianwenRoutes().find(item=>item.id==="qianwen-wan-2-5-text-to-image")!;
+    const route=compatImageRoute(QIANWEN_WAN_2_5_TEXT_TO_IMAGE_OPERATION,"legacy-image-synthesis","wan2.5-t2i-preview","legacy-prompt-image-v1","legacy-results-image-v1");
     const fetcher=vi.fn<typeof fetch>(async()=>jsonResponse({output:{task_id:"legacy-task",task_status:"SUCCEEDED",results:[{url:"https://dashscope-result-wlcb.oss-cn-wulanchabu.aliyuncs.com/1.png"},{url:"https://dashscope-result-wlcb.oss-cn-wulanchabu.aliyuncs.com/2.png"}]}}));
     const adapter=new QianwenAdapter(fetcher);
     const submitted=await adapter.submit({operation:route.providerOperation,executionConfig:route.adapterConfig,generation:{prompt:"江南水乡",parameters:route.defaults},assets:[],credential:"secret"});
@@ -285,6 +290,24 @@ describe("QianwenAdapter", () => {
       .rejects.toMatchObject({code:"GENERATION_PROVIDER_RATE_LIMITED",status:429,details:{retryAfterMs:45_000}});
   });
 });
+
+function compatImageRoute(
+  operation: typeof QIANWEN_WAN_2_6_TEXT_TO_IMAGE_OPERATION | typeof QIANWEN_WAN_2_5_TEXT_TO_IMAGE_OPERATION,
+  endpointId: "image-generation" | "legacy-image-synthesis",
+  vendorModel: "wan2.6-t2i" | "wan2.5-t2i-preview",
+  requestProfile: "messages-text-image-v1" | "legacy-prompt-image-v1",
+  resultProfile: "choices-content-image-v1" | "legacy-results-image-v1",
+) {
+  return {
+    providerOperation: operation,
+    defaults: { size: "1280*1280", imageCount: 2 },
+    adapterConfig: {
+      protocol: "dashscope-media-v1", operation, endpointId, vendorModel,
+      requestProfile, resultProfile, assetBindings: [], pollIntervalMs: 5000,
+      submitMode: "async-task",
+    } as JsonValue,
+  };
+}
 
 function jsonResponse(value: unknown, status = 200, headers:Record<string,string> = {}): Response {
   return new Response(JSON.stringify(value), {
