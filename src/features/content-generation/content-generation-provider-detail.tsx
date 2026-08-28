@@ -82,7 +82,7 @@ export function ContentGenerationProviderDetail({
       {provider.credential ? (
         <SettingsSection title={format(labels.providerCredential, provider.displayName)}>
           <SettingsRow
-            align="start"
+            compact
             description={format(labels.providerCredentialDescription, provider.credential.environmentVariable)}
             label={labels.apiKey}
           >

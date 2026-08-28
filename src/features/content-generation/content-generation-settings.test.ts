@@ -39,6 +39,7 @@ describe("content generation settings", () => {
     expect(settingsSource).toContain("deleteGenerationProviderCredential");
     expect(settingsSource).toContain("modal.confirm");
     expect(providerSource).toContain("<Input.Password");
+    expect(providerSource).toContain('<SettingsRow\n            compact\n            description=');
     expect(providerSource).toContain("visibilityToggle={{");
     expect(providerSource).toContain("provider.credential.location");
     expect(providerSource).toContain("onCopyCredentialLocation");
