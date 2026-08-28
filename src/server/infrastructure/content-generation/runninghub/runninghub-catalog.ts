@@ -12,6 +12,7 @@ import {
   RUNNINGHUB_CREDENTIAL_REF,
   RUNNINGHUB_PROVIDER_ID,
 } from "./runninghub-provider-constants";
+import { withGenerationParameterPresentation } from "../generation-parameter-presentation";
 
 const MIB = 1024 * 1024;
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -204,7 +205,7 @@ export function createRunningHubRoutes(
     isDefault: definition.route.catalogDefault ?? false,
     revision: definition.route.revision,
     defaults: routeDefaults(definition),
-    inputSchema: definition.inputSchema,
+    inputSchema: withGenerationParameterPresentation(definition.inputSchema),
     adapterConfig: executionConfig(definition) as unknown as JsonValue,
     credentialRef: RUNNINGHUB_CREDENTIAL_REF,
     createdAt: now,
@@ -741,7 +742,7 @@ function videoFields(
 function routeMeta(input: Omit<RunningHubOperationDefinition["route"], "revision"> & {
   revision?: number;
 }): RunningHubOperationDefinition["route"] {
-  return { ...input, revision: input.revision ?? 8 };
+  return { ...input, revision: input.revision ?? 9 };
 }
 
 function standard(

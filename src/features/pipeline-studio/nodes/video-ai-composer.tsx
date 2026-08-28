@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Tooltip } from "antd";
+import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type {
   CanvasGenerationSettingValue,
@@ -10,17 +10,19 @@ import type {
   CanvasPromptDocument,
   CanvasResourceRole,
 } from "@/contracts/pipeline";
-import { FileVideo, LoaderCircle, Maximize2, Send, Square } from "@/components/icons";
+import { FileVideo } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
 import {
   promptReferenceRouteProblem,
   videoCapabilityForPrompt,
+  videoRouteSupportsPrompt,
 } from "../model/prompt-reference-validation";
 import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
+import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 import { reconcileComposerSettings } from "../model/generation-composer-settings";
@@ -53,7 +55,7 @@ export function VideoAiComposer({
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
   const [settings, setSettings] = useState<Record<string, JsonValue>>({});
-  const [loadedCapability, setLoadedCapability] = useState<string | null>(null);
+  const [routesLoaded, setRoutesLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -66,12 +68,19 @@ export function VideoAiComposer({
     () => connectedCanvasReferences(nodeId, canvasNodes, canvasEdges),
     [canvasEdges, canvasNodes, nodeId],
   );
-  const capability = videoCapabilityForPrompt(promptDocument, connectedReferences);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
   );
-  const loadingRoutes = loadedCapability !== capability;
+  const inferredCapability = videoCapabilityForPrompt(promptDocument, connectedReferences);
+  const availableRoutes = useMemo(
+    () => routes.filter((route) => videoRouteSupportsPrompt(promptDocument, route, connectedReferences)),
+    [connectedReferences, promptDocument, routes],
+  );
+  const pickerRoutes = selectedRoute && !availableRoutes.some((route) => route.id === selectedRoute.id)
+    ? [selectedRoute, ...availableRoutes]
+    : availableRoutes;
+  const loadingRoutes = !routesLoaded;
   const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
   const parameterConflict = generationParameterConflict(
     selectedRoute?.inputSchema.constraints ?? [],
@@ -89,10 +98,10 @@ export function VideoAiComposer({
     pipelineStudioApi.getGenerationOptions(controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
-        const available = response.routes.filter((route) => route.enabled && route.capability === capability);
+        const available = response.routes.filter((route) => route.enabled && route.capability.endsWith("-to-video"));
         const selected = available.find((route) => route.id === data.params?.routeId)
-          ?? available.find((route) => route.isDefault)
-          ?? available[0];
+          ?? available.find((route) => route.isDefault && route.capability === inferredCapability)
+          ?? available.find((route) => route.capability === inferredCapability);
         setRoutes(available);
         setSelectedRouteId(selected?.id ?? "");
         setSettings(selected ? reconcileComposerSettings(selected, data.params?.settings as Record<string, JsonValue>) : {});
@@ -101,10 +110,10 @@ export function VideoAiComposer({
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoadedCapability(capability);
+        if (!controller.signal.aborted) setRoutesLoaded(true);
       });
     return () => controller.abort();
-  }, [capability, data.params?.routeId, data.params?.settings]);
+  }, [data.params?.routeId, data.params?.settings, inferredCapability]);
 
   const disabledReason = useMemo(() => {
     if (waitingForSave) return t.pipeline.videoAiPendingSave;
@@ -186,7 +195,7 @@ export function VideoAiComposer({
       nodeId={nodeId}
       promptDocument={promptDocument}
       resourceRole={resourceRole}
-      routes={routes}
+      routes={pickerRoutes}
       selectedRoute={selectedRoute}
       selectedRouteId={selectedRouteId}
       settings={settings}
@@ -274,22 +283,13 @@ function VideoComposerSurface({
       ariaLabel={t.pipeline.videoAiTitle}
       large={large}
       error={error}
+      expandLabel={t.pipeline.textAiExpand}
+      onExpand={onExpand}
       body={(
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex h-12 shrink-0 items-center gap-2 px-4">
             <FileVideo className="size-4 text-[var(--pl-accent)]" />
             <span className="text-xs font-medium text-[var(--pl-text-secondary)]">{t.pipeline.videoAiReferenceHint}</span>
-            {!large ? (
-              <button
-                type="button"
-                title={t.pipeline.textAiExpand}
-                aria-label={t.pipeline.textAiExpand}
-                onClick={onExpand}
-                className="ml-auto flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-              >
-                <Maximize2 className="size-4" />
-              </button>
-            ) : null}
           </div>
           <ResourcePromptEditor
             autoFocus={large}
@@ -348,36 +348,18 @@ function VideoComposerSurface({
             values={settings}
           />
           <span className="flex-1" />
-          {generating ? <LoaderCircle className="size-4 animate-spin text-[var(--pl-text-muted)]" /> : null}
-          {generating ? (
-            <Tooltip title={cancellable ? t.pipeline.videoAiCancel : t.pipeline.videoAiGenerating} getPopupContainer={tooltipContainer}>
-              <span>
-                <button
-                  type="button"
-                  disabled={cancelling || !cancellable}
-                  aria-label={t.pipeline.videoAiCancel}
-                  onClick={onCancel}
-                  className="flex size-9 items-center justify-center rounded-full border border-[var(--pl-border-strong)] text-[var(--pl-text)] hover:bg-[var(--pl-surface-hover)] disabled:opacity-50"
-                >
-                  {cancelling ? <LoaderCircle className="size-4 animate-spin" /> : <Square className="size-3.5" />}
-                </button>
-              </span>
-            </Tooltip>
-          ) : (
-            <Tooltip title={disabledReason || t.pipeline.videoAiGenerate} getPopupContainer={tooltipContainer}>
-              <span>
-                <button
-                  type="button"
-                  disabled={Boolean(disabledReason)}
-                  aria-label={t.pipeline.videoAiGenerate}
-                  onClick={onSubmit}
-                  className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
-                >
-                  <Send className="size-4" />
-                </button>
-              </span>
-            </Tooltip>
-          )}
+          <CanvasComposerSubmitAction
+            cancellable={cancellable}
+            cancelling={cancelling}
+            cancelLabel={t.pipeline.videoAiCancel}
+            disabledReason={disabledReason}
+            generateLabel={t.pipeline.videoAiGenerate}
+            generating={generating}
+            generatingLabel={t.pipeline.videoAiGenerating}
+            getPopupContainer={tooltipContainer}
+            onCancel={onCancel}
+            onSubmit={onSubmit}
+          />
         </>
       )}
     />

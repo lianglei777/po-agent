@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GenerationRouteDto } from "@/contracts/generation";
 import {
-  canvasVisibleParameterFields,
   generationSettingsSummary,
-  IMAGE_ASPECT_RATIO_FIELD,
   reconcileComposerSettings,
 } from "./generation-composer-settings";
 
@@ -38,40 +36,34 @@ describe("reconcileComposerSettings", () => {
     })).toEqual({ resolution: "1080p", durationSeconds: 5 });
   });
 
-  it("adds the canvas aspect-ratio field when the image route does not declare it", () => {
+  it("does not add parameters that the route does not declare", () => {
     const next = route([
       { key: "resolution", label: "Resolution", type: "select", options: [{ label: "720p", value: "720p" }] },
     ]);
 
-    expect(reconcileComposerSettings(next, { aspectRatio: "16:9" }, [IMAGE_ASPECT_RATIO_FIELD])).toEqual({
+    expect(reconcileComposerSettings(next, { aspectRatio: "16:9" })).toEqual({
       resolution: "720p",
-      aspectRatio: "16:9",
     });
   });
 });
 
 describe("canvas generation parameter presentation", () => {
-  it("hides width and height when the canvas derives them from ratio and resolution", () => {
-    const fields = [
-      IMAGE_ASPECT_RATIO_FIELD,
-      { key: "resolution", label: "Resolution", type: "select" as const },
-      { key: "width", label: "Width", type: "number" as const },
-      { key: "height", label: "Height", type: "number" as const },
-      { key: "outputFormat", label: "Format", type: "select" as const },
-    ];
-
-    expect(canvasVisibleParameterFields(fields).map((field) => field.key)).toEqual([
-      "aspectRatio",
-      "resolution",
-      "outputFormat",
-    ]);
-  });
-
   it("uses the automatic-duration label for Seedance's -1 sentinel", () => {
     expect(generationSettingsSummary(
-      [{ key: "durationSeconds", label: "Duration", type: "select" }],
+      [{ key: "durationSeconds", label: "Duration", type: "select", presentation: { summary: true } }],
       { durationSeconds: -1 },
-      { audioOn: "On", audioOff: "Off", autoDuration: "Auto" },
+      { enabled: "On", disabled: "Off", autoDuration: "Auto", fieldLabels: {} },
     )).toEqual(["Auto"]);
+  });
+
+  it("summarizes fields selected by catalog presentation metadata", () => {
+    expect(generationSettingsSummary(
+      [
+        { key: "size", label: "Size", type: "select", presentation: { summary: true, optionVisual: "dimensions" } },
+        { key: "promptExtend", label: "Prompt enhancement", type: "boolean", presentation: { summary: true } },
+      ],
+      { size: "1024*1536", promptExtend: false },
+      { enabled: "On", disabled: "Off", autoDuration: "Auto", fieldLabels: {} },
+    )).toEqual(["2:3", "1024×1536", "Prompt enhancementOff"]);
   });
 });

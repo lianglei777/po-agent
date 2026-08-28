@@ -53,4 +53,20 @@ describe("FileGenerationCredentialStore", () => {
     );
     await expect(store.getCredential("unknown:default")).resolves.toBeNull();
   });
+
+  it("preserves every credential when different providers are saved concurrently", async () => {
+    const store = new FileGenerationCredentialStore(filePath, {});
+
+    await Promise.all([
+      store.setCredential("runninghub:default", "runninghub-key"),
+      store.setCredential("qianwen:default", "qianwen-key"),
+    ]);
+
+    await expect(store.getCredential("runninghub:default")).resolves.toBe(
+      "runninghub-key",
+    );
+    await expect(store.getCredential("qianwen:default")).resolves.toBe(
+      "qianwen-key",
+    );
+  });
 });

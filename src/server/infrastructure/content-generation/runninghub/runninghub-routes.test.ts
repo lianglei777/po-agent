@@ -36,6 +36,10 @@ describe("createRunningHubRoutes", () => {
       route.defaults.bitrateMode === "standard" &&
       route.defaults.outputFormat === "mp4",
     )).toBe(true);
+    expect(seedance25Routes[0].inputSchema.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "aspectRatio", presentation: { control: "ratio-grid", optionVisual: "ratio", summary: true } }),
+      expect.objectContaining({ key: "durationSeconds", presentation: { control: "slider", summary: true, unit: "s" } }),
+    ]));
   });
 
   it("assigns product names for grouping", () => {

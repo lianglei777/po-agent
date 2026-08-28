@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import type { ModelInfo } from "@/contracts/models";
 import type { CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
-import { Brain, LoaderCircle, Maximize2, Send } from "@/components/icons";
+import { Brain } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
+import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { CanvasModelPicker } from "./shared/canvas-model-picker";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
@@ -188,8 +189,9 @@ function ComposerSurface({
       ariaLabel={t.pipeline.textAiTitle}
       large={large}
       error={error}
+      expandLabel={t.pipeline.textAiExpand}
+      onExpand={onExpand}
       body={(
-        <>
         <ResourcePromptEditor
           autoFocus={large}
           value={promptDocument}
@@ -203,18 +205,6 @@ function ComposerSurface({
           placeholder={mode === "revise" ? t.pipeline.textAiRevisePlaceholder : t.pipeline.textAiGeneratePlaceholder}
           ariaLabel={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
         />
-        {!large ? (
-          <button
-            type="button"
-            title={t.pipeline.textAiExpand}
-            aria-label={t.pipeline.textAiExpand}
-            onClick={onExpand}
-            className="m-3 flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-          >
-            <Maximize2 className="size-4" />
-          </button>
-        ) : null}
-        </>
       )}
       footer={(
         <>
@@ -245,18 +235,14 @@ function ComposerSurface({
           </span>
         ) : null}
         <span className="flex-1" />
-        {generating ? <span className="flex items-center gap-2 text-xs text-[var(--pl-text-muted)]"><LoaderCircle className="size-3.5 animate-spin" />{t.pipeline.textAiGenerating}</span> : null}
-        <span title={disabledReason || (mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate)}>
-          <button
-            type="button"
-            disabled={Boolean(disabledReason) || generating}
-            aria-label={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
-            onClick={onSubmit}
-            className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
-          >
-            {generating ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </button>
-        </span>
+        <CanvasComposerSubmitAction
+          disabledReason={disabledReason}
+          generateLabel={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
+          generating={generating}
+          generatingLabel={t.pipeline.textAiGenerating}
+          getPopupContainer={tooltipContainer}
+          onSubmit={onSubmit}
+        />
         </>
       )}
     />

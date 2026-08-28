@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Tooltip } from "antd";
+import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type { CanvasEdge, CanvasGenerationSettingValue, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
-import { ImagePlus, LoaderCircle, Maximize2, Send, Square } from "@/components/icons";
+import { ImagePlus } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
@@ -13,11 +13,11 @@ import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute }
 import { promptReferenceRouteProblem } from "../model/prompt-reference-validation";
 import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
+import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 import {
   composerParameterFields,
-  IMAGE_ASPECT_RATIO_FIELD,
   reconcileComposerSettings,
 } from "../model/generation-composer-settings";
 import { CanvasGenerationConfig } from "./shared/canvas-generation-config";
@@ -55,10 +55,9 @@ export function ImageAiComposer({
   const instruction = promptDocument.plainText;
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState(data.params?.routeId ?? "");
-  const [settings, setSettings] = useState<Record<string, JsonValue>>({
-    aspectRatio: data.params?.settings?.aspectRatio ?? "1:1",
-    resolution: data.params?.settings?.resolution ?? "2k",
-  });
+  const [settings, setSettings] = useState<Record<string, JsonValue>>(
+    data.params?.settings as Record<string, JsonValue> | undefined ?? {},
+  );
   const [loadedCapability, setLoadedCapability] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -104,7 +103,7 @@ export function ImageAiComposer({
         if (selected) setSettings((current) => reconcileComposerSettings(selected, {
           ...current,
           ...(data.params?.settings as Record<string, JsonValue> | undefined),
-        }, [IMAGE_ASPECT_RATIO_FIELD]));
+        }));
       })
       .catch((error) => {
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
@@ -118,7 +117,7 @@ export function ImageAiComposer({
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
     setSelectedRouteId(routeId);
-    if (route) setSettings((current) => reconcileComposerSettings(route, current, [IMAGE_ASPECT_RATIO_FIELD]));
+    if (route) setSettings((current) => reconcileComposerSettings(route, current));
   };
 
   const promptProblem = imagePromptProblem(selectedRoute, instruction);
@@ -269,12 +268,14 @@ function ComposerSurface({
 }) {
   const { t } = useI18n();
   const busy = generating || cancelling;
-  const parameterFields = composerParameterFields(selectedRoute, [IMAGE_ASPECT_RATIO_FIELD]);
+  const parameterFields = composerParameterFields(selectedRoute);
   return (
     <CanvasNodeComposerShell
       ariaLabel={mode === "modify" ? t.pipeline.imageAiModifyTitle : t.pipeline.imageAiTitle}
       large={large}
       error={error}
+      expandLabel={t.pipeline.textAiExpand}
+      onExpand={onExpand}
       body={(
         <div className="relative flex min-h-0 flex-1 flex-col">
           {mode === "modify" ? (
@@ -284,17 +285,6 @@ function ComposerSurface({
                 {t.pipeline.imageAiCurrentReference}
               </span>
             </div>
-          ) : null}
-          {!large ? (
-            <button
-              type="button"
-              title={t.pipeline.textAiExpand}
-              aria-label={t.pipeline.textAiExpand}
-              onClick={onExpand}
-              className="absolute right-3 top-3 z-10 flex size-8 items-center justify-center rounded-lg bg-[var(--pl-surface-elevated)] text-[var(--pl-text-muted)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)]"
-            >
-              <Maximize2 className="size-4" />
-            </button>
           ) : null}
           <ResourcePromptEditor
             autoFocus={large}
@@ -340,47 +330,18 @@ function ComposerSurface({
             values={settings}
           />
           <span className="flex-1" />
-          {generating ? (
-            <span className="hidden items-center gap-2 text-xs text-[var(--pl-text-muted)] sm:flex">
-              <LoaderCircle className="size-3.5 animate-spin" />
-              {t.pipeline.imageAiGenerating}
-            </span>
-          ) : null}
-          {generating ? (
-            <Tooltip
-              title={cancellable ? t.pipeline.imageAiCancel : t.pipeline.imageAiGenerating}
-              getPopupContainer={tooltipContainer}
-            >
-              <span>
-                <button
-                  type="button"
-                  disabled={cancelling || !cancellable}
-                  aria-label={t.pipeline.imageAiCancel}
-                  onClick={onCancel}
-                  className="flex size-9 items-center justify-center rounded-full border border-[var(--pl-border-strong)] text-[var(--pl-text)] hover:bg-[var(--pl-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:opacity-50"
-                >
-                  {cancelling ? <LoaderCircle className="size-4 animate-spin" /> : <Square className="size-3.5" />}
-                </button>
-              </span>
-            </Tooltip>
-          ) : (
-            <Tooltip
-              title={disabledReason || (mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate)}
-              getPopupContainer={tooltipContainer}
-            >
-              <span>
-                <button
-                  type="button"
-                  disabled={Boolean(disabledReason)}
-                  aria-label={mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate}
-                  onClick={onSubmit}
-                  className="flex size-9 items-center justify-center rounded-full bg-[var(--pl-accent)] text-white transition-colors hover:bg-[var(--pl-accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-35"
-                >
-                  <Send className="size-4" />
-                </button>
-              </span>
-            </Tooltip>
-          )}
+          <CanvasComposerSubmitAction
+            cancellable={cancellable}
+            cancelling={cancelling}
+            cancelLabel={t.pipeline.imageAiCancel}
+            disabledReason={disabledReason}
+            generateLabel={mode === "modify" ? t.pipeline.imageAiModify : t.pipeline.imageAiGenerate}
+            generating={generating}
+            generatingLabel={t.pipeline.imageAiGenerating}
+            getPopupContainer={tooltipContainer}
+            onCancel={onCancel}
+            onSubmit={onSubmit}
+          />
         </>
       )}
     />

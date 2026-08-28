@@ -12,6 +12,9 @@ const EMPTY_FILE: CredentialFile = { version: 1, credentials: {} };
 export class FileGenerationCredentialStore
   implements GenerationCredentialStore
 {
+  private writeQueue: Promise<void> = Promise.resolve();
+  private temporarySequence = 0;
+
   constructor(
     private readonly filePath: string,
     private readonly environment: Readonly<Record<string, string | undefined>> =
@@ -33,12 +36,19 @@ export class FileGenerationCredentialStore
   }
 
   async setCredential(reference: string, value: string): Promise<void> {
+    const write = this.writeQueue.then(() => this.writeCredential(reference, value));
+    // 单次失败不能阻塞后续保存；调用方仍会收到当前 write 的原始异常。
+    this.writeQueue = write.catch(() => undefined);
+    return write;
+  }
+
+  private async writeCredential(reference: string, value: string): Promise<void> {
     const state = await this.read();
     const normalized = value.trim();
     if (normalized) state.credentials[reference] = normalized;
     else delete state.credentials[reference];
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    const temporary = `${this.filePath}.${process.pid}.tmp`;
+    const temporary = `${this.filePath}.${process.pid}.${++this.temporarySequence}.tmp`;
     await fs.writeFile(
       temporary,
       `${JSON.stringify(state, null, 2)}\n`,

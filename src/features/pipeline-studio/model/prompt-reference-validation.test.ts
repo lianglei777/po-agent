@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GenerationCapability, GenerationRouteDto } from "@/contracts/generation";
 import type { CanvasPromptDocument, CanvasResourceRole } from "@/contracts/pipeline";
-import { promptReferenceRouteProblem, videoCapabilityForPrompt } from "./prompt-reference-validation";
+import { promptReferenceRouteProblem, videoCapabilityForPrompt, videoRouteSupportsPrompt } from "./prompt-reference-validation";
 
 describe("prompt reference route validation", () => {
   it("maps explicit frame roles to image-to-video slots", () => {
@@ -49,6 +49,22 @@ describe("prompt reference route validation", () => {
     expect(promptReferenceRouteProblem(promptWith([]), firstFrameRoute)).toMatchObject({
       kind: "missing-required",
     });
+  });
+
+  it("maps audio to a vendor-specific unique audio slot", () => {
+    const document = promptWith([["audio", "reference"]]);
+    const textVideoWithAudio = route("text-to-video", [
+      { key: "audioUrl", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
+    ]);
+    expect(promptReferenceRouteProblem(document, textVideoWithAudio)).toBeNull();
+    expect(videoRouteSupportsPrompt(document, textVideoWithAudio)).toBe(true);
+    expect(videoRouteSupportsPrompt(document, route("multimodal-to-video", [
+      { key: "audioUrls", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
+    ]))).toBe(true);
+    expect(promptReferenceRouteProblem(document, route("image-to-video", [
+      { key: "firstFrameUrl", label: "首帧", mediaType: "image", required: true, maxFiles: 1 },
+      { key: "drivingAudio", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
+    ]))).toMatchObject({ kind: "missing-required" });
   });
 });
 

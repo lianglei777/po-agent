@@ -301,9 +301,8 @@ describe("CanvasStudioService image AI", () => {
       inputSchema: {
         prompt: { required: true },
         parameters: [
-          { key: "resolution", label: "Resolution", type: "select", options: [{ label: "2k", value: "2k" }] },
-          { key: "width", label: "Width", type: "number", min: 240, max: 8192 },
-          { key: "height", label: "Height", type: "number", min: 240, max: 8192 },
+          { key: "size", label: "Size", type: "select", options: [{ label: "1280*720", value: "1280*720" }] },
+          { key: "promptExtend", label: "Prompt extend", type: "boolean" },
         ],
       },
     };
@@ -317,14 +316,14 @@ describe("CanvasStudioService image AI", () => {
     const result = await service.generate("image-node-1", {
       prompt: "A cinematic mountain landscape",
       routeId: "route-image-1",
-      settings: { aspectRatio: "16:9", resolution: "2k" },
+      settings: { size: "1280*720", promptExtend: false, aspectRatio: "16:9" },
     });
 
     expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
       capability: "text-to-image",
       routeId: "route-image-1",
       prompt: "A cinematic mountain landscape",
-      parameters: { resolution: "2k", width: 2048, height: 1152 },
+      parameters: { size: "1280*720", promptExtend: false },
       sourceRef: "pipeline:canvas:image-node-1",
     }));
     expect(result).toMatchObject({
@@ -334,7 +333,7 @@ describe("CanvasStudioService image AI", () => {
           params: {
             prompt: "A cinematic mountain landscape",
             routeId: "route-image-1",
-            settings: { aspectRatio: "16:9", resolution: "2k" },
+            settings: { size: "1280*720", promptExtend: false, aspectRatio: "16:9" },
           },
           taskInfo: { runId: "run-image-1", status: "processing", progressPercent: 0 },
         },
@@ -432,7 +431,11 @@ describe("CanvasStudioService image AI", () => {
       enabled: true,
       isDefault: true,
       capability: "image-to-image",
-      inputSchema: { prompt: { required: true }, parameters: [] },
+      inputSchema: {
+        prompt: { required: true },
+        parameters: [],
+        assets: [{ key: "imageUrls", label: "Reference images", mediaType: "image", maxFiles: 1 }],
+      },
     };
     const runs = {
       ensureSession: vi.fn(),
@@ -514,6 +517,10 @@ describe("CanvasStudioService video AI", () => {
       capability: "image-to-video",
       inputSchema: {
         prompt: { required: true },
+        assets: [
+          { key: "firstFrameUrl", label: "First frame", mediaType: "image", required: true, maxFiles: 1 },
+          { key: "lastFrameUrl", label: "Last frame", mediaType: "image", maxFiles: 1 },
+        ],
         parameters: [
           { key: "durationSeconds", label: "Duration", type: "select", options: [{ label: "5", value: 5 }] },
           { key: "conversionSlots", label: "Slots", type: "multi-select", options: [{ label: "All", value: "all" }] },
@@ -573,7 +580,10 @@ describe("CanvasStudioService video AI", () => {
       enabled: true,
       isDefault: false,
       capability: "image-to-video",
-      inputSchema: { prompt: { required: true } },
+      inputSchema: {
+        prompt: { required: true },
+        assets: [{ key: "lastFrameUrl", label: "Last frame", mediaType: "image", maxFiles: 1 }],
+      },
     };
     const runs = {
       ensureSession: vi.fn(),

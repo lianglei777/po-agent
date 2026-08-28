@@ -11,6 +11,7 @@ import type {
   ProviderSubmitResult,
 } from "@/server/ports/generation-provider";
 import { createGenerationProviderSnapshot } from "../generation-provider-snapshot";
+import { readLimitedResponse } from "../read-limited-response";
 import { QIANWEN_PROVIDER_ID } from "./qianwen-provider-constants";
 import {
   buildQianwenRequest,
@@ -87,22 +88,10 @@ export class QianwenAdapter implements GenerationProvider {
         502,
       );
     }
-    const length = response.headers.get("content-length");
-    if (length && Number(length) > DOWNLOAD_LIMIT_BYTES) {
-      throw new AppError(
-        "GENERATION_DOWNLOAD_TOO_LARGE",
-        "Qianwen output exceeds the 500 MiB download limit",
-        502,
-      );
-    }
-    const data = new Uint8Array(await response.arrayBuffer());
-    if (data.byteLength > DOWNLOAD_LIMIT_BYTES) {
-      throw new AppError(
-        "GENERATION_DOWNLOAD_TOO_LARGE",
-        "Qianwen output exceeds the 500 MiB download limit",
-        502,
-      );
-    }
+    const data = await readLimitedResponse(response, {
+      limitBytes: DOWNLOAD_LIMIT_BYTES,
+      tooLargeMessage: "Qianwen output exceeds the 500 MiB download limit",
+    });
     return {
       data,
       contentType: response.headers.get("content-type") ?? undefined,
@@ -131,6 +120,14 @@ export class QianwenAdapter implements GenerationProvider {
     try {
       value = text ? JSON.parse(text) : {};
     } catch {
+      if (!response.ok) {
+        throw new AppError(
+          "GENERATION_PROVIDER_ERROR",
+          `Qianwen request failed (${response.status})`,
+          response.status,
+          { submissionRejected: true },
+        );
+      }
       throw new AppError(
         "GENERATION_PROVIDER_PROTOCOL_ERROR",
         "Qianwen returned invalid JSON",
@@ -144,13 +141,21 @@ export class QianwenAdapter implements GenerationProvider {
           "GENERATION_PROVIDER_RATE_LIMITED",
           stringValue(root.message) ?? "Qianwen rate limit was reached",
           429,
-          { retryAfterMs: parseRetryAfter(response.headers.get("retry-after")) },
+          {
+            submissionRejected: true,
+            providerCode: stringValue(root.code),
+            retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
+          },
         );
       }
       throw new AppError(
         "GENERATION_PROVIDER_ERROR",
         stringValue(root.message) ?? `Qianwen request failed (${response.status})`,
         response.status,
+        {
+          submissionRejected: true,
+          providerCode: stringValue(root.code),
+        },
       );
     }
     return value;
@@ -160,6 +165,8 @@ export class QianwenAdapter implements GenerationProvider {
 function normalizeResponse(value: unknown, config: ReturnType<typeof resolveQianwenExecutionConfig>): ProviderSubmitResult {
   const root = objectValue(value);
   const output = objectValue(root.output);
+  const providerErrorCode = stringValue(output.code) ?? stringValue(root.code);
+  const providerErrorMessage = stringValue(output.message) ?? stringValue(root.message);
   const remoteTaskId = stringValue(output.task_id);
   const status = (stringValue(output.task_status) ?? "UNKNOWN").toUpperCase();
   const urls=config.resultProfile==="video-url-v1"
@@ -191,10 +198,10 @@ function normalizeResponse(value: unknown, config: ReturnType<typeof resolveQian
     errorCode: failed
       ? missingSucceededOutput || unknownStatus
         ? "GENERATION_PROVIDER_PROTOCOL_ERROR"
-        : stringValue(output.code) ?? `QIANWEN_TASK_${status}`
+        : providerErrorCode ?? `QIANWEN_TASK_${status}`
       : !remoteTaskId ? "GENERATION_PROVIDER_PROTOCOL_ERROR" : undefined,
     errorMessage: failed
-      ? stringValue(output.message) ?? (missingSucceededOutput
+      ? providerErrorMessage ?? (missingSucceededOutput
         ? "Qianwen succeeded response did not include an output URL"
         : unknownStatus
           ? `Qianwen returned an unsupported task status: ${status}`

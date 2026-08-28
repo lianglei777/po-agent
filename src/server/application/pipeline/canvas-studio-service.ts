@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
+import type { GenerationAssetSlot, GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import type {
   CanvasEdge,
@@ -18,6 +18,7 @@ import type { GenerationArtifact } from "@/server/domain/generation";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
 import type { LlmMessage, LlmPort } from "@/server/ports/llm-port";
+import { generationAssetSlotForReference } from "@/lib/generation-asset-slot";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { GenerationRunService, type GenerationRunView } from "@/server/application/content-generation/generation-run-service";
 import { ensurePipelineRunSession } from "./pipeline-session";
@@ -367,7 +368,6 @@ export class CanvasStudioService {
     const imageRefs = refs.imageList ?? [];
     const videoRefs = refs.videoList ?? [];
     const audioRefs = refs.audioList ?? [];
-    const generationAssets: GenerationInputAsset[] = [];
     let capability: "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video";
     const requestedRoute = data.params?.routeId
       ? await this.runs.getRoute(data.params.routeId)
@@ -378,46 +378,19 @@ export class CanvasStudioService {
 
     if (data.type === "image") {
       capability = imageRefs.length ? "image-to-image" : "text-to-image";
-      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
-    } else if (requestedVideoCapability === "text-to-video") {
+    } else if (requestedVideoCapability === "text-to-video"
+      || requestedVideoCapability === "image-to-video"
+      || requestedVideoCapability === "multimodal-to-video") {
       capability = requestedVideoCapability;
-      if (requestedRoute?.inputSchema.assets?.some((slot) => slot.key === "audioUrls")) {
-        generationAssets.push(...referenceAssets(audioRefs.slice(0, 1), "audioUrls"));
-      }
-    } else if (requestedVideoCapability === "image-to-video") {
-      capability = requestedVideoCapability;
-      const { firstFrame, lastFrame } = frameReferences(imageRefs);
-      generationAssets.push(...referenceAssets(firstFrame ? [firstFrame] : [], "firstFrameUrl"));
-      generationAssets.push(...referenceAssets(lastFrame ? [lastFrame] : [], "lastFrameUrl"));
-      if (requestedRoute?.inputSchema.assets?.some((slot) => slot.key === "audioUrls")) {
-        generationAssets.push(...referenceAssets(audioRefs.slice(0, 1), "audioUrls"));
-      }
-    } else if (requestedVideoCapability === "multimodal-to-video") {
-      capability = requestedVideoCapability;
-      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
-      generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
-      generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
     } else if (promptDocument && (videoRefs.length || audioRefs.length || imageRefs.some((reference) => reference.role === "reference"))) {
       capability = "multimodal-to-video";
-      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
-      generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
-      generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
     } else if (promptDocument && imageRefs.length >= 1) {
       capability = "image-to-video";
-      const firstFrame = imageRefs.find((reference) => reference.role === "first-frame");
-      const lastFrame = imageRefs.find((reference) => reference.role === "last-frame");
-      generationAssets.push(...referenceAssets(firstFrame ? [firstFrame] : [], "firstFrameUrl"));
-      generationAssets.push(...referenceAssets(lastFrame ? [lastFrame] : [], "lastFrameUrl"));
     } else if (!promptDocument && (videoRefs.length || audioRefs.length || imageRefs.length > 2)) {
       // 旧画布没有富文本提示词，继续按连线数量推断槽位，避免升级后改变已有工作流语义。
       capability = "multimodal-to-video";
-      generationAssets.push(...referenceAssets(imageRefs, "imageUrls"));
-      generationAssets.push(...referenceAssets(videoRefs, "videoUrls"));
-      generationAssets.push(...referenceAssets(audioRefs, "audioUrls"));
     } else if (!promptDocument && imageRefs.length >= 1) {
       capability = "image-to-video";
-      generationAssets.push(...referenceAssets(imageRefs.slice(0, 1), "firstFrameUrl"));
-      generationAssets.push(...referenceAssets(imageRefs.slice(1, 2), "lastFrameUrl"));
     } else {
       capability = "text-to-video";
     }
@@ -430,6 +403,9 @@ export class CanvasStudioService {
       const route = requestedRoute?.enabled && requestedRoute.capability === capability
         ? requestedRoute
         : (await this.runs.listRoutes()).find((candidate) => candidate.enabled && candidate.isDefault && candidate.capability === capability);
+      const generationAssets = route
+        ? generationAssetsForRoute(referencesFromParams(data.params), route.inputSchema.assets ?? [], !promptDocument)
+        : [];
       const parameters = generationParameters(data, route?.inputSchema.parameters);
       const result = await this.runs.createRun({
         sessionId: `pipeline:${node.projectId}`,
@@ -1281,17 +1257,24 @@ function referenceAssets(refs: CanvasMediaReference[], slot: string): Generation
   return assets;
 }
 
-function frameReferences(refs: CanvasMediaReference[]): {
-  firstFrame?: CanvasMediaReference;
-  lastFrame?: CanvasMediaReference;
-} {
-  const explicitFirst = refs.find((reference) => reference.role === "first-frame");
-  const explicitLast = refs.find((reference) => reference.role === "last-frame");
-  const unassigned = refs.filter((reference) => reference.role === "reference");
-  // 明确标记的尾帧不能回退成首帧；只有旧画布中的普通引用按顺序补齐空槽位。
-  const firstFrame = explicitFirst ?? unassigned[0];
-  const lastFrame = explicitLast ?? unassigned.find((reference) => reference !== firstFrame);
-  return { firstFrame, lastFrame };
+function generationAssetsForRoute(
+  references: CanvasMediaReference[],
+  slots: GenerationAssetSlot[],
+  legacyFrameFallback: boolean,
+): GenerationInputAsset[] {
+  const assets = references.flatMap((reference) => {
+    const slot = generationAssetSlotForReference(slots, reference);
+    return slot ? referenceAssets([reference], slot.key) : [];
+  });
+  if (!legacyFrameFallback || assets.length || !references.some((reference) => reference.mediaType === "image")) {
+    return assets;
+  }
+  // 旧画布没有语义角色；仅为标准首尾帧槽按原顺序保留兼容映射。
+  const images = references.filter((reference) => reference.mediaType === "image");
+  return [
+    ...referenceAssets(images.slice(0, 1), "firstFrameUrl"),
+    ...referenceAssets(images.slice(1, 2), "lastFrameUrl"),
+  ].filter((asset) => slots.some((slot) => slot.key === asset.slot));
 }
 
 function referenceParams(references: CanvasMediaReference[]): Pick<CanvasGenerationParams, "textList" | "imageList" | "videoList" | "audioList" | "mixedListOrder"> {
@@ -1365,11 +1348,6 @@ function effectivePrompt(data: CanvasNodeData): string {
 
 function generationParameters(data: CanvasNodeData, fields?: GenerationParameterField[]): Record<string, JsonValue> | undefined {
   const settings = { ...(data.params?.settings ?? {}), ...(data.params?.advancedSettings ?? {}) };
-  if (data.type === "image") {
-    const dimensions = dimensionsForRatio(String(settings.aspectRatio ?? "1:1"), String(settings.resolution ?? "2k"));
-    settings.width = dimensions.width;
-    settings.height = dimensions.height;
-  }
   const definitions = fields ? new Map(fields.map((field) => [field.key, field])) : null;
   const parameters: Record<string, JsonValue> = {};
   for (const [key, value] of Object.entries(settings)) {
@@ -1387,16 +1365,6 @@ function parameterValueIsValid(field: GenerationParameterField, value: unknown) 
   if (field.type === "boolean") return typeof value === "boolean";
   if (field.type === "number") return typeof value === "number" && (field.min === undefined || value >= field.min) && (field.max === undefined || value <= field.max);
   return typeof value === "string";
-}
-
-function dimensionsForRatio(ratio: string, resolution: string) {
-  const long = resolution.toLowerCase() === "1k" ? 1024 : 2048;
-  const pairs: Record<string, [number, number]> = {
-    "16:9": [16, 9], "9:16": [9, 16], "4:3": [4, 3], "3:4": [3, 4], "1:1": [1, 1],
-  };
-  const [w, h] = pairs[ratio] ?? [1, 1];
-  if (w >= h) return { width: long, height: Math.max(240, Math.round((long * h / w) / 8) * 8) };
-  return { width: Math.max(240, Math.round((long * w / h) / 8) * 8), height: long };
 }
 
 function groupRunnable(data: CanvasNodeData) {

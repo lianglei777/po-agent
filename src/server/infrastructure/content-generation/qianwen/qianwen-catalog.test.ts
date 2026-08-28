@@ -10,7 +10,12 @@ describe("Qianwen catalog", () => {
   it("registers synchronous and asynchronous image profiles", () => {
     const routes=createQianwenRoutes("2026-08-27T00:00:00.000Z");
     expect(routes.map(route=>route.id)).toEqual(expect.arrayContaining(["qianwen-z-image-text-to-image","qianwen-wan-2-6-text-to-image"]));
-    expect(routes.find(route=>route.id==="qianwen-z-image-text-to-image")).toMatchObject({capability:"text-to-image",inputSchema:{prompt:{maxLength:800}},adapterConfig:{submitMode:"sync",vendorModel:"z-image-turbo"}});
+    const zImage=routes.find(route=>route.id==="qianwen-z-image-text-to-image")!;
+    expect(zImage).toMatchObject({capability:"text-to-image",inputSchema:{prompt:{maxLength:800}},adapterConfig:{submitMode:"sync",vendorModel:"z-image-turbo"}});
+    expect(zImage.inputSchema.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({key:"size",presentation:{control:"ratio-grid",optionVisual:"dimensions",summary:true}}),
+      expect.objectContaining({key:"promptExtend",presentation:{control:"segmented",summary:true}}),
+    ]));
     expect(routes.find(route=>route.id==="qianwen-wan-2-6-text-to-image")).toMatchObject({defaults:{imageCount:1,size:"1280*1280"},adapterConfig:{submitMode:"async-task",pollIntervalMs:5000}});
   });
 
@@ -71,7 +76,7 @@ describe("Qianwen catalog", () => {
       capability: "text-to-video",
       enabled: false,
       isDefault: false,
-      revision: 2,
+      revision: 3,
       credentialRef: "qianwen:default",
       defaults: {
         resolution: "1080P",

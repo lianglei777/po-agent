@@ -1,32 +1,17 @@
-import type {
-  GenerationParameterField,
-  GenerationRouteDto,
-  JsonValue,
-} from "@/contracts/generation";
-
-export const IMAGE_ASPECT_RATIO_FIELD: GenerationParameterField = {
-  key: "aspectRatio",
-  label: "画面比例",
-  type: "select",
-  defaultValue: "1:1",
-  options: ["1:1", "16:9", "9:16", "4:3", "3:4"].map((value) => ({ label: value, value })),
-};
+import type { GenerationParameterField, GenerationRouteDto, JsonValue } from "@/contracts/generation";
+import { generationOptionVisual } from "@/components/generation/generation-parameter-presentation";
 
 export function composerParameterFields(
   route: GenerationRouteDto | undefined,
-  supplements: GenerationParameterField[] = [],
 ) {
-  const declared = route?.inputSchema.parameters ?? [];
-  const declaredKeys = new Set(declared.map((field) => field.key));
-  return [...declared, ...supplements.filter((field) => !declaredKeys.has(field.key))];
+  return route?.inputSchema.parameters ?? [];
 }
 
 export function reconcileComposerSettings(
   route: GenerationRouteDto,
   previous: Record<string, JsonValue> = {},
-  supplements: GenerationParameterField[] = [],
 ): Record<string, JsonValue> {
-  const fields = composerParameterFields(route, supplements);
+  const fields = composerParameterFields(route);
   return Object.fromEntries(fields.flatMap((field) => {
     const previousValue = previous[field.key];
     if (isSupportedValue(field, previousValue)) return [[field.key, previousValue]];
@@ -38,34 +23,30 @@ export function reconcileComposerSettings(
 export function generationSettingsSummary(
   fields: GenerationParameterField[],
   values: Record<string, JsonValue>,
-  labels: { audioOn: string; audioOff: string; autoDuration: string },
+  labels: {
+    autoDuration: string;
+    disabled: string;
+    enabled: string;
+    fieldLabels: Readonly<Record<string, string>>;
+  },
 ) {
-  const preferredKeys = [
-    "aspectRatio",
-    "resolution",
-    "durationSeconds",
-    "generateAudio",
-    "outputFormat",
-    "bitrateMode",
-  ];
-  return preferredKeys.flatMap((key) => {
-    const field = fields.find((candidate) => candidate.key === key);
-    const value = values[key];
-    if (!field || value === undefined) return [];
-    if (key === "generateAudio") return [value === true ? labels.audioOn : labels.audioOff];
-    if (key === "durationSeconds") {
+  return fields.filter((field) => field.presentation?.summary).flatMap((field) => {
+    const value = values[field.key];
+    if (value === undefined || value === "") return [];
+    const label = labels.fieldLabels[field.key] ?? field.label;
+    if (field.type === "boolean") return [`${label}${value === true ? labels.enabled : labels.disabled}`];
+    if (field.key === "durationSeconds") {
       return [value === "auto" || value === -1 ? labels.autoDuration : `${String(value)}s`];
     }
-    return [String(value).toUpperCase()];
+    if (field.presentation?.optionVisual === "dimensions") {
+      const visual = generationOptionVisual(value as string | number | boolean);
+      return visual ? [visual.ratio, visual.dimensions] : [String(value)];
+    }
+    if (field.presentation?.optionVisual === "ratio") return [String(value)];
+    const option = field.options?.find((candidate) => candidate.value === value);
+    if (field.type === "number") return [`${label} ${String(value)}`];
+    return [String(option?.label ?? value).toUpperCase()];
   });
-}
-
-export function canvasVisibleParameterFields(fields: GenerationParameterField[]) {
-  const usesDerivedDimensions = fields.some((field) => field.key === "aspectRatio")
-    && fields.some((field) => field.key === "resolution");
-  if (!usesDerivedDimensions) return fields;
-  // 画布按画幅与分辨率计算最终尺寸，避免展示随后会被服务端覆盖的宽高输入。
-  return fields.filter((field) => field.key !== "width" && field.key !== "height");
 }
 
 function isSupportedValue(field: GenerationParameterField, value: JsonValue | undefined) {

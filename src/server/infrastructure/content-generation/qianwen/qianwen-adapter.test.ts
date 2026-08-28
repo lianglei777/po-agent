@@ -155,6 +155,26 @@ describe("QianwenAdapter", () => {
     });
   });
 
+  it("preserves a top-level business error returned with HTTP 200", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      request_id: "request-error",
+      code: "InvalidParameter",
+      message: "invalid prompt",
+    }));
+
+    await expect(new QianwenAdapter(fetcher).submit({
+      operation: ROUTE.providerOperation,
+      executionConfig: ROUTE.adapterConfig,
+      generation: { prompt: "test" },
+      assets: [],
+      credential: "secret-key",
+    })).resolves.toMatchObject({
+      state: "failed",
+      errorCode: "InvalidParameter",
+      errorMessage: "invalid prompt",
+    });
+  });
+
   it("rejects undocumented task statuses instead of polling forever", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       output: {
@@ -250,6 +270,10 @@ describe("QianwenAdapter", () => {
     })).rejects.toMatchObject({
       code: "GENERATION_PROVIDER_ERROR",
       message: "invalid API key",
+      details: {
+        submissionRejected: true,
+        providerCode: "InvalidApiKey",
+      },
     });
 
     const rateLimited = new QianwenAdapter(vi.fn<typeof fetch>(async () => jsonResponse(

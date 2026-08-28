@@ -18,6 +18,13 @@ export interface GenerationParameterOption {
   value: string | number | boolean;
 }
 
+export interface GenerationParameterPresentation {
+  control?: "select" | "segmented" | "ratio-grid" | "slider" | "switch" | "number-input" | "text-input";
+  optionVisual?: "plain" | "ratio" | "dimensions";
+  summary?: boolean;
+  unit?: string;
+}
+
 export interface GenerationParameterField {
   key: string;
   label: string;
@@ -31,6 +38,8 @@ export interface GenerationParameterField {
   minLength?: number;
   maxLength?: number;
   format?: "url";
+  /** 仅描述供应商无关的交互呈现；校验和请求映射仍由字段本身与 adapter 决定。 */
+  presentation?: GenerationParameterPresentation;
 }
 
 export type GenerationInputConstraint =

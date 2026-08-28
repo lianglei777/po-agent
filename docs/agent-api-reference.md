@@ -2593,7 +2593,7 @@ Content-Type: application/json
 
 总开关或对应 Route 关闭时，服务端拒绝创建新 Run。开关只影响新任务，不取消已提交任务。`:providerId` 必须存在于服务端受信 Provider Directory；未知值返回 `404 GENERATION_PROVIDER_NOT_FOUND`。现有 `/api/generation/providers/runninghub` URL 保持兼容。
 
-`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”、“多个素材槽合计不超过指定数量”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub、千问或其他供应商的原始请求字段。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
+`inputSchema` 定义 Prompt 规则、语义参数、素材槽位和组合约束。Prompt 规则可包含 `required`、`minLength` 和 `maxLength`；文本参数还可声明长度和公网 HTTPS URL 格式。`constraints` 当前支持“多个素材槽至少提供一个”、“多个素材槽合计不超过指定数量”和“参数互斥”。客户端提示只用于交互，服务端会在创建付费 Run 前再次校验。客户端必须按这些稳定语义字段构建输入，不得依赖 RunningHub、千问或其他供应商的原始请求字段。参数字段可以携带可选的 `presentation`，声明 `control`、`optionVisual`、`summary` 和 `unit` 等供应商无关展示提示；该元数据不参与校验或供应商请求映射，未知展示方式必须回退到标准表单控件。参数字段不包含 `advanced` 展示分级；确认界面直接展示 Route 声明的全部参数。服务端按 `inputSchema.parameters[].defaultValue < route.defaults < request.parameters` 的优先级解析参数，返回和持久化的 Run input 包含所有已解析默认值。
 
 Wan 3.0 参考生视频的 `fileUrl` 与 `linkUrl` 互斥，只接受不含凭证的公网 HTTPS URL。RunningHub 文档允许部分参考视频达到 100 MB，但 Po Agent 当前文件读取和上传链路统一限制为 50 MiB；Route Schema 返回的是应用实际可接受的上限。
 
@@ -2677,7 +2677,7 @@ created | uploading | submitting | submitted | polling | downloading |
 succeeded | failed | submission_unknown | cancelled
 ```
 
-`submission_unknown` 表示提交可能已到达供应商但本地未收到确认，Worker 不会自动重提，以避免重复计费。
+`submission_unknown` 表示提交可能已到达供应商但本地未收到确认，Worker 不会自动重提，以避免重复计费。已收到的 HTTP 拒绝或供应商业务错误属于确定性失败，不会进入该状态，并尽可能保留供应商错误码和消息。
 
 `awaiting_confirmation` 表示 Agent 已解析生成意图并持久化 Run，但尚未创建 Provider Job，也不会被 Worker 领取。确认接口只接受该状态，Body 为 `{ "prompt": "...", "parameters": { ... } }`；服务端按 Run 绑定 Route 的当前 `inputSchema` 重新校验参数，并原子切换为 `queued`、创建首个 Provider Job。重复确认返回当前 Run，不会创建第二个 Job；Run 已取消时返回 `409 GENERATION_RUN_NOT_CONFIRMABLE`。
 
@@ -3053,10 +3053,10 @@ interface GenerateCanvasNodeResponse {
 
 - 图片节点没有上游图片参考时使用 `text-to-image` Route。
 - 对已有图片提交 `createNewNode: true` 时，服务端保留源节点，在其右侧寻找空位创建结果节点，以源图片作为 `image-to-image` 输入，并返回两节点之间的来源连线。失败或取消只影响新节点。
-- 视频提示词中标记为 `first-frame` / `last-frame` 的图片分别绑定 `firstFrameUrl` / `lastFrameUrl`，使用 `image-to-video` Route；普通图片、视频或音频参考分别绑定 `imageUrls` / `videoUrls` / `audioUrls`，使用 `multimodal-to-video` Route；无媒体引用时使用 `text-to-video` Route。
+- 视频提示词中标记为 `first-frame` / `last-frame` 的图片优先绑定 Route Schema 声明的对应语义槽；普通图片、视频或音频参考按媒体类型绑定 Schema 中唯一或标准命名的槽位。最终 capability 以用户选定且可用的 Route 为准；未选 Route 时才按引用类型选择默认能力。
 - Route Schema 的必填素材槽、最大文件数和全部参数字段会在 Composer 中即时校验；服务端仍会再次校验请求，且只把 Schema 声明并通过类型/范围检查的参数转发给 Provider。
 - `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
-- 图片比例会转换为 Route 的 `width` 和 `height` 参数，生成配置与任务状态同时持久化到当前节点。
+- 图片和视频参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态同时持久化到当前节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。
 - 生成完成或失败后通过项目 SSE 通知客户端重新读取 Canvas Snapshot。
 

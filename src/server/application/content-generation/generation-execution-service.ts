@@ -157,6 +157,15 @@ export class GenerationExecutionService {
         credential,
       });
     } catch (error) {
+      if (isConfirmedSubmissionFailure(error)) {
+        await this.fail(
+          job,
+          run,
+          errorCode(error, "GENERATION_PROVIDER_ERROR"),
+          errorMessage(error),
+        );
+        return;
+      }
       const uncertain = {
         ...job,
         status: "submission_unknown" as const,
@@ -297,6 +306,7 @@ export class GenerationExecutionService {
         let checksum: string | undefined;
         if (output.url) {
           const downloaded = await provider.download(output.url);
+          assertOutputContentType(output.outputType, downloaded.contentType);
           const kind = artifactKind(
             output.outputType,
             downloaded.contentType,
@@ -526,7 +536,9 @@ function isTerminal(status: ProviderJob["status"]): boolean {
 }
 
 function errorCode(error: unknown, fallback: string): string {
-  return error instanceof AppError ? error.code : fallback;
+  if (!(error instanceof AppError)) return fallback;
+  const providerCode = detailString(error.details, "providerCode");
+  return providerCode ?? error.code;
 }
 
 function errorMessage(error: unknown): string {
@@ -547,6 +559,23 @@ function retryAfterMs(error:unknown):number|undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+function isConfirmedSubmissionFailure(error: unknown): boolean {
+  return error instanceof AppError
+    && detailBoolean(error.details, "submissionRejected") === true;
+}
+
+function detailString(details: unknown, key: string): string | undefined {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return undefined;
+  const value = (details as Record<string, unknown>)[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function detailBoolean(details: unknown, key: string): boolean | undefined {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return undefined;
+  const value = (details as Record<string, unknown>)[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function artifactKind(
   outputType?: string,
   contentType?: string,
@@ -558,4 +587,40 @@ function artifactKind(
   if (value.includes("video") || /\b(mp4|mov|webm)\b/.test(value)) return "video";
   if (value.includes("audio") || /\b(mp3|wav|m4a)\b/.test(value)) return "audio";
   return "image";
+}
+
+function assertOutputContentType(
+  outputType: string | undefined,
+  contentType: string | undefined,
+): void {
+  const expected = expectedMediaFamily(outputType);
+  if (!expected) return;
+  const actual = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (actual?.startsWith(`${expected}/`)) return;
+  throw new AppError(
+    "GENERATION_PROVIDER_PROTOCOL_ERROR",
+    `Generation output content type does not match ${outputType ?? "the expected media type"}`,
+    502,
+  );
+}
+
+function expectedMediaFamily(outputType: string | undefined): "image" | "video" | "audio" | undefined {
+  switch (outputType?.toLowerCase()) {
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "webp":
+    case "gif":
+      return "image";
+    case "mp4":
+    case "mov":
+    case "webm":
+      return "video";
+    case "mp3":
+    case "wav":
+    case "m4a":
+      return "audio";
+    default:
+      return undefined;
+  }
 }

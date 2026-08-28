@@ -10,6 +10,7 @@ import type {
   ProviderSubmitResult,
 } from "@/server/ports/generation-provider";
 import { createGenerationProviderSnapshot } from "../generation-provider-snapshot";
+import { readLimitedResponse } from "../read-limited-response";
 import { RUNNINGHUB_PROVIDER_ID } from "./runninghub-provider-constants";
 import {
   buildRunningHubRequest,
@@ -122,16 +123,11 @@ export class RunningHubAdapter implements GenerationProvider {
         502,
       );
     }
-    const length = response.headers.get("content-length");
-    if (length && Number(length) > 500 * 1024 * 1024) {
-      throw new AppError(
-        "GENERATION_DOWNLOAD_TOO_LARGE",
-        "RunningHub output exceeds the 500 MiB download limit",
-        502,
-      );
-    }
     return {
-      data: new Uint8Array(await response.arrayBuffer()),
+      data: await readLimitedResponse(response, {
+        limitBytes: 500 * 1024 * 1024,
+        tooLargeMessage: "RunningHub output exceeds the 500 MiB download limit",
+      }),
       contentType: response.headers.get("content-type") ?? undefined,
     };
   }
@@ -159,6 +155,14 @@ export class RunningHubAdapter implements GenerationProvider {
     try {
       value = text ? JSON.parse(text) : {};
     } catch {
+      if (!response.ok) {
+        throw new AppError(
+          "GENERATION_PROVIDER_ERROR",
+          `RunningHub request failed (${response.status})`,
+          response.status,
+          { submissionRejected: true },
+        );
+      }
       throw new AppError(
         "GENERATION_PROVIDER_PROTOCOL_ERROR",
         "RunningHub returned invalid JSON",
@@ -172,7 +176,10 @@ export class RunningHubAdapter implements GenerationProvider {
           "GENERATION_PROVIDER_RATE_LIMITED",
           stringValue(record.errorMessage) ?? stringValue(record.message) ?? "RunningHub rate limit was reached",
           429,
-          { retryAfterMs: parseRetryAfter(response.headers.get("retry-after")) },
+          {
+            submissionRejected: true,
+            retryAfterMs: parseRetryAfter(response.headers.get("retry-after")),
+          },
         );
       }
       throw new AppError(
@@ -181,6 +188,7 @@ export class RunningHubAdapter implements GenerationProvider {
           stringValue(record.message) ??
           `RunningHub request failed (${response.status})`,
         response.status,
+        { submissionRejected: true },
       );
     }
     return value;

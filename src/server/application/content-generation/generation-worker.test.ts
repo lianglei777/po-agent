@@ -139,6 +139,34 @@ describe("GenerationWorker", () => {
     });
   });
 
+  it("rejects a downloaded body whose content type does not match the output", async () => {
+    vi.mocked(provider.download).mockResolvedValueOnce({
+      data: new TextEncoder().encode("provider error"),
+      contentType: "application/json",
+    });
+    const created = await runService.createRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      prompt: "rainy bamboo forest",
+      source: "api",
+      idempotencyKey: "mismatched-download-content-type",
+    });
+
+    await worker.runOnce();
+    now = new Date("2026-08-06T00:00:05.000Z");
+    await worker.runOnce();
+
+    await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
+      run: {
+        status: "failed",
+        errorCode: "GENERATION_PROVIDER_PROTOCOL_ERROR",
+      },
+      jobs: [{ status: "failed" }],
+      artifacts: [],
+    });
+    expect(files.saveOutput).not.toHaveBeenCalled();
+  });
+
   it("persists Retry-After and exponential backoff across poll failures", async () => {
     const created=await runService.createRun({sessionId:"session-1",capability:"text-to-video",prompt:"backoff",source:"api",idempotencyKey:"backoff"});
     await worker.runOnce();
@@ -242,6 +270,36 @@ describe("GenerationWorker", () => {
       }],
     });
     expect(provider.submit).toHaveBeenCalledOnce();
+  });
+
+  it("records a confirmed provider rejection without marking submission unknown", async () => {
+    vi.mocked(provider.submit).mockRejectedValueOnce(new AppError(
+      "GENERATION_PROVIDER_ERROR",
+      "invalid API key",
+      401,
+      { submissionRejected: true, providerCode: "InvalidApiKey" },
+    ));
+    const created = await runService.createRun({
+      sessionId: "session-1",
+      capability: "text-to-video",
+      prompt: "test",
+      source: "api",
+      idempotencyKey: "confirmed-provider-rejection",
+    });
+
+    await worker.runOnce();
+
+    await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
+      run: {
+        status: "failed",
+        errorCode: "InvalidApiKey",
+        errorMessage: "invalid API key",
+      },
+      jobs: [{
+        status: "failed",
+        lastErrorCode: "InvalidApiKey",
+      }],
+    });
   });
 
   it("rejects an asset that exceeds the selected Route limit before upload", async () => {
