@@ -174,6 +174,37 @@ describe("parseGenerateTextNodeRequest", () => {
     })).toThrow("videoMetadata is invalid");
   });
 
+  it("validates persisted audio metadata", () => {
+    const audioNode = {
+      ...node,
+      type: "audio" as const,
+      data: {
+        type: "audio" as const,
+        name: "Narration",
+        action: "audio_generate",
+        audioMetadata: {
+          durationSeconds: 18.4,
+          format: "MP3",
+          sampleRateHz: 48_000,
+          channelCount: 2,
+        },
+      },
+    };
+    expect(parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "audio-metadata",
+      mutations: [{ type: "node.create", node: audioNode }],
+    }).mutations).toHaveLength(1);
+    expect(() => parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "invalid-audio-metadata",
+      mutations: [{
+        type: "node.create",
+        node: { ...audioNode, data: { ...audioNode.data, audioMetadata: { durationSeconds: 2, sampleRateHz: 0 } } },
+      }],
+    })).toThrow("audioMetadata is invalid");
+  });
+
   it("validates server-owned generation provenance shape", () => {
     const imageNode = {
       ...node,

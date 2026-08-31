@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
 import type { CanvasMutationBatch, CanvasNode, CanvasPromptDocument, PipelineProject } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
@@ -124,7 +125,7 @@ describe("CanvasStudioService text AI", () => {
   });
 });
 
-describe("CanvasStudioService local image upload", () => {
+describe("CanvasStudioService local media upload", () => {
   it("fills an existing empty image node instead of creating another node", async () => {
     let currentNode = imageNode();
     const repository = {
@@ -997,6 +998,21 @@ describe("CanvasStudioService video AI", () => {
       prompt: "A quiet product image",
     }));
     expect(runs.createRun).not.toHaveBeenCalled();
+  });
+
+  it("rejects an audio file larger than 10 MiB before writing an asset", async () => {
+    const assets = { upload: vi.fn() } as unknown as GenerationAssetService;
+    const service = createService({} as PipelineRepository, {} as LlmPort, {} as GenerationRunService, assets);
+
+    await expect(service.upload({
+      projectId: "project-1",
+      name: "narration.mp3",
+      contentType: "audio/mpeg",
+      data: new Uint8Array(MAX_CANVAS_AUDIO_UPLOAD_BYTES + 1),
+      positionX: 0,
+      positionY: 0,
+    })).rejects.toMatchObject({ code: "FILE_TOO_LARGE", status: 413 });
+    expect(assets.upload).not.toHaveBeenCalled();
   });
 });
 

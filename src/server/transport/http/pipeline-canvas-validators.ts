@@ -205,6 +205,32 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
     if (value.type !== "text") throw validationError(`mutations[${index}].node.data.textDocument is only valid for text nodes`);
     validateTextDocument(value.textDocument, `mutations[${index}].node.data.textDocument`);
   }
+  if (value.audioMetadata !== undefined) {
+    if (value.type !== "audio" || !isRecord(value.audioMetadata)) {
+      throw validationError(`mutations[${index}].node.data.audioMetadata is invalid`);
+    }
+    const metadata = value.audioMetadata;
+    if (!Number.isFinite(metadata.durationSeconds)
+      || Number(metadata.durationSeconds) < 0
+      || Number(metadata.durationSeconds) > 86_400
+      || (metadata.format !== undefined && (
+        typeof metadata.format !== "string"
+        || !metadata.format.trim()
+        || metadata.format.length > 32
+      ))
+      || (metadata.sampleRateHz !== undefined && (
+        !Number.isInteger(metadata.sampleRateHz)
+        || Number(metadata.sampleRateHz) < 1_000
+        || Number(metadata.sampleRateHz) > 384_000
+      ))
+      || (metadata.channelCount !== undefined && (
+        !Number.isInteger(metadata.channelCount)
+        || Number(metadata.channelCount) < 1
+        || Number(metadata.channelCount) > 32
+      ))) {
+      throw validationError(`mutations[${index}].node.data.audioMetadata is invalid`);
+    }
+  }
   if (value.videoMetadata !== undefined) {
     if (value.type !== "video" || !isRecord(value.videoMetadata)) {
       throw validationError(`mutations[${index}].node.data.videoMetadata is invalid`);

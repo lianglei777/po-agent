@@ -32,3 +32,16 @@ export function videoNodeToolbarPresentation(input: {
     showGenerateAction: input.hasVideo,
   };
 }
+
+export function audioNodePresentation(input: {
+  selected: boolean;
+  dragging: boolean;
+  mediaDeferred: boolean;
+  hasAudio: boolean;
+}) {
+  return {
+    showToolbar: input.selected && !input.dragging && !input.mediaDeferred && input.hasAudio,
+    showUploadAction: input.selected && !input.dragging && !input.hasAudio,
+    analyzeWaveform: input.selected && !input.mediaDeferred && input.hasAudio,
+  };
+}

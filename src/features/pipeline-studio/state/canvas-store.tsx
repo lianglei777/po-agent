@@ -570,7 +570,7 @@ function makeCanvasNode(projectId: string, type: CanvasMediaType, position: { x:
     text: { width: 320, height: 220 },
     image: { width: 360, height: 300 },
     video: { width: 380, height: 320 },
-    audio: { width: 360, height: 160 },
+    audio: { width: 360, height: 180 },
   };
   const config = defaults[type];
   return {

@@ -265,6 +265,13 @@ export interface CanvasVideoMetadata {
   height: number;
 }
 
+export interface CanvasAudioMetadata {
+  durationSeconds: number;
+  format?: string;
+  sampleRateHz?: number;
+  channelCount?: number;
+}
+
 export interface CanvasVideoSelection {
   runId: string;
   artifactId: string;
@@ -322,6 +329,7 @@ export interface CanvasNodeData {
   workspaceFile?: CanvasWorkspaceFileRef;
   params?: CanvasGenerationParams;
   taskInfo?: CanvasNodeTaskInfo;
+  audioMetadata?: CanvasAudioMetadata;
   videoMetadata?: CanvasVideoMetadata;
   videoSelection?: CanvasVideoSelection;
   generationProvenance?: CanvasGenerationProvenance;

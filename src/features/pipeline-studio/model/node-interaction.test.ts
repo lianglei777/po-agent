@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasNodeDragHandle, imageNodePresentation, videoNodeToolbarPresentation } from "./node-interaction";
+import { audioNodePresentation, canvasNodeDragHandle, imageNodePresentation, videoNodeToolbarPresentation } from "./node-interaction";
 
 describe("canvas node interaction", () => {
   it("allows visual nodes to be dragged from their non-control body", () => {
@@ -45,5 +45,18 @@ describe("canvas node interaction", () => {
       hasVideo: false,
       hasHistory: false,
     }).showToolbar).toBe(false);
+  });
+
+  it("shows audio asset actions only for one selected stable node", () => {
+    expect(audioNodePresentation({ selected: true, dragging: false, mediaDeferred: false, hasAudio: true }))
+      .toEqual({ showToolbar: true, showUploadAction: false, analyzeWaveform: true });
+    expect(audioNodePresentation({ selected: true, dragging: false, mediaDeferred: false, hasAudio: false }))
+      .toEqual({ showToolbar: false, showUploadAction: true, analyzeWaveform: false });
+    expect(audioNodePresentation({ selected: true, dragging: true, mediaDeferred: false, hasAudio: true }).showToolbar)
+      .toBe(false);
+    expect(audioNodePresentation({ selected: true, dragging: false, mediaDeferred: true, hasAudio: true }).showToolbar)
+      .toBe(false);
+    expect(audioNodePresentation({ selected: false, dragging: false, mediaDeferred: false, hasAudio: true }).analyzeWaveform)
+      .toBe(false);
   });
 });

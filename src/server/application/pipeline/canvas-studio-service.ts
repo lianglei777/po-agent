@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { GenerationAssetSlot, GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
+import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 import type {
   CanvasEdge,
@@ -209,6 +210,9 @@ export class CanvasStudioService {
   }): Promise<CanvasNode> {
     const type = mediaTypeForMime(input.contentType, input.name);
     if (!type) throw new AppError("VALIDATION_ERROR", "Only image, video, audio, or text files can be added to the canvas", 400);
+    if (type === "audio" && input.data.byteLength > MAX_CANVAS_AUDIO_UPLOAD_BYTES) {
+      throw new AppError("FILE_TOO_LARGE", "Audio files must not exceed 10 MiB", 413);
+    }
     const targetNode = input.nodeId ? await this.requireNode(input.nodeId) : null;
     if (targetNode && (targetNode.projectId !== input.projectId || targetNode.data?.type !== type)) {
       throw new AppError("VALIDATION_ERROR", "The uploaded file type does not match the target canvas node", 400);
@@ -1706,7 +1710,7 @@ function defaultNodeName(type: CanvasMediaType) {
 }
 
 function defaultSize(type: CanvasMediaType) {
-  return type === "text" ? { width: 320, height: 220 } : type === "audio" ? { width: 360, height: 150 } : { width: 350, height: 350 };
+  return type === "text" ? { width: 320, height: 220 } : type === "audio" ? { width: 360, height: 180 } : { width: 350, height: 350 };
 }
 
 function isMediaType(value: string): value is CanvasMediaType {

@@ -68,6 +68,7 @@ export interface StoryboardFrame {
 }
 
 export type CanvasMediaType = "text" | "image" | "video" | "audio";
+export const MAX_CANVAS_AUDIO_UPLOAD_BYTES = 10 * 1024 * 1024;
 export type CanvasResourceSourceType = "canvas-node" | "asset";
 export type CanvasResourceRole = "reference" | "first-frame" | "last-frame";
 
@@ -121,6 +122,13 @@ export interface CanvasVideoMetadata {
   durationSeconds: number;
   width: number;
   height: number;
+}
+
+export interface CanvasAudioMetadata {
+  durationSeconds: number;
+  format?: string;
+  sampleRateHz?: number;
+  channelCount?: number;
 }
 
 export interface CanvasVideoSelection {
@@ -192,6 +200,7 @@ export interface CanvasNodeData {
   workspaceFile?: CanvasWorkspaceFileRef;
   params?: CanvasGenerationParams;
   taskInfo?: CanvasNodeTaskInfo;
+  audioMetadata?: CanvasAudioMetadata;
   videoMetadata?: CanvasVideoMetadata;
   videoSelection?: CanvasVideoSelection;
   generationProvenance?: CanvasGenerationProvenance;
