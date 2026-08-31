@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { audioNodePresentation, canvasNodeDragHandle, imageNodePresentation, videoNodeToolbarPresentation } from "./node-interaction";
+import { audioNodePresentation, imageNodePresentation, videoNodeToolbarPresentation } from "./node-interaction";
 
 describe("canvas node interaction", () => {
-  it("allows visual nodes to be dragged from their non-control body", () => {
-    expect(canvasNodeDragHandle("text")).toBeUndefined();
-    expect(canvasNodeDragHandle("image")).toBeUndefined();
-    expect(canvasNodeDragHandle("video")).toBeUndefined();
-    expect(canvasNodeDragHandle("audio")).toBe(".pipeline-node-drag-handle");
-  });
-
   it("shows the toolbar and composer for a selected still image", () => {
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: false, hasImage: true })).toEqual({
       showToolbar: true,

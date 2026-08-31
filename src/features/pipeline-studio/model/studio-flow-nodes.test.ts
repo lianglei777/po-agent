@@ -18,6 +18,29 @@ const canvasNode: CanvasNode = {
 };
 
 describe("studio flow node reconciliation", () => {
+  it("keeps audio nodes draggable from every non-control surface like other standard nodes", () => {
+    const audioNode: CanvasNode = {
+      ...canvasNode,
+      id: "audio-node-1",
+      type: "audio",
+      entityId: "audio-entity-1",
+      data: { type: "audio", name: "Audio", action: "audio_reference", content: [] },
+    };
+
+    const [flowNode] = reconcileStudioFlowNodes([], [audioNode], {
+      selectedNodeIds: [audioNode.id],
+      editingNodeId: null,
+      interactionMode: "select",
+    });
+
+    expect(flowNode).toMatchObject({
+      id: audioNode.id,
+      draggable: true,
+      selected: true,
+    });
+    expect(flowNode.dragHandle).toBeUndefined();
+  });
+
   it("preserves React Flow measurements when canvas state updates during a drag", () => {
     const initial = reconcileStudioFlowNodes([], [canvasNode], {
       selectedNodeIds: [],

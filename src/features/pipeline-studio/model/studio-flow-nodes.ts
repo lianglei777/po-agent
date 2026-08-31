@@ -1,6 +1,5 @@
 import type { Node } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { canvasNodeDragHandle } from "./node-interaction";
 
 export type StudioFlowNodeData = { canvasNode: CanvasNode } & Record<string, unknown>;
 export type StudioFlowNode = Node<StudioFlowNodeData, "studio">;
@@ -30,7 +29,6 @@ export function reconcileStudioFlowNodes(
       selected: selectedNodeIds.has(canvasNode.id),
       draggable: options.interactionMode === "select" && options.editingNodeId !== canvasNode.id,
       style: { width: canvasNode.width ?? 320, height: canvasNode.height ?? 220 },
-      dragHandle: canvasNodeDragHandle(canvasNode.data?.type),
     };
   });
 }

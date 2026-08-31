@@ -345,7 +345,7 @@ export function AudioCanvasNode({
               <span>{t.pipeline.nodeAudioDropHint}</span>
             </div>
             <Tooltip title={hasIncomingConnection ? t.pipeline.canvasUploadBlockedByConnection : undefined}>
-              <span>
+              <span className="nodrag inline-flex">
                 <Button size="small" disabled={hasIncomingConnection} onClick={() => inputRef.current?.click()}>{t.pipeline.nodeAudioChoose}</Button>
               </span>
             </Tooltip>

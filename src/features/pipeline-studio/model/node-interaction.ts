@@ -1,9 +1,3 @@
-import type { CanvasMediaType } from "@/contracts/pipeline";
-
-export function canvasNodeDragHandle(type: CanvasMediaType | undefined) {
-  return type === "audio" ? ".pipeline-node-drag-handle" : undefined;
-}
-
 export function imageNodePresentation(input: {
   selected: boolean;
   composerActive: boolean;
