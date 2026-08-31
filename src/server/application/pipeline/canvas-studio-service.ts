@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { GenerationAssetSlot, GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
 import { AppError } from "@/server/domain/app-error";
 import type {
@@ -9,6 +9,7 @@ import type {
   CanvasMediaType,
   CanvasNode,
   CanvasNodeData,
+  CanvasPromptDocument,
   CanvasViewport,
   CanvasWorkflow,
   GenerateCanvasNodeInput,
@@ -57,14 +58,23 @@ export class CanvasStudioService {
     if (!await this.repository.getProject(projectId)) {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
     }
-    const affectedTargets = await this.validateMutationConnections(projectId, batch);
-    const result = await this.repository.applyCanvasMutationBatch(projectId, batch.baseRevision, batch.mutations);
+    await this.assertWorkflowMutationAllowed(projectId, batch);
+    const sanitizedBatch = await this.preserveGenerationProvenance(projectId, batch);
+    const affectedTargets = await this.validateMutationConnections(projectId, sanitizedBatch);
+    const result = await this.repository.applyCanvasMutationBatch(projectId, sanitizedBatch.baseRevision, sanitizedBatch.mutations);
     if (!result.applied) {
       throw new AppError("PIPELINE_CANVAS_REVISION_CONFLICT", `Canvas revision conflict. Current revision is ${result.revision}`, 409);
     }
 
     for (const targetId of affectedTargets) {
       await this.syncTargetReferences(targetId);
+    }
+    const updatedNodeIds = new Set(sanitizedBatch.mutations.flatMap((mutation) => (
+      mutation.type === "node.update" && mutation.patch.data !== undefined ? [mutation.nodeId] : []
+    )));
+    for (const nodeId of updatedNodeIds) {
+      const refreshed = await this.refreshGenerationProvenance(nodeId);
+      if (refreshed) this.emit("node_updated", projectId, refreshed);
     }
     return this.getState(projectId);
   }
@@ -98,20 +108,28 @@ export class CanvasStudioService {
     width?: number | null;
     height?: number | null;
     data?: CanvasNodeData;
-  }, projectId?: string): Promise<CanvasNode> {
+  }, projectId?: string, allowGenerationProvenanceUpdate = false): Promise<CanvasNode> {
     const current = await this.requireNode(nodeId);
     if (projectId && current.projectId !== projectId) {
       throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found in this project", 404);
     }
+    if (projectId && patch.data !== undefined) {
+      await this.assertWorkflowNodesMutable(current.projectId, [nodeId]);
+    }
+    const normalizedData = patch.data ? normalizeData(patch.data, current) : undefined;
     const updated = await this.repository.updateCanvasNode(nodeId, {
       ...patch,
-      data: patch.data ? normalizeData(patch.data, current) : undefined,
+      data: normalizedData && !allowGenerationProvenanceUpdate
+        ? { ...normalizedData, generationProvenance: current.data?.generationProvenance }
+        : normalizedData,
     });
     if (!updated) throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found", 404);
-    this.emit("node_updated", current.projectId, updated);
+    const refreshed = patch.data ? await this.refreshGenerationProvenance(updated.id) : updated;
+    const finalNode = refreshed ?? updated;
+    this.emit("node_updated", current.projectId, finalNode);
     // 上游内容变化后立即重建直接下游的引用快照；连线身份不变，引用内容随节点更新。
     await this.syncDependentTargets(current.projectId, current.id);
-    return updated;
+    return finalNode;
   }
 
   async updateViewport(projectId: string, viewport: CanvasViewport): Promise<void> {
@@ -124,6 +142,7 @@ export class CanvasStudioService {
     sourceNodeId: string;
     targetNodeId: string;
   }): Promise<CanvasEdge> {
+    await this.assertWorkflowNodesMutable(input.projectId, [input.sourceNodeId, input.targetNodeId]);
     const [source, target, edges] = await Promise.all([
       this.requireNode(input.sourceNodeId),
       this.requireNode(input.targetNodeId),
@@ -148,6 +167,7 @@ export class CanvasStudioService {
   async deleteEdge(edgeId: string, projectId?: string): Promise<void> {
     const edge = await this.repository.getCanvasEdge(edgeId);
     if (!edge || (projectId && edge.projectId !== projectId)) return;
+    await this.assertWorkflowNodesMutable(edge.projectId, [edge.sourceNodeId, edge.targetNodeId]);
     await this.repository.deleteCanvasEdge(edgeId);
     await this.syncTargetReferences(edge.targetNodeId);
     this.emit("edge_deleted", edge.projectId, { id: edgeId });
@@ -158,6 +178,7 @@ export class CanvasStudioService {
     if (projectId && node.projectId !== projectId) {
       throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found in this project", 404);
     }
+    await this.assertWorkflowNodesMutable(node.projectId, [nodeId]);
     const edges = await this.repository.listCanvasEdges(node.projectId);
     const affectedTargets = [...new Set(edges.filter((edge) => edge.sourceNodeId === nodeId).map((edge) => edge.targetNodeId))];
     await this.repository.deleteCanvasEdgesByNode(nodeId);
@@ -230,7 +251,7 @@ export class CanvasStudioService {
     data.content = content;
     if (type === "text") data.textDocument = plainTextDocument(content?.join("\n") ?? "");
     data.url = type === "text" ? undefined : [canvasFileUrl(node.id)];
-    return this.updateNode(node.id, { data });
+    return this.updateNode(node.id, { data }, undefined, true);
   }
 
   async readNodeMedia(nodeId: string) {
@@ -290,7 +311,11 @@ export class CanvasStudioService {
     });
   }
 
-  async generate(nodeId: string, input?: GenerateCanvasNodeInput): Promise<{ node: CanvasNode; runId?: string; edge?: CanvasEdge }> {
+  async generate(
+    nodeId: string,
+    input?: GenerateCanvasNodeInput,
+    execution?: { idempotencyKey?: string },
+  ): Promise<{ node: CanvasNode; runId?: string; edge?: CanvasEdge }> {
     if (input?.createNewNode) {
       return this.generateDerivedImage(nodeId, input);
     }
@@ -364,36 +389,13 @@ export class CanvasStudioService {
     }
 
     const prompt = compiledPrompt ?? effectivePrompt(data);
-    const refs = data.params ?? { prompt: "" };
-    const imageRefs = refs.imageList ?? [];
-    const videoRefs = refs.videoList ?? [];
-    const audioRefs = refs.audioList ?? [];
-    let capability: "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video";
     const requestedRoute = data.params?.routeId
       ? await this.runs.getRoute(data.params.routeId)
       : null;
     const requestedVideoCapability = requestedRoute?.enabled && data.type === "video"
       ? requestedRoute.capability
       : undefined;
-
-    if (data.type === "image") {
-      capability = imageRefs.length ? "image-to-image" : "text-to-image";
-    } else if (requestedVideoCapability === "text-to-video"
-      || requestedVideoCapability === "image-to-video"
-      || requestedVideoCapability === "multimodal-to-video") {
-      capability = requestedVideoCapability;
-    } else if (promptDocument && (videoRefs.length || audioRefs.length || imageRefs.some((reference) => reference.role === "reference"))) {
-      capability = "multimodal-to-video";
-    } else if (promptDocument && imageRefs.length >= 1) {
-      capability = "image-to-video";
-    } else if (!promptDocument && (videoRefs.length || audioRefs.length || imageRefs.length > 2)) {
-      // 旧画布没有富文本提示词，继续按连线数量推断槽位，避免升级后改变已有工作流语义。
-      capability = "multimodal-to-video";
-    } else if (!promptDocument && imageRefs.length >= 1) {
-      capability = "image-to-video";
-    } else {
-      capability = "text-to-video";
-    }
+    const capability = canvasGenerationCapability(data, promptDocument, requestedVideoCapability);
 
     try {
       await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
@@ -407,6 +409,17 @@ export class CanvasStudioService {
         ? generationAssetsForRoute(referencesFromParams(data.params), route.inputSchema.assets ?? [], !promptDocument)
         : [];
       const parameters = generationParameters(data, route?.inputSchema.parameters);
+      if (route && data.params?.routeId !== route.id) {
+        data = { ...data, params: { ...data.params!, routeId: route.id } };
+        node = await this.updateNode(node.id, { data });
+      }
+      const sourceFingerprint = await this.generationInputFingerprint({
+        node,
+        data,
+        prompt,
+        routeId: route?.id,
+        references: referencesFromParams(data.params),
+      });
       const result = await this.runs.createRun({
         sessionId: `pipeline:${node.projectId}`,
         capability,
@@ -415,9 +428,10 @@ export class CanvasStudioService {
         originalPrompt: data.params?.prompt,
         assets: generationAssets,
         parameters,
+        sourceFingerprint,
         source: "direct-ui",
         sourceRef: canvasSourceRef(node.id),
-        idempotencyKey: `pipeline:canvas:${node.id}:${Date.now()}`,
+        idempotencyKey: execution?.idempotencyKey ?? `pipeline:canvas:${node.id}:${Date.now()}`,
       });
       const updated = await this.updateNode(node.id, {
         data: {
@@ -468,8 +482,17 @@ export class CanvasStudioService {
     return { ...result, edge };
   }
 
-  async cancelGeneration(nodeId: string): Promise<CanvasNode> {
+  async cancelGeneration(nodeId: string, context?: { workflowRunId?: string }): Promise<CanvasNode> {
     const node = await this.requireNode(nodeId);
+    const activeRuns = await this.repository.listActiveCanvasWorkflowRuns(node.projectId);
+    const owningRun = activeRuns.find((run) => run.nodeIds.includes(nodeId));
+    if (owningRun && context?.workflowRunId !== owningRun.id) {
+      throw new AppError(
+        "PIPELINE_WORKFLOW_RUN_ACTIVE",
+        "Cancel this node from the active canvas workflow instead",
+        409,
+      );
+    }
     const data = node.data;
     const runId = data?.taskInfo?.runId;
     if (!data || !runId || (data.taskInfo?.status !== "processing" && data.taskInfo?.status !== "queued")) {
@@ -509,6 +532,7 @@ export class CanvasStudioService {
     const completedAt = view.run.completedAt ?? artifact.createdAt;
     const newestSuccessfulRun = (await this.listNodeGenerationRuns(node.id))
       .find((candidate) => candidate.run.status === "succeeded" && candidate.artifacts.some((item) => item.kind === data.type));
+    const inputFingerprint = view.run.input?.sourceFingerprint;
     return this.updateNode(node.id, {
       data: {
         ...data,
@@ -524,8 +548,11 @@ export class CanvasStudioService {
           },
           videoMetadata: undefined,
         } : {}),
+        generationProvenance: inputFingerprint && (data.type === "image" || data.type === "video")
+          ? { runId, inputFingerprint, stale: false }
+          : undefined,
       },
-    });
+    }, undefined, true);
   }
 
   async readNodeGenerationArtifact(nodeId: string, runId: string, artifactId: string) {
@@ -557,9 +584,10 @@ export class CanvasStudioService {
         artifactIds: undefined,
         videoSelection: undefined,
         videoMetadata: undefined,
+        generationProvenance: undefined,
         taskInfo: { status: "idle" },
       },
-    });
+    }, undefined, true);
   }
 
   async readNodeUploadSource(nodeId: string) {
@@ -768,7 +796,8 @@ export class CanvasStudioService {
       await this.failGeneration(node.id, runId, "The generation completed without a video artifact");
       return;
     }
-    const completedRun = videoArtifact ? await this.runs.getRun(runId) : null;
+    const completedRun = await this.runs.getRun(runId);
+    const inputFingerprint = completedRun?.run.input?.sourceFingerprint;
     // Take 只属于视频节点；其他媒体继续保留一次生成返回的全部 Artifact。
     const urls = videoArtifact
       ? videoArtifact.remoteUrl ? [videoArtifact.remoteUrl] : []
@@ -789,10 +818,14 @@ export class CanvasStudioService {
         },
         videoMetadata: undefined,
       } : {}),
+      generationProvenance: inputFingerprint && (node.data.type === "image" || node.data.type === "video")
+        ? { runId, inputFingerprint, stale: false }
+        : undefined,
       groupRun: activeGroupRun ? { ...activeGroupRun, status: "completed" } : node.data.groupRun,
     };
     await this.repository.updateCanvasNode(node.id, { data });
-    this.emit("node_updated", node.projectId, { ...node, data });
+    const refreshed = await this.refreshGenerationProvenance(node.id);
+    this.emit("node_updated", node.projectId, refreshed ?? { ...node, data });
     await this.syncDependentTargets(node.projectId, node.id);
     if (activeGroupRun && data.group) {
       await this.advanceGroupRun(node.projectId, data.group.id, activeGroupRun.id);
@@ -930,8 +963,234 @@ export class CanvasStudioService {
       },
     };
     const updated = await this.repository.updateCanvasNode(targetNodeId, { data: next });
-    if (updated) this.emit("node_updated", target.projectId, updated);
+    const refreshed = updated ? await this.refreshGenerationProvenance(updated.id) : null;
+    if (updated) this.emit("node_updated", target.projectId, refreshed ?? updated);
+    return refreshed ?? updated;
+  }
+
+  async preflightWorkflowNode(nodeId: string, plannedNodeIds: ReadonlySet<string>): Promise<void> {
+    const node = await this.requireNode(nodeId);
+    const data = node.data;
+    if (!data || data.generatorType === "resource" || data.type === "audio") {
+      throw new AppError("VALIDATION_ERROR", "This node cannot run in a canvas workflow", 400);
+    }
+    if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
+      throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
+    }
+
+    const references = referencesFromParams(data.params);
+    const unavailable = references.find((reference) => (
+      !mediaReferenceIsUsable(reference) && !plannedNodeIds.has(reference.nodeId)
+    ));
+    if (unavailable) {
+      throw new AppError("VALIDATION_ERROR", "An upstream node has no usable content yet", 409);
+    }
+    if (data.type === "text") {
+      if (!this.llm.isConfigured()) {
+        throw new AppError("PIPELINE_LLM_FAILED", "Configure a text model before generating text", 400);
+      }
+      const hasPlannedText = references.some((reference) => (
+        reference.mediaType === "text" && plannedNodeIds.has(reference.nodeId)
+      ));
+      if (!effectivePrompt(data).trim() && !hasPlannedText) {
+        throw new AppError("VALIDATION_ERROR", "Enter a prompt or connect a text reference first", 400);
+      }
+      return;
+    }
+
+    const requestedRoute = data.params?.routeId ? await this.runs.getRoute(data.params.routeId) : null;
+    const promptDocument = data.params?.promptDocument;
+    const capability = canvasGenerationCapability(data, promptDocument, requestedRoute?.enabled ? requestedRoute.capability : undefined);
+    const route = requestedRoute?.enabled && requestedRoute.capability === capability
+      ? requestedRoute
+      : (await this.runs.listRoutes()).find((candidate) => candidate.enabled && candidate.isDefault && candidate.capability === capability);
+    const preflightReferences = references.map((reference) => (
+      mediaReferenceIsUsable(reference) || !plannedNodeIds.has(reference.nodeId)
+        ? reference
+        : {
+            ...reference,
+            // 仅用于校验 Route 的素材槽位；真实 Artifact 仍由上游步骤完成后绑定。
+            workspaceFile: {
+              relativePath: `.pipeline-studio/workflow-preflight/${reference.nodeId}`,
+              name: `${reference.nodeId}.${reference.mediaType}`,
+              contentType: `${reference.mediaType}/workflow-preflight`,
+            },
+          }
+    ));
+    const generationAssets = route
+      ? generationAssetsForRoute(preflightReferences, route.inputSchema.assets ?? [], !promptDocument)
+      : [];
+    const ownPrompt = promptDocument?.plainText.trim() || effectivePrompt(data);
+    const hasPlannedText = references.some((reference) => (
+      reference.mediaType === "text" && plannedNodeIds.has(reference.nodeId)
+    ));
+    await this.runs.validateRunInput({
+      capability,
+      routeId: route?.id,
+      prompt: ownPrompt.trim() || (hasPlannedText ? "Workflow upstream text" : ownPrompt),
+      assets: generationAssets,
+      parameters: generationParameters(data, route?.inputSchema.parameters),
+    });
+  }
+
+  private async preserveGenerationProvenance(
+    projectId: string,
+    batch: CanvasMutationBatch,
+  ): Promise<CanvasMutationBatch> {
+    const currentNodes = new Map(
+      (await this.repository.listCanvasNodes(projectId)).map((node) => [node.id, node]),
+    );
+    return {
+      ...batch,
+      mutations: batch.mutations.map((mutation) => {
+        if (mutation.type === "node.create" && mutation.node.data?.generationProvenance) {
+          return {
+            ...mutation,
+            node: {
+              ...mutation.node,
+              data: { ...mutation.node.data, generationProvenance: undefined },
+            },
+          };
+        }
+        if (mutation.type !== "node.update" || mutation.patch.data === undefined) return mutation;
+        const current = currentNodes.get(mutation.nodeId);
+        if (mutation.patch.data === null) {
+          return current?.data?.generationProvenance
+            ? { ...mutation, patch: { ...mutation.patch, data: current.data } }
+            : mutation;
+        }
+        return {
+          ...mutation,
+          patch: {
+            ...mutation.patch,
+            data: {
+              ...mutation.patch.data,
+              generationProvenance: current?.data?.generationProvenance,
+            },
+          },
+        };
+      }),
+    };
+  }
+
+  private async assertWorkflowMutationAllowed(projectId: string, batch: CanvasMutationBatch): Promise<void> {
+    const edges = await this.repository.listCanvasEdges(projectId);
+    const edgesById = new Map(edges.map((edge) => [edge.id, edge]));
+    const protectedNodeIds = new Set<string>();
+    for (const mutation of batch.mutations) {
+      if (mutation.type === "node.delete" || (mutation.type === "node.update" && mutation.patch.data !== undefined)) {
+        protectedNodeIds.add(mutation.nodeId);
+      } else if (mutation.type === "edge.create") {
+        protectedNodeIds.add(mutation.edge.sourceNodeId);
+        protectedNodeIds.add(mutation.edge.targetNodeId);
+      } else if (mutation.type === "edge.update" || mutation.type === "edge.delete") {
+        const edge = edgesById.get(mutation.edgeId);
+        if (edge) {
+          protectedNodeIds.add(edge.sourceNodeId);
+          protectedNodeIds.add(edge.targetNodeId);
+        }
+      }
+    }
+    await this.assertWorkflowNodesMutable(projectId, protectedNodeIds);
+  }
+
+  private async assertWorkflowNodesMutable(projectId: string, nodeIds: Iterable<string>): Promise<void> {
+    const requested = new Set(nodeIds);
+    if (!requested.size) return;
+    const activeRuns = await this.repository.listActiveCanvasWorkflowRuns(projectId);
+    if (!activeRuns.some((run) => run.nodeIds.some((nodeId) => requested.has(nodeId)))) return;
+    throw new AppError(
+      "PIPELINE_WORKFLOW_RUN_ACTIVE",
+      "Canvas workflow nodes and connections cannot be changed while the workflow is active",
+      409,
+    );
+  }
+
+  private async refreshGenerationProvenance(nodeId: string): Promise<CanvasNode | null> {
+    const node = await this.repository.getCanvasNode(nodeId);
+    const provenance = node?.data?.generationProvenance;
+    if (!node?.data || !provenance || (node.data.type !== "image" && node.data.type !== "video")) {
+      return node;
+    }
+    const currentFingerprint = await this.currentGenerationInputFingerprint(node);
+    const stale = currentFingerprint !== provenance.inputFingerprint;
+    if (stale === provenance.stale) return node;
+    const updated = await this.repository.updateCanvasNode(node.id, {
+      data: {
+        ...node.data,
+        generationProvenance: { ...provenance, stale },
+      },
+    });
     return updated;
+  }
+
+  private async currentGenerationInputFingerprint(node: CanvasNode): Promise<string | null> {
+    const data = node.data;
+    if (!data || (data.type !== "image" && data.type !== "video")) return null;
+    const storedReferences = referencesFromParams(data.params);
+    const connectedReferences = storedReferences.filter((reference) => reference.referenceId?.startsWith("edge:"));
+    const document = data.params?.promptDocument;
+    if (!document) {
+      return this.generationInputFingerprint({
+        node,
+        data,
+        prompt: effectivePrompt(data),
+        routeId: data.params?.routeId,
+        references: storedReferences,
+      });
+    }
+    const compiled = await this.compilePromptDocument(node.projectId, document, connectedReferences);
+    if (compiled.issues.length || compiled.references.some((reference) => !mediaReferenceIsUsable(reference))) {
+      return null;
+    }
+    return this.generationInputFingerprint({
+      node,
+      data,
+      prompt: compiled.prompt,
+      routeId: data.params?.routeId,
+      references: compiled.references,
+    });
+  }
+
+  private async generationInputFingerprint(input: {
+    node: CanvasNode;
+    data: CanvasNodeData;
+    prompt: string;
+    routeId?: string;
+    references: CanvasMediaReference[];
+  }): Promise<string> {
+    const referenceSnapshots = await Promise.all(input.references.map(async (reference) => {
+      const sourceType = reference.sourceType ?? "canvas-node";
+      const sourceId = reference.sourceId ?? reference.nodeId;
+      const source = sourceType === "canvas-node"
+        ? await this.repository.getCanvasNode(sourceId)
+        : await this.repository.getAsset(sourceId);
+      return {
+        sourceType,
+        sourceId,
+        sourceUpdatedAt: source?.updatedAt ?? null,
+        referenceId: reference.referenceId ?? null,
+        role: reference.role ?? "reference",
+        order: reference.order ?? null,
+        artifactId: reference.artifactId ?? null,
+        workspacePath: reference.workspaceFile?.relativePath ?? null,
+        content: reference.content ?? null,
+      };
+    }));
+    const settings = {
+      ...(input.data.params?.settings ?? {}),
+      ...(input.data.params?.advancedSettings ?? {}),
+    };
+    return createHash("sha256")
+      .update(stableJson({
+        schemaVersion: 1,
+        nodeType: input.data.type,
+        prompt: input.prompt,
+        routeId: input.routeId ?? null,
+        settings,
+        references: referenceSnapshots,
+      }))
+      .digest("hex");
   }
 
   private async syncDependentTargets(projectId: string, sourceNodeId: string): Promise<void> {
@@ -1295,6 +1554,20 @@ function referencesFromParams(params: CanvasGenerationParams | undefined): Canva
     - (order.get(right.referenceId ?? right.nodeId) ?? Number.MAX_SAFE_INTEGER));
 }
 
+function stableJson(value: unknown): string {
+  return JSON.stringify(sortJsonValue(value));
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+      .map(([key, nested]) => [key, sortJsonValue(nested)]),
+  );
+}
+
 function mergeReferences(primary: CanvasMediaReference[], fallback: CanvasMediaReference[]): CanvasMediaReference[] {
   const result = [...primary];
   const keys = new Set(primary.map((reference) => `${reference.sourceType ?? "canvas-node"}:${reference.sourceId ?? reference.nodeId}:${reference.role ?? "reference"}`));
@@ -1344,6 +1617,30 @@ function effectivePrompt(data: CanvasNodeData): string {
   const text = (data.params?.textList ?? []).flatMap((ref) => ref.content ?? []).map((part) => part.trim()).filter(Boolean);
   if (!text.length) return own;
   return [own, ...text].filter(Boolean).join("\n\n");
+}
+
+function canvasGenerationCapability(
+  data: CanvasNodeData,
+  promptDocument: CanvasPromptDocument | undefined,
+  requestedCapability?: string,
+): "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video" {
+  const params = data.params ?? { prompt: "" };
+  const imageRefs = params.imageList ?? [];
+  const videoRefs = params.videoList ?? [];
+  const audioRefs = params.audioList ?? [];
+  if (data.type === "image") return imageRefs.length ? "image-to-image" : "text-to-image";
+  if (requestedCapability === "text-to-video"
+    || requestedCapability === "image-to-video"
+    || requestedCapability === "multimodal-to-video") return requestedCapability;
+  if (promptDocument && (videoRefs.length || audioRefs.length || imageRefs.some((reference) => reference.role === "reference"))) {
+    return "multimodal-to-video";
+  }
+  if (promptDocument && imageRefs.length >= 1) return "image-to-video";
+  if (!promptDocument && (videoRefs.length || audioRefs.length || imageRefs.length > 2)) {
+    // 旧画布没有富文本提示词，继续按连线数量推断槽位，避免升级后改变已有工作流语义。
+    return "multimodal-to-video";
+  }
+  return !promptDocument && imageRefs.length >= 1 ? "image-to-video" : "text-to-video";
 }
 
 function generationParameters(data: CanvasNodeData, fields?: GenerationParameterField[]): Record<string, JsonValue> | undefined {

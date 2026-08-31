@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
   parseCanvasMutationBatch,
+  parseCreateCanvasWorkflowRunRequest,
   parseGenerateCanvasNodeRequest,
   parseGenerateTextNodeRequest,
   parseRetryCanvasGenerationRequest,
   parseSelectCanvasArtifactRequest,
 } from "./pipeline-canvas-validators";
+
+describe("canvas workflow run validators", () => {
+  it("deduplicates bounded canvas node identifiers", () => {
+    expect(parseCreateCanvasWorkflowRunRequest({ nodeIds: ["node-1", "node-1", "node-2"] }))
+      .toEqual({ nodeIds: ["node-1", "node-2"] });
+  });
+
+  it("rejects empty and invalid workflow selections", () => {
+    expect(() => parseCreateCanvasWorkflowRunRequest({ nodeIds: [] }))
+      .toThrow("nodeIds must contain between 1 and 100 entries");
+    expect(() => parseCreateCanvasWorkflowRunRequest({ nodeIds: [""] }))
+      .toThrow("nodeIds contains an invalid canvas node identifier");
+  });
+});
 
 const node = {
   id: "node-1",
@@ -157,6 +172,39 @@ describe("parseGenerateTextNodeRequest", () => {
         node: { ...videoNode, data: { ...videoNode.data, videoMetadata: { durationSeconds: -1, width: 0, height: 1080 } } },
       }],
     })).toThrow("videoMetadata is invalid");
+  });
+
+  it("validates server-owned generation provenance shape", () => {
+    const imageNode = {
+      ...node,
+      type: "image" as const,
+      data: {
+        type: "image" as const,
+        name: "Image",
+        action: "image_generate",
+        generationProvenance: {
+          runId: "run-image-1",
+          inputFingerprint: "a".repeat(64),
+          stale: false,
+        },
+      },
+    };
+    expect(parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "image-provenance",
+      mutations: [{ type: "node.create", node: imageNode }],
+    }).mutations).toHaveLength(1);
+    expect(() => parseCanvasMutationBatch({
+      baseRevision: 0,
+      requestId: "invalid-image-provenance",
+      mutations: [{
+        type: "node.create",
+        node: {
+          ...imageNode,
+          data: { ...imageNode.data, generationProvenance: { ...imageNode.data.generationProvenance, inputFingerprint: "client-value" } },
+        },
+      }],
+    })).toThrow("generationProvenance is invalid");
   });
 
   it("accepts restore intent and rejects unknown edge creation intents", () => {

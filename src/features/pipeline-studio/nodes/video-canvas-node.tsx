@@ -40,15 +40,10 @@ export function VideoCanvasNode({
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
   const canvasEdges = useCanvasStore((state) => state.edges);
-  const canvasNodes = useCanvasStore((state) => state.nodes);
   const incomingEdges = useMemo(
     () => canvasEdges.filter((edge) => edge.targetNodeId === id),
     [canvasEdges, id],
   );
-  const incomingSources = useMemo(() => {
-    const sourceIds = new Set(incomingEdges.map((edge) => edge.sourceNodeId));
-    return canvasNodes.filter((candidate) => sourceIds.has(candidate.id));
-  }, [canvasNodes, incomingEdges]);
   const hasIncomingConnection = incomingEdges.length > 0;
   const videoDraft = useCanvasStore((state) => state.composerDrafts[composerDraftKey(id, "video")]);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
@@ -58,6 +53,7 @@ export function VideoCanvasNode({
     mutation.type === "node.create" ? mutation.node.id === id
       : mutation.type === "node.update" && mutation.nodeId === id && mutation.patch.data !== undefined
   )));
+  const workflowLocked = useCanvasStore((state) => state.workflowLockedNodeIds.includes(id));
   const canvas = node.data;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -73,14 +69,11 @@ export function VideoCanvasNode({
   const hasVideo = Boolean(mediaUrl);
   const hasGenerationHistory = Boolean(canvas?.workspaceFile || canvas?.artifactIds?.length || canvas?.taskInfo?.runId);
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
-  const selectedAt = canvas?.videoSelection?.completedAt;
-  const outputStale = Boolean(selectedAt && (
-    canvas?.videoSelection?.historical
-    || incomingSources.some((source) => source.updatedAt > selectedAt)
-    || incomingEdges.some((edge) => Boolean(edge.updatedAt && edge.updatedAt > selectedAt))
-    || (videoDraft && JSON.stringify(videoDraft) !== JSON.stringify(canvas?.params?.promptDocument))
-    || composerInputDirty
-  ));
+  const hasLocalInputChanges = Boolean(
+    (videoDraft && JSON.stringify(videoDraft) !== JSON.stringify(canvas?.params?.promptDocument))
+    || composerInputDirty,
+  );
+  const outputStale = Boolean(canvas?.generationProvenance?.stale || hasLocalInputChanges);
   const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
   const toolbarPresentation = videoNodeToolbarPresentation({
     selected: singleSelected,
@@ -214,7 +207,7 @@ export function VideoCanvasNode({
           />
           <CanvasNodeToolbarButton label={t.pipeline.nodeVideoDownload} icon={<Download className="size-4" />} onClick={downloadVideo} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
-          <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
+          <CanvasNodeToolbarButton danger disabled={workflowLocked} disabledReason={t.pipeline.canvasWorkflowNodeLocked} label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
             </>
           ) : null}
         </CanvasNodeContextToolbar>
@@ -314,10 +307,10 @@ export function VideoCanvasNode({
                 </div>
               ) : null}
               {outputStale ? (
-                <Tooltip title={t.pipeline.videoOutputStale}>
+                <Tooltip title={t.pipeline.generationOutputStale}>
                   <span className="nodrag absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-warn)] px-2 py-1 text-caption font-medium text-[var(--workspace-bg)]">
                     <AlertTriangle className="size-3" />
-                    {t.pipeline.videoOutputStaleBadge}
+                    {t.pipeline.generationOutputStaleBadge}
                   </span>
                 </Tooltip>
               ) : null}
@@ -356,6 +349,7 @@ export function VideoCanvasNode({
           nodeId={id}
           data={canvas}
           waitingForSave={waitingForSave}
+          workflowLocked={workflowLocked}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
             setComposerInputDirty(false);

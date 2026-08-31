@@ -7,6 +7,9 @@ import type {
   CanvasNodeData,
   CanvasViewport,
   CanvasWorkflow,
+  CanvasWorkflowRun,
+  CanvasWorkflowRunStatus,
+  CanvasWorkflowRunStep,
   PipelineAsset,
   PipelineAssetType,
   PipelineProject,
@@ -72,6 +75,30 @@ export interface PipelineRepository {
   listCanvasWorkflows(projectId: string): Promise<CanvasWorkflow[]>;
   getCanvasWorkflow(id: string): Promise<CanvasWorkflow | null>;
   deleteCanvasWorkflow(id: string): Promise<boolean>;
+
+  createCanvasWorkflowRun(input: {
+    id: string;
+    projectId: string;
+    nodeIds: string[];
+    edges: CanvasWorkflowRun["edges"];
+    steps: Array<Pick<CanvasWorkflowRunStep, "nodeId" | "status">>;
+  }): Promise<CanvasWorkflowRun>;
+  getCanvasWorkflowRun(id: string): Promise<CanvasWorkflowRun | null>;
+  findCanvasWorkflowRunByGenerationRunId(projectId: string, generationRunId: string): Promise<CanvasWorkflowRun | null>;
+  listCanvasWorkflowRuns(projectId: string, limit?: number): Promise<CanvasWorkflowRun[]>;
+  listActiveCanvasWorkflowRuns(projectId: string): Promise<CanvasWorkflowRun[]>;
+  updateCanvasWorkflowRun(id: string, patch: {
+    status?: CanvasWorkflowRunStatus;
+    errorMessage?: string | null;
+    completedAt?: string | null;
+  }): Promise<CanvasWorkflowRun | null>;
+  updateCanvasWorkflowRunStep(runId: string, nodeId: string, patch: {
+    status?: CanvasWorkflowRunStep["status"];
+    generationRunId?: string | null;
+    errorMessage?: string | null;
+    startedAt?: string | null;
+    completedAt?: string | null;
+  }): Promise<CanvasWorkflowRunStep | null>;
 
   getStageStatuses(projectId: string): Promise<PipelineStageStatus[]>;
 }

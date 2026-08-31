@@ -1,4 +1,4 @@
-import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, CanvasResourceRole, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
+import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, CanvasResourceRole, CreateCanvasWorkflowRunRequest, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 
 const NODE_TYPES = new Set(["text", "image", "video", "audio", "script", "character", "scene", "prop", "storyboard"]);
@@ -232,6 +232,16 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
       throw validationError(`mutations[${index}].node.data.videoSelection is invalid`);
     }
   }
+  if (value.generationProvenance !== undefined) {
+    if ((value.type !== "image" && value.type !== "video")
+      || !isRecord(value.generationProvenance)
+      || !validId(value.generationProvenance.runId)
+      || typeof value.generationProvenance.inputFingerprint !== "string"
+      || !/^[a-f0-9]{64}$/.test(value.generationProvenance.inputFingerprint)
+      || typeof value.generationProvenance.stale !== "boolean") {
+      throw validationError(`mutations[${index}].node.data.generationProvenance is invalid`);
+    }
+  }
   return value as unknown as CanvasNodeData;
 }
 
@@ -274,6 +284,19 @@ export function parseRetryCanvasGenerationRequest(value: unknown): { idempotency
     throw validationError("idempotencyKey is invalid");
   }
   return { idempotencyKey };
+}
+
+export function parseCreateCanvasWorkflowRunRequest(value: unknown): CreateCanvasWorkflowRunRequest {
+  if (!isRecord(value) || !Array.isArray(value.nodeIds)) {
+    throw validationError("nodeIds must be an array");
+  }
+  if (value.nodeIds.length === 0 || value.nodeIds.length > 100) {
+    throw validationError("nodeIds must contain between 1 and 100 entries");
+  }
+  if (value.nodeIds.some((nodeId) => !validId(nodeId))) {
+    throw validationError("nodeIds contains an invalid canvas node identifier");
+  }
+  return { nodeIds: [...new Set(value.nodeIds as string[])] };
 }
 
 function parseGenerationSettings(value: Record<string, unknown>): NonNullable<GenerateCanvasNodeRequest["settings"]> {

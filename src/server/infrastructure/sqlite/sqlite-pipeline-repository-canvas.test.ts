@@ -90,6 +90,56 @@ describe("SqlitePipelineRepository canvas mutations", () => {
 
     expect(await repository.getCanvasEdge("edge-1")).toMatchObject({ role: "first-frame", order: 2 });
   });
+
+  it("persists workflow runs and keeps failed runs active while a sibling step is still running", async () => {
+    database = new SqliteDatabase(":memory:");
+    const repository = new SqlitePipelineRepository(database);
+    await repository.createProject({
+      id: "project-1",
+      rootPath: ".",
+      title: "Project",
+      originalText: "",
+      artDirection: null,
+      modelSettings: null,
+      promptConfig: null,
+      status: "draft",
+      coverArtifactId: null,
+    });
+
+    const run = await repository.createCanvasWorkflowRun({
+      id: "workflow-run-1",
+      projectId: "project-1",
+      nodeIds: ["image-1", "video-1"],
+      edges: [{ sourceNodeId: "image-1", targetNodeId: "video-1" }],
+      steps: [
+        { nodeId: "image-1", status: "pending" },
+        { nodeId: "video-1", status: "pending" },
+      ],
+    });
+    expect(run).toMatchObject({ status: "pending", steps: [{ nodeId: "image-1" }, { nodeId: "video-1" }] });
+    await expect(repository.createCanvasWorkflowRun({
+      id: "workflow-run-2",
+      projectId: "project-1",
+      nodeIds: ["image-1"],
+      edges: [],
+      steps: [{ nodeId: "image-1", status: "pending" }],
+    })).rejects.toThrow();
+
+    await repository.updateCanvasWorkflowRun("workflow-run-1", { status: "failed", errorMessage: "first branch failed" });
+    await repository.updateCanvasWorkflowRunStep("workflow-run-1", "video-1", {
+      status: "running",
+      generationRunId: "generation-run-1",
+    });
+
+    expect(await repository.findCanvasWorkflowRunByGenerationRunId("project-1", "generation-run-1"))
+      .toMatchObject({ id: "workflow-run-1" });
+    expect(await repository.listActiveCanvasWorkflowRuns("project-1"))
+      .toHaveLength(1);
+
+    await repository.updateCanvasWorkflowRunStep("workflow-run-1", "video-1", { status: "completed" });
+    expect(await repository.listActiveCanvasWorkflowRuns("project-1"))
+      .toHaveLength(0);
+  });
 });
 
 function makeNode(id = "node-1", type: "text" | "image" | "video" = "text"): CanvasNode {

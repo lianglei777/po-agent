@@ -223,6 +223,8 @@ Pipeline Studio 使用可迁移的本地项目目录。创建项目时，用户�
 
 内容生成 Run 和供应商 Job 使用 `node:sqlite` 持久化。任务编排和状态机位于 application，SQLite、内容生成供应商、文件系统和凭证存储分别通过 ports 隔离。进程内 Worker 由 composition 启动，只通过 application 和 ports 推进 Job，不允许 Route Handler 或供应商 adapter 直接修改任务状态。Provider Module 声明该供应商的 Worker 并发上限；Worker 按 Provider 独立调度，并把查询/下载的连续可恢复错误次数、下一次执行时间和指数退避状态持久化到 Job。付费提交结果不确定时仍禁止自动重试。
 
+Pipeline Studio 的多节点执行使用项目数据库中的 Workflow Run 和 Step 作为编排事实来源。Run 冻结选中节点与内部边的拓扑快照，Step 只关联标准 Generation Run，不复制 Provider Job 或 Artifact。调度器按拓扑推进 ready 节点；刷新或应用重启后从项目数据库和关联 Generation Run 恢复。进程内锁只用于避免同一进程重复推进，不能作为运行状态来源。项目数据库以部分唯一索引保证一个项目最多存在一个活动 Run；application 在创建首个付费 Generation Run 前预检全部步骤的静态 Route、Provider、Prompt、参数和素材槽位，并在活动期间拒绝修改运行节点的数据或连接。
+
 浏览器原始素材先经受控资产接口写入 workspace 的 `.po-agent/generation-inputs/`，再以 workspace-relative `AssetRef` 创建 Run。直接生成 UI 只读取持久化 Run view；它不会直接调用供应商查询接口。显式重试保留 Run，并原子新增带独立幂等键的 Provider Job。
 
 前端把 Chat 与 Generate 作为同一持久化 Session 的两个 workspace surface。新建 Session 不再选择固定模式；已有 Pi Session 可以直接创建 Generation Run。Session 列表只来自 Pi Session repository，生成状态只来自 SQLite Run/Job；旧 `content-generation.json`、通用 HTTP 模板和独立内容生成 Session 不进入生产组装。

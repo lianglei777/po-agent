@@ -108,6 +108,11 @@ Content-Type: text/event-stream; charset=utf-8
 | `INSTRUCTION_DELETE_FAILED` |           500 | 删除指令文件失败                                         |
 | `AGENT_BUSY`                |           409 | Agent 正在流式输出或压缩中，无法重载                     |
 | `GENERATION_RUN_ACTIVE`     |           409 | 当前 Session 仍有活动生成任务，不能开始新一轮消息        |
+| `PIPELINE_WORKFLOW_RUN_ACTIVE` |        409 | 当前 Pipeline 项目已有活动工作流运行                    |
+| `PIPELINE_WORKFLOW_RUN_NOT_FOUND` |     404 | Pipeline Workflow Run 不存在或不属于当前项目           |
+| `PIPELINE_WORKFLOW_RUN_NOT_CANCELLABLE` | 409 | 当前 Workflow Run 状态不能取消                     |
+| `PIPELINE_WORKFLOW_RUN_NOT_RETRYABLE` | 409 | 当前 Workflow Run 不是可重试的失败状态              |
+| `PIPELINE_WORKFLOW_RUN_BUSY` |          409 | Workflow Run 仍有节点在运行，暂时不能重试              |
 | `INSTRUCTION_RELOAD_FAILED` |           500 | 重载指令失败                                             |
 | `INTERNAL_ERROR`            |           500 | 未归类的服务端错误                                       |
 
@@ -3059,6 +3064,8 @@ interface GenerateCanvasNodeResponse {
 - 图片和视频参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态同时持久化到当前节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。
 - 生成完成或失败后通过项目 SSE 通知客户端重新读取 Canvas Snapshot。
+- 画布生成时由应用层为 Prompt、Route、参数、引用顺序/角色及引用资源版本计算输入指纹，并随 Run 输入持久化；该字段是服务端审计信息，不接受客户端指定。
+- 成功结果在节点 `data.generationProvenance` 中只保存当前 Run、输入指纹和 `stale` 状态。上游资源、Prompt、Route 或参数变化时服务端重算状态，图片和视频节点共同显示“旧版本”，但不会清空结果或自动重新生成。
 
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/cancel-generation`
 
@@ -3085,7 +3092,7 @@ GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/media
 - Artifact media 接口同样校验 Run 与节点的 `sourceRef` 归属，只读取项目已注册 workspace root 内的本地结果。
 - 节点保留本地上传源时，历史面板将其与生成 Take 统一展示；`upload-source/select` 可无损切回上传源，media 接口始终读取原上传文件，不受当前 Take 影响。
 - 切换 Take 后 `/api/pipeline/canvas-nodes/{nodeId}/media` 优先读取当前选中的 `artifactIds[0]`，不会被最后一次失败或重试 Run 覆盖。
-- 上游节点内容更新时，服务端会重建直接下游节点的引用快照并发出 `node_updated` SSE；前端将当前 Take 标记为旧版本，但保留视频供比较和再次生成。
+- 上游节点内容更新时，服务端会重建直接下游节点的引用快照、比较输入指纹并发出 `node_updated` SSE；前端只消费服务端 `stale` 状态，同时保留视频供比较和再次生成。
 
 ### `GET /api/pipeline/assets/{assetId}/media`
 
@@ -3135,3 +3142,33 @@ type CanvasMutation =
 ### Canvas 自动保存
 
 前端 Pipeline Studio feature 将交互产生的 mutation 暂存在 feature-scoped Zustand Store 中，并在短暂防抖后提交。保存期间继续产生的操作保留在下一批中，不会被上一批响应覆盖。浏览器刷新后重新通过 Canvas Snapshot 恢复节点、连线、viewport 和 revision。
+
+### Workflow Run
+
+Pipeline Studio 可以把当前明确选中的生成节点作为一次持久化 Workflow Run 执行。Run 在启动时冻结节点 ID 和内部边拓扑；每个步骤关联现有 Generation Run，Provider Job 和 Artifact 仍以 Generation API 的记录为事实来源。
+
+创建 Run 会在任何 Generation Run 入库前预检全部所选步骤；任一静态 Route、Provider、Prompt、参数或素材槽位无效时，整个请求失败且不会启动付费任务。项目数据库保证同一项目最多有一个活动 Workflow Run。活动 Run 覆盖的节点数据和连接不可修改或删除，节点也不能通过单节点接口取消；应使用 Workflow Run cancel 接口统一取消。
+
+```text
+GET  /api/pipeline/projects/{projectId}/canvas/workflow-runs?limit=1
+POST /api/pipeline/projects/{projectId}/canvas/workflow-runs
+GET  /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}
+POST /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}/cancel
+POST /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}/retry
+```
+
+创建请求：
+
+```ts
+interface CreateCanvasWorkflowRunRequest {
+  nodeIds: string[];
+}
+```
+
+`nodeIds` 接受 1–100 个当前项目节点。application 层过滤其中真正可生成的文本、图片和视频节点，并在任何 Generation Run 创建前拒绝空选区、跨项目节点、环路、重复活动运行和已经单独生成中的节点。
+
+Workflow Run 状态为 `pending | running | completed | failed | cancelling | cancelled`；Step 状态为 `pending | running | completed | failed | cancelled`。失败不会回滚已完成步骤，尚未执行的下游保持 `pending`。显式重试复用失败媒体节点的 Generation Run retry 语义，并从失败步骤继续；已完成步骤不会重复付费执行。
+
+取消会阻止等待步骤启动，并通过现有 Generation Run 取消用例处理活动媒体任务。供应商已经接受任务时，仍遵守 Generation API 的取消与计费限制。
+
+项目重新打开或读取 Workflow Run 列表时，application 会读取活动 Run，并按关联 Generation Run 的持久化状态恢复成功、失败、取消或继续运行的步骤。恢复操作使用稳定幂等键，不能为同一步骤重复创建 Provider 任务。

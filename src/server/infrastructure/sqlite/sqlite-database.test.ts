@@ -26,6 +26,8 @@ describe("SqliteDatabase", () => {
       { version: 12, name: "generation_route_presentation" },
       { version: 13, name: "generation_transient_failure_count" },
       { version: 14, name: "generation_route_catalog_lifecycle" },
+      { version: 15, name: "pipeline_canvas_workflow_runs" },
+      { version: 16, name: "pipeline_canvas_single_active_workflow_run" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([
@@ -56,7 +58,9 @@ describe("SqliteDatabase", () => {
         'pipeline_canvas_nodes',
         'pipeline_canvas_edges',
         'pipeline_canvas_drafts',
-        'pipeline_canvas_workflows'
+        'pipeline_canvas_workflows',
+        'pipeline_canvas_workflow_runs',
+        'pipeline_canvas_workflow_run_steps'
       )
       ORDER BY name
     `).all()).toEqual([
@@ -68,6 +72,8 @@ describe("SqliteDatabase", () => {
     { name: "pipeline_canvas_drafts" },
     { name: "pipeline_canvas_edges" },
     { name: "pipeline_canvas_nodes" },
+    { name: "pipeline_canvas_workflow_run_steps" },
+    { name: "pipeline_canvas_workflow_runs" },
     { name: "pipeline_canvas_workflows" },
     { name: "pipeline_frames" },
     { name: "pipeline_projects" },

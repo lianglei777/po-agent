@@ -41,6 +41,7 @@ describe("GenerationRunService", () => {
       prompt: " rainy bamboo forest ",
       originalPrompt: " make a video ",
       parameters: { durationSeconds: 10 },
+      sourceFingerprint: "a".repeat(64),
       source: "agent-tool",
       sourceRef: "tool-call-1",
       idempotencyKey: "idem-1",
@@ -55,6 +56,7 @@ describe("GenerationRunService", () => {
         status: "queued",
         input: {
           originalPrompt: "make a video",
+          sourceFingerprint: "a".repeat(64),
           parameters: {
             resolution: "720p",
             durationSeconds: 10,
@@ -88,6 +90,21 @@ describe("GenerationRunService", () => {
       width: 1024,
       height: 1024,
     });
+  });
+
+  it("preflights provider credentials without creating a generation run", async () => {
+    const guarded = new GenerationRunService(repository, {
+      credentials: { getCredential: async () => null },
+    });
+
+    await expect(guarded.validateRunInput({
+      capability: "text-to-video",
+      routeId: "runninghub-seedance-2-text-to-video",
+      prompt: "credential preflight",
+      parameters: { durationSeconds: 5 },
+    })).rejects.toMatchObject({ code: "GENERATION_CREDENTIAL_NOT_FOUND", status: 400 });
+
+    expect(await repository.listRunsBySession("session-1")).toEqual([]);
   });
 
   it("validates cross-slot asset requirements before creating paid work", async () => {

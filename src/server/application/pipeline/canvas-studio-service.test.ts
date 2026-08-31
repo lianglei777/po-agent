@@ -49,6 +49,44 @@ describe("CanvasStudioService mutation batches", () => {
       status: 409,
     });
   });
+
+  it("does not accept client-authored generation provenance", async () => {
+    const current = {
+      ...imageNode(),
+      data: {
+        ...imageNode().data!,
+        generationProvenance: { runId: "run-real", inputFingerprint: "a".repeat(64), stale: false },
+      },
+    };
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listCanvasNodes: vi.fn().mockResolvedValue([current]),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      applyCanvasMutationBatch: vi.fn().mockResolvedValue({ applied: false, revision: 1 }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await expect(service.applyMutationBatch(project.id, {
+      baseRevision: 0,
+      requestId: "forged-provenance",
+      mutations: [{
+        type: "node.update",
+        nodeId: current.id,
+        patch: {
+          data: {
+            ...current.data!,
+            generationProvenance: { runId: "run-forged", inputFingerprint: "b".repeat(64), stale: false },
+          },
+        },
+      }],
+    })).rejects.toMatchObject({ code: "PIPELINE_CANVAS_REVISION_CONFLICT" });
+
+    expect(repository.applyCanvasMutationBatch).toHaveBeenCalledWith(project.id, 0, [expect.objectContaining({
+      patch: expect.objectContaining({
+        data: expect.objectContaining({ generationProvenance: current.data!.generationProvenance }),
+      }),
+    })]);
+  });
 });
 
 describe("CanvasStudioService text AI", () => {
@@ -306,10 +344,19 @@ describe("CanvasStudioService image AI", () => {
         ],
       },
     };
+    let sourceFingerprint = "";
     const runs = {
       ensureSession: vi.fn(),
       getRoute: vi.fn().mockResolvedValue(route),
-      createRun: vi.fn().mockResolvedValue({ run: { id: "run-image-1" } }),
+      createRun: vi.fn().mockImplementation(async (input: { sourceFingerprint?: string }) => {
+        sourceFingerprint = input.sourceFingerprint ?? "";
+        return { run: { id: "run-image-1" } };
+      }),
+      getRun: vi.fn().mockImplementation(async () => ({
+        run: { id: "run-image-1", input: { sourceFingerprint } },
+        jobs: [],
+        artifacts: [],
+      })),
     } as unknown as GenerationRunService;
     const service = createService(repository, {} as LlmPort, runs);
 
@@ -324,6 +371,7 @@ describe("CanvasStudioService image AI", () => {
       routeId: "route-image-1",
       prompt: "A cinematic mountain landscape",
       parameters: { size: "1280*720", promptExtend: false },
+      sourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
       sourceRef: "pipeline:canvas:image-node-1",
     }));
     expect(result).toMatchObject({
@@ -339,6 +387,30 @@ describe("CanvasStudioService image AI", () => {
         },
       },
     });
+
+    await service.completeGeneration("image-node-1", "run-image-1", [{
+      id: "artifact-image-1",
+      runId: "run-image-1",
+      jobId: "job-image-1",
+      kind: "image",
+      remoteUrl: "https://media.example/image.png",
+      createdAt: "2026-08-21T00:01:00.000Z",
+    }]);
+    expect(currentNode.data?.generationProvenance).toEqual({
+      runId: "run-image-1",
+      inputFingerprint: sourceFingerprint,
+      stale: false,
+    });
+
+    currentNode = {
+      ...currentNode,
+      data: {
+        ...currentNode.data!,
+        params: { ...currentNode.data!.params!, prompt: "A different landscape" },
+      },
+    };
+    await service.syncTargetReferences(currentNode.id);
+    expect(currentNode.data?.generationProvenance?.stale).toBe(true);
   });
 
   it("cancels the active run and returns the image node to an editable state", async () => {
@@ -749,7 +821,10 @@ describe("CanvasStudioService video AI", () => {
       }),
     } as unknown as PipelineRepository;
 
-    await createService(repository).completeGeneration("image-node-1", "run-image-multi", [
+    const runs = {
+      getRun: vi.fn().mockResolvedValue({ run: { id: "run-image-multi", input: {} }, jobs: [], artifacts: [] }),
+    } as unknown as GenerationRunService;
+    await createService(repository, {} as LlmPort, runs).completeGeneration("image-node-1", "run-image-multi", [
       {
         id: "artifact-image-1",
         runId: "run-image-multi",
@@ -859,6 +934,70 @@ describe("CanvasStudioService video AI", () => {
     })).rejects.toMatchObject({ status: 409 });
     expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
   });
+
+  it("blocks node cancellation and destructive edits owned by an active workflow", async () => {
+    const node = imageNode();
+    node.data = { ...node.data!, taskInfo: { runId: "generation-1", status: "processing" } };
+    const repository = {
+      ...repositoryStub({ applied: true, revision: 1 }),
+      getCanvasNode: vi.fn().mockResolvedValue(node),
+      listCanvasNodes: vi.fn().mockResolvedValue([node]),
+      listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([{
+        id: "workflow-1",
+        projectId: project.id,
+        status: "running",
+        nodeIds: [node.id],
+        edges: [],
+        steps: [{ nodeId: node.id, status: "running", generationRunId: "generation-1" }],
+      }]),
+    } as unknown as PipelineRepository;
+    const runs = { cancelRun: vi.fn() } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+
+    await expect(service.cancelGeneration(node.id)).rejects.toMatchObject({
+      code: "PIPELINE_WORKFLOW_RUN_ACTIVE",
+      status: 409,
+    });
+    await expect(service.applyMutationBatch(project.id, {
+      baseRevision: 0,
+      requestId: "delete-active-workflow-node",
+      mutations: [{ type: "node.delete", nodeId: node.id }],
+    })).rejects.toMatchObject({ code: "PIPELINE_WORKFLOW_RUN_ACTIVE" });
+
+    expect(runs.cancelRun).not.toHaveBeenCalled();
+    expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
+  });
+
+  it("preflights a workflow media node without creating a generation run", async () => {
+    const node = imageNode();
+    node.data = { ...node.data!, params: { prompt: "A quiet product image", routeId: "image-route" } };
+    const repository = {
+      getCanvasNode: vi.fn().mockResolvedValue(node),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "image-route",
+      enabled: true,
+      isDefault: true,
+      capability: "text-to-image",
+      inputSchema: { prompt: { required: true }, assets: [], parameters: [] },
+    };
+    const runs = {
+      getRoute: vi.fn().mockResolvedValue(route),
+      listRoutes: vi.fn().mockResolvedValue([route]),
+      validateRunInput: vi.fn().mockResolvedValue(undefined),
+      createRun: vi.fn(),
+    } as unknown as GenerationRunService;
+
+    await createService(repository, {} as LlmPort, runs)
+      .preflightWorkflowNode(node.id, new Set([node.id]));
+
+    expect(runs.validateRunInput).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "text-to-image",
+      routeId: "image-route",
+      prompt: "A quiet product image",
+    }));
+    expect(runs.createRun).not.toHaveBeenCalled();
+  });
 });
 
 function repositoryStub(result: { applied: boolean; revision: number }) {
@@ -878,6 +1017,9 @@ function createService(
   runs = {} as GenerationRunService,
   assets = {} as GenerationAssetService,
 ) {
+  if (!("listActiveCanvasWorkflowRuns" in repository)) {
+    Object.assign(repository, { listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]) });
+  }
   return new CanvasStudioService(
     repository,
     runs,

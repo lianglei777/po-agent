@@ -137,6 +137,8 @@ export interface GenerationInput {
   originalPrompt?: string;
   assets?: GenerationInputAsset[];
   parameters?: Record<string, JsonValue>;
+  /** 来源工作流对输入配置生成的稳定摘要；服务端用于判断已有输出是否仍匹配当前输入。 */
+  sourceFingerprint?: string;
 }
 
 export interface CreateGenerationRunRequest {

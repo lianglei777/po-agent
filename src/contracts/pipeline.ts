@@ -130,6 +130,12 @@ export interface CanvasVideoSelection {
   historical?: boolean;
 }
 
+export interface CanvasGenerationProvenance {
+  runId: string;
+  inputFingerprint: string;
+  stale: boolean;
+}
+
 export interface CanvasGroupRunInfo {
   id: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -188,6 +194,7 @@ export interface CanvasNodeData {
   taskInfo?: CanvasNodeTaskInfo;
   videoMetadata?: CanvasVideoMetadata;
   videoSelection?: CanvasVideoSelection;
+  generationProvenance?: CanvasGenerationProvenance;
   group?: {
     id: string;
     name: string;
@@ -287,6 +294,48 @@ export interface CanvasWorkflow {
   edges: CanvasWorkflowEdgeTemplate[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type CanvasWorkflowRunStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelling"
+  | "cancelled";
+
+export type CanvasWorkflowRunStepStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface CanvasWorkflowRunEdge {
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+
+export interface CanvasWorkflowRunStep {
+  nodeId: string;
+  status: CanvasWorkflowRunStepStatus;
+  generationRunId?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface CanvasWorkflowRun {
+  id: string;
+  projectId: string;
+  status: CanvasWorkflowRunStatus;
+  nodeIds: string[];
+  edges: CanvasWorkflowRunEdge[];
+  steps: CanvasWorkflowRunStep[];
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
 }
 
 export interface PipelineStageStatus {
@@ -407,6 +456,18 @@ export interface GenerateTextNodeResponse {
 
 export interface CanvasWorkflowListResponse {
   workflows: CanvasWorkflow[];
+}
+
+export interface CreateCanvasWorkflowRunRequest {
+  nodeIds: string[];
+}
+
+export interface CanvasWorkflowRunResponse {
+  workflowRun: CanvasWorkflowRun;
+}
+
+export interface CanvasWorkflowRunListResponse {
+  workflowRuns: CanvasWorkflowRun[];
 }
 
 

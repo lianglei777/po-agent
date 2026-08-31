@@ -18,6 +18,7 @@ import type {
   ProviderJob,
 } from "@/server/domain/generation";
 import type { GenerationRepository } from "@/server/ports/generation-repository";
+import type { GenerationCredentialReader } from "@/server/ports/generation-provider";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { GenerationRouter } from "./generation-router";
 
@@ -36,10 +37,16 @@ export interface CreateGenerationRunInput {
   originalPrompt?: string;
   assets?: GenerationInput["assets"];
   parameters?: Record<string, JsonValue>;
+  sourceFingerprint?: string;
   source: GenerationSource;
   sourceRef?: string;
   idempotencyKey: string;
 }
+
+export type ValidateGenerationRunInput = Pick<
+  CreateGenerationRunInput,
+  "capability" | "routeId" | "prompt" | "assets" | "parameters"
+>;
 
 export class GenerationRunService {
   private readonly router: GenerationRouter;
@@ -47,6 +54,7 @@ export class GenerationRunService {
   private readonly createId: () => string;
   private readonly now: () => Date;
   private readonly sessions?: SessionRepository;
+  private readonly credentials?: GenerationCredentialReader;
 
   constructor(
     private readonly repository: GenerationRepository,
@@ -55,6 +63,7 @@ export class GenerationRunService {
       createId?: () => string;
       now?: () => Date;
       sessions?: SessionRepository;
+      credentials?: GenerationCredentialReader;
     } = {},
   ) {
     this.router = new GenerationRouter(repository);
@@ -62,6 +71,7 @@ export class GenerationRunService {
     this.createId = options.createId ?? randomUUID;
     this.now = options.now ?? (() => new Date());
     this.sessions = options.sessions;
+    this.credentials = options.credentials;
   }
 
   async upsertSession(session: GenerationSession): Promise<void> {
@@ -105,6 +115,11 @@ export class GenerationRunService {
       jobs: await this.repository.listJobsByRun(result.run.id),
       artifacts: await this.repository.listArtifactsByRun(result.run.id),
     };
+  }
+
+  async validateRunInput(input: ValidateGenerationRunInput): Promise<void> {
+    await this.ready;
+    await this.validateInput(input);
   }
 
   async prepareRun(
@@ -401,23 +416,7 @@ export class GenerationRunService {
         400,
       );
     }
-    const route = await this.router.resolve({
-      capability: input.capability,
-      routeId: input.routeId,
-    });
-    await this.requireProviderEnabled(route);
-    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
-    const parameters = validateParameters(
-      route.inputSchema.parameters ?? [],
-      route.defaults,
-      input.parameters,
-    );
-    validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
-    validateInputConstraints(
-      route.inputSchema.constraints ?? [],
-      parameters,
-      input.assets ?? [],
-    );
+    const { route, prompt, parameters } = await this.validateInput(input);
     const timestamp = this.now().toISOString();
     const run: GenerationRun = {
       id: this.createId(),
@@ -432,6 +431,7 @@ export class GenerationRunService {
         originalPrompt: input.originalPrompt?.trim() || undefined,
         assets: input.assets,
         parameters,
+        sourceFingerprint: input.sourceFingerprint,
       },
       source: input.source,
       sourceRef: input.sourceRef,
@@ -446,6 +446,34 @@ export class GenerationRunService {
           ? this.createInitialJob(run, route, parameters, timestamp)
           : undefined,
     };
+  }
+
+  private async validateInput(input: ValidateGenerationRunInput) {
+    const route = await this.router.resolve({
+      capability: input.capability,
+      routeId: input.routeId,
+    });
+    await this.requireProviderEnabled(route);
+    if (route.credentialRef && this.credentials && !await this.credentials.getCredential(route.credentialRef)) {
+      throw new AppError(
+        "GENERATION_CREDENTIAL_NOT_FOUND",
+        `Credential is not configured for ${route.providerId}`,
+        400,
+      );
+    }
+    const prompt = validatePrompt(input.prompt, route.inputSchema.prompt);
+    const parameters = validateParameters(
+      route.inputSchema.parameters ?? [],
+      route.defaults,
+      input.parameters,
+    );
+    validateAssets(route.inputSchema.assets ?? [], input.assets ?? []);
+    validateInputConstraints(
+      route.inputSchema.constraints ?? [],
+      parameters,
+      input.assets ?? [],
+    );
+    return { route, prompt, parameters };
   }
 
   private createInitialJob(

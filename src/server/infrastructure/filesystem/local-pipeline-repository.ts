@@ -314,6 +314,44 @@ export class LocalPipelineRepository implements PipelineRepository {
     return this.deleteFromOwner((repository) => repository.deleteCanvasWorkflow(id));
   }
 
+  async createCanvasWorkflowRun(input: Parameters<PipelineRepository["createCanvasWorkflowRun"]>[0]) {
+    return (await this.requireProject(input.projectId)).repository.createCanvasWorkflowRun(input);
+  }
+
+  async getCanvasWorkflowRun(id: string) {
+    return (await this.find((repository) => repository.getCanvasWorkflowRun(id)))?.value ?? null;
+  }
+
+  async findCanvasWorkflowRunByGenerationRunId(projectId: string, generationRunId: string) {
+    return (await this.requireProject(projectId)).repository
+      .findCanvasWorkflowRunByGenerationRunId(projectId, generationRunId);
+  }
+
+  async listCanvasWorkflowRuns(projectId: string, limit?: number) {
+    return (await this.requireProject(projectId)).repository.listCanvasWorkflowRuns(projectId, limit);
+  }
+
+  async listActiveCanvasWorkflowRuns(projectId: string) {
+    return (await this.requireProject(projectId)).repository.listActiveCanvasWorkflowRuns(projectId);
+  }
+
+  async updateCanvasWorkflowRun(
+    id: string,
+    patch: Parameters<PipelineRepository["updateCanvasWorkflowRun"]>[1],
+  ) {
+    const owner = await this.find((repository) => repository.getCanvasWorkflowRun(id));
+    return owner ? owner.repository.updateCanvasWorkflowRun(id, patch) : null;
+  }
+
+  async updateCanvasWorkflowRunStep(
+    runId: string,
+    nodeId: string,
+    patch: Parameters<PipelineRepository["updateCanvasWorkflowRunStep"]>[2],
+  ) {
+    const owner = await this.find((repository) => repository.getCanvasWorkflowRun(runId));
+    return owner ? owner.repository.updateCanvasWorkflowRunStep(runId, nodeId, patch) : null;
+  }
+
   async getStageStatuses(projectId: string): Promise<PipelineStageStatus[]> {
     return (await this.requireProject(projectId)).repository.getStageStatuses(projectId);
   }

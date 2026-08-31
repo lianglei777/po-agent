@@ -353,6 +353,8 @@ interface CanvasGenerationSnapshot {
 
 当前输入指纹与当前输出 Run 的指纹不一致时即为 stale。指纹在 application 层计算，前端不自行猜测。
 
+当前实现已按这一边界落地：Run 输入保存服务端生成的 `sourceFingerprint`，图片/视频节点保存当前结果的 `generationProvenance`。画布输入或直接上游引用变化后由 application 层重算并传播 `stale`；前端只为尚未保存的本地 Composer 草稿补充即时提示，不再用节点时间戳或“历史 Take”身份猜测结果是否过期。
+
 ## 9. Take 与生成历史
 
 ### 9.1 推荐模型

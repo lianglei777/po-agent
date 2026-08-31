@@ -5,7 +5,7 @@ import { memo, useCallback, useRef, useState } from "react";
 import { App, Button, Modal, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Trash2 } from "@/components/icons";
+import { AlertTriangle, Copy, Download, Eye, ImagePlus, Images, Pencil, RefreshCw, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
@@ -68,6 +68,7 @@ export function ImageCanvasNode({
     mutation.type === "node.create" ? mutation.node.id === id :
       mutation.type === "node.update" && mutation.nodeId === id && mutation.patch.data !== undefined
   )));
+  const workflowLocked = useCanvasStore((state) => state.workflowLockedNodeIds.includes(id));
   const canvas = node.data;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -274,7 +275,7 @@ export function ImageCanvasNode({
           />
           <CanvasNodeToolbarButton label={t.pipeline.nodeImageDownload} icon={<Download className="size-4" />} onClick={downloadImage} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
-          <CanvasNodeToolbarButton danger label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
+          <CanvasNodeToolbarButton danger disabled={workflowLocked} disabledReason={t.pipeline.canvasWorkflowNodeLocked} label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
         </CanvasNodeContextToolbar>
       ) : null}
 
@@ -390,6 +391,14 @@ export function ImageCanvasNode({
                 ) : null}
               </>
             )}
+            {canvas.generationProvenance?.stale ? (
+              <Tooltip title={t.pipeline.generationOutputStale}>
+                <span className="nodrag absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-[var(--pl-warn)] px-2 py-1 text-caption font-medium text-[var(--workspace-bg)]">
+                  <AlertTriangle className="size-3" />
+                  {t.pipeline.generationOutputStaleBadge}
+                </span>
+              </Tooltip>
+            ) : null}
           </div>
         ) : (
           <div className="pointer-events-none flex h-full w-full items-center justify-center bg-[var(--pl-surface-subtle)] text-[var(--pl-text-muted)]">
@@ -410,6 +419,7 @@ export function ImageCanvasNode({
           data={canvas}
           mode={hasImage ? "modify" : "create"}
           waitingForSave={waitingForSave}
+          workflowLocked={workflowLocked}
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}

@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { createCanvasStore } from "./canvas-store";
 
 describe("pipeline studio canvas store", () => {
+  it("treats the hydrated server snapshot as already saved", () => {
+    const store = createCanvasStore("project-1");
+
+    store.getState().hydrate({ revision: 0, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    expect(store.getState()).toMatchObject({ saveState: "saved", pendingMutations: [] });
+  });
+
   it("creates nodes and supports undo and redo", () => {
     vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValueOnce("node-1").mockReturnValueOnce("entity-1") });
     const store = createCanvasStore("project-1");
@@ -196,6 +204,21 @@ describe("pipeline studio canvas store", () => {
 
     store.getState().undo();
     expect(store.getState().nodes[0]).toMatchObject({ width: 320, height: 220 });
+  });
+
+  it("keeps workflow-owned nodes and connections immutable while the run is active", () => {
+    const store = createCanvasStore("project-1");
+    const source = store.getState().createNode("image", { x: 0, y: 0 }, "Source");
+    const target = store.getState().createNode("video", { x: 400, y: 0 }, "Target");
+    const mutationCount = store.getState().pendingMutations.length;
+    store.getState().setWorkflowLockedNodeIds([source.id]);
+
+    store.getState().deleteNodes([source.id]);
+    store.getState().createEdge(source.id, target.id);
+
+    expect(store.getState().nodes.some((node) => node.id === source.id)).toBe(true);
+    expect(store.getState().edges).toEqual([]);
+    expect(store.getState().pendingMutations).toHaveLength(mutationCount);
   });
 
   it("does not record a resize when the node returns to its original size", () => {

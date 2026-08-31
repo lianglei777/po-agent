@@ -34,12 +34,14 @@ export function VideoAiComposer({
   nodeId,
   data,
   waitingForSave,
+  workflowLocked,
   onNodeUpdate,
   onInputDirtyChange,
 }: {
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
+  workflowLocked: boolean;
   onNodeUpdate: (node: CanvasNode) => void;
   onInputDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -91,7 +93,7 @@ export function VideoAiComposer({
     .join(" / ");
   const status = data.taskInfo?.status;
   const generating = status === "queued" || status === "processing" || submitting;
-  const cancellable = Boolean(data.taskInfo?.runId) && (status === "queued" || status === "processing");
+  const cancellable = !workflowLocked && Boolean(data.taskInfo?.runId) && (status === "queued" || status === "processing");
 
   useEffect(() => {
     const controller = new AbortController();

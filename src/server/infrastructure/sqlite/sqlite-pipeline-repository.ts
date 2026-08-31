@@ -8,6 +8,8 @@ import type {
   CanvasNodeData,
   CanvasViewport,
   CanvasWorkflow,
+  CanvasWorkflowRun,
+  CanvasWorkflowRunStep,
   PipelineAsset,
   PipelineAssetType,
   PipelineProject,
@@ -515,6 +517,151 @@ export class SqlitePipelineRepository implements PipelineRepository {
     return this.database.prepare("DELETE FROM pipeline_canvas_workflows WHERE id = ?").run(id).changes > 0;
   }
 
+  async createCanvasWorkflowRun(input: {
+    id: string;
+    projectId: string;
+    nodeIds: string[];
+    edges: CanvasWorkflowRun["edges"];
+    steps: Array<Pick<CanvasWorkflowRunStep, "nodeId" | "status">>;
+  }): Promise<CanvasWorkflowRun> {
+    const timestamp = nowIso();
+    this.database.transaction(() => {
+      this.database.prepare(`
+        INSERT INTO pipeline_canvas_workflow_runs(
+          id, project_id, status, node_ids_json, edges_json, created_at, updated_at
+        ) VALUES (?, ?, 'pending', ?, ?, ?, ?)
+      `).run(
+        input.id,
+        input.projectId,
+        toJson(input.nodeIds),
+        toJson(input.edges),
+        timestamp,
+        timestamp,
+      );
+      const insertStep = this.database.prepare(`
+        INSERT INTO pipeline_canvas_workflow_run_steps(
+          workflow_run_id, node_id, status, updated_at
+        ) VALUES (?, ?, ?, ?)
+      `);
+      for (const step of input.steps) {
+        insertStep.run(input.id, step.nodeId, step.status, timestamp);
+      }
+    });
+    return (await this.getCanvasWorkflowRun(input.id))!;
+  }
+
+  async getCanvasWorkflowRun(id: string): Promise<CanvasWorkflowRun | null> {
+    const row = this.database.prepare(
+      "SELECT * FROM pipeline_canvas_workflow_runs WHERE id = ?",
+    ).get(id) as SqliteRow | undefined;
+    return row ? this.canvasWorkflowRunFromRow(row) : null;
+  }
+
+  async findCanvasWorkflowRunByGenerationRunId(
+    projectId: string,
+    generationRunId: string,
+  ): Promise<CanvasWorkflowRun | null> {
+    const row = this.database.prepare(`
+      SELECT workflow_run_id
+      FROM pipeline_canvas_workflow_run_steps
+      WHERE generation_run_id = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(generationRunId) as { workflow_run_id: string } | undefined;
+    if (!row) return null;
+    const run = await this.getCanvasWorkflowRun(row.workflow_run_id);
+    return run?.projectId === projectId ? run : null;
+  }
+
+  async listCanvasWorkflowRuns(projectId: string, limit = 20): Promise<CanvasWorkflowRun[]> {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+    const rows = this.database.prepare(`
+      SELECT * FROM pipeline_canvas_workflow_runs
+      WHERE project_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(projectId, safeLimit) as SqliteRow[];
+    return rows.map((row) => this.canvasWorkflowRunFromRow(row));
+  }
+
+  async listActiveCanvasWorkflowRuns(projectId: string): Promise<CanvasWorkflowRun[]> {
+    const rows = this.database.prepare(`
+      SELECT * FROM pipeline_canvas_workflow_runs
+      WHERE project_id = ? AND (
+        status IN ('pending', 'running', 'cancelling')
+        OR EXISTS (
+          SELECT 1 FROM pipeline_canvas_workflow_run_steps
+          WHERE workflow_run_id = pipeline_canvas_workflow_runs.id AND status = 'running'
+        )
+      )
+      ORDER BY created_at ASC
+    `).all(projectId) as SqliteRow[];
+    return rows.map((row) => this.canvasWorkflowRunFromRow(row));
+  }
+
+  async updateCanvasWorkflowRun(
+    id: string,
+    patch: {
+      status?: CanvasWorkflowRun["status"];
+      errorMessage?: string | null;
+      completedAt?: string | null;
+    },
+  ): Promise<CanvasWorkflowRun | null> {
+    const current = await this.getCanvasWorkflowRun(id);
+    if (!current) return null;
+    const timestamp = nowIso();
+    this.database.prepare(`
+      UPDATE pipeline_canvas_workflow_runs
+      SET status = ?, error_message = ?, completed_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      patch.status ?? current.status,
+      patch.errorMessage === undefined ? current.errorMessage ?? null : patch.errorMessage,
+      patch.completedAt === undefined ? current.completedAt ?? null : patch.completedAt,
+      timestamp,
+      id,
+    );
+    return this.getCanvasWorkflowRun(id);
+  }
+
+  async updateCanvasWorkflowRunStep(
+    runId: string,
+    nodeId: string,
+    patch: {
+      status?: CanvasWorkflowRunStep["status"];
+      generationRunId?: string | null;
+      errorMessage?: string | null;
+      startedAt?: string | null;
+      completedAt?: string | null;
+    },
+  ): Promise<CanvasWorkflowRunStep | null> {
+    const row = this.database.prepare(`
+      SELECT * FROM pipeline_canvas_workflow_run_steps
+      WHERE workflow_run_id = ? AND node_id = ?
+    `).get(runId, nodeId) as SqliteRow | undefined;
+    if (!row) return null;
+    const current = canvasWorkflowRunStepFromRow(row);
+    this.database.prepare(`
+      UPDATE pipeline_canvas_workflow_run_steps
+      SET status = ?, generation_run_id = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
+      WHERE workflow_run_id = ? AND node_id = ?
+    `).run(
+      patch.status ?? current.status,
+      patch.generationRunId === undefined ? current.generationRunId ?? null : patch.generationRunId,
+      patch.errorMessage === undefined ? current.errorMessage ?? null : patch.errorMessage,
+      patch.startedAt === undefined ? current.startedAt ?? null : patch.startedAt,
+      patch.completedAt === undefined ? current.completedAt ?? null : patch.completedAt,
+      nowIso(),
+      runId,
+      nodeId,
+    );
+    const updated = this.database.prepare(`
+      SELECT * FROM pipeline_canvas_workflow_run_steps
+      WHERE workflow_run_id = ? AND node_id = ?
+    `).get(runId, nodeId) as SqliteRow;
+    return canvasWorkflowRunStepFromRow(updated);
+  }
+
   async getStageStatuses(projectId: string): Promise<PipelineStageStatus[]> {
     const project = await this.getProject(projectId);
     const assets = await this.listAssets(projectId);
@@ -530,6 +677,26 @@ export class SqlitePipelineRepository implements PipelineRepository {
       { stage: "video", status: frames.length === 0 ? "gated" : framesWithFinalTake === 0 ? "idle" : framesWithFinalTake === frames.length ? "ready" : "warn", statusLabel: frames.length === 0 ? "gated" : `${framesWithFinalTake}/${frames.length}` },
       { stage: "assembly", status: project?.status === "assembled" || project?.status === "exported" ? "ready" : "gated", statusLabel: "coming soon" },
     ];
+  }
+
+  private canvasWorkflowRunFromRow(row: SqliteRow): CanvasWorkflowRun {
+    const steps = this.database.prepare(`
+      SELECT * FROM pipeline_canvas_workflow_run_steps
+      WHERE workflow_run_id = ?
+      ORDER BY rowid ASC
+    `).all(row.id as string) as SqliteRow[];
+    return {
+      id: row.id as string,
+      projectId: row.project_id as string,
+      status: row.status as CanvasWorkflowRun["status"],
+      nodeIds: parseJson<string[]>(row.node_ids_json) ?? [],
+      edges: parseJson<CanvasWorkflowRun["edges"]>(row.edges_json) ?? [],
+      steps: steps.map(canvasWorkflowRunStepFromRow),
+      errorMessage: row.error_message == null ? undefined : String(row.error_message),
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+      completedAt: row.completed_at == null ? undefined : String(row.completed_at),
+    };
   }
 }
 
@@ -635,5 +802,16 @@ function canvasWorkflowFromRow(row: SqliteRow): CanvasWorkflow {
     edges: template.edges,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+  };
+}
+
+function canvasWorkflowRunStepFromRow(row: SqliteRow): CanvasWorkflowRunStep {
+  return {
+    nodeId: row.node_id as string,
+    status: row.status as CanvasWorkflowRunStep["status"],
+    generationRunId: row.generation_run_id == null ? undefined : String(row.generation_run_id),
+    errorMessage: row.error_message == null ? undefined : String(row.error_message),
+    startedAt: row.started_at == null ? undefined : String(row.started_at),
+    completedAt: row.completed_at == null ? undefined : String(row.completed_at),
   };
 }

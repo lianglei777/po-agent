@@ -435,4 +435,49 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         ON generation_routes(provider_id, retired_at, name, id);
     `,
   },
+  {
+    version: 15,
+    name: "pipeline_canvas_workflow_runs",
+    sql: `
+      CREATE TABLE pipeline_canvas_workflow_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelling', 'cancelled')),
+        node_ids_json TEXT NOT NULL,
+        edges_json TEXT NOT NULL,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_workflow_runs_project_idx
+        ON pipeline_canvas_workflow_runs(project_id, created_at DESC);
+      CREATE INDEX pipeline_canvas_workflow_runs_active_idx
+        ON pipeline_canvas_workflow_runs(project_id, status, updated_at DESC);
+
+      CREATE TABLE pipeline_canvas_workflow_run_steps (
+        workflow_run_id TEXT NOT NULL REFERENCES pipeline_canvas_workflow_runs(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+        generation_run_id TEXT,
+        error_message TEXT,
+        started_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workflow_run_id, node_id)
+      ) STRICT;
+      CREATE INDEX pipeline_canvas_workflow_run_steps_generation_idx
+        ON pipeline_canvas_workflow_run_steps(generation_run_id)
+        WHERE generation_run_id IS NOT NULL;
+    `,
+  },
+  {
+    version: 16,
+    name: "pipeline_canvas_single_active_workflow_run",
+    sql: `
+      CREATE UNIQUE INDEX pipeline_canvas_workflow_runs_one_active_per_project
+        ON pipeline_canvas_workflow_runs(project_id)
+        WHERE status IN ('pending', 'running', 'cancelling');
+    `,
+  },
 ];

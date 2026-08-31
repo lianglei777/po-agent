@@ -28,6 +28,7 @@ export function ImageAiComposer({
   nodeId,
   data,
   waitingForSave,
+  workflowLocked,
   mode = "create",
   onNodeUpdate,
   onGenerationStarted,
@@ -35,6 +36,7 @@ export function ImageAiComposer({
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
+  workflowLocked: boolean;
   mode?: "create" | "modify";
   onNodeUpdate: (node: CanvasNode) => void;
   onGenerationStarted?: (node: CanvasNode, edge?: CanvasEdge) => void;
@@ -198,7 +200,7 @@ export function ImageAiComposer({
       settings={settings}
       loadingRoutes={loadingRoutes}
       generating={generating}
-      cancellable={Boolean(data.taskInfo?.runId) && (taskStatus === "queued" || taskStatus === "processing")}
+      cancellable={!workflowLocked && Boolean(data.taskInfo?.runId) && (taskStatus === "queued" || taskStatus === "processing")}
       cancelling={cancelling}
       disabledReason={disabledReason}
       error={localError ?? data.taskInfo?.errorMessage ?? null}

@@ -35,6 +35,7 @@ type CanvasStoreState = CanvasDocument & {
   connectionsVisible: boolean;
   minimapVisible: boolean;
   uploadingNodeIds: string[];
+  workflowLockedNodeIds: string[];
   loaded: boolean;
   error: string | null;
   saveState: CanvasSaveState;
@@ -54,6 +55,7 @@ type CanvasStoreState = CanvasDocument & {
   toggleConnections: () => void;
   toggleMinimap: () => void;
   setNodeUploading: (nodeId: string, uploading: boolean) => void;
+  setWorkflowLockedNodeIds: (nodeIds: string[]) => void;
   createNode: (type: CanvasMediaType, position: { x: number; y: number }, name: string) => CanvasNode;
   insertServerNode: (node: CanvasNode) => void;
   insertServerGenerationResult: (node: CanvasNode, edge?: CanvasEdge) => void;
@@ -112,6 +114,7 @@ export function createCanvasStore(projectId: string) {
     connectionsVisible: true,
     minimapVisible: false,
     uploadingNodeIds: [],
+    workflowLockedNodeIds: [],
     loaded: false,
     error: null,
     saveState: "idle",
@@ -136,7 +139,7 @@ export function createCanvasStore(projectId: string) {
         composerDrafts,
         loaded: true,
         error: null,
-        saveState: "idle",
+        saveState: "saved",
         pendingMutations: [],
         uploadingNodeIds: [],
         past: [],
@@ -213,6 +216,7 @@ export function createCanvasStore(projectId: string) {
         ? state.uploadingNodeIds.includes(nodeId) ? state.uploadingNodeIds : [...state.uploadingNodeIds, nodeId]
         : state.uploadingNodeIds.filter((id) => id !== nodeId),
     })),
+    setWorkflowLockedNodeIds: (workflowLockedNodeIds) => set({ workflowLockedNodeIds }),
 
     createNode: (type, position, name) => {
       const node = makeCanvasNode(projectId, type, position, name);
@@ -260,7 +264,7 @@ export function createCanvasStore(projectId: string) {
       };
     }),
 
-    updateNodeData: (nodeId, data) => set((state) => ({
+    updateNodeData: (nodeId, data) => set((state) => state.workflowLockedNodeIds.includes(nodeId) ? state : ({
       nodes: state.nodes.map((node) => node.id === nodeId ? { ...node, data, updatedAt: new Date().toISOString() } : node),
       pendingMutations: appendMutation(state.pendingMutations, { type: "node.update", nodeId, patch: { data } }),
       saveState: "idle",
@@ -345,11 +349,14 @@ export function createCanvasStore(projectId: string) {
 
     deleteNodes: (nodeIds) => {
       if (!nodeIds.length) return;
-      const ids = new Set(nodeIds);
       const state = get();
+      const locked = new Set(state.workflowLockedNodeIds);
+      const deletableNodeIds = nodeIds.filter((nodeId) => !locked.has(nodeId));
+      if (!deletableNodeIds.length) return;
+      const ids = new Set(deletableNodeIds);
       const deletedEdgeIds = state.edges.filter((edge) => ids.has(edge.sourceNodeId) || ids.has(edge.targetNodeId)).map((edge) => edge.id);
       const mutations: CanvasMutation[] = [
-        ...nodeIds.map((nodeId): CanvasMutation => ({ type: "node.delete", nodeId })),
+        ...deletableNodeIds.map((nodeId): CanvasMutation => ({ type: "node.delete", nodeId })),
         ...deletedEdgeIds.map((edgeId): CanvasMutation => ({ type: "edge.delete", edgeId })),
       ];
       commitDocument(
@@ -418,6 +425,7 @@ export function createCanvasStore(projectId: string) {
 
     createEdge: (sourceNodeId, targetNodeId, intent = "connect") => {
       const state = get();
+      if (state.workflowLockedNodeIds.includes(sourceNodeId) || state.workflowLockedNodeIds.includes(targetNodeId)) return;
       if (intent === "connect" && state.uploadingNodeIds.includes(targetNodeId)) return;
       const problem = canvasConnectionProblem(state.nodes, state.edges, sourceNodeId, targetNodeId);
       if (problem && !(intent === "restore" && problem === "target-has-content")) return;
@@ -442,6 +450,7 @@ export function createCanvasStore(projectId: string) {
       const state = get();
       const current = state.edges.find((edge) => edge.id === edgeId);
       if (!current) return;
+      if (state.workflowLockedNodeIds.includes(current.sourceNodeId) || state.workflowLockedNodeIds.includes(current.targetNodeId)) return;
       commitDocument(
         set,
         get,
@@ -455,14 +464,19 @@ export function createCanvasStore(projectId: string) {
 
     deleteEdges: (edgeIds) => {
       if (!edgeIds.length) return;
-      const ids = new Set(edgeIds);
       const state = get();
+      const deletableEdgeIds = edgeIds.filter((edgeId) => {
+        const edge = state.edges.find((candidate) => candidate.id === edgeId);
+        return !edge || (!state.workflowLockedNodeIds.includes(edge.sourceNodeId) && !state.workflowLockedNodeIds.includes(edge.targetNodeId));
+      });
+      if (!deletableEdgeIds.length) return;
+      const deletableIds = new Set(deletableEdgeIds);
       commitDocument(
         set,
         get,
         state.nodes,
-        state.edges.filter((edge) => !ids.has(edge.id)),
-        edgeIds.map((edgeId): CanvasMutation => ({ type: "edge.delete", edgeId })),
+        state.edges.filter((edge) => !deletableIds.has(edge.id)),
+        deletableEdgeIds.map((edgeId): CanvasMutation => ({ type: "edge.delete", edgeId })),
       );
     },
 

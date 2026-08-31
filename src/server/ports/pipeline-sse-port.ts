@@ -9,6 +9,7 @@ export type PipelineSseEventType =
   | "generation_progress"
   | "generation_completed"
   | "generation_failed"
+  | "workflow_run_updated"
   | "agent_message"
   | "agent_thinking"
   | "agent_tool_call";
