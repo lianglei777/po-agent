@@ -12,8 +12,8 @@ describe("RunningHub catalog", () => {
   it("compiles every operation into a frozen trusted execution config", () => {
     const routes = createRunningHubRoutes("2026-08-27T00:00:00.000Z");
 
-    expect(RUNNINGHUB_OPERATIONS).toHaveLength(25);
-    expect(routes).toHaveLength(25);
+    expect(RUNNINGHUB_OPERATIONS).toHaveLength(26);
+    expect(routes).toHaveLength(26);
     expect(routes.find((route) => route.id === "runninghub-wan-3-reference-to-video")?.navigationLabel)
       .toBe("reference-to-video");
     expect(routes.find((route) => route.id === "runninghub-seedream-v5-pro-text-to-image")?.navigationLabel)
@@ -131,6 +131,37 @@ describe("RunningHub catalog", () => {
       prompt: "follow the references",
       aspectRatio: "16:9 (Widescreen)",
       duration: 8,
+    });
+  });
+
+  it("maps Kling lip-sync with server-owned face identifiers", () => {
+    const config = resolveRunningHubExecutionConfig("kling-lip-sync-video", {});
+    expect(config.endpoint).toBe("/openapi/v2/kling-lip-sync/lip-sync-video");
+    expect(buildRunningHubRequest(config, {
+      prompt: "",
+      parameters: {
+        sessionId: "session-1",
+        faceId: "7",
+        soundStartTime: 0,
+        soundEndTime: 4_000,
+        soundInsertTime: 1_000,
+        soundVolume: 1.2,
+        originalAudioVolume: 0.5,
+      },
+    }, [{
+      slot: "audioUrl",
+      name: "voice.mp3",
+      mimeType: "audio/mpeg",
+      reference: { kind: "url", url: "https://assets.test/voice.mp3" },
+    }])).toEqual({
+      sessionId: "session-1",
+      faceId: "7",
+      audioUrl: "https://assets.test/voice.mp3",
+      soundStartTime: 0,
+      soundEndTime: 4_000,
+      soundInsertTime: 1_000,
+      soundVolume: 1.2,
+      originalAudioVolume: 0.5,
     });
   });
 });

@@ -32,11 +32,24 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
   )) throw validationError("routeId is invalid");
   if (value.settings !== undefined && !isRecord(value.settings)) throw validationError("settings is invalid");
   const settings = value.settings ? parseGenerationSettings(value.settings) : undefined;
+  let lipSync: GenerateCanvasNodeRequest["lipSync"];
+  if (value.lipSync !== undefined) {
+    if (!isRecord(value.lipSync)
+      || !validId(value.lipSync.preparationId)
+      || !validId(value.lipSync.faceKey)) {
+      throw validationError("lipSync is invalid");
+    }
+    lipSync = {
+      preparationId: value.lipSync.preparationId,
+      faceKey: value.lipSync.faceKey,
+    };
+  }
   return {
     prompt: typeof value.prompt === "string" ? value.prompt.trim() : undefined,
     promptDocument: value.promptDocument as GenerateCanvasNodeRequest["promptDocument"],
     routeId: typeof value.routeId === "string" ? value.routeId.trim() : undefined,
     settings,
+    lipSync,
     ...(typeof value.createNewNode === "boolean" ? { createNewNode: value.createNewNode } : {}),
   };
 }
@@ -297,6 +310,18 @@ function parseClientGenerationParams(value: unknown, index: number): CanvasGener
   if (value.advancedSettings !== undefined && !isRecord(value.advancedSettings)) {
     throw validationError(`${path}.advancedSettings is invalid`);
   }
+  let lipSync: CanvasGenerationParams["lipSync"];
+  if (value.lipSync !== undefined) {
+    if (!isRecord(value.lipSync)
+      || !validId(value.lipSync.preparationId)
+      || !validId(value.lipSync.faceKey)) {
+      throw validationError(`${path}.lipSync is invalid`);
+    }
+    lipSync = {
+      preparationId: value.lipSync.preparationId,
+      faceKey: value.lipSync.faceKey,
+    };
+  }
   return {
     prompt: value.prompt,
     promptDocument: value.promptDocument as CanvasGenerationParams["promptDocument"],
@@ -306,6 +331,7 @@ function parseClientGenerationParams(value: unknown, index: number): CanvasGener
     modeType: value.modeType as string | undefined,
     settings: value.settings ? parseGenerationSettings(value.settings) : undefined,
     advancedSettings: value.advancedSettings ? parseGenerationSettings(value.advancedSettings) : undefined,
+    lipSync,
   };
 }
 

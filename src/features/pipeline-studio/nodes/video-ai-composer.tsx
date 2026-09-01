@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type {
@@ -8,7 +9,9 @@ import type {
   CanvasNode,
   CanvasNodeData,
   CanvasPromptDocument,
+  CanvasResourceReferenceAttrs,
   CanvasResourceRole,
+  LipSyncPreparationDto,
 } from "@/contracts/pipeline";
 import { FileVideo } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
@@ -29,6 +32,7 @@ import { reconcileComposerSettings } from "../model/generation-composer-settings
 import { CanvasGenerationConfig } from "./shared/canvas-generation-config";
 import { CanvasModelPicker } from "./shared/canvas-model-picker";
 import { generationParameterConflict } from "@/components/generation/generation-input-constraints";
+import { KlingLipSyncComposer } from "./kling-lip-sync-composer";
 
 export function VideoAiComposer({
   nodeId,
@@ -64,6 +68,10 @@ export function VideoAiComposer({
   const [localError, setLocalError] = useState<string | null>(null);
   const [invalidReferenceCount, setInvalidReferenceCount] = useState(0);
   const [unsupportedReferenceCount, setUnsupportedReferenceCount] = useState(0);
+  const [lipSyncPreparation, setLipSyncPreparation] = useState<LipSyncPreparationDto | null>(null);
+  const [lipSyncFaceKey, setLipSyncFaceKey] = useState(data.params?.lipSync?.faceKey ?? "");
+  const [automaticTiming, setAutomaticTiming] = useState(true);
+  const preparationController = useRef<AbortController | null>(null);
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const canvasEdges = useCanvasStore((state) => state.edges);
   const connectedReferences = useMemo(
@@ -74,6 +82,17 @@ export function VideoAiComposer({
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
   );
+  const isLipSync = selectedRoute?.capability === "audio-to-video";
+  const videoReferences = connectedReferences.filter((reference) => reference.mediaType === "video");
+  const audioReferences = connectedReferences.filter((reference) => reference.mediaType === "audio");
+  const sourceAudioDurationMs = audioReferences.length === 1
+    ? durationMilliseconds(canvasNodes.find((node) => node.id === audioReferences[0].sourceId)?.data?.audioMetadata?.durationSeconds)
+    : undefined;
+  const videoSource = videoReferences.length === 1
+    ? canvasNodes.find((node) => node.id === videoReferences[0].sourceId)
+    : undefined;
+  const videoReferenceIdentity = videoReferences.length === 1 ? mediaReferenceIdentity(videoReferences[0], videoSource) : "";
+  const previousVideoReferenceIdentity = useRef(videoReferenceIdentity);
   const inferredCapability = videoCapabilityForPrompt(promptDocument, connectedReferences);
   // 素材只参与首次推荐；后续变化必须保留用户手动选择的 Route，避免模型被静默替换。
   const initialRouteId = useRef(data.params?.routeId);
@@ -116,10 +135,45 @@ export function VideoAiComposer({
     return () => controller.abort();
   }, []);
 
-  const disabledReason = useMemo(() => {
+  useEffect(() => () => preparationController.current?.abort(), []);
+
+  useEffect(() => {
+    if (previousVideoReferenceIdentity.current === videoReferenceIdentity) return;
+    previousVideoReferenceIdentity.current = videoReferenceIdentity;
+    preparationController.current?.abort();
+    setLipSyncPreparation(null);
+    setLipSyncFaceKey("");
+  }, [videoReferenceIdentity]);
+
+  useEffect(() => {
+    const stored = data.params?.lipSync;
+    if (!stored) return;
+    const controller = new AbortController();
+    pipelineStudioApi.getLipSyncPreparation(nodeId, stored.preparationId, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setLipSyncPreparation(response.preparation);
+        if (response.preparation.faces.some((face) => face.key === stored.faceKey)) {
+          setLipSyncFaceKey(stored.faceKey);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [data.params?.lipSync, nodeId]);
+
+  const disabledReason = (() => {
     if (waitingForSave) return t.pipeline.videoAiPendingSave;
     if (loadingRoutes) return t.pipeline.videoAiRoutesLoading;
     if (!selectedRoute) return t.pipeline.videoAiNoRoutes;
+    if (selectedRoute.capability === "audio-to-video") {
+      if (videoReferences.length !== 1) return t.pipeline.lipSyncVideoCountRequired;
+      if (audioReferences.length !== 1) return t.pipeline.lipSyncAudioCountRequired;
+      if (lipSyncPreparation?.status === "ready" && !lipSyncFaceKey) return t.pipeline.lipSyncFaceRequired;
+      const timingError = lipSyncTimingProblem(settings, lipSyncPreparation, lipSyncFaceKey);
+      if (timingError === "duration") return t.pipeline.lipSyncDurationTooShort;
+      if (timingError === "overlap") return t.pipeline.lipSyncOverlapRequired;
+      return "";
+    }
     if (invalidReferenceCount) return t.pipeline.promptReferenceUnavailable;
     if (unsupportedReferenceCount) return t.pipeline.promptReferenceUnsupported;
     if (referenceProblem?.kind === "unsupported") return t.pipeline.promptReferenceUnsupported;
@@ -153,12 +207,17 @@ export function VideoAiComposer({
       return t.pipeline.videoAiPromptTooLong.replace("{count}", String(selectedRoute.inputSchema.prompt.maxLength ?? 20_000));
     }
     return "";
-  }, [invalidReferenceCount, loadingRoutes, parameterConflictLabels, promptDocument.plainText, referenceProblem, selectedRoute, t.pipeline, unsupportedReferenceCount, waitingForSave]);
+  })();
 
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
     setSelectedRouteId(routeId);
     if (route?.capability === "image-to-video") setResourceRole("first-frame");
+    if (route?.capability !== "audio-to-video") {
+      preparationController.current?.abort();
+      setLipSyncPreparation(null);
+      setLipSyncFaceKey("");
+    }
     const nextSettings = route ? reconcileComposerSettings(route, settings) : {};
     if (route) setSettings(nextSettings);
     onInputDirtyChange?.(
@@ -172,6 +231,39 @@ export function VideoAiComposer({
     setSubmitting(true);
     setLocalError(null);
     try {
+      if (selectedRoute.capability === "audio-to-video") {
+        const wasReady = lipSyncPreparation?.status === "ready";
+        const preparation = wasReady ? lipSyncPreparation : await prepareLipSync(
+          nodeId,
+          preparationController,
+          setLipSyncPreparation,
+          t.pipeline.lipSyncAnalysisTimeout,
+        );
+        if (preparation.status !== "ready") {
+          throw new Error(preparation.errorMessage ?? t.pipeline.lipSyncAnalysisFailed);
+        }
+        const face = preparation.faces.find((candidate) => candidate.key === lipSyncFaceKey)
+          ?? preparation.faces.find((candidate) => candidate.recommended)
+          ?? preparation.faces[0];
+        if (!face) throw new Error(t.pipeline.lipSyncAnalysisFailed);
+        const nextSettings = automaticTiming
+          ? automaticLipSyncSettings(settings, face, sourceAudioDurationMs)
+          : settings;
+        setLipSyncPreparation(preparation);
+        setLipSyncFaceKey(face.key);
+        setSettings(nextSettings);
+        // 多人脸第一次点击只完成识别并展示选择，避免未经用户确认就消耗生成额度。
+        if (!wasReady && preparation.faces.length > 1) return;
+        const response = await pipelineStudioApi.generateCanvasNode(nodeId, {
+          prompt: "",
+          routeId: selectedRoute.id,
+          settings: generationRequestSettings(nextSettings),
+          lipSync: { preparationId: preparation.id, faceKey: face.key },
+        });
+        onNodeUpdate(response.node);
+        setExpanded(false);
+        return;
+      }
       const response = await pipelineStudioApi.generateCanvasNode(nodeId, {
         prompt: promptDocument.plainText.trim(),
         promptDocument,
@@ -183,6 +275,7 @@ export function VideoAiComposer({
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : t.pipeline.videoAiError);
     } finally {
+      preparationController.current = null;
       setSubmitting(false);
     }
   };
@@ -201,7 +294,45 @@ export function VideoAiComposer({
     }
   };
 
-  const surface = (large: boolean) => (
+  const surface = (large: boolean) => isLipSync ? (
+    <KlingLipSyncComposer
+      large={large}
+      routes={routes}
+      selectedRouteId={selectedRouteId}
+      references={connectedReferences}
+      preparation={lipSyncPreparation}
+      faceKey={lipSyncFaceKey}
+      settings={settings}
+      automaticTiming={automaticTiming}
+      busy={generating || cancelling}
+      cancellable={cancellable}
+      cancelling={cancelling}
+      disabledReason={disabledReason}
+      error={localError ?? lipSyncPreparation?.errorMessage ?? data.taskInfo?.errorMessage ?? null}
+      onRouteChange={changeRoute}
+      onFaceChange={(faceKey) => {
+        setLipSyncFaceKey(faceKey);
+        const face = lipSyncPreparation?.faces.find((candidate) => candidate.key === faceKey);
+        if (automaticTiming && face) {
+          setSettings((current) => automaticLipSyncSettings(current, face, sourceAudioDurationMs));
+        }
+      }}
+      onSettingsChange={(nextSettings) => {
+        setSettings(nextSettings);
+        onInputDirtyChange?.(true);
+      }}
+      onAutomaticTimingChange={(value) => {
+        setAutomaticTiming(value);
+        const face = lipSyncPreparation?.faces.find((candidate) => candidate.key === lipSyncFaceKey);
+        if (value && face) {
+          setSettings((current) => automaticLipSyncSettings(current, face, sourceAudioDurationMs));
+        }
+      }}
+      onSubmit={() => void submit()}
+      onCancel={() => void cancel()}
+      onExpand={() => setExpanded(true)}
+    />
+  ) : (
     <VideoComposerSurface
       large={large}
       nodeId={nodeId}
@@ -333,7 +464,6 @@ function VideoComposerSurface({
             items={routes.map((route) => ({
               id: route.id,
               name: route.name,
-              badge: videoCapabilityLabel(route.capability, t.pipeline),
               meta: route.providerId,
               description: route.description,
               tags: route.tags,
@@ -416,13 +546,84 @@ function generationRequestSettings(values: Record<string, JsonValue>): Record<st
   )));
 }
 
-function videoCapabilityLabel(
-  capability: GenerationRouteDto["capability"],
-  labels: ReturnType<typeof useI18n>["t"]["pipeline"],
+async function prepareLipSync(
+  nodeId: string,
+  controllerRef: MutableRefObject<AbortController | null>,
+  onChange: (preparation: LipSyncPreparationDto) => void,
+  timeoutMessage: string,
 ) {
-  if (capability === "image-to-video") return labels.videoAiModeImage;
-  if (capability === "multimodal-to-video") return labels.videoAiModeMultimodal;
-  return labels.videoAiModeText;
+  controllerRef.current?.abort();
+  const controller = new AbortController();
+  controllerRef.current = controller;
+  let preparation = (await pipelineStudioApi.createLipSyncPreparation(nodeId)).preparation;
+  onChange(preparation);
+  for (let attempt = 0; preparation.status === "analyzing" && attempt < 80; attempt += 1) {
+    await abortableDelay(1_500, controller.signal);
+    preparation = (await pipelineStudioApi.getLipSyncPreparation(nodeId, preparation.id, controller.signal)).preparation;
+    onChange(preparation);
+  }
+  if (preparation.status === "analyzing") throw new Error(timeoutMessage);
+  return preparation;
+}
+
+function automaticLipSyncSettings(
+  current: Record<string, JsonValue>,
+  face: LipSyncPreparationDto["faces"][number],
+  audioDurationMs: number | undefined,
+) {
+  const availableDuration = face.availableEndMs - face.availableStartMs;
+  const cropDuration = Math.min(audioDurationMs ?? 2_000, availableDuration, 60_000);
+  return {
+    ...current,
+    soundStartTime: 0,
+    soundEndTime: Math.max(2_000, cropDuration),
+    soundInsertTime: face.availableStartMs,
+  };
+}
+
+function lipSyncTimingProblem(
+  settings: Record<string, JsonValue>,
+  preparation: LipSyncPreparationDto | null,
+  faceKey: string,
+): "duration" | "overlap" | "" {
+  if (preparation?.status !== "ready" || !faceKey) return "";
+  const face = preparation.faces.find((candidate) => candidate.key === faceKey);
+  if (!face) return "";
+  const start = numericSetting(settings.soundStartTime, 0);
+  const end = numericSetting(settings.soundEndTime, 2_000);
+  const insert = numericSetting(settings.soundInsertTime, 0);
+  const duration = end - start;
+  if (duration < 2_000) return "duration";
+  const overlap = Math.min(insert + duration, face.availableEndMs) - Math.max(insert, face.availableStartMs);
+  return overlap < 2_000 ? "overlap" : "";
+}
+
+function numericSetting(value: JsonValue | undefined, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function durationMilliseconds(seconds: number | undefined) {
+  return typeof seconds === "number" && Number.isFinite(seconds) ? Math.round(seconds * 1_000) : undefined;
+}
+
+function mediaReferenceIdentity(reference: CanvasResourceReferenceAttrs, source: CanvasNode | undefined) {
+  return [
+    reference.sourceId,
+    source?.data?.videoSelection?.artifactId,
+    source?.data?.artifactIds?.join(","),
+    source?.data?.workspaceFile?.relativePath,
+    source?.data?.url?.join(","),
+  ].filter(Boolean).join(":");
+}
+
+function abortableDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds);
+    signal.addEventListener("abort", () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
+  });
 }
 
 function tooltipContainer(trigger: HTMLElement) {

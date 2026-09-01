@@ -14,6 +14,7 @@ import type {
   PipelineAssetType,
   PipelineProject,
   PipelineStageStatus,
+  LipSyncPreparation,
   StoryboardFrame,
 } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
@@ -346,6 +347,74 @@ export class SqlitePipelineRepository implements PipelineRepository {
 
   async deleteCanvasEdgesByNode(nodeId: string): Promise<void> {
     this.database.prepare("DELETE FROM pipeline_canvas_edges WHERE source_node_id = ? OR target_node_id = ?").run(nodeId, nodeId);
+  }
+
+  async createLipSyncPreparation(
+    input: Omit<LipSyncPreparation, "createdAt" | "updatedAt">,
+  ): Promise<LipSyncPreparation> {
+    const timestamp = nowIso();
+    const preparation: LipSyncPreparation = { ...input, createdAt: timestamp, updatedAt: timestamp };
+    this.database.prepare(`
+      INSERT INTO pipeline_lip_sync_preparations(
+        id, node_id, project_id, video_fingerprint, provider_session_id, remote_task_id,
+        status, faces_json, error_message, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      preparation.id,
+      preparation.nodeId,
+      preparation.projectId,
+      preparation.videoFingerprint,
+      preparation.providerSessionId ?? null,
+      preparation.remoteTaskId ?? null,
+      preparation.status,
+      toJson(preparation.faces),
+      preparation.errorMessage ?? null,
+      preparation.createdAt,
+      preparation.updatedAt,
+    );
+    return preparation;
+  }
+
+  async getLipSyncPreparation(id: string): Promise<LipSyncPreparation | null> {
+    const row = this.database.prepare(
+      "SELECT * FROM pipeline_lip_sync_preparations WHERE id = ?",
+    ).get(id) as SqliteRow | undefined;
+    return row ? lipSyncPreparationFromRow(row) : null;
+  }
+
+  async findLipSyncPreparation(nodeId: string, videoFingerprint: string): Promise<LipSyncPreparation | null> {
+    const row = this.database.prepare(`
+      SELECT * FROM pipeline_lip_sync_preparations
+      WHERE node_id = ? AND video_fingerprint = ? AND status IN ('analyzing', 'ready')
+      ORDER BY updated_at DESC LIMIT 1
+    `).get(nodeId, videoFingerprint) as SqliteRow | undefined;
+    return row ? lipSyncPreparationFromRow(row) : null;
+  }
+
+  async updateLipSyncPreparation(
+    id: string,
+    patch: Partial<Pick<LipSyncPreparation,
+      "providerSessionId" | "remoteTaskId" | "status" | "faces" | "errorMessage"
+    >>,
+  ): Promise<LipSyncPreparation | null> {
+    const current = await this.getLipSyncPreparation(id);
+    if (!current) return null;
+    const updated = { ...current, ...patch, updatedAt: nowIso() };
+    this.database.prepare(`
+      UPDATE pipeline_lip_sync_preparations
+      SET provider_session_id = ?, remote_task_id = ?, status = ?, faces_json = ?,
+          error_message = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      updated.providerSessionId ?? null,
+      updated.remoteTaskId ?? null,
+      updated.status,
+      toJson(updated.faces),
+      updated.errorMessage ?? null,
+      updated.updatedAt,
+      id,
+    );
+    return updated;
   }
 
   async getCanvasViewport(projectId: string): Promise<CanvasViewport> {
@@ -788,6 +857,22 @@ function canvasEdgeFromRow(row: SqliteRow): CanvasEdge {
     order: row.sort_order == null ? 0 : Number(row.sort_order),
     createdAt: row.created_at as string | undefined,
     updatedAt: row.updated_at as string | undefined,
+  };
+}
+
+function lipSyncPreparationFromRow(row: SqliteRow): LipSyncPreparation {
+  return {
+    id: row.id as string,
+    nodeId: row.node_id as string,
+    projectId: row.project_id as string,
+    videoFingerprint: row.video_fingerprint as string,
+    providerSessionId: row.provider_session_id == null ? undefined : String(row.provider_session_id),
+    remoteTaskId: row.remote_task_id == null ? undefined : String(row.remote_task_id),
+    status: row.status as LipSyncPreparation["status"],
+    faces: parseJson<LipSyncPreparation["faces"]>(row.faces_json) ?? [],
+    errorMessage: row.error_message == null ? undefined : String(row.error_message),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }
 

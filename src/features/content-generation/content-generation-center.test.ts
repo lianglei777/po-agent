@@ -51,6 +51,7 @@ describe("content generation conversation", () => {
       "runninghub-wan-2-7-reference-to-video",
       "runninghub-wan-3-image-to-video",
       "runninghub-wan-3-reference-to-video",
+      "runninghub-kling-lip-sync-video",
       "runninghub-extract-background-audio",
       "runninghub-extract-vocal-audio",
       "runninghub-minimax-h3-oss-multimodal-video",

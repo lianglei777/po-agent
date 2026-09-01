@@ -62,6 +62,9 @@ import { VideoGenerationService } from "@/server/application/pipeline/video-gene
 import { ScriptAnalysisService } from "@/server/application/pipeline/script-analysis-service";
 import { StoryboardService } from "@/server/application/pipeline/storyboard-service";
 import { CanvasStudioService } from "@/server/application/pipeline/canvas-studio-service";
+import { LipSyncPreparationService } from "@/server/application/pipeline/lip-sync-preparation-service";
+import { RunningHubLipSyncProvider } from "@/server/infrastructure/content-generation/runninghub/runninghub-lip-sync-provider";
+import { RUNNINGHUB_CREDENTIAL_REF } from "@/server/infrastructure/content-generation/runninghub/runninghub-provider-constants";
 import { CompositeAgentToolProvider } from "@/server/application/pipeline/composite-agent-tool-provider";
 import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
@@ -267,12 +270,19 @@ function createContainer() {
     storyboardService = new StoryboardService(pipelineLlm, pipelineRepository, getGenerationRunService(), pipelineSse);
     assetGenerationService = new AssetGenerationService(pipelineRepository, getGenerationRunService(), pipelineSse);
     videoGenerationService = new VideoGenerationService(pipelineRepository, getGenerationRunService(), pipelineSse);
+    const lipSyncPreparations = new LipSyncPreparationService(
+      pipelineRepository,
+      new RunningHubLipSyncProvider(),
+      getGenerationCredentialStore(),
+      RUNNINGHUB_CREDENTIAL_REF,
+    );
     canvasStudioService = new CanvasStudioService(
       pipelineRepository,
       getGenerationRunService(),
       getGenerationAssetService(),
       pipelineLlm,
       pipelineSse,
+      lipSyncPreparations,
     );
     canvasWorkflowRunService = new CanvasWorkflowRunService(
       pipelineRepository,

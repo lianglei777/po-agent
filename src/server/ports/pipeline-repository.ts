@@ -14,6 +14,7 @@ import type {
   PipelineAssetType,
   PipelineProject,
   PipelineStageStatus,
+  LipSyncPreparation,
   StoryboardFrame,
 } from "@/server/domain/pipeline";
 
@@ -65,6 +66,13 @@ export interface PipelineRepository {
   updateCanvasEdge(id: string, patch: { role?: CanvasEdge["role"]; order?: number }): Promise<CanvasEdge | null>;
   deleteCanvasEdge(id: string): Promise<boolean>;
   deleteCanvasEdgesByNode(nodeId: string): Promise<void>;
+
+  createLipSyncPreparation(input: Omit<LipSyncPreparation, "createdAt" | "updatedAt">): Promise<LipSyncPreparation>;
+  getLipSyncPreparation(id: string): Promise<LipSyncPreparation | null>;
+  findLipSyncPreparation(nodeId: string, videoFingerprint: string): Promise<LipSyncPreparation | null>;
+  updateLipSyncPreparation(id: string, patch: Partial<Pick<LipSyncPreparation,
+    "providerSessionId" | "remoteTaskId" | "status" | "faces" | "errorMessage"
+  >>): Promise<LipSyncPreparation | null>;
 
   getCanvasViewport(projectId: string): Promise<CanvasViewport>;
   getCanvasRevision(projectId: string): Promise<number>;

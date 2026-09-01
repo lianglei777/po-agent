@@ -104,6 +104,10 @@ export interface CanvasGenerationParams {
   modeType?: string;
   settings?: Record<string, CanvasGenerationSettingValue>;
   advancedSettings?: Record<string, CanvasGenerationSettingValue>;
+  lipSync?: {
+    preparationId: string;
+    faceKey: string;
+  };
   textList?: CanvasMediaReference[];
   imageList?: CanvasMediaReference[];
   videoList?: CanvasMediaReference[];
@@ -457,7 +461,35 @@ export interface GenerateCanvasNodeRequest {
   promptDocument?: CanvasPromptDocument;
   routeId?: string;
   settings?: Record<string, CanvasGenerationSettingValue>;
+  lipSync?: {
+    preparationId: string;
+    faceKey: string;
+  };
   createNewNode?: boolean;
+}
+
+export type LipSyncPreparationStatus = "analyzing" | "ready" | "failed";
+
+export interface LipSyncFaceDto {
+  key: string;
+  previewUrl?: string;
+  availableStartMs: number;
+  availableEndMs: number;
+  recommended: boolean;
+}
+
+export interface LipSyncPreparationDto {
+  id: string;
+  nodeId: string;
+  status: LipSyncPreparationStatus;
+  faces: LipSyncFaceDto[];
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLipSyncPreparationResponse {
+  preparation: LipSyncPreparationDto;
 }
 
 export interface GenerateTextNodeRequest {

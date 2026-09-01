@@ -37,8 +37,9 @@ export class GenerationTurnPlanningService {
     const routes = allRoutes
       .filter((route) =>
         route.enabled &&
-        // Chat 工作流尚未声明 generate_audio 工具，不能把音频 Route 交给规划器后错误映射成生图。
+        // 这两类 Route 依赖画布专用的媒体或人脸准备态，不能交给 Chat 规划器直接调用。
         route.capability !== "video-to-audio" &&
+        route.capability !== "audio-to-video" &&
         providerEnabled.get(route.providerId) === true &&
         credentialAvailable.get(route.id) === true
       )
@@ -83,7 +84,10 @@ export function generationRouteDto(route: GenerationRoute): GenerationRouteDto {
     isDefault: route.isDefault,
     revision: route.revision,
     defaults: route.defaults,
-    inputSchema: route.inputSchema,
+    inputSchema: {
+      ...route.inputSchema,
+      parameters: route.inputSchema.parameters?.filter((field) => !field.internal),
+    },
   };
 }
 

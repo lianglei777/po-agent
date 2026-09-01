@@ -93,4 +93,37 @@ describe("generationRouteDto", () => {
     expect(JSON.stringify(dto)).not.toContain("credentialRef");
     expect(JSON.stringify(dto)).not.toContain("internal-operation");
   });
+
+  it("does not expose server-owned generation parameters", () => {
+    const dto = generationRouteDto({
+      id: "lip-sync",
+      name: "Kling lip sync",
+      description: "Lip sync",
+      tags: [],
+      capability: "audio-to-video",
+      product: "Kling",
+      providerId: "runninghub",
+      providerOperation: "kling-lip-sync-video",
+      enabled: true,
+      isDefault: false,
+      revision: 1,
+      defaults: {},
+      inputSchema: {
+        prompt: { required: false },
+        parameters: [
+          { key: "sessionId", label: "Session", type: "text", internal: true },
+          { key: "soundVolume", label: "Volume", type: "number" },
+        ],
+      },
+      adapterConfig: {},
+      credentialRef: "runninghub:default",
+      createdAt: "now",
+      updatedAt: "now",
+    });
+
+    expect(dto.inputSchema.parameters).toEqual([
+      { key: "soundVolume", label: "Volume", type: "number" },
+    ]);
+    expect(JSON.stringify(dto)).not.toContain("sessionId");
+  });
 });

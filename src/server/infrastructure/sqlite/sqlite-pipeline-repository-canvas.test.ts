@@ -140,6 +140,48 @@ describe("SqlitePipelineRepository canvas mutations", () => {
     expect(await repository.listActiveCanvasWorkflowRuns("project-1"))
       .toHaveLength(0);
   });
+
+  it("persists reusable lip-sync preparations without exposing storage JSON details", async () => {
+    database = new SqliteDatabase(":memory:");
+    const repository = new SqlitePipelineRepository(database);
+    await repository.createProject({
+      id: "project-1",
+      rootPath: ".",
+      title: "Project",
+      originalText: "",
+      artDirection: null,
+      modelSettings: null,
+      promptConfig: null,
+      status: "draft",
+      coverArtifactId: null,
+    });
+    await repository.applyCanvasMutationBatch("project-1", 0, [
+      { type: "node.create", node: makeNode("video-1", "video") },
+    ]);
+
+    await repository.createLipSyncPreparation({
+      id: "preparation-1",
+      nodeId: "video-1",
+      projectId: "project-1",
+      videoFingerprint: "fingerprint-1",
+      remoteTaskId: "task-1",
+      status: "analyzing",
+      faces: [],
+    });
+    await repository.updateLipSyncPreparation("preparation-1", {
+      status: "ready",
+      providerSessionId: "session-1",
+      faces: [{ key: "face-1", providerFaceId: "0", availableStartMs: 0, availableEndMs: 4_000 }],
+    });
+
+    await expect(repository.findLipSyncPreparation("video-1", "fingerprint-1"))
+      .resolves.toMatchObject({
+        id: "preparation-1",
+        providerSessionId: "session-1",
+        status: "ready",
+        faces: [{ key: "face-1", providerFaceId: "0" }],
+      });
+  });
 });
 
 function makeNode(id = "node-1", type: "text" | "image" | "video" = "text"): CanvasNode {

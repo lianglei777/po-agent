@@ -26,6 +26,7 @@ import { GenerationAssetService } from "@/server/application/content-generation/
 import { GenerationRunService, type GenerationRunView } from "@/server/application/content-generation/generation-run-service";
 import { ensurePipelineRunSession } from "./pipeline-session";
 import { collectPromptResourceReferences, compileCanvasPrompt } from "./prompt-compiler";
+import { LipSyncPreparationService } from "./lip-sync-preparation-service";
 
 const MAX_GENERATED_TEXT_LENGTH = 200_000;
 const MAX_TEXT_REFERENCE_LENGTH = 120_000;
@@ -40,7 +41,33 @@ export class CanvasStudioService {
     private readonly assets: GenerationAssetService,
     private readonly llm: LlmPort,
     private readonly sse: PipelineSsePort,
+    private readonly lipSyncPreparations?: LipSyncPreparationService,
   ) {}
+
+  async createLipSyncPreparation(nodeId: string) {
+    if (!this.lipSyncPreparations) throw new AppError("VALIDATION_ERROR", "Lip-sync is not configured", 400);
+    await this.syncTargetReferences(nodeId);
+    const node = await this.requireNode(nodeId);
+    const references = referencesFromParams(node.data?.params);
+    const videos = references.filter((reference) => reference.mediaType === "video" && mediaReferenceIsUsable(reference));
+    const audios = references.filter((reference) => reference.mediaType === "audio" && mediaReferenceIsUsable(reference));
+    if (videos.length !== 1) throw new AppError("VALIDATION_ERROR", "Connect exactly one person video", 400);
+    if (audios.length !== 1) throw new AppError("VALIDATION_ERROR", "Connect exactly one dubbing audio", 400);
+    const video = await this.readMediaReference(videos[0]);
+    const videoFingerprint = createHash("sha256").update(video.data).digest("hex");
+    return this.lipSyncPreparations.create({
+      nodeId: node.id,
+      projectId: node.projectId,
+      videoFingerprint,
+      video: { ...video, slot: "videoUrl" },
+    });
+  }
+
+  async getLipSyncPreparation(nodeId: string, preparationId: string) {
+    if (!this.lipSyncPreparations) throw new AppError("VALIDATION_ERROR", "Lip-sync is not configured", 400);
+    await this.requireNode(nodeId);
+    return this.lipSyncPreparations.get(preparationId, nodeId);
+  }
 
   async getState(projectId: string) {
     if (!await this.repository.getProject(projectId)) {
@@ -349,7 +376,7 @@ export class CanvasStudioService {
       promptReferences = compiled.references;
     }
 
-    if (input && (input.prompt !== undefined || input.promptDocument !== undefined || input.routeId !== undefined || input.settings !== undefined)) {
+    if (input && (input.prompt !== undefined || input.promptDocument !== undefined || input.routeId !== undefined || input.settings !== undefined || input.lipSync !== undefined)) {
       data = {
         ...data,
         generatorType: "default",
@@ -359,6 +386,7 @@ export class CanvasStudioService {
           ...(input.promptDocument !== undefined ? { promptDocument: input.promptDocument } : {}),
           ...(input.routeId !== undefined ? { routeId: input.routeId } : {}),
           settings: { ...data.params?.settings, ...input.settings },
+          ...(input.lipSync !== undefined ? { lipSync: input.lipSync } : {}),
           ...(promptReferences ? referenceParams(promptReferences) : {}),
         },
         taskInfo: { status: "idle" },
@@ -412,7 +440,33 @@ export class CanvasStudioService {
       const generationAssets = route
         ? generationAssetsForRoute(referencesFromParams(data.params), route.inputSchema.assets ?? [], !promptDocument)
         : [];
-      const parameters = generationParameters(data, route?.inputSchema.parameters);
+      let parameters = generationParameters(data, route?.inputSchema.parameters);
+      if (capability === "audio-to-video") {
+        const lipSync = input?.lipSync ?? data.params?.lipSync;
+        if (!route || !lipSync || !this.lipSyncPreparations) {
+          throw new AppError("VALIDATION_ERROR", "Select a detected person before generating lip-sync video", 400);
+        }
+        const references = referencesFromParams(data.params);
+        const videos = references.filter((reference) => reference.mediaType === "video" && mediaReferenceIsUsable(reference));
+        const audios = references.filter((reference) => reference.mediaType === "audio" && mediaReferenceIsUsable(reference));
+        if (videos.length !== 1 || audios.length !== 1) {
+          throw new AppError("VALIDATION_ERROR", "Lip-sync requires exactly one person video and one dubbing audio", 400);
+        }
+        const video = await this.readMediaReference(videos[0]);
+        const videoFingerprint = createHash("sha256").update(video.data).digest("hex");
+        const trusted = await this.lipSyncPreparations.requireReady(
+          lipSync.preparationId,
+          node.id,
+          videoFingerprint,
+          lipSync.faceKey,
+        );
+        parameters = {
+          ...parameters,
+          sessionId: trusted.preparation.providerSessionId!,
+          faceId: trusted.face.providerFaceId,
+        };
+        validateLipSyncTiming(parameters, trusted.face.availableStartMs, trusted.face.availableEndMs);
+      }
       if (route && data.params?.routeId !== route.id) {
         data = { ...data, params: { ...data.params!, routeId: route.id } };
         node = await this.updateNode(node.id, { data });
@@ -1031,12 +1085,38 @@ export class CanvasStudioService {
     const hasPlannedText = references.some((reference) => (
       reference.mediaType === "text" && plannedNodeIds.has(reference.nodeId)
     ));
+    let parameters = generationParameters(data, route?.inputSchema.parameters);
+    if (capability === "audio-to-video") {
+      const selection = data.params?.lipSync;
+      const videos = references.filter((reference) => reference.mediaType === "video");
+      const audios = references.filter((reference) => reference.mediaType === "audio");
+      if (!route || !selection || !this.lipSyncPreparations || videos.length !== 1 || audios.length !== 1) {
+        throw new AppError("VALIDATION_ERROR", "Prepare and select a lip-sync person before running this workflow", 400);
+      }
+      if (plannedNodeIds.has(videos[0].nodeId) || !mediaReferenceIsUsable(videos[0])) {
+        throw new AppError("VALIDATION_ERROR", "Analyze the final upstream video before running lip-sync in a workflow", 409);
+      }
+      const video = await this.readMediaReference(videos[0]);
+      const fingerprint = createHash("sha256").update(video.data).digest("hex");
+      const trusted = await this.lipSyncPreparations.requireReady(
+        selection.preparationId,
+        node.id,
+        fingerprint,
+        selection.faceKey,
+      );
+      parameters = {
+        ...parameters,
+        sessionId: trusted.preparation.providerSessionId!,
+        faceId: trusted.face.providerFaceId,
+      };
+      validateLipSyncTiming(parameters, trusted.face.availableStartMs, trusted.face.availableEndMs);
+    }
     await this.runs.validateRunInput({
       capability,
       routeId: route?.id,
       prompt: ownPrompt.trim() || (hasPlannedText ? "Workflow upstream text" : ownPrompt),
       assets: generationAssets,
-      parameters: generationParameters(data, route?.inputSchema.parameters),
+      parameters,
     });
   }
 
@@ -1190,6 +1270,7 @@ export class CanvasStudioService {
         prompt: input.prompt,
         routeId: input.routeId ?? null,
         settings,
+        lipSync: input.data.params?.lipSync ?? null,
         references: referenceSnapshots,
       }))
       .digest("hex");
@@ -1353,6 +1434,11 @@ export class CanvasStudioService {
     await this.updateNode(node.id, {
       data: { ...latest.data, taskInfo: { status: "failed", errorMessage: message } },
     }, undefined, true);
+  }
+
+  private async readMediaReference(reference: CanvasMediaReference) {
+    if (reference.sourceType === "asset" && reference.sourceId) return this.readAssetMedia(reference.sourceId);
+    return this.readNodeMedia(reference.sourceId ?? reference.nodeId);
   }
 
   private emit(type: Parameters<PipelineSsePort["emit"]>[0]["type"], projectId: string, payload: unknown) {
@@ -1683,13 +1769,14 @@ function canvasGenerationCapability(
   data: CanvasNodeData,
   promptDocument: CanvasPromptDocument | undefined,
   requestedCapability?: string,
-): "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video" | "video-to-audio" {
+): "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video" | "audio-to-video" | "video-to-audio" {
   const params = data.params ?? { prompt: "" };
   const imageRefs = params.imageList ?? [];
   const videoRefs = params.videoList ?? [];
   const audioRefs = params.audioList ?? [];
   if (data.type === "image") return imageRefs.length ? "image-to-image" : "text-to-image";
   if (data.type === "audio") return "video-to-audio";
+  if (requestedCapability === "audio-to-video") return requestedCapability;
   if (requestedCapability === "text-to-video"
     || requestedCapability === "image-to-video"
     || requestedCapability === "multimodal-to-video") return requestedCapability;
@@ -1702,6 +1789,24 @@ function canvasGenerationCapability(
     return "multimodal-to-video";
   }
   return !promptDocument && imageRefs.length >= 1 ? "image-to-video" : "text-to-video";
+}
+
+function validateLipSyncTiming(
+  parameters: Record<string, JsonValue> | undefined,
+  availableStartMs: number,
+  availableEndMs: number,
+) {
+  const start = Number(parameters?.soundStartTime);
+  const end = Number(parameters?.soundEndTime);
+  const insert = Number(parameters?.soundInsertTime);
+  if (![start, end, insert].every(Number.isFinite) || start < 0 || end - start < 2_000 || insert < 0) {
+    throw new AppError("VALIDATION_ERROR", "Lip-sync audio timing is invalid", 400);
+  }
+  const overlapStart = Math.max(insert, availableStartMs);
+  const overlapEnd = Math.min(insert + (end - start), availableEndMs);
+  if (overlapEnd - overlapStart < 2_000) {
+    throw new AppError("VALIDATION_ERROR", "Lip-sync audio must overlap the selected person's available interval by at least 2 seconds", 400);
+  }
 }
 
 function generationParameters(data: CanvasNodeData, fields?: GenerationParameterField[]): Record<string, JsonValue> | undefined {

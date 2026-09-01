@@ -8,11 +8,12 @@ describe("video generation options", () => {
       route("text", "text-to-video"),
       route("image", "image-to-video"),
       route("multimodal", "multimodal-to-video"),
+      route("lip-sync", "audio-to-video"),
       route("disabled", "image-to-video", false),
       route("still-image", "text-to-image"),
     ]);
 
-    expect(routes.map((item) => item.id)).toEqual(["text", "image", "multimodal"]);
+    expect(routes.map((item) => item.id)).toEqual(["text", "image", "multimodal", "lip-sync"]);
   });
 
   it("respects a saved route before using input-based recommendation", () => {

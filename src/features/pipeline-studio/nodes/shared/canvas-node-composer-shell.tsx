@@ -7,6 +7,7 @@ export function CanvasNodeComposerShell({
   body,
   footer,
   error,
+  compactHeightClass = "h-56",
   expandLabel,
   onExpand,
 }: {
@@ -15,6 +16,7 @@ export function CanvasNodeComposerShell({
   body: ReactNode;
   footer: ReactNode;
   error?: ReactNode;
+  compactHeightClass?: string;
   expandLabel: string;
   onExpand: () => void;
 }) {
@@ -22,7 +24,7 @@ export function CanvasNodeComposerShell({
     <section
       className={
         "flex flex-col overflow-hidden rounded-xl border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--pl-shadow-hover)] " +
-        (large ? "h-[min(68vh,680px)]" : "h-56")
+        (large ? "h-[min(68vh,680px)]" : compactHeightClass)
       }
       aria-label={ariaLabel}
     >

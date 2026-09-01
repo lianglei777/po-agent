@@ -11,6 +11,7 @@ import type {
   GenerateTextNodeResponse,
   CanvasWorkflowRunListResponse,
   CanvasWorkflowRunResponse,
+  CreateLipSyncPreparationResponse,
 } from "@/contracts/pipeline";
 import type { ModelsResponse } from "@/contracts/models";
 import type { GenerationComposerOptionsResponse, GenerationRunViewDto, ListGenerationRunsResponse } from "@/contracts/generation";
@@ -85,6 +86,16 @@ export const pipelineStudioApi = {
   generateCanvasNode: (nodeId: string, input: GenerateCanvasNodeRequest) => request<GenerateCanvasNodeResponse>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generate`,
     { method: "POST", body: JSON.stringify(input) },
+  ),
+
+  createLipSyncPreparation: (nodeId: string) => request<CreateLipSyncPreparationResponse>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/lip-sync/preparations`,
+    { method: "POST" },
+  ),
+
+  getLipSyncPreparation: (nodeId: string, preparationId: string, signal?: AbortSignal) => request<CreateLipSyncPreparationResponse>(
+    `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/lip-sync/preparations/${encodeURIComponent(preparationId)}`,
+    { signal },
   ),
 
   cancelCanvasNodeGeneration: (nodeId: string) => request<GenerateCanvasNodeResponse>(

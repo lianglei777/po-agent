@@ -315,6 +315,18 @@ describe("parseGenerateCanvasNodeRequest", () => {
     })).toThrow("settings.unsafe is invalid");
   });
 
+  it("accepts a bounded lip-sync preparation selection", () => {
+    expect(parseGenerateCanvasNodeRequest({
+      routeId: "runninghub-kling-lip-sync-video",
+      lipSync: { preparationId: "preparation-1", faceKey: "face-2" },
+    })).toMatchObject({
+      lipSync: { preparationId: "preparation-1", faceKey: "face-2" },
+    });
+    expect(() => parseGenerateCanvasNodeRequest({
+      lipSync: { preparationId: "preparation-1", faceKey: "x".repeat(201) },
+    })).toThrow("lipSync is invalid");
+  });
+
   it("accepts an explicit request to create a derived image node", () => {
     expect(parseGenerateCanvasNodeRequest({ prompt: "change the lighting", createNewNode: true }))
       .toMatchObject({ prompt: "change the lighting", createNewNode: true });

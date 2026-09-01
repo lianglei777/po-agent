@@ -38,6 +38,8 @@ export interface GenerationParameterField {
   minLength?: number;
   maxLength?: number;
   format?: "url";
+  /** 仅供服务端适配器使用，不通过 Route DTO 暴露给客户端。 */
+  internal?: boolean;
   /** 仅描述供应商无关的交互呈现；校验和请求映射仍由字段本身与 adapter 决定。 */
   presentation?: GenerationParameterPresentation;
 }
@@ -88,6 +90,7 @@ export const GENERATION_CAPABILITIES = [
   "text-to-video",
   "image-to-video",
   "multimodal-to-video",
+  "audio-to-video",
   "video-to-audio",
 ] as const;
 

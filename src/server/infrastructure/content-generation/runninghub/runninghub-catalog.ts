@@ -191,6 +191,7 @@ export const RUNNINGHUB_OPERATIONS: RunningHubOperationDefinition[] = validateCa
   ...pixVerseOperations(),
   ...wan27Operations(),
   ...wan3Operations(),
+  ...klingLipSyncOperations(),
   ...runningHubSelfDeployOperations(),
 ]);
 
@@ -757,6 +758,44 @@ function runningHubSelfDeployOperations(): RunningHubOperationDefinition[] {
       ]),
     }),
   ];
+}
+
+function klingLipSyncOperations(): RunningHubOperationDefinition[] {
+  return [defineOperation({
+    operation: "kling-lip-sync-video",
+    route: routeMeta({
+      id: "runninghub-kling-lip-sync-video",
+      name: "可灵对口型",
+      description: "组合人物视频的人脸识别结果与配音音频，生成逐帧口型同步的视频。单人脸自动继续，多人脸由用户确认目标人物。",
+      tags: ["人物视频", "配音音频", "多人物选择", "2–60秒"],
+      product: "可灵对口型",
+      capability: "audio-to-video",
+      navigationLabel: "audio-to-video",
+    }),
+    inputSchema: {
+      prompt: { required: false, maxLength: 0 },
+      parameters: [
+        { key: "sessionId", label: "识别会话", type: "text", required: true, maxLength: 200, internal: true },
+        { key: "faceId", label: "目标人物", type: "text", required: true, maxLength: 200, internal: true },
+        numberField("soundStartTime", "音频开始", 0, 0, 60_000),
+        numberField("soundEndTime", "音频结束", 2_000, 2_000, 60_000),
+        numberField("soundInsertTime", "视频插入位置", 0, 0, 60_000),
+        numberField("soundVolume", "配音音量", 1, 0, 2),
+        numberField("originalAudioVolume", "原视频音量", 1, 0, 2),
+      ],
+      assets: [mediaSlot("audioUrl", "配音音频", "audio", 1, 5 * MIB, AUDIO_TYPES, true)],
+    },
+    protocol: standard("/openapi/v2/kling-lip-sync/lip-sync-video", [
+      parameter("sessionId", "sessionId", null),
+      parameter("faceId", "faceId", null),
+      asset("audioUrl"),
+      parameter("soundStartTime", "soundStartTime", 0),
+      parameter("soundEndTime", "soundEndTime", 2_000),
+      parameter("soundInsertTime", "soundInsertTime", 0),
+      parameter("soundVolume", "soundVolume", 1),
+      parameter("originalAudioVolume", "originalAudioVolume", 1),
+    ]),
+  })];
 }
 
 function seedance20VariantImageSchema(variant: "mini" | "fast"): GenerationInputSchema {

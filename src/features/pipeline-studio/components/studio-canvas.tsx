@@ -630,18 +630,20 @@ export function StudioCanvas({
         onZoomChangeComplete={(percentage) => void commitCanvasZoom(percentage)}
       />
 
-      <BottomCenterToolbar
-        disabledReason={workflowRunDisabledReason}
-        running={workflowRunBusy || workflowActive}
-        onCreate={() => {
-          const instance = instanceRef.current;
-          const center = instance
-            ? instance.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
-            : { x: 200, y: 160 };
-          setCreateMenu({ screenX: window.innerWidth / 2 - 90, screenY: window.innerHeight - 150, flowX: center.x, flowY: center.y });
-        }}
-        onRun={() => void startWorkflow()}
-      />
+      {editingNodeId === null ? (
+        <BottomCenterToolbar
+          disabledReason={workflowRunDisabledReason}
+          running={workflowRunBusy || workflowActive}
+          onCreate={() => {
+            const instance = instanceRef.current;
+            const center = instance
+              ? instance.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+              : { x: 200, y: 160 };
+            setCreateMenu({ screenX: window.innerWidth / 2 - 90, screenY: window.innerHeight - 150, flowX: center.x, flowY: center.y });
+          }}
+          onRun={() => void startWorkflow()}
+        />
+      ) : null}
 
       <input
         ref={uploadInputRef}

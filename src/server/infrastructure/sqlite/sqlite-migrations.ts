@@ -480,4 +480,25 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         WHERE status IN ('pending', 'running', 'cancelling');
     `,
   },
+  {
+    version: 17,
+    name: "pipeline_lip_sync_preparations",
+    sql: `
+      CREATE TABLE pipeline_lip_sync_preparations (
+        id TEXT PRIMARY KEY,
+        node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        video_fingerprint TEXT NOT NULL,
+        provider_session_id TEXT,
+        remote_task_id TEXT,
+        status TEXT NOT NULL CHECK (status IN ('analyzing', 'ready', 'failed')),
+        faces_json TEXT NOT NULL DEFAULT '[]',
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX pipeline_lip_sync_preparations_node_idx
+        ON pipeline_lip_sync_preparations(node_id, video_fingerprint, updated_at DESC);
+    `,
+  },
 ];

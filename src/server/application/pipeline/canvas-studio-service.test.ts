@@ -7,6 +7,7 @@ import type { LlmPort } from "@/server/ports/llm-port";
 import type { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import type { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { CanvasStudioService } from "./canvas-studio-service";
+import type { LipSyncPreparationService } from "./lip-sync-preparation-service";
 
 const project: PipelineProject = {
   id: "project-1",
@@ -1124,6 +1125,107 @@ describe("CanvasStudioService audio generation", () => {
   });
 });
 
+describe("CanvasStudioService Kling lip sync", () => {
+  it("injects trusted provider face identifiers without accepting them from the client", async () => {
+    const target = videoNode();
+    target.data = {
+      ...target.data!,
+      params: { prompt: "", settings: {}, routeId: "route-kling-lip-sync" },
+    };
+    const personVideo = {
+      ...videoNode(),
+      id: "person-video",
+      data: {
+        ...videoNode().data!,
+        workspaceFile: { relativePath: "assets/person.mp4", contentType: "video/mp4", name: "person.mp4" },
+      },
+    };
+    const dubbingAudio = {
+      ...audioNode(),
+      id: "dubbing-audio",
+      data: {
+        ...audioNode().data!,
+        workspaceFile: { relativePath: "assets/voice.mp3", contentType: "audio/mpeg", name: "voice.mp3" },
+      },
+    };
+    const nodes = new Map([[target.id, target], [personVideo.id, personVideo], [dubbingAudio.id, dubbingAudio]]);
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasEdges: vi.fn().mockResolvedValue([
+        { id: "edge-video", projectId: project.id, sourceNodeId: personVideo.id, targetNodeId: target.id, edgeType: "reference", order: 0, createdAt: target.createdAt, updatedAt: target.updatedAt },
+        { id: "edge-audio", projectId: project.id, sourceNodeId: dubbingAudio.id, targetNodeId: target.id, edgeType: "reference", order: 1, createdAt: target.createdAt, updatedAt: target.updatedAt },
+      ]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-09-01T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-kling-lip-sync",
+      enabled: true,
+      isDefault: false,
+      capability: "audio-to-video",
+      inputSchema: {
+        prompt: { required: false, maxLength: 0 },
+        parameters: [
+          { key: "sessionId", label: "Session", type: "text", required: true, internal: true },
+          { key: "faceId", label: "Face", type: "text", required: true, internal: true },
+          { key: "soundStartTime", label: "Start", type: "number", required: true, defaultValue: 0 },
+          { key: "soundEndTime", label: "End", type: "number", required: true, defaultValue: 2_000 },
+          { key: "soundInsertTime", label: "Insert", type: "number", required: true, defaultValue: 0 },
+        ],
+        assets: [{ key: "audioUrl", label: "Audio", mediaType: "audio", required: true, maxFiles: 1 }],
+      },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-lip-sync" } }),
+    } as unknown as GenerationRunService;
+    const assets = {
+      read: vi.fn().mockImplementation(async ({ relativePath }: { relativePath: string }) => ({
+        data: new Uint8Array(relativePath.endsWith(".mp4") ? [1, 2, 3] : [4, 5]),
+        mimeType: relativePath.endsWith(".mp4") ? "video/mp4" : "audio/mpeg",
+        name: relativePath.split("/").at(-1)!,
+      })),
+    } as unknown as GenerationAssetService;
+    const preparations = {
+      requireReady: vi.fn().mockResolvedValue({
+        preparation: { providerSessionId: "trusted-session" },
+        face: { providerFaceId: "trusted-face", availableStartMs: 0, availableEndMs: 5_000 },
+      }),
+    } as unknown as LipSyncPreparationService;
+
+    await createService(repository, {} as LlmPort, runs, assets, undefined, preparations).generate(target.id, {
+      routeId: route.id,
+      settings: { soundStartTime: 0, soundEndTime: 3_000, soundInsertTime: 1_000 },
+      lipSync: { preparationId: "preparation-1", faceKey: "face-1" },
+    });
+
+    expect(preparations.requireReady).toHaveBeenCalledWith(
+      "preparation-1",
+      target.id,
+      expect.stringMatching(/^[a-f0-9]{64}$/),
+      "face-1",
+    );
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "audio-to-video",
+      routeId: route.id,
+      parameters: expect.objectContaining({
+        sessionId: "trusted-session",
+        faceId: "trusted-face",
+      }),
+      assets: [expect.objectContaining({ slot: "audioUrl" })],
+    }));
+    expect(nodes.get(target.id)?.data?.params?.lipSync).toEqual({
+      preparationId: "preparation-1",
+      faceKey: "face-1",
+    });
+  });
+});
+
 function repositoryStub(result: { applied: boolean; revision: number }) {
   return {
     getProject: vi.fn().mockResolvedValue(project),
@@ -1141,6 +1243,7 @@ function createService(
   runs = {} as GenerationRunService,
   assets = {} as GenerationAssetService,
   sse = { emit: vi.fn() } as unknown as PipelineSsePort,
+  lipSyncPreparations?: LipSyncPreparationService,
 ) {
   if (!("listActiveCanvasWorkflowRuns" in repository)) {
     Object.assign(repository, { listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]) });
@@ -1151,6 +1254,7 @@ function createService(
     assets,
     llm,
     sse,
+    lipSyncPreparations,
   );
 }
 

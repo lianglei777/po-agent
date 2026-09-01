@@ -125,7 +125,8 @@ export function ContentGenerationCenter({
   // Workspace Store 会跨 Session 存活，所有权确认前不能展示旧会话数据。
   const ownsCenterSession = centerSessionId === session.id;
   const enabledRoutes = useMemo(
-    () => routes.filter((item) => item.enabled),
+    // 对口型依赖 Pipeline Studio 的人脸准备态，通用生成面板不提供不完整的直调入口。
+    () => routes.filter((item) => item.enabled && item.capability !== "audio-to-video"),
     [routes],
   );
   const route = enabledRoutes.find((item) => item.id === selectedRouteId);

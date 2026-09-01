@@ -282,6 +282,27 @@ export class LocalPipelineRepository implements PipelineRepository {
     if (owner) await owner.repository.deleteCanvasEdgesByNode(nodeId);
   }
 
+  async createLipSyncPreparation(input: Parameters<PipelineRepository["createLipSyncPreparation"]>[0]) {
+    return (await this.requireProject(input.projectId)).repository.createLipSyncPreparation(input);
+  }
+
+  async getLipSyncPreparation(id: string) {
+    return (await this.find((repository) => repository.getLipSyncPreparation(id)))?.value ?? null;
+  }
+
+  async findLipSyncPreparation(nodeId: string, videoFingerprint: string) {
+    const owner = await this.find((repository) => repository.getCanvasNode(nodeId));
+    return owner ? owner.repository.findLipSyncPreparation(nodeId, videoFingerprint) : null;
+  }
+
+  async updateLipSyncPreparation(
+    id: string,
+    patch: Parameters<PipelineRepository["updateLipSyncPreparation"]>[1],
+  ) {
+    const owner = await this.find((repository) => repository.getLipSyncPreparation(id));
+    return owner ? owner.repository.updateLipSyncPreparation(id, patch) : null;
+  }
+
   async getCanvasViewport(projectId: string) {
     return (await this.requireProject(projectId)).repository.getCanvasViewport(projectId);
   }

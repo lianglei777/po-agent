@@ -5,7 +5,7 @@ describe("createRunningHubRoutes", () => {
   it("provides one stable catalog default for every supported capability", () => {
     const routes = createRunningHubRoutes("2026-08-06T00:00:00.000Z");
 
-    expect(routes).toHaveLength(25);
+    expect(routes).toHaveLength(26);
     expect(routes.every((route) =>
       route.providerId === "runninghub" &&
       !route.enabled &&
@@ -57,6 +57,7 @@ describe("createRunningHubRoutes", () => {
       "PixVerse V6",
       "Wan 2.7",
       "Wan 3.0",
+      "可灵对口型",
       "RunningHub 音频分离",
       "MiniMax H3 OSS",
     ]);

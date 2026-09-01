@@ -21,7 +21,14 @@ export function generationRouteDto(route: GenerationRoute): GenerationRouteDto {
     isDefault: route.isDefault,
     revision: route.revision,
     defaults: route.defaults,
-    inputSchema: route.inputSchema,
+    inputSchema: publicInputSchema(route.inputSchema),
+  };
+}
+
+function publicInputSchema(inputSchema: GenerationRoute["inputSchema"]): GenerationRoute["inputSchema"] {
+  return {
+    ...inputSchema,
+    parameters: inputSchema.parameters?.filter((field) => !field.internal),
   };
 }
 

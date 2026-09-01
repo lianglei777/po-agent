@@ -28,6 +28,7 @@ describe("SqliteDatabase", () => {
       { version: 14, name: "generation_route_catalog_lifecycle" },
       { version: 15, name: "pipeline_canvas_workflow_runs" },
       { version: 16, name: "pipeline_canvas_single_active_workflow_run" },
+      { version: 17, name: "pipeline_lip_sync_preparations" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([
@@ -61,6 +62,7 @@ describe("SqliteDatabase", () => {
         'pipeline_canvas_workflows',
         'pipeline_canvas_workflow_runs',
         'pipeline_canvas_workflow_run_steps'
+        ,'pipeline_lip_sync_preparations'
       )
       ORDER BY name
     `).all()).toEqual([
@@ -76,6 +78,7 @@ describe("SqliteDatabase", () => {
     { name: "pipeline_canvas_workflow_runs" },
     { name: "pipeline_canvas_workflows" },
     { name: "pipeline_frames" },
+    { name: "pipeline_lip_sync_preparations" },
     { name: "pipeline_projects" },
     { name: "provider_jobs" },
     { name: "sessions" },

@@ -284,7 +284,7 @@ function reconcileSelectedRoute(
   routes: GenerationRouteDto[],
   selectedRouteId: string,
 ): string {
-  const enabledRoutes = routes.filter((route) => route.enabled);
+  const enabledRoutes = routes.filter((route) => route.enabled && route.capability !== "audio-to-video");
   return enabledRoutes.some((route) => route.id === selectedRouteId)
     ? selectedRouteId
     : (enabledRoutes[0]?.id ?? "");
