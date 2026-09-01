@@ -33,6 +33,9 @@ ENV PI_CODING_AGENT_DIR=/data/pi-agent
 COPY --from=builder /app/.next/standalone ./
 # 客户端静态资源（JS chunk / CSS 等）
 COPY --from=builder /app/.next/static ./.next/static
+# public 静态资源（侧边栏图标等）：standalone 产物不包含 public（桌面端由 prepare-standalone 补拷，
+# Docker 无此步骤），漏拷会导致 /po-agent-icon.png 404
+COPY --from=builder /app/public ./public
 
 EXPOSE 51732
 CMD ["node", "server.js"]
