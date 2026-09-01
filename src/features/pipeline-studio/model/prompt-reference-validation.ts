@@ -7,6 +7,8 @@ export type PromptReferenceRouteProblem =
   | { kind: "unsupported"; reference: CanvasResourceReferenceAttrs }
   | { kind: "too-many"; slot: GenerationAssetSlot; count: number }
   | { kind: "missing-required"; slot: GenerationAssetSlot }
+  | { kind: "missing-constrained"; slots: GenerationAssetSlot[]; minFiles: number }
+  | { kind: "too-many-constrained"; slots: GenerationAssetSlot[]; count: number; maxFiles: number }
   | null;
 
 export function promptReferenceRouteProblem(
@@ -35,6 +37,17 @@ export function promptReferenceRouteProblem(
     const minimum = slot.minFiles ?? (slot.required ? 1 : 0);
     if ((counts.get(slot.key) ?? 0) < minimum) return { kind: "missing-required", slot };
   }
+  for (const constraint of route.inputSchema.constraints ?? []) {
+    if (constraint.kind === "mutually-exclusive-parameters") continue;
+    const constrainedSlots = slots.filter((slot) => constraint.slots.includes(slot.key));
+    const count = constrainedSlots.reduce((total, slot) => total + (counts.get(slot.key) ?? 0), 0);
+    if (constraint.kind === "at-least-one-asset" && count < (constraint.minFiles ?? 1)) {
+      return { kind: "missing-constrained", slots: constrainedSlots, minFiles: constraint.minFiles ?? 1 };
+    }
+    if (constraint.kind === "max-total-assets" && count > constraint.maxFiles) {
+      return { kind: "too-many-constrained", slots: constrainedSlots, count, maxFiles: constraint.maxFiles };
+    }
+  }
   return null;
 }
 
@@ -52,24 +65,4 @@ export function videoCapabilityForPrompt(
     return "image-to-video" as const;
   }
   return "text-to-video" as const;
-}
-
-export function videoRouteSupportsPrompt(
-  document: CanvasPromptDocument,
-  route: GenerationRouteDto,
-  additionalReferences: CanvasResourceReferenceAttrs[] = [],
-) {
-  if (promptReferenceRouteProblem(document, route, additionalReferences) !== null) return false;
-  const references = [...additionalReferences, ...promptDocumentResourceAttrs(document)]
-    .filter((reference) => reference.mediaType !== "text");
-  if (!references.length) return route.capability === "text-to-video";
-  if (references.some((reference) => reference.mediaType === "video"
-    || (reference.mediaType === "image" && reference.role === "reference"))) {
-    return route.capability === "multimodal-to-video";
-  }
-  if (references.some((reference) => reference.mediaType === "image")) {
-    return route.capability === "image-to-video";
-  }
-  // 纯音频引用可以是文生视频的驱动音频，也可以是多模态输入，最终由路由 Schema 决定。
-  return true;
 }

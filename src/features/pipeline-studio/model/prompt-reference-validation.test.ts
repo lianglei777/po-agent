@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { GenerationCapability, GenerationRouteDto } from "@/contracts/generation";
+import type { GenerationCapability, GenerationInputConstraint, GenerationRouteDto } from "@/contracts/generation";
 import type { CanvasPromptDocument, CanvasResourceRole } from "@/contracts/pipeline";
-import { promptReferenceRouteProblem, videoCapabilityForPrompt, videoRouteSupportsPrompt } from "./prompt-reference-validation";
+import { promptReferenceRouteProblem, videoCapabilityForPrompt } from "./prompt-reference-validation";
 
 describe("prompt reference route validation", () => {
   it("maps explicit frame roles to image-to-video slots", () => {
@@ -57,14 +57,36 @@ describe("prompt reference route validation", () => {
       { key: "audioUrl", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
     ]);
     expect(promptReferenceRouteProblem(document, textVideoWithAudio)).toBeNull();
-    expect(videoRouteSupportsPrompt(document, textVideoWithAudio)).toBe(true);
-    expect(videoRouteSupportsPrompt(document, route("multimodal-to-video", [
+    expect(promptReferenceRouteProblem(document, route("multimodal-to-video", [
       { key: "audioUrls", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
-    ]))).toBe(true);
+    ]))).toBeNull();
     expect(promptReferenceRouteProblem(document, route("image-to-video", [
       { key: "firstFrameUrl", label: "首帧", mediaType: "image", required: true, maxFiles: 1 },
       { key: "drivingAudio", label: "驱动音频", mediaType: "audio", maxFiles: 1 },
     ]))).toMatchObject({ kind: "missing-required" });
+  });
+
+  it("validates constraints that span multiple optional asset slots", () => {
+    const constrained = route("multimodal-to-video", [
+      { key: "imageUrls", label: "参考图片", mediaType: "image", maxFiles: 3 },
+      { key: "videoUrls", label: "参考视频", mediaType: "video", maxFiles: 3 },
+    ], [
+      { kind: "at-least-one-asset", slots: ["imageUrls", "videoUrls"] },
+      { kind: "max-total-assets", slots: ["imageUrls", "videoUrls"], maxFiles: 1 },
+    ]);
+
+    expect(promptReferenceRouteProblem(promptWith([]), constrained)).toMatchObject({
+      kind: "missing-constrained",
+      minFiles: 1,
+    });
+    expect(promptReferenceRouteProblem(promptWith([
+      ["image", "reference"],
+      ["video", "reference"],
+    ]), constrained)).toMatchObject({
+      kind: "too-many-constrained",
+      count: 2,
+      maxFiles: 1,
+    });
   });
 });
 
@@ -93,7 +115,11 @@ function promptWith(entries: Array<["image" | "video" | "audio", CanvasResourceR
   };
 }
 
-function route(capability: GenerationCapability, assets: NonNullable<GenerationRouteDto["inputSchema"]["assets"]>): GenerationRouteDto {
+function route(
+  capability: GenerationCapability,
+  assets: NonNullable<GenerationRouteDto["inputSchema"]["assets"]>,
+  constraints?: GenerationInputConstraint[],
+): GenerationRouteDto {
   return {
     id: "route-1",
     name: "Route",
@@ -106,6 +132,6 @@ function route(capability: GenerationCapability, assets: NonNullable<GenerationR
     isDefault: true,
     revision: 1,
     defaults: {},
-    inputSchema: { prompt: { required: true }, assets },
+    inputSchema: { prompt: { required: true }, assets, constraints },
   };
 }

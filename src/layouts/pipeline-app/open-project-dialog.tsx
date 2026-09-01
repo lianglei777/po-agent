@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Form, Input, Modal, message } from "antd";
+import { Button, Form, Input, Modal, Space, message } from "antd";
 import type { ProjectResponse } from "@/contracts/pipeline";
 import { FolderOpen } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
@@ -58,25 +58,27 @@ export function OpenProjectDialog({ open, onClose, onOpened }: OpenProjectDialog
     >
       <Form form={form} layout="vertical" className="mt-4">
         <Form.Item
-          name="rootPath"
           label={t.pipeline.existingProjectLocation}
           extra={t.pipeline.existingProjectLocationHint}
-          rules={[{ required: true, message: t.pipeline.existingProjectLocationPlaceholder }]}
+          required
         >
-          <Input
-            autoFocus
-            placeholder={t.pipeline.existingProjectLocationPlaceholder}
-            addonAfter={typeof window !== "undefined" && window.poAgentDesktop ? (
+          <Space.Compact block>
+            <Form.Item
+              name="rootPath"
+              noStyle
+              rules={[{ required: true, message: t.pipeline.existingProjectLocationPlaceholder }]}
+            >
+              <Input autoFocus placeholder={t.pipeline.existingProjectLocationPlaceholder} />
+            </Form.Item>
+            {typeof window !== "undefined" && window.poAgentDesktop ? (
               <Button
-                type="text"
-                size="small"
                 icon={<FolderOpen className="size-4" />}
                 onClick={handleBrowse}
               >
                 {t.pipeline.dialogBrowse}
               </Button>
             ) : null}
-          />
+          </Space.Compact>
         </Form.Item>
       </Form>
     </Modal>

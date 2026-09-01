@@ -34,6 +34,10 @@ describe("content generation conversation", () => {
       "runninghub-seedance-2-text-to-video",
       "runninghub-seedance-2-image-to-video",
       "runninghub-seedance-2-multimodal-video",
+      "runninghub-seedance-2-mini-image-to-video",
+      "runninghub-seedance-2-fast-image-to-video",
+      "runninghub-seedance-2-mini-multimodal-video",
+      "runninghub-seedance-2-fast-multimodal-video",
       "runninghub-seedance-2-5-text-to-video",
       "runninghub-seedance-2-5-image-to-video",
       "runninghub-seedance-2-5-multimodal-video",
@@ -67,10 +71,12 @@ describe("content generation conversation", () => {
       "audioUrls",
     ]);
     // Seedance 2.5 路由包含新增的 bitrateMode 与 outputFormat 字段
-    expect(routes[5].inputSchema.parameters?.map((field) => field.key)).toContain("bitrateMode");
-    expect(routes[5].inputSchema.parameters?.map((field) => field.key)).toContain("outputFormat");
+    const seedance25Text = routes.find((route) => route.id === "runninghub-seedance-2-5-text-to-video")!;
+    expect(seedance25Text.inputSchema.parameters?.map((field) => field.key)).toContain("bitrateMode");
+    expect(seedance25Text.inputSchema.parameters?.map((field) => field.key)).toContain("outputFormat");
     // 2.5 multimodal 素材上限提升：图片 30、视频 10、音频 10
-    expect(routes[7].inputSchema.assets?.map((slot) => slot.maxFiles)).toEqual([30, 10, 10]);
+    const seedance25Multimodal = routes.find((route) => route.id === "runninghub-seedance-2-5-multimodal-video")!;
+    expect(seedance25Multimodal.inputSchema.assets?.map((slot) => slot.maxFiles)).toEqual([30, 10, 10]);
   });
 
   it("renders durable runs as user and provider turns with local artifacts", () => {

@@ -144,6 +144,11 @@ Codex blue (`#1668dc`) is the primary action color; `#4096ff` is reserved for fo
 - Generate is a sibling Session view, not a separate Session type. Returning to Chat restores the same conversation, while generation Runs remain associated with the same Session.
 - Long conversations use a Codex-style turn navigator overlaid on the Chat panel's right edge. User turns form a quiet continuous rail of short marks; hovering one mark expands nearby marks into a wave and reveals the user prompt plus the following assistant summary. Clicking a mark jumps to that turn without changing panel widths.
 
+## Pipeline Studio
+
+- Text, image, and video generation composers share one compact model picker: a flat list with stable row height, a type icon on each item, provider metadata, and a dedicated keyboard-accessible information button for model descriptions and capability tags. Hovering the selection row itself must not expand or disclose model details.
+- Audio nodes currently represent uploaded or connected audio assets rather than audio generation, so they must not expose a model picker until an audio-generation capability is available through the content-generation contract.
+
 ## Settings and detail pages
 
 - Settings replaces the workspace chrome with a quiet near-black navigation rail and a rounded dark panel surface. A visible Exit Settings action returns to the preserved workspace.

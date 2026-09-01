@@ -183,6 +183,7 @@ export const RUNNINGHUB_OPERATIONS: RunningHubOperationDefinition[] = validateCa
     ]),
   }),
   ...seedance20Operations(),
+  ...seedance20VariantOperations(),
   ...seedance25Operations(),
   ...minimaxOperations(),
   ...pixVerseOperations(),
@@ -272,6 +273,87 @@ function seedance20Operations(): RunningHubOperationDefinition[] {
       }),
       inputSchema: multimodalVideoSchema(false),
       protocol: standard("/openapi/v2/rhart-video/sparkvideo-2.0/multimodal-video", [
+        prompt(), ...COMMON_VIDEO_FIELDS,
+        asset("imageUrls", "imageUrls", "list"),
+        asset("videoUrls", "videoUrls", "list"),
+        asset("audioUrls", "audioUrls", "list"),
+        parameter("realPersonMode", "realPersonMode", true),
+        parameter("conversionSlots", "conversionSlots", ["all"]),
+      ]),
+    }),
+  ];
+}
+
+function seedance20VariantOperations(): RunningHubOperationDefinition[] {
+  return [
+    defineOperation({
+      operation: "seedance-2-mini-image-to-video",
+      route: routeMeta({
+        id: "runninghub-seedance-2-mini-image-to-video",
+        name: "Seedance 2.0 Mini 图生视频",
+        description: "Seedance 2.0 Mini 图生视频，适合低成本批量将静态图片转为 4–15 秒动态视频，支持首帧或首尾帧、有声视频和高清超分输出。",
+        tags: ["高性价比", "批量生产", "首帧/首尾帧", "有声视频", "最高4K超分"],
+        product: "Seedance 2.0 Mini",
+        capability: "image-to-video",
+      }),
+      inputSchema: seedance20VariantImageSchema("mini"),
+      protocol: standard("/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video", [
+        prompt(), ...COMMON_VIDEO_FIELDS,
+        asset("firstFrameUrl"), asset("lastFrameUrl"),
+        parameter("realPersonMode", "realPersonMode", true),
+        parameter("conversionSlots", "conversionSlots", ["all"]),
+      ]),
+    }),
+    defineOperation({
+      operation: "seedance-2-fast-image-to-video",
+      route: routeMeta({
+        id: "runninghub-seedance-2-fast-image-to-video",
+        name: "Seedance 2.0 Fast 图生视频",
+        description: "Seedance 2.0 Fast 图生视频，侧重生成速度与性价比，支持首帧或首尾帧驱动、4–15 秒时长、有声视频和多种画幅。",
+        tags: ["快速生成", "高性价比", "首帧/首尾帧", "有声视频", "多种画幅"],
+        product: "Seedance 2.0 Fast",
+        capability: "image-to-video",
+      }),
+      inputSchema: seedance20VariantImageSchema("fast"),
+      protocol: standard("/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video", [
+        prompt(), ...COMMON_VIDEO_FIELDS,
+        asset("firstFrameUrl"), asset("lastFrameUrl"),
+        parameter("realPersonMode", "realPersonMode", true),
+        parameter("conversionSlots", "conversionSlots", ["all"]),
+      ]),
+    }),
+    defineOperation({
+      operation: "seedance-2-mini-multimodal-video",
+      route: routeMeta({
+        id: "runninghub-seedance-2-mini-multimodal-video",
+        name: "Seedance 2.0 Mini 多模态视频",
+        description: "Seedance 2.0 Mini 多模态视频，面向高频批量创作，支持图片、视频和音频组合参考，以及视频编辑和续写。",
+        tags: ["高性价比", "批量生产", "多模态参考", "视频编辑与续写", "最高4K超分"],
+        product: "Seedance 2.0 Mini",
+        capability: "multimodal-to-video",
+      }),
+      inputSchema: seedance20VariantMultimodalSchema("mini"),
+      protocol: standard("/openapi/v2/rhart-video/sparkvideo-2.0-mini/multimodal-video", [
+        prompt(), ...COMMON_VIDEO_FIELDS,
+        asset("imageUrls", "imageUrls", "list"),
+        asset("videoUrls", "videoUrls", "list"),
+        asset("audioUrls", "audioUrls", "list"),
+        parameter("realPersonMode", "realPersonMode", true),
+        parameter("conversionSlots", "conversionSlots", ["all"]),
+      ]),
+    }),
+    defineOperation({
+      operation: "seedance-2-fast-multimodal-video",
+      route: routeMeta({
+        id: "runninghub-seedance-2-fast-multimodal-video",
+        name: "Seedance 2.0 Fast 多模态视频",
+        description: "Seedance 2.0 Fast 多模态视频，侧重快速生成与性价比，支持图片、视频和音频组合参考，以及视频编辑和续写。",
+        tags: ["快速生成", "高性价比", "多模态参考", "视频编辑与续写"],
+        product: "Seedance 2.0 Fast",
+        capability: "multimodal-to-video",
+      }),
+      inputSchema: seedance20VariantMultimodalSchema("fast"),
+      protocol: standard("/openapi/v2/rhart-video/sparkvideo-2.0-fast/multimodal-video", [
         prompt(), ...COMMON_VIDEO_FIELDS,
         asset("imageUrls", "imageUrls", "list"),
         asset("videoUrls", "videoUrls", "list"),
@@ -595,6 +677,64 @@ function multimodalVideoSchema(version25: boolean): GenerationInputSchema {
       mediaSlot("audioUrls", "参考音频", "audio", mediaCount, 50 * MIB, AUDIO_TYPES),
     ],
   };
+}
+
+function seedance20VariantImageSchema(variant: "mini" | "fast"): GenerationInputSchema {
+  const resolutions = variant === "mini"
+    ? ["480p", "720p", "native1080p", "native4k", "1080p", "2k", "4k"]
+    : ["480p", "720p", "1080p", "2k", "4k"];
+  return {
+    prompt: { required: false, maxLength: 20_480 },
+    parameters: [
+      ...seedance20VariantVideoFields(resolutions),
+      booleanField("realPersonMode", "真人模式", true),
+      multiSelectField("conversionSlots", "素材资产化范围", [
+        ["全部首尾帧", "all"], ["首帧", "firstFrameUrl"], ["尾帧", "lastFrameUrl"],
+      ]),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("firstFrameUrl", "首帧图片", "image", 1, 30 * MIB, IMAGE_TYPES, true),
+      mediaSlot("lastFrameUrl", "尾帧图片", "image", 1, 30 * MIB, IMAGE_TYPES),
+    ],
+  };
+}
+
+function seedance20VariantMultimodalSchema(variant: "mini" | "fast"): GenerationInputSchema {
+  const referenceOptions: Array<[string, string]> = [
+    ["全部素材", "all"],
+    ...Array.from({ length: 9 }, (_, index) => [`图片 ${index + 1}`, `image${index + 1}`] as [string, string]),
+    ...Array.from({ length: 3 }, (_, index) => [`视频 ${index + 1}`, `video${index + 1}`] as [string, string]),
+  ];
+  return {
+    prompt: { required: true, maxLength: 20_480 },
+    parameters: [
+      ...seedance20VariantVideoFields(["480p", "720p", "1080p", "2k", "4k"]),
+      booleanField("realPersonMode", "真人模式", true),
+      multiSelectField("conversionSlots", "素材资产化范围", referenceOptions),
+      booleanField("returnLastFrame", "返回视频尾帧", false),
+      seedField(),
+    ],
+    assets: [
+      mediaSlot("imageUrls", "参考图片", "image", 9, 30 * MIB, IMAGE_TYPES),
+      mediaSlot("videoUrls", "参考视频", "video", 3, 50 * MIB, VIDEO_TYPES),
+      mediaSlot("audioUrls", "参考音频", "audio", 3, (variant === "mini" ? 50 : 15) * MIB, AUDIO_TYPES),
+    ],
+  };
+}
+
+function seedance20VariantVideoFields(resolutions: string[]): GenerationParameterField[] {
+  const durations = [-1, ...Array.from({ length: 12 }, (_, index) => index + 4)];
+  return [
+    selectField("resolution", "分辨率", resolutions, "720p"),
+    {
+      key: "durationSeconds", label: "时长", type: "select", required: true, defaultValue: 5,
+      options: durations.map((value) => ({ label: value === -1 ? "智能时长" : String(value), value })),
+    },
+    selectField("aspectRatio", "画面比例", ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"], "adaptive"),
+    booleanField("generateAudio", "生成音频", true),
+  ];
 }
 
 function minimaxSchema(mode: "text" | "image" | "multimodal"): GenerationInputSchema {

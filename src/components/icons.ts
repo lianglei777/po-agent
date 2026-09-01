@@ -46,6 +46,7 @@ import {
   Hexagon as HexagonIcon,
   ImagePlus as ImagePlusIcon,
   Images as ImagesIcon,
+  Info as InfoIcon,
   Italic as ItalicIcon,
   Key as KeyIcon,
   KeyRound as KeyRoundIcon,
@@ -155,6 +156,7 @@ export const Globe = createAppIcon(GlobeIcon);
 export const Hexagon = createAppIcon(HexagonIcon);
 export const ImagePlus = createAppIcon(ImagePlusIcon);
 export const Images = createAppIcon(ImagesIcon);
+export const Info = createAppIcon(InfoIcon);
 export const Italic = createAppIcon(ItalicIcon);
 export const Key = createAppIcon(KeyIcon);
 export const KeyRound = createAppIcon(KeyRoundIcon);

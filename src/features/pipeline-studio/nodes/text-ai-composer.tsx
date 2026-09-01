@@ -213,12 +213,12 @@ function ComposerSurface({
           value={selectedModel}
           disabled={loadingModels || generating || !models.length}
           emptyLabel={loadingModels ? t.pipeline.textAiModelLoading : t.pipeline.textAiNoModels}
+          itemDetailsLabel={t.pipeline.generationModelDetails}
           onChange={onModelChange}
           getPopupContainer={tooltipContainer}
           items={models.map((model) => ({
             id: modelValue(model),
             name: model.name,
-            group: model.provider,
             meta: model.provider,
             description: t.pipeline.generationTextModelDescription.replace("{provider}", model.provider),
             tags: [

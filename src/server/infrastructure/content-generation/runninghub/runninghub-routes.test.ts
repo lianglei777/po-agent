@@ -5,7 +5,7 @@ describe("createRunningHubRoutes", () => {
   it("provides one stable catalog default for every supported capability", () => {
     const routes = createRunningHubRoutes("2026-08-06T00:00:00.000Z");
 
-    expect(routes).toHaveLength(18);
+    expect(routes).toHaveLength(22);
     expect(routes.every((route) =>
       route.providerId === "runninghub" &&
       !route.enabled &&
@@ -49,6 +49,8 @@ describe("createRunningHubRoutes", () => {
     expect(products).toEqual([
       "Seedream v5 Pro",
       "Seedance 2.0",
+      "Seedance 2.0 Mini",
+      "Seedance 2.0 Fast",
       "Seedance 2.5",
       "MiniMax Hailuo H3",
       "PixVerse V6",
@@ -72,5 +74,35 @@ describe("createRunningHubRoutes", () => {
       .toEqual([{ kind: "mutually-exclusive-parameters", keys: ["fileUrl", "linkUrl"] }]);
     expect(byOperation.get("wan-3-reference-to-video")?.defaults.resolution).toBe("1080P");
     expect(byOperation.get("wan-3-image-to-video")?.defaults.durationSeconds).toBe("auto");
+  });
+
+  it("models Seedance 2.0 Mini and Fast limits from the provider contracts", () => {
+    const routes = createRunningHubRoutes("2026-09-01T00:00:00.000Z");
+    const byOperation = new Map(routes.map((route) => [route.providerOperation, route]));
+    const miniImage = byOperation.get("seedance-2-mini-image-to-video")!;
+    const fastImage = byOperation.get("seedance-2-fast-image-to-video")!;
+    const miniMultimodal = byOperation.get("seedance-2-mini-multimodal-video")!;
+    const fastMultimodal = byOperation.get("seedance-2-fast-multimodal-video")!;
+
+    expect(miniImage.inputSchema.assets).toMatchObject([
+      { key: "firstFrameUrl", required: true, maxFiles: 1, maxFileSizeBytes: 30 * 1024 * 1024 },
+      { key: "lastFrameUrl", required: false, maxFiles: 1, maxFileSizeBytes: 30 * 1024 * 1024 },
+    ]);
+    expect(miniImage.inputSchema.parameters?.find((field) => field.key === "resolution")?.options?.map((option) => option.value))
+      .toEqual(["480p", "720p", "native1080p", "native4k", "1080p", "2k", "4k"]);
+    expect(fastImage.inputSchema.parameters?.find((field) => field.key === "resolution")?.options?.map((option) => option.value))
+      .toEqual(["480p", "720p", "1080p", "2k", "4k"]);
+    expect(miniMultimodal.inputSchema.assets?.map((slot) => [slot.key, slot.maxFiles, slot.maxFileSizeBytes]))
+      .toEqual([
+        ["imageUrls", 9, 30 * 1024 * 1024],
+        ["videoUrls", 3, 50 * 1024 * 1024],
+        ["audioUrls", 3, 50 * 1024 * 1024],
+      ]);
+    expect(fastMultimodal.inputSchema.assets?.find((slot) => slot.key === "audioUrls")?.maxFileSizeBytes)
+      .toBe(15 * 1024 * 1024);
+    for (const route of [miniImage, fastImage, miniMultimodal, fastMultimodal]) {
+      expect(route.inputSchema.parameters?.find((field) => field.key === "durationSeconds")?.options?.map((option) => option.value))
+        .toEqual([-1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    }
   });
 });

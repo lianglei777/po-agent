@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type {
@@ -17,8 +17,8 @@ import { promptDocumentFromPlainText } from "../model/prompt-document";
 import {
   promptReferenceRouteProblem,
   videoCapabilityForPrompt,
-  videoRouteSupportsPrompt,
 } from "../model/prompt-reference-validation";
+import { selectInitialVideoGenerationRoute, videoGenerationRoutes } from "../model/video-generation-options";
 import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
@@ -75,13 +75,10 @@ export function VideoAiComposer({
     [routes, selectedRouteId],
   );
   const inferredCapability = videoCapabilityForPrompt(promptDocument, connectedReferences);
-  const availableRoutes = useMemo(
-    () => routes.filter((route) => videoRouteSupportsPrompt(promptDocument, route, connectedReferences)),
-    [connectedReferences, promptDocument, routes],
-  );
-  const pickerRoutes = selectedRoute && !availableRoutes.some((route) => route.id === selectedRoute.id)
-    ? [selectedRoute, ...availableRoutes]
-    : availableRoutes;
+  // 素材只参与首次推荐；后续变化必须保留用户手动选择的 Route，避免模型被静默替换。
+  const initialRouteId = useRef(data.params?.routeId);
+  const initialSettings = useRef(data.params?.settings as Record<string, JsonValue> | undefined);
+  const initialCapability = useRef(inferredCapability);
   const loadingRoutes = !routesLoaded;
   const referenceProblem = promptReferenceRouteProblem(promptDocument, selectedRoute, connectedReferences);
   const parameterConflict = generationParameterConflict(
@@ -100,13 +97,15 @@ export function VideoAiComposer({
     pipelineStudioApi.getGenerationOptions(controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
-        const available = response.routes.filter((route) => route.enabled && route.capability.endsWith("-to-video"));
-        const selected = available.find((route) => route.id === data.params?.routeId)
-          ?? available.find((route) => route.isDefault && route.capability === inferredCapability)
-          ?? available.find((route) => route.capability === inferredCapability);
+        const available = videoGenerationRoutes(response.routes);
+        const selected = selectInitialVideoGenerationRoute(
+          available,
+          initialRouteId.current,
+          initialCapability.current,
+        );
         setRoutes(available);
         setSelectedRouteId(selected?.id ?? "");
-        setSettings(selected ? reconcileComposerSettings(selected, data.params?.settings as Record<string, JsonValue>) : {});
+        setSettings(selected ? reconcileComposerSettings(selected, initialSettings.current) : {});
       })
       .catch((error) => {
         if (!controller.signal.aborted) setLocalError(error instanceof Error ? error.message : String(error));
@@ -115,7 +114,7 @@ export function VideoAiComposer({
         if (!controller.signal.aborted) setRoutesLoaded(true);
       });
     return () => controller.abort();
-  }, [data.params?.routeId, data.params?.settings, inferredCapability]);
+  }, []);
 
   const disabledReason = useMemo(() => {
     if (waitingForSave) return t.pipeline.videoAiPendingSave;
@@ -131,6 +130,16 @@ export function VideoAiComposer({
     }
     if (referenceProblem?.kind === "missing-required") {
       return t.pipeline.promptReferenceRequired.replace("{label}", referenceProblem.slot.label);
+    }
+    if (referenceProblem?.kind === "missing-constrained") {
+      return t.pipeline.promptReferenceMinimumRequired
+        .replace("{count}", String(referenceProblem.minFiles))
+        .replace("{labels}", referenceProblem.slots.map((slot) => slot.label).join(" / "));
+    }
+    if (referenceProblem?.kind === "too-many-constrained") {
+      return t.pipeline.promptReferenceTotalTooMany
+        .replace("{count}", String(referenceProblem.maxFiles))
+        .replace("{labels}", referenceProblem.slots.map((slot) => slot.label).join(" / "));
     }
     if (parameterConflictLabels) {
       return t.pipeline.generationParametersMutuallyExclusive.replace("{fields}", parameterConflictLabels);
@@ -149,6 +158,7 @@ export function VideoAiComposer({
   const changeRoute = (routeId: string) => {
     const route = routes.find((candidate) => candidate.id === routeId);
     setSelectedRouteId(routeId);
+    if (route?.capability === "image-to-video") setResourceRole("first-frame");
     const nextSettings = route ? reconcileComposerSettings(route, settings) : {};
     if (route) setSettings(nextSettings);
     onInputDirtyChange?.(
@@ -197,7 +207,7 @@ export function VideoAiComposer({
       nodeId={nodeId}
       promptDocument={promptDocument}
       resourceRole={resourceRole}
-      routes={pickerRoutes}
+      routes={routes}
       selectedRoute={selectedRoute}
       selectedRouteId={selectedRouteId}
       settings={settings}
@@ -316,13 +326,14 @@ function VideoComposerSurface({
             ariaLabel={t.pipeline.videoAiRoute}
             value={selectedRouteId}
             disabled={loadingRoutes || busy || !routes.length}
+            itemDetailsLabel={t.pipeline.generationModelDetails}
             onChange={onRouteChange}
             emptyLabel={loadingRoutes ? t.pipeline.videoAiRoutesLoading : t.pipeline.videoAiNoRoutes}
             getPopupContainer={tooltipContainer}
             items={routes.map((route) => ({
               id: route.id,
               name: route.name,
-              group: route.product,
+              badge: videoCapabilityLabel(route.capability, t.pipeline),
               meta: route.providerId,
               description: route.description,
               tags: route.tags,
@@ -403,6 +414,15 @@ function generationRequestSettings(values: Record<string, JsonValue>): Record<st
       typeof item === "string" || typeof item === "number" || typeof item === "boolean"
     )))
   )));
+}
+
+function videoCapabilityLabel(
+  capability: GenerationRouteDto["capability"],
+  labels: ReturnType<typeof useI18n>["t"]["pipeline"],
+) {
+  if (capability === "image-to-video") return labels.videoAiModeImage;
+  if (capability === "multimodal-to-video") return labels.videoAiModeMultimodal;
+  return labels.videoAiModeText;
 }
 
 function tooltipContainer(trigger: HTMLElement) {

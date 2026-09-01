@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Form, Input, Modal, message } from "antd";
+import { Button, Form, Input, Modal, Space, message } from "antd";
 import { FolderOpen } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineApi } from "./pipeline-api";
@@ -76,26 +76,29 @@ export function NewProjectDialog({ open, onClose, onCreated }: NewProjectDialogP
           <Input autoFocus placeholder={t.pipeline.dialogProjectTitlePlaceholder} />
         </Form.Item>
         <Form.Item
-          name="parentDirectory"
           label={t.pipeline.dialogProjectLocation}
           extra={projectPath
             ? `${t.pipeline.dialogProjectPathPreview}: ${projectPath}`
             : t.pipeline.dialogProjectLocationHint}
-          rules={[{ required: true, message: t.pipeline.dialogProjectLocationPlaceholder }]}
+          required
         >
-          <Input
-            placeholder={t.pipeline.dialogProjectLocationPlaceholder}
-            addonAfter={typeof window !== "undefined" && window.poAgentDesktop ? (
+          <Space.Compact block>
+            <Form.Item
+              name="parentDirectory"
+              noStyle
+              rules={[{ required: true, message: t.pipeline.dialogProjectLocationPlaceholder }]}
+            >
+              <Input placeholder={t.pipeline.dialogProjectLocationPlaceholder} />
+            </Form.Item>
+            {typeof window !== "undefined" && window.poAgentDesktop ? (
               <Button
-                type="text"
-                size="small"
                 icon={<FolderOpen className="size-4" />}
                 onClick={handleBrowse}
               >
                 {t.pipeline.dialogBrowse}
               </Button>
             ) : null}
-          />
+          </Space.Compact>
         </Form.Item>
       </Form>
     </Modal>

@@ -297,6 +297,10 @@ describe("RunningHubAdapter", () => {
     ["wan-2-7-reference-to-video", "/openapi/v2/alibaba/wan-2.7/reference-to-video"],
     ["wan-3-image-to-video", "/openapi/v2/alibaba/wan-3.0/image-to-video"],
     ["wan-3-reference-to-video", "/openapi/v2/alibaba/wan-3.0/reference-to-video"],
+    ["seedance-2-mini-image-to-video", "/openapi/v2/rhart-video/sparkvideo-2.0/image-to-video"],
+    ["seedance-2-fast-image-to-video", "/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video"],
+    ["seedance-2-mini-multimodal-video", "/openapi/v2/rhart-video/sparkvideo-2.0-mini/multimodal-video"],
+    ["seedance-2-fast-multimodal-video", "/openapi/v2/rhart-video/sparkvideo-2.0-fast/multimodal-video"],
   ])("submits %s to its trusted endpoint", async (operation, path) => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       taskId: "new-operation",

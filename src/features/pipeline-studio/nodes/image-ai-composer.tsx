@@ -140,6 +140,16 @@ export function ImageAiComposer({
     if (referenceProblem?.kind === "missing-required") {
       return t.pipeline.promptReferenceRequired.replace("{label}", referenceProblem.slot.label);
     }
+    if (referenceProblem?.kind === "missing-constrained") {
+      return t.pipeline.promptReferenceMinimumRequired
+        .replace("{count}", String(referenceProblem.minFiles))
+        .replace("{labels}", referenceProblem.slots.map((slot) => slot.label).join(" / "));
+    }
+    if (referenceProblem?.kind === "too-many-constrained") {
+      return t.pipeline.promptReferenceTotalTooMany
+        .replace("{count}", String(referenceProblem.maxFiles))
+        .replace("{labels}", referenceProblem.slots.map((slot) => slot.label).join(" / "));
+    }
     if (parameterConflictLabels) {
       return t.pipeline.generationParametersMutuallyExclusive.replace("{fields}", parameterConflictLabels);
     }
@@ -311,11 +321,11 @@ function ComposerSurface({
             disabled={loadingRoutes || busy || !routes.length}
             onChange={onRouteChange}
             emptyLabel={loadingRoutes ? t.pipeline.imageAiRoutesLoading : t.pipeline.imageAiNoRoutesShort}
+            itemDetailsLabel={t.pipeline.generationModelDetails}
             getPopupContainer={tooltipContainer}
             items={routes.map((route) => ({
               id: route.id,
               name: route.name,
-              group: route.product,
               meta: route.providerId,
               description: route.description,
               tags: route.tags,

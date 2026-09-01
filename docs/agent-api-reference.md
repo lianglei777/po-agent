@@ -2521,7 +2521,7 @@ GET /api/generation/routes
 
 Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。
 
-当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
+当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.0 Mini、Seedance 2.0 Fast、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
 
 千问AI平台当前内置 `qianwen-wan-3-0-text-to-video`、`qianwen-wan-3-0-image-to-video` 和 `qianwen-wan-3-0-multimodal-to-video` Route，对应 `wan3.0-video` 的文生、首帧/首尾帧和图视音多模态生成。Route 支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数；`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长。
 

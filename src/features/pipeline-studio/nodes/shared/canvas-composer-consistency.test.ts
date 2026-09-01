@@ -20,6 +20,14 @@ describe("canvas composer consistency", () => {
     }
   });
 
+  it("uses the same flat model picker and information interaction for every generation composer", () => {
+    for (const source of composerSources) {
+      expect(source).toContain("<CanvasModelPicker");
+      expect(source).toContain("itemDetailsLabel={t.pipeline.generationModelDetails}");
+      expect(source).not.toContain("group:");
+    }
+  });
+
   it("uses the shared server-owned stale state for generated media", () => {
     for (const source of [imageNodeSource, videoNodeSource]) {
       expect(source).toContain("generationProvenance?.stale");
