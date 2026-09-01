@@ -169,18 +169,18 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
 ```powershell
 # 构建指定架构镜像
-docker build --platform linux/amd64 -t po-agent:0.1.0 .
+docker build --platform linux/amd64 -t po-agent:0.2.0 .
 
 # 导出为 tar(Windows PowerShell 没有 gzip,直接导出未压缩 tar)
-docker save po-agent:0.1.0 -o po-agent.tar
+docker save po-agent:0.2.0 -o po-agent.tar
 ```
 
 > `--platform linux/amd64` 必须显式指定,否则本机可能构建出架构不匹配的镜像,服务器上跑不起来。
 >
 > [Dockerfile](../../Dockerfile) 默认走 npmmirror 加速;如需切回官方源:
-> `docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.1.0 .`
+> `docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.0 .`
 >
-> **想要更小的压缩文件**:Windows PowerShell 没有 `gzip`。若装了 Git for Windows,在 **Git Bash**(非 PowerShell)里执行 `docker save po-agent:0.1.0 | gzip > po-agent.tar.gz` 可得到压缩包,上传更快。`docker load` 对 `.tar` 和 `.tar.gz` 都能自动识别。
+> **想要更小的压缩文件**:Windows PowerShell 没有 `gzip`。若装了 Git for Windows,在 **Git Bash**(非 PowerShell)里执行 `docker save po-agent:0.2.0 | gzip > po-agent.tar.gz` 可得到压缩包,上传更快。`docker load` 对 `.tar` 和 `.tar.gz` 都能自动识别。
 
 ### 5.4 上传镜像到服务器
 
@@ -204,7 +204,7 @@ scp po-agent.tar root@你的服务器IP:/opt/
 
 ```bash
 docker load -i /opt/po-agent.tar
-docker images   # 确认 po-agent:0.1.0 在列
+docker images   # 确认 po-agent:0.2.0 在列
 ```
 
 > `docker load` 能自动识别 `.tar` 和 `.tar.gz`,压缩包用 `docker load < /opt/po-agent.tar.gz` 亦可。
@@ -224,7 +224,7 @@ mkdir -p /opt/po-agent /root/po-agent-workspace
 ```yaml
 services:
   po-agent:
-    image: po-agent:0.1.0
+    image: po-agent:0.2.0
     container_name: po-agent
     ports:
       # 关键:只绑 127.0.0.1,不对公网开放
@@ -312,11 +312,11 @@ docker compose up -d   # 自动用新镜像重启容器
 docker login
 
 # 给镜像打 Docker Hub 格式的标签(版本号 + latest)
-docker tag po-agent:0.1.0 你的用户名/po-agent:0.1.0
-docker tag po-agent:0.1.0 你的用户名/po-agent:latest
+docker tag po-agent:0.2.0 你的用户名/po-agent:0.2.0
+docker tag po-agent:0.2.0 你的用户名/po-agent:latest
 
 # 推送
-docker push 你的用户名/po-agent:0.1.0
+docker push 你的用户名/po-agent:0.2.0
 docker push 你的用户名/po-agent:latest
 ```
 
@@ -333,7 +333,7 @@ docker pull 你的用户名/po-agent:latest
 ```yaml
 services:
   po-agent:
-    image: 你的用户名/po-agent:latest   # 原来是 po-agent:0.1.0
+    image: 你的用户名/po-agent:latest   # 原来是 po-agent:0.2.0
     ...
 ```
 
@@ -379,7 +379,7 @@ docker compose -f docker-compose.dev.yml build --build-arg NPM_REGISTRY=https://
 **云服务器部署**在 `docker build` 时传 build-arg:
 
 ```powershell
-docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.1.0 .
+docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.0 .
 ```
 
 ## 10. 常用运维命令
