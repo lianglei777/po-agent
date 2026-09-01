@@ -1,4 +1,4 @@
-import type { CanvasMutationBatch, CanvasNode, CanvasNodeData, CanvasResourceRole, CreateCanvasWorkflowRunRequest, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
+import type { CanvasGenerationParams, CanvasMutationBatch, CanvasNode, CanvasNodeData, CanvasResourceRole, CreateCanvasWorkflowRunRequest, GenerateCanvasNodeRequest, GenerateTextNodeRequest } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 
 const NODE_TYPES = new Set(["text", "image", "video", "audio", "script", "character", "scene", "prop", "storyboard"]);
@@ -186,19 +186,35 @@ function parseNode(value: unknown, index: number): CanvasNode {
   validateNumber(value.positionY, `mutations[${index}].node.positionY`);
   validateOptionalNullableSize(value.width, `mutations[${index}].node.width`);
   validateOptionalNullableSize(value.height, `mutations[${index}].node.height`);
-  if (value.data !== null) parseNodeData(value.data, index);
+  const data = value.data === null ? null : parseNodeData(value.data, index);
   if (typeof value.createdAt !== "string" || typeof value.updatedAt !== "string") {
     throw validationError(`mutations[${index}].node timestamps are invalid`);
   }
-  return value as unknown as CanvasNode;
+  return {
+    id: value.id,
+    projectId: value.projectId,
+    type: value.type as CanvasNode["type"],
+    entityId: value.entityId,
+    positionX: Number(value.positionX),
+    positionY: Number(value.positionY),
+    width: typeof value.width === "number" || value.width === null ? value.width : null,
+    height: typeof value.height === "number" || value.height === null ? value.height : null,
+    data,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  };
 }
 
 function parseNodeData(value: unknown, index: number): CanvasNodeData {
   if (!isRecord(value) || !["text", "image", "video", "audio"].includes(String(value.type))) {
     throw validationError(`mutations[${index}].node.data is invalid`);
   }
-  if (typeof value.name !== "string" || value.name.length > 200 || typeof value.action !== "string") {
+  if (typeof value.name !== "string" || value.name.length > 200
+    || typeof value.action !== "string" || value.action.length > 200) {
     throw validationError(`mutations[${index}].node.data fields are invalid`);
+  }
+  if (value.generatorType !== undefined && !["default", "enhance", "resource"].includes(String(value.generatorType))) {
+    throw validationError(`mutations[${index}].node.data.generatorType is invalid`);
   }
   validateLegacyContent(value.content, `mutations[${index}].node.data.content`);
   if (value.textDocument !== undefined) {
@@ -248,27 +264,49 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
       throw validationError(`mutations[${index}].node.data.videoMetadata is invalid`);
     }
   }
-  if (value.videoSelection !== undefined) {
-    if (value.type !== "video" || !isRecord(value.videoSelection)
-      || !validId(value.videoSelection.runId)
-      || !validId(value.videoSelection.artifactId)
-      || typeof value.videoSelection.completedAt !== "string"
-      || !Number.isFinite(Date.parse(value.videoSelection.completedAt))
-      || (value.videoSelection.historical !== undefined && typeof value.videoSelection.historical !== "boolean")) {
-      throw validationError(`mutations[${index}].node.data.videoSelection is invalid`);
+  const params = value.params === undefined ? undefined : parseClientGenerationParams(value.params, index);
+  // 任务状态、文件和产物引用由服务端生命周期维护；传输层只输出客户端可编辑字段。
+  return {
+    type: value.type as CanvasNodeData["type"],
+    name: value.name,
+    action: value.action,
+    generatorType: value.generatorType as CanvasNodeData["generatorType"],
+    content: value.content as string[] | undefined,
+    textDocument: value.textDocument as CanvasNodeData["textDocument"],
+    params,
+    audioMetadata: value.audioMetadata as CanvasNodeData["audioMetadata"],
+    videoMetadata: value.videoMetadata as CanvasNodeData["videoMetadata"],
+  };
+}
+
+function parseClientGenerationParams(value: unknown, index: number): CanvasGenerationParams {
+  const path = `mutations[${index}].node.data.params`;
+  if (!isRecord(value) || typeof value.prompt !== "string" || value.prompt.length > MAX_AI_INSTRUCTION_LENGTH) {
+    throw validationError(`${path} is invalid`);
+  }
+  if (value.promptDocument !== undefined) validatePromptDocument(value.promptDocument, `${path}.promptDocument`);
+  for (const field of ["routeId", "model", "modeType"] as const) {
+    if (value[field] !== undefined && (typeof value[field] !== "string" || value[field].length > 300)) {
+      throw validationError(`${path}.${field} is invalid`);
     }
   }
-  if (value.generationProvenance !== undefined) {
-    if ((value.type !== "image" && value.type !== "video")
-      || !isRecord(value.generationProvenance)
-      || !validId(value.generationProvenance.runId)
-      || typeof value.generationProvenance.inputFingerprint !== "string"
-      || !/^[a-f0-9]{64}$/.test(value.generationProvenance.inputFingerprint)
-      || typeof value.generationProvenance.stale !== "boolean") {
-      throw validationError(`mutations[${index}].node.data.generationProvenance is invalid`);
-    }
+  if (value.count !== undefined && (!Number.isInteger(value.count) || Number(value.count) < 1 || Number(value.count) > 20)) {
+    throw validationError(`${path}.count is invalid`);
   }
-  return value as unknown as CanvasNodeData;
+  if (value.settings !== undefined && !isRecord(value.settings)) throw validationError(`${path}.settings is invalid`);
+  if (value.advancedSettings !== undefined && !isRecord(value.advancedSettings)) {
+    throw validationError(`${path}.advancedSettings is invalid`);
+  }
+  return {
+    prompt: value.prompt,
+    promptDocument: value.promptDocument as CanvasGenerationParams["promptDocument"],
+    routeId: value.routeId as string | undefined,
+    model: value.model as string | undefined,
+    count: typeof value.count === "number" ? value.count : undefined,
+    modeType: value.modeType as string | undefined,
+    settings: value.settings ? parseGenerationSettings(value.settings) : undefined,
+    advancedSettings: value.advancedSettings ? parseGenerationSettings(value.advancedSettings) : undefined,
+  };
 }
 
 function validateLegacyContent(value: unknown, path: string) {

@@ -1,8 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CanvasWorkflowRun } from "@/contracts/pipeline";
-import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import {
+  canvasSaveErrorIsRetryable,
+  canvasSaveRetryDelay,
+  PipelineStudioApiError,
+  pipelineStudioApi,
+} from "../api/pipeline-studio-api";
 import { canvasWorkflowRunIsActive } from "../model/workflow-run";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 
@@ -13,6 +18,8 @@ export function useCanvasController(projectId: string, initialTitle: string) {
   const [projectTitle, setProjectTitle] = useState(initialTitle);
   const [workflowRun, setWorkflowRun] = useState<CanvasWorkflowRun | null>(null);
   const [workflowRunBusy, setWorkflowRunBusy] = useState(false);
+  const saveRetryAttemptRef = useRef(0);
+  const saveRetryableRef = useRef(true);
 
   useEffect(() => {
     store.getState().setWorkflowLockedNodeIds(
@@ -66,6 +73,13 @@ export function useCanvasController(projectId: string, initialTitle: string) {
 
   useEffect(() => {
     if (!pendingMutationCount || saveState === "saving") return;
+    if (saveState === "idle") {
+      saveRetryAttemptRef.current = 0;
+      saveRetryableRef.current = true;
+    } else if (!saveRetryableRef.current) {
+      return;
+    }
+    const delay = saveState === "error" ? canvasSaveRetryDelay(saveRetryAttemptRef.current - 1) : 360;
     const timer = window.setTimeout(async () => {
       const state = store.getState();
       const rawMutationCount = state.pendingMutations.length;
@@ -78,12 +92,17 @@ export function useCanvasController(projectId: string, initialTitle: string) {
           mutations: state.pendingMutations.slice(0, rawMutationCount),
         });
         store.getState().finishSaving(rawMutationCount, snapshot);
+        saveRetryAttemptRef.current = 0;
+        saveRetryableRef.current = true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const revisionConflict = error instanceof PipelineStudioApiError && error.status === 409;
+        saveRetryableRef.current = !revisionConflict && canvasSaveErrorIsRetryable(error);
+        if (saveRetryableRef.current) saveRetryAttemptRef.current += 1;
         store.getState().failSaving(message);
-        if (message.includes("revision conflict")) void reloadSnapshot();
+        if (revisionConflict) void reloadSnapshot();
       }
-    }, 360);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [pendingMutationCount, projectId, reloadSnapshot, saveState, store]);
 

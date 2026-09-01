@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { GenerationAssetSlot, GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
 import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
+import { canvasWorkflowNodeIsRunnable } from "@/contracts/pipeline";
 import type {
   CanvasEdge,
   CanvasGenerationParams,
@@ -60,7 +61,7 @@ export class CanvasStudioService {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
     }
     await this.assertWorkflowMutationAllowed(projectId, batch);
-    const sanitizedBatch = await this.preserveGenerationProvenance(projectId, batch);
+    const sanitizedBatch = await this.preserveServerOwnedNodeData(projectId, batch);
     const affectedTargets = await this.validateMutationConnections(projectId, sanitizedBatch);
     const result = await this.repository.applyCanvasMutationBatch(projectId, sanitizedBatch.baseRevision, sanitizedBatch.mutations);
     if (!result.applied) {
@@ -708,7 +709,7 @@ export class CanvasStudioService {
     ]);
     const members = nodes.filter((node) => node.data?.group?.id === input.groupId);
     if (!members.length) throw new AppError("VALIDATION_ERROR", "Canvas group was not found", 404);
-    const runnable = members.filter((node) => node.data && groupRunnable(node.data));
+    const runnable = members.filter((node) => node.data && canvasWorkflowNodeIsRunnable(node.data));
     if (!runnable.length) throw new AppError("VALIDATION_ERROR", "This group has no generative nodes to run", 400);
     if (runnable.some((node) => node.data?.groupRun?.status === "pending" || node.data?.groupRun?.status === "running")) {
       throw new AppError("VALIDATION_ERROR", "This canvas group is already running", 409);
@@ -1037,7 +1038,7 @@ export class CanvasStudioService {
     });
   }
 
-  private async preserveGenerationProvenance(
+  private async preserveServerOwnedNodeData(
     projectId: string,
     batch: CanvasMutationBatch,
   ): Promise<CanvasMutationBatch> {
@@ -1047,30 +1048,25 @@ export class CanvasStudioService {
     return {
       ...batch,
       mutations: batch.mutations.map((mutation) => {
-        if (mutation.type === "node.create" && mutation.node.data?.generationProvenance) {
+        if (mutation.type === "node.create" && mutation.node.data) {
           return {
             ...mutation,
             node: {
               ...mutation.node,
-              data: { ...mutation.node.data, generationProvenance: undefined },
+              data: sanitizeCreatedNodeData(mutation.node.data),
             },
           };
         }
         if (mutation.type !== "node.update" || mutation.patch.data === undefined) return mutation;
         const current = currentNodes.get(mutation.nodeId);
         if (mutation.patch.data === null) {
-          return current?.data?.generationProvenance
-            ? { ...mutation, patch: { ...mutation.patch, data: current.data } }
-            : mutation;
+          return current?.data ? { ...mutation, patch: { ...mutation.patch, data: current.data } } : mutation;
         }
         return {
           ...mutation,
           patch: {
             ...mutation.patch,
-            data: {
-              ...mutation.patch.data,
-              generationProvenance: current?.data?.generationProvenance,
-            },
+            data: preserveServerOwnedFields(current?.data, mutation.patch.data),
           },
         };
       }),
@@ -1349,9 +1345,12 @@ export class CanvasStudioService {
   }
 
   private async markFailed(node: CanvasNode, error: unknown) {
-    if (!node.data) return;
+    const latest = await this.repository.getCanvasNode(node.id);
+    if (!latest?.data) return;
     const message = error instanceof Error ? error.message : String(error);
-    await this.repository.updateCanvasNode(node.id, { data: { ...node.data, taskInfo: { status: "failed", errorMessage: message } } });
+    await this.updateNode(node.id, {
+      data: { ...latest.data, taskInfo: { status: "failed", errorMessage: message } },
+    }, undefined, true);
   }
 
   private emit(type: Parameters<PipelineSsePort["emit"]>[0]["type"], projectId: string, payload: unknown) {
@@ -1382,6 +1381,61 @@ function createNodeData(type: CanvasMediaType, name: string, generatorType: "def
     },
     taskInfo: { status: "idle" },
   };
+}
+
+function sanitizeCreatedNodeData(data: CanvasNodeData): CanvasNodeData {
+  const editable = structuredClone(data);
+  delete editable.url;
+  delete editable.poster;
+  delete editable.artifactIds;
+  delete editable.workspaceFile;
+  delete editable.taskInfo;
+  delete editable.videoSelection;
+  delete editable.generationProvenance;
+  delete editable.group;
+  delete editable.groupRun;
+  delete editable.legacyEntity;
+  return {
+    ...editable,
+    params: sanitizeClientGenerationParams(data.params),
+    taskInfo: { status: "idle" },
+  };
+}
+
+function preserveServerOwnedFields(current: CanvasNodeData | null | undefined, requested: CanvasNodeData): CanvasNodeData {
+  if (!current) return sanitizeCreatedNodeData(requested);
+  return {
+    ...requested,
+    url: current.url,
+    poster: current.poster,
+    artifactIds: current.artifactIds,
+    workspaceFile: current.workspaceFile,
+    taskInfo: current.taskInfo,
+    videoSelection: current.videoSelection,
+    generationProvenance: current.generationProvenance,
+    group: current.group,
+    groupRun: current.groupRun,
+    legacyEntity: current.legacyEntity,
+    params: requested.params ? {
+      ...sanitizeClientGenerationParams(requested.params)!,
+      textList: current.params?.textList,
+      imageList: current.params?.imageList,
+      videoList: current.params?.videoList,
+      audioList: current.params?.audioList,
+      mixedListOrder: current.params?.mixedListOrder,
+    } : requested.params,
+  };
+}
+
+function sanitizeClientGenerationParams(params: CanvasNodeData["params"]): CanvasNodeData["params"] {
+  if (!params) return params;
+  const editable = structuredClone(params);
+  delete editable.textList;
+  delete editable.imageList;
+  delete editable.videoList;
+  delete editable.audioList;
+  delete editable.mixedListOrder;
+  return editable;
 }
 
 function normalizeData(data: CanvasNodeData, current: CanvasNode): CanvasNodeData {
@@ -1666,12 +1720,6 @@ function parameterValueIsValid(field: GenerationParameterField, value: unknown) 
   if (field.type === "boolean") return typeof value === "boolean";
   if (field.type === "number") return typeof value === "number" && (field.min === undefined || value >= field.min) && (field.max === undefined || value <= field.max);
   return typeof value === "string";
-}
-
-function groupRunnable(data: CanvasNodeData) {
-  if (data.generatorType === "resource" || data.type === "audio") return false;
-  if (data.type === "text") return Boolean(data.params?.prompt?.trim());
-  return data.type === "image" || data.type === "video";
 }
 
 function hasInternalCycle(nodeIds: Set<string>, edges: CanvasEdge[]) {

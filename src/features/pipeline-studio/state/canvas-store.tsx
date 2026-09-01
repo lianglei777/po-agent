@@ -63,6 +63,7 @@ type CanvasStoreState = CanvasDocument & {
   updateNodeData: (nodeId: string, data: CanvasNodeData) => void;
   updateNodePositionLive: (nodeId: string, position: { x: number; y: number }) => void;
   commitNodePosition: (nodeId: string, previous: { x: number; y: number }) => void;
+  commitNodePositions: (origins: Array<{ nodeId: string; x: number; y: number }>) => void;
   resizeNode: (nodeId: string, width: number, height: number) => void;
   fitNodeSize: (nodeId: string, size: { width: number; height: number }) => void;
   updateNodeSizeLive: (nodeId: string, size: { width: number; height: number }) => void;
@@ -287,6 +288,31 @@ export function createCanvasStore(projectId: string) {
           nodeId,
           patch: { positionX: node.positionX, positionY: node.positionY },
         }),
+        saveState: "idle",
+      });
+    },
+
+    commitNodePositions: (origins) => {
+      const state = get();
+      const originById = new Map(origins.map((origin) => [origin.nodeId, origin]));
+      const changed = state.nodes.filter((node) => {
+        const origin = originById.get(node.id);
+        return origin && (node.positionX !== origin.x || node.positionY !== origin.y);
+      });
+      if (!changed.length) return;
+      const beforeNodes = state.nodes.map((node) => {
+        const origin = originById.get(node.id);
+        return origin ? { ...node, positionX: origin.x, positionY: origin.y } : node;
+      });
+      const pendingMutations = changed.reduce((mutations, node) => appendMutation(mutations, {
+        type: "node.update",
+        nodeId: node.id,
+        patch: { positionX: node.positionX, positionY: node.positionY },
+      }), state.pendingMutations);
+      set({
+        past: pushHistory(state.past, { nodes: beforeNodes, edges: state.edges }),
+        future: [],
+        pendingMutations,
         saveState: "idle",
       });
     },
@@ -601,9 +627,17 @@ function makeCanvasNode(projectId: string, type: CanvasMediaType, position: { x:
 function appendMutation(mutations: CanvasMutation[], next: CanvasMutation): CanvasMutation[] {
   if (next.type === "viewport.update") return [...mutations.filter((item) => item.type !== "viewport.update"), next];
   if (next.type === "node.update") {
-    const previous = mutations.findLast((item) => item.type === "node.update" && item.nodeId === next.nodeId);
-    if (previous?.type === "node.update") {
-      return mutations.map((item) => item === previous ? { ...previous, patch: { ...previous.patch, ...next.patch } } : item);
+    for (let index = mutations.length - 1; index >= 0; index -= 1) {
+      const previous = mutations[index];
+      const isStructuralBoundary = (previous.type === "node.create" && previous.node.id === next.nodeId)
+        || (previous.type === "node.delete" && previous.nodeId === next.nodeId);
+      // 删除或恢复会改变服务端实体身份，更新只能在最近的结构边界内合并。
+      if (isStructuralBoundary) break;
+      if (previous.type === "node.update" && previous.nodeId === next.nodeId) {
+        return mutations.map((item, itemIndex) => itemIndex === index
+          ? { ...previous, patch: { ...previous.patch, ...next.patch } }
+          : item);
+      }
     }
   }
   return [...mutations, next];

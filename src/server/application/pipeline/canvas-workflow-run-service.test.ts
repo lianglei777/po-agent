@@ -169,6 +169,45 @@ describe("CanvasWorkflowRunService", () => {
     expect(canvas.generate).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels a generation run that is created after the workflow was cancelled", async () => {
+    const repository = await createRepository(false);
+    let resolveGeneration!: (result: { node: CanvasNode; runId: string }) => void;
+    const generation = new Promise<{ node: CanvasNode; runId: string }>((resolve) => {
+      resolveGeneration = resolve;
+    });
+    const canvas = {
+      preflightWorkflowNode: vi.fn().mockResolvedValue(undefined),
+      generate: vi.fn().mockReturnValue(generation),
+      cancelGeneration: vi.fn().mockResolvedValue(imageNode()),
+    } as unknown as CanvasStudioService;
+    const service = new CanvasWorkflowRunService(
+      repository,
+      {} as GenerationRunService,
+      canvas,
+      { emit: vi.fn() } as unknown as PipelineSsePort,
+      { createId: () => "workflow-run-1", now: () => new Date("2026-08-29T00:00:00.000Z") },
+    );
+
+    await service.create({ projectId: "project-1", nodeIds: ["image-1"] });
+    await vi.waitFor(() => expect(canvas.generate).toHaveBeenCalledTimes(1));
+    expect(await repository.getCanvasWorkflowRun("workflow-run-1")).toMatchObject({
+      status: "running",
+      steps: [{ nodeId: "image-1", status: "running" }],
+    });
+
+    await service.cancel("project-1", "workflow-run-1");
+    resolveGeneration({ node: imageNode(), runId: "late-generation" });
+
+    await vi.waitFor(() => expect(canvas.cancelGeneration).toHaveBeenCalledWith(
+      "image-1",
+      { workflowRunId: "workflow-run-1" },
+    ));
+    expect(await repository.getCanvasWorkflowRun("workflow-run-1")).toMatchObject({
+      status: "cancelled",
+      steps: [{ nodeId: "image-1", status: "cancelled", generationRunId: "late-generation" }],
+    });
+  });
+
   it("rejects the whole workflow before starting any paid generation when preflight fails", async () => {
     const repository = await createRepository();
     const canvas = {

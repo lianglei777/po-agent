@@ -15,6 +15,17 @@ import type {
 import type { ModelsResponse } from "@/contracts/models";
 import type { GenerationComposerOptionsResponse, GenerationRunViewDto, ListGenerationRunsResponse } from "@/contracts/generation";
 
+export class PipelineStudioApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "PipelineStudioApiError";
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -22,9 +33,21 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: { message: response.statusText } }));
-    throw new Error(body.error?.message ?? `Request failed: ${response.status}`);
+    throw new PipelineStudioApiError(
+      body.error?.message ?? `Request failed: ${response.status}`,
+      response.status,
+      body.error?.code,
+    );
   }
   return response.json() as Promise<T>;
+}
+
+export function canvasSaveErrorIsRetryable(error: unknown): boolean {
+  return !(error instanceof PipelineStudioApiError) || error.status >= 500;
+}
+
+export function canvasSaveRetryDelay(attempt: number): number {
+  return Math.min(1_000 * (2 ** Math.max(0, attempt)), 30_000);
 }
 
 export const pipelineStudioApi = {

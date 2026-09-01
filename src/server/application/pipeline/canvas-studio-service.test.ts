@@ -51,12 +51,20 @@ describe("CanvasStudioService mutation batches", () => {
     });
   });
 
-  it("does not accept client-authored generation provenance", async () => {
+  it("preserves all server-owned node state against client-authored data", async () => {
     const current = {
       ...imageNode(),
       data: {
         ...imageNode().data!,
+        url: ["/api/pipeline/artifacts/artifact-real/content"],
+        artifactIds: ["artifact-real"],
+        workspaceFile: { relativePath: "images/real.png", contentType: "image/png", name: "real.png" },
+        taskInfo: { runId: "run-real", status: "processing" as const, progressPercent: 40 },
         generationProvenance: { runId: "run-real", inputFingerprint: "a".repeat(64), stale: false },
+        params: {
+          prompt: "Original",
+          imageList: [{ nodeId: "source-1", mediaType: "image" as const, label: "Source" }],
+        },
       },
     };
     const repository = {
@@ -76,7 +84,12 @@ describe("CanvasStudioService mutation batches", () => {
         patch: {
           data: {
             ...current.data!,
+            url: ["https://attacker.test/forged.png"],
+            artifactIds: ["artifact-forged"],
+            workspaceFile: { relativePath: "../forged", contentType: "text/html", name: "forged" },
+            taskInfo: { runId: "run-forged", status: "completed" },
             generationProvenance: { runId: "run-forged", inputFingerprint: "b".repeat(64), stale: false },
+            params: { ...current.data!.params!, prompt: "Updated", imageList: [] },
           },
         },
       }],
@@ -84,7 +97,14 @@ describe("CanvasStudioService mutation batches", () => {
 
     expect(repository.applyCanvasMutationBatch).toHaveBeenCalledWith(project.id, 0, [expect.objectContaining({
       patch: expect.objectContaining({
-        data: expect.objectContaining({ generationProvenance: current.data!.generationProvenance }),
+        data: expect.objectContaining({
+          url: current.data!.url,
+          artifactIds: current.data!.artifactIds,
+          workspaceFile: current.data!.workspaceFile,
+          taskInfo: current.data!.taskInfo,
+          generationProvenance: current.data!.generationProvenance,
+          params: expect.objectContaining({ prompt: "Updated", imageList: current.data!.params!.imageList }),
+        }),
       }),
     })]);
   });
@@ -122,6 +142,34 @@ describe("CanvasStudioService text AI", () => {
       textDocument: { plainText: "Revised final text" },
       taskInfo: { status: "completed", progressPercent: 100 },
     });
+  });
+
+  it("emits and propagates a text generation failure through the normal node update path", async () => {
+    let currentNode = textNode("");
+    currentNode = { ...currentNode, data: { ...currentNode.data!, params: { prompt: "Write a line" } } };
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch, updatedAt: "2026-08-20T00:00:00.000Z" };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const llm = {
+      isConfigured: vi.fn().mockReturnValue(true),
+      chat: vi.fn().mockRejectedValue(new Error("text model unavailable")),
+    } as unknown as LlmPort;
+    const sse = { emit: vi.fn() } as unknown as PipelineSsePort;
+    const service = createService(repository, llm, undefined, undefined, sse);
+
+    await expect(service.generate(currentNode.id)).rejects.toThrow("text model unavailable");
+
+    expect(currentNode.data?.taskInfo).toEqual({ status: "failed", errorMessage: "text model unavailable" });
+    expect(sse.emit).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: "node_updated",
+      projectId: currentNode.projectId,
+      payload: expect.objectContaining({ data: expect.objectContaining({ taskInfo: currentNode.data?.taskInfo }) }),
+    }));
   });
 });
 
@@ -1032,6 +1080,7 @@ function createService(
   llm = {} as LlmPort,
   runs = {} as GenerationRunService,
   assets = {} as GenerationAssetService,
+  sse = { emit: vi.fn() } as unknown as PipelineSsePort,
 ) {
   if (!("listActiveCanvasWorkflowRuns" in repository)) {
     Object.assign(repository, { listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]) });
@@ -1041,7 +1090,7 @@ function createService(
     runs,
     assets,
     llm,
-    { emit: vi.fn() } as unknown as PipelineSsePort,
+    sse,
   );
 }
 

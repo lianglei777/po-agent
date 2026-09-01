@@ -215,6 +215,14 @@ export interface CanvasNodeData {
   };
 }
 
+export function canvasWorkflowNodeIsRunnable(data: CanvasNodeData): boolean {
+  if (data.generatorType === "resource" || data.type === "audio") return false;
+  if (data.type === "text") {
+    return Boolean(data.params?.promptDocument?.plainText.trim() || data.params?.prompt.trim());
+  }
+  return data.type === "image" || data.type === "video";
+}
+
 export type CanvasNodeType =
   | CanvasMediaType
   | "script"

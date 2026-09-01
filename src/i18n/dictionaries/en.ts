@@ -1064,6 +1064,8 @@ export const en = {
     canvasWorkflows: "Workflows",
     canvasWorkflowRunSelected: "Run selected",
     canvasWorkflowSelectNodes: "Select the nodes to run first",
+    canvasWorkflowNoRunnableNodes: "The selection has no generative nodes to run",
+    canvasWorkflowNodeBusy: "Wait for the selected node generation to finish",
     canvasWorkflowWaitForSave: "Wait for the canvas to finish saving",
     canvasWorkflowResolveSaveError: "Resolve the canvas save failure before running a workflow",
     canvasWorkflowAlreadyRunning: "The current workflow is still running",

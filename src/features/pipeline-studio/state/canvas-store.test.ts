@@ -27,6 +27,41 @@ describe("pipeline studio canvas store", () => {
     vi.unstubAllGlobals();
   });
 
+  it("does not merge an edit across a delete and restore boundary", () => {
+    const store = createCanvasStore("project-1");
+    const node = {
+      id: "node-1",
+      projectId: "project-1",
+      type: "text" as const,
+      entityId: "entity-1",
+      positionX: 0,
+      positionY: 0,
+      width: 320,
+      height: 220,
+      data: { type: "text" as const, name: "Text", action: "text_generate", content: ["Original"] },
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    };
+    store.getState().hydrate({ revision: 1, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().updateNodeData(node.id, { ...node.data, content: ["Before delete"] });
+    store.getState().deleteNodes([node.id]);
+    store.getState().undo();
+    store.getState().updateNodeData(node.id, { ...node.data, content: ["After restore"] });
+
+    expect(store.getState().pendingMutations.map((mutation) => mutation.type)).toEqual([
+      "node.update",
+      "node.delete",
+      "node.create",
+      "node.update",
+    ]);
+    expect(store.getState().pendingMutations.at(-1)).toEqual({
+      type: "node.update",
+      nodeId: node.id,
+      patch: { data: { ...node.data, content: ["After restore"] } },
+    });
+  });
+
   it("deletes a connection and restores it through undo", () => {
     const store = createCanvasStore("project-1");
     const edge = {
@@ -204,6 +239,40 @@ describe("pipeline studio canvas store", () => {
 
     store.getState().undo();
     expect(store.getState().nodes[0]).toMatchObject({ width: 320, height: 220 });
+  });
+
+  it("commits a multi-node drag as one undoable history operation", () => {
+    const store = createCanvasStore("project-1");
+    const first = {
+      id: "node-1",
+      projectId: "project-1",
+      type: "image" as const,
+      entityId: "entity-1",
+      positionX: 0,
+      positionY: 10,
+      width: 360,
+      height: 300,
+      data: { type: "image" as const, name: "One", action: "image_generate" },
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    };
+    const second = { ...first, id: "node-2", entityId: "entity-2", positionX: 100, name: undefined };
+    store.getState().hydrate({ revision: 1, nodes: [first, second], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+    store.getState().updateNodePositionLive(first.id, { x: 20, y: 30 });
+    store.getState().updateNodePositionLive(second.id, { x: 120, y: 30 });
+
+    store.getState().commitNodePositions([
+      { nodeId: first.id, x: 0, y: 10 },
+      { nodeId: second.id, x: 100, y: 10 },
+    ]);
+
+    expect(store.getState().past).toHaveLength(1);
+    expect(store.getState().pendingMutations).toEqual([
+      { type: "node.update", nodeId: first.id, patch: { positionX: 20, positionY: 30 } },
+      { type: "node.update", nodeId: second.id, patch: { positionX: 120, positionY: 30 } },
+    ]);
+    store.getState().undo();
+    expect(store.getState().nodes.map((node) => [node.positionX, node.positionY])).toEqual([[0, 10], [100, 10]]);
   });
 
   it("keeps workflow-owned nodes and connections immutable while the run is active", () => {

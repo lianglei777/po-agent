@@ -1024,6 +1024,8 @@ export const zh = {
     canvasWorkflows: "工作流",
     canvasWorkflowRunSelected: "运行所选",
     canvasWorkflowSelectNodes: "请先选择要运行的节点",
+    canvasWorkflowNoRunnableNodes: "所选内容中没有可运行的生成节点",
+    canvasWorkflowNodeBusy: "请等待所选节点的生成任务完成",
     canvasWorkflowWaitForSave: "请等待画布保存完成",
     canvasWorkflowResolveSaveError: "请先解决画布保存失败，再运行工作流",
     canvasWorkflowAlreadyRunning: "当前工作流仍在运行",

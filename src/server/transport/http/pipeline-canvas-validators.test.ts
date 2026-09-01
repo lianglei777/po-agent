@@ -205,7 +205,7 @@ describe("parseGenerateTextNodeRequest", () => {
     })).toThrow("audioMetadata is invalid");
   });
 
-  it("validates server-owned generation provenance shape", () => {
+  it("strips server-owned node state from client mutations", () => {
     const imageNode = {
       ...node,
       type: "image" as const,
@@ -213,6 +213,9 @@ describe("parseGenerateTextNodeRequest", () => {
         type: "image" as const,
         name: "Image",
         action: "image_generate",
+        url: ["https://attacker.test/image.png"],
+        artifactIds: ["artifact-forged"],
+        taskInfo: { runId: "run-forged", status: "completed" },
         generationProvenance: {
           runId: "run-image-1",
           inputFingerprint: "a".repeat(64),
@@ -220,22 +223,21 @@ describe("parseGenerateTextNodeRequest", () => {
         },
       },
     };
-    expect(parseCanvasMutationBatch({
+    const parsed = parseCanvasMutationBatch({
       baseRevision: 0,
       requestId: "image-provenance",
       mutations: [{ type: "node.create", node: imageNode }],
-    }).mutations).toHaveLength(1);
-    expect(() => parseCanvasMutationBatch({
-      baseRevision: 0,
-      requestId: "invalid-image-provenance",
-      mutations: [{
-        type: "node.create",
-        node: {
-          ...imageNode,
-          data: { ...imageNode.data, generationProvenance: { ...imageNode.data.generationProvenance, inputFingerprint: "client-value" } },
-        },
-      }],
-    })).toThrow("generationProvenance is invalid");
+    });
+    expect(parsed.mutations[0]).toMatchObject({
+      type: "node.create",
+      node: { data: { type: "image", name: "Image", action: "image_generate" } },
+    });
+    const mutation = parsed.mutations[0];
+    if (mutation.type !== "node.create") throw new Error("Expected a node creation mutation");
+    expect(mutation.node.data).not.toHaveProperty("url");
+    expect(mutation.node.data).not.toHaveProperty("artifactIds");
+    expect(mutation.node.data).not.toHaveProperty("taskInfo");
+    expect(mutation.node.data).not.toHaveProperty("generationProvenance");
   });
 
   it("accepts restore intent and rejects unknown edge creation intents", () => {

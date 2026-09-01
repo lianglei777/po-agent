@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { App, Drawer, Dropdown, Input, Modal, Slider, Tooltip } from "antd";
-import type { CanvasMediaType, CanvasNode, CanvasWorkflowRun } from "@/contracts/pipeline";
+import { canvasWorkflowNodeIsRunnable, type CanvasMediaType, type CanvasNode, type CanvasWorkflowRun } from "@/contracts/pipeline";
 import {
   ArrowLeft,
   ChevronDown,
@@ -132,8 +132,15 @@ export function StudioCanvas({
   const [previewZoom, setPreviewZoom] = useState<number | null>(null);
   const displayZoom = previewZoom ?? viewport.zoom;
   const workflowActive = canvasWorkflowRunIsActive(workflowRun);
+  const selectedRunnableNodes = nodes.filter((node) => (
+    selectedNodeIds.includes(node.id) && node.data && canvasWorkflowNodeIsRunnable(node.data)
+  ));
   const workflowRunDisabledReason = selectedNodeIds.length === 0
     ? t.pipeline.canvasWorkflowSelectNodes
+    : selectedRunnableNodes.length === 0
+      ? t.pipeline.canvasWorkflowNoRunnableNodes
+      : selectedRunnableNodes.some((node) => node.data?.taskInfo?.status === "queued" || node.data?.taskInfo?.status === "processing")
+        ? t.pipeline.canvasWorkflowNodeBusy
     : saveState === "idle" || saveState === "saving"
       ? t.pipeline.canvasWorkflowWaitForSave
       : saveState === "error"
@@ -439,11 +446,11 @@ export function StudioCanvas({
     });
     if (!confirmed) return;
     try {
-      await onRunWorkflow(selectedNodeIds);
+      await onRunWorkflow(selectedRunnableNodes.map((node) => node.id));
     } catch (workflowError) {
       message.error(workflowError instanceof Error ? workflowError.message : t.pipeline.canvasWorkflowStartFailed);
     }
-  }, [message, modal, onRunWorkflow, selectedNodeIds, t.common.cancel, t.common.confirm, t.pipeline.canvasWorkflowConfirmDescription, t.pipeline.canvasWorkflowConfirmTitle, t.pipeline.canvasWorkflowStartFailed, workflowRunBusy, workflowRunDisabledReason]);
+  }, [message, modal, onRunWorkflow, selectedRunnableNodes, t.common.cancel, t.common.confirm, t.pipeline.canvasWorkflowConfirmDescription, t.pipeline.canvasWorkflowConfirmTitle, t.pipeline.canvasWorkflowStartFailed, workflowRunBusy, workflowRunDisabledReason]);
 
   const cancelWorkflow = useCallback(async () => {
     const confirmed = await modal.confirm({
@@ -553,14 +560,18 @@ export function StudioCanvas({
             setSelectedEdgeId(null);
             setSelection([]);
           }}
-          onNodeDragStart={(_, node) => {
-            dragOriginsRef.current.set(node.id, { x: node.position.x, y: node.position.y });
+          onNodeDragStart={(_, node, draggedNodes) => {
+            for (const draggedNode of draggedNodes.length ? draggedNodes : [node]) {
+              dragOriginsRef.current.set(draggedNode.id, { x: draggedNode.position.x, y: draggedNode.position.y });
+            }
             if (!selectedNodeIds.includes(node.id)) setSelection([node.id]);
           }}
-          onNodeDragStop={(_, node) => {
-            const previous = dragOriginsRef.current.get(node.id);
-            if (previous) store.getState().commitNodePosition(node.id, previous);
-            dragOriginsRef.current.delete(node.id);
+          onNodeDragStop={() => {
+            store.getState().commitNodePositions([...dragOriginsRef.current].map(([nodeId, position]) => ({
+              nodeId,
+              ...position,
+            })));
+            dragOriginsRef.current.clear();
           }}
           onConnect={(connection: Connection) => {
             if (connection.source && connection.target) createEdge(connection.source, connection.target);

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { canvasWorkflowNodeIsRunnable } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 import type {
   CanvasEdge,
-  CanvasNodeData,
   CanvasWorkflowRun,
   CanvasWorkflowRunStep,
 } from "@/server/domain/pipeline";
@@ -56,7 +56,7 @@ export class CanvasWorkflowRunService {
     }
     const runnable = requestedIds
       .map((nodeId) => nodesById.get(nodeId)!)
-      .filter((node) => node.data && workflowNodeIsRunnable(node.data));
+      .filter((node) => node.data && canvasWorkflowNodeIsRunnable(node.data));
     if (!runnable.length) {
       throw new AppError("VALIDATION_ERROR", "The selection has no generative nodes to run", 400);
     }
@@ -366,6 +366,27 @@ export class CanvasWorkflowRunService {
         await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
           generationRunId: result.runId,
         });
+        const latest = await this.repository.getCanvasWorkflowRun(run.id);
+        const latestStep = latest?.steps.find((candidate) => candidate.nodeId === step.nodeId);
+        if (latest && (latest.status === "cancelling" || latest.status === "cancelled" || latestStep?.status === "cancelled")) {
+          try {
+            // Run ID 可能晚于取消请求返回；绑定后必须补偿取消，避免供应商任务脱离 Workflow 生命周期继续计费。
+            await this.canvas.cancelGeneration(step.nodeId, { workflowRunId: run.id });
+          } catch {
+            // 与主动取消一致，供应商取消失败不能阻止 Workflow 状态收敛。
+          }
+          if (latestStep?.status !== "cancelled") {
+            await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+              status: "cancelled",
+              completedAt: this.timestamp(),
+            });
+          }
+        }
+        return;
+      }
+      const latest = await this.repository.getCanvasWorkflowRun(run.id);
+      const latestStep = latest?.steps.find((candidate) => candidate.nodeId === step.nodeId);
+      if (!latest || latest.status === "cancelling" || latest.status === "cancelled" || latestStep?.status === "cancelled") {
         return;
       }
       await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
@@ -408,14 +429,6 @@ export class CanvasWorkflowRunService {
   private timestamp(): string {
     return this.now().toISOString();
   }
-}
-
-function workflowNodeIsRunnable(data: CanvasNodeData): boolean {
-  if (data.generatorType === "resource" || data.type === "audio") return false;
-  if (data.type === "text") {
-    return Boolean(data.params?.promptDocument?.plainText.trim() || data.params?.prompt.trim());
-  }
-  return data.type === "image" || data.type === "video";
 }
 
 function internalRunEdges(edges: CanvasEdge[], nodeIds: Set<string>): CanvasWorkflowRun["edges"] {
