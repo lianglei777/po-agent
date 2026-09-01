@@ -36,7 +36,8 @@ export type RunningHubRequestField =
       source: "asset";
       key: string;
       vendorKey: string;
-      serialize: "first" | "list";
+      serialize: "first" | "list" | "numbered";
+      maxItems?: number;
     };
 
 export interface RunningHubExecutionConfig {
@@ -89,8 +90,9 @@ const parameter = (
 const asset = (
   key: string,
   vendorKey = key,
-  serialize: "first" | "list" = "first",
-): RunningHubRequestField => ({ source: "asset", key, vendorKey, serialize });
+  serialize: "first" | "list" | "numbered" = "first",
+  maxItems?: number,
+): RunningHubRequestField => ({ source: "asset", key, vendorKey, serialize, maxItems });
 
 const COMMON_VIDEO_FIELDS = [
   parameter("resolution", "resolution", "720p"),
@@ -189,6 +191,7 @@ export const RUNNINGHUB_OPERATIONS: RunningHubOperationDefinition[] = validateCa
   ...pixVerseOperations(),
   ...wan27Operations(),
   ...wan3Operations(),
+  ...runningHubSelfDeployOperations(),
 ]);
 
 export function createRunningHubRoutes(
@@ -679,6 +682,83 @@ function multimodalVideoSchema(version25: boolean): GenerationInputSchema {
   };
 }
 
+function runningHubSelfDeployOperations(): RunningHubOperationDefinition[] {
+  const audioSeparationSchema = (): GenerationInputSchema => ({
+    prompt: { required: false, maxLength: 0 },
+    assets: [mediaSlot("videoUrl", "源视频", "video", 1, 200 * MIB, VIDEO_TYPES, true)],
+  });
+  return [
+    defineOperation({
+      operation: "extract-background-audio",
+      route: routeMeta({
+        id: "runninghub-extract-background-audio",
+        name: "RunningHub 提取背景音",
+        description: "从视频中分离场景音、环境音或伴奏，并去除人声。",
+        tags: ["音频分离", "背景音", "去除人声", "最大200MB"],
+        product: "RunningHub 音频分离",
+        capability: "video-to-audio",
+        navigationLabel: "video-to-audio",
+        catalogDefault: true,
+      }),
+      inputSchema: audioSeparationSchema(),
+      protocol: standard("/openapi/v2/rhart-audio/extract-background", [
+        asset("videoUrl"),
+      ]),
+    }),
+    defineOperation({
+      operation: "extract-vocal-audio",
+      route: routeMeta({
+        id: "runninghub-extract-vocal-audio",
+        name: "RunningHub 提取人声",
+        description: "从视频中提取纯人声，并过滤背景音效与伴奏。",
+        tags: ["音频分离", "纯人声", "去除伴奏", "最大200MB"],
+        product: "RunningHub 音频分离",
+        capability: "video-to-audio",
+        navigationLabel: "video-to-audio",
+      }),
+      inputSchema: audioSeparationSchema(),
+      protocol: standard("/openapi/v2/rhart-audio/extract-vocal", [
+        asset("videoUrl"),
+      ]),
+    }),
+    defineOperation({
+      operation: "minimax-h3-oss-multimodal-video",
+      route: routeMeta({
+        id: "runninghub-minimax-h3-oss-multimodal-video",
+        name: "MiniMax H3 高级多模态视频",
+        description: "RunningHub 自部署 MiniMax H3 高级工作流，支持最多 9 张图片、3 个视频和 3 个音频联合参考，默认输出 768P 视频。",
+        tags: ["多模态参考", "9图/3视频/3音频", "默认768P", "5–15秒"],
+        product: "MiniMax H3 OSS",
+        capability: "multimodal-to-video",
+      }),
+      inputSchema: {
+        prompt: { required: false, maxLength: 20_000 },
+        parameters: [
+          selectField("aspectRatio", "画面比例", [
+            "1:1 (Square)", "2:3 (Portrait Photo)", "3:2 (Photo)", "3:4 (Portrait Standard)",
+            "4:3 (Standard)", "9:16 (Portrait Widescreen)", "16:9 (Widescreen)", "21:9 (Ultrawide)",
+          ], "16:9 (Widescreen)"),
+          durationField(5, 15, 5),
+        ],
+        assets: [
+          mediaSlot("imageUrls", "参考图片", "image", 9, 100 * MIB, IMAGE_TYPES),
+          mediaSlot("videoUrls", "参考视频", "video", 3, 100 * MIB, VIDEO_TYPES),
+          mediaSlot("audioUrls", "参考音频", "audio", 3, 100 * MIB, AUDIO_TYPES),
+        ],
+        constraints: [{ kind: "at-least-one-asset", slots: ["imageUrls", "videoUrls", "audioUrls"] }],
+      },
+      protocol: standard("/openapi/v2/rhart-video/minimax-h3-oss/fl2va-advanced", [
+        asset("imageUrls", "image", "numbered", 9),
+        asset("videoUrls", "video", "numbered", 3),
+        asset("audioUrls", "audio", "numbered", 3),
+        prompt(),
+        parameter("aspectRatio", "aspectRatio", "16:9 (Widescreen)"),
+        parameter("durationSeconds", "duration", 5),
+      ]),
+    }),
+  ];
+}
+
 function seedance20VariantImageSchema(variant: "mini" | "fast"): GenerationInputSchema {
   const resolutions = variant === "mini"
     ? ["480p", "720p", "native1080p", "native4k", "1080p", "2k", "4k"]
@@ -886,7 +966,7 @@ function videoFields(
 function routeMeta(input: Omit<RunningHubOperationDefinition["route"], "revision"> & {
   revision?: number;
 }): RunningHubOperationDefinition["route"] {
-  return { ...input, revision: input.revision ?? 9 };
+  return { ...input, revision: input.revision ?? 10 };
 }
 
 function standard(
@@ -953,6 +1033,9 @@ function validateCatalog(
       }
       if (field.source === "asset" && !assets.has(field.key)) {
         throw new Error(`${definition.operation} request references unknown asset: ${field.key}`);
+      }
+      if (field.source === "asset" && field.serialize === "numbered" && (!field.maxItems || field.maxItems < 1)) {
+        throw new Error(`${definition.operation} numbered asset requires maxItems`);
       }
     }
     for (const field of parameters.values()) validateDefault(definition.operation, field);

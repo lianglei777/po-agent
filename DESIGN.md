@@ -147,7 +147,7 @@ Codex blue (`#1668dc`) is the primary action color; `#4096ff` is reserved for fo
 ## Pipeline Studio
 
 - Text, image, and video generation composers share one compact model picker: a flat list with stable row height, a type icon on each item, provider metadata, and a dedicated keyboard-accessible information button for model descriptions and capability tags. Hovering the selection row itself must not expand or disclose model details.
-- Audio nodes currently represent uploaded or connected audio assets rather than audio generation, so they must not expose a model picker until an audio-generation capability is available through the content-generation contract.
+- Audio nodes support uploaded audio assets and the `video-to-audio` capability. When connected to a video node, they use the same compact model picker as other generation composers to select a trusted audio-separation Route; without a video input, the generate action remains disabled with a specific reason.
 
 ## Settings and detail pages
 

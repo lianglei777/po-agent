@@ -1064,6 +1064,66 @@ describe("CanvasStudioService video AI", () => {
   });
 });
 
+describe("CanvasStudioService audio generation", () => {
+  it("binds an upstream video to a selected video-to-audio route", async () => {
+    const target = audioNode();
+    const source = {
+      ...videoNode(),
+      id: "source-video",
+      data: {
+        ...videoNode().data!,
+        workspaceFile: { relativePath: "assets/source.mp4", contentType: "video/mp4", name: "source.mp4" },
+      },
+    };
+    const nodes = new Map([[target.id, target], [source.id, source]]);
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasEdges: vi.fn().mockResolvedValue([{
+        id: "edge-video-audio", projectId: target.projectId, sourceNodeId: source.id, targetNodeId: target.id,
+        edgeType: "reference", order: 0, createdAt: target.createdAt, updatedAt: target.updatedAt,
+      }]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-09-01T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-extract-vocal", enabled: true, isDefault: true, capability: "video-to-audio",
+      inputSchema: {
+        prompt: { required: false },
+        assets: [{ key: "videoUrl", label: "Source video", mediaType: "video", required: true, maxFiles: 1 }],
+      },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-audio-1" } }),
+    } as unknown as GenerationRunService;
+
+    const result = await createService(repository, {} as LlmPort, runs).generate(target.id, {
+      prompt: "",
+      routeId: route.id,
+    });
+
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "video-to-audio",
+      routeId: route.id,
+      assets: [{
+        slot: "videoUrl",
+        bindingId: "edge:edge-video-audio",
+        order: 0,
+        ref: { type: "workspace-file", relativePath: "assets/source.mp4" },
+      }],
+    }));
+    expect(result.node.data).toMatchObject({
+      action: "audio_generate",
+      taskInfo: { runId: "run-audio-1", status: "processing" },
+    });
+  });
+});
+
 function repositoryStub(result: { applied: boolean; revision: number }) {
   return {
     getProject: vi.fn().mockResolvedValue(project),
@@ -1128,6 +1188,24 @@ function videoNode(): CanvasNode {
       type: "video",
       name: "Video",
       action: "video_generate",
+      generatorType: "default",
+      url: [],
+      params: { prompt: "", settings: {} },
+      taskInfo: { status: "idle" },
+    },
+  };
+}
+
+function audioNode(): CanvasNode {
+  return {
+    ...imageNode(),
+    id: "audio-node-1",
+    type: "audio",
+    entityId: "audio-entity-1",
+    data: {
+      type: "audio",
+      name: "Audio",
+      action: "audio_generate",
       generatorType: "default",
       url: [],
       params: { prompt: "", settings: {} },

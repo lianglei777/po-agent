@@ -2519,9 +2519,9 @@ GET /api/generation/routes
 
 返回当前 Catalog 中由应用管理的 Route，包括仍在 Catalog 内但被用户停用的 Route，不返回已经从 Catalog 下线的 Route。每项包含 `id`、`name`、用于设置导航的短 `navigationLabel`、面向用户决策的 `description` 与 `tags`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。`navigationLabel` 表示 API 形态（如 `text-to-image` 或 `reference-to-video`），不改变运行时 capability；`tags` 是可独立展示的短标签数组，不是使用分隔符拼接的文本。供应商 operation、credential reference 和 adapter 配置不会返回。
 
-Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。
+Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。Chat 工具当前只执行生图和生视频，因此不会向 Chat 规划器暴露 `video-to-audio`；该能力可从直接生成界面或 Pipeline Studio 音频节点执行。
 
-当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.0 Mini、Seedance 2.0 Fast、Seedance 2.5、MiniMax Hailuo H3、PixVerse V6、Wan 2.7 与 Wan 3.0。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability。
+当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.0 Mini、Seedance 2.0 Fast、Seedance 2.5、MiniMax Hailuo H3、MiniMax H3 OSS、PixVerse V6、Wan 2.7、Wan 3.0 与 RunningHub 音频分离。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability；人声与背景音提取接口映射为 `video-to-audio`，输入一个视频素材并输出音频 Artifact。
 
 千问AI平台当前内置 `qianwen-wan-3-0-text-to-video`、`qianwen-wan-3-0-image-to-video` 和 `qianwen-wan-3-0-multimodal-to-video` Route，对应 `wan3.0-video` 的文生、首帧/首尾帧和图视音多模态生成。Route 支持 `resolution`、`aspectRatio`、`durationSeconds`、`generateAudio`、`promptExtend`、`watermark` 和可选 `seed` 语义参数；`durationSeconds` 接受 2–30 的整数或 `-1` 智能时长。
 
@@ -3056,12 +3056,12 @@ interface GenerateCanvasNodeResponse {
 }
 ```
 
-- 图片节点没有上游图片参考时使用 `text-to-image` Route。
+- 图片节点没有上游图片参考时使用 `text-to-image` Route；音频节点连接视频素材后使用 `video-to-audio` Route。
 - 对已有图片提交 `createNewNode: true` 时，服务端保留源节点，在其右侧寻找空位创建结果节点，以源图片作为 `image-to-image` 输入，并返回两节点之间的来源连线。失败或取消只影响新节点。
 - 视频提示词中标记为 `first-frame` / `last-frame` 的图片优先绑定 Route Schema 声明的对应语义槽；普通图片、视频或音频参考按媒体类型绑定 Schema 中唯一或标准命名的槽位。最终 capability 以用户选定且可用的 Route 为准；未选 Route 时才按引用类型选择默认能力。
 - Route Schema 的必填素材槽、最大文件数和全部参数字段会在 Composer 中即时校验；服务端仍会再次校验请求，且只把 Schema 声明并通过类型/范围检查的参数转发给 Provider。
 - `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
-- 图片和视频参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态同时持久化到当前节点。
+- 图片、视频和音频处理参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态同时持久化到当前节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。
 - 生成完成或失败后通过项目 SSE 通知客户端重新读取 Canvas Snapshot。
 - 画布生成时由应用层为 Prompt、Route、参数、引用顺序/角色及引用资源版本计算输入指纹，并随 Run 输入持久化；该字段是服务端审计信息，不接受客户端指定。

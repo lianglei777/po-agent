@@ -185,5 +185,6 @@ export function capabilityLabel(capability: GenerationRouteDto["capability"], la
   if (capability === "image-to-image") return labels.capabilityImageToImage;
   if (capability === "text-to-video") return labels.capabilityTextToVideo;
   if (capability === "image-to-video") return labels.capabilityImageToVideo;
-  return labels.capabilityMultimodalToVideo;
+  if (capability === "multimodal-to-video") return labels.capabilityMultimodalToVideo;
+  return labels.capabilityVideoToAudio;
 }

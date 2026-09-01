@@ -46,9 +46,14 @@ export function buildRunningHubRequest(
       if (field.serialize === "string" && value !== null) value = String(value);
       if (field.omitWhenEmpty && isEmpty(value)) continue;
     } else {
-      value = field.serialize === "list"
-        ? referencesForSlot(assets, field.key)
-        : firstReferenceForSlot(assets, field.key);
+      if (field.serialize === "numbered") {
+        const references = referencesForSlot(assets, field.key);
+        for (let index = 0; index < (field.maxItems ?? 0); index += 1) {
+          body[`${field.vendorKey}${index + 1}`] = references[index] ?? null;
+        }
+        continue;
+      }
+      value = field.serialize === "list" ? referencesForSlot(assets, field.key) : firstReferenceForSlot(assets, field.key);
     }
     body[field.vendorKey] = value;
   }
@@ -103,13 +108,15 @@ function parseField(value: JsonValue): RunningHubRequestField | null {
   if (
     field.source === "asset" &&
     typeof field.key === "string" &&
-    (field.serialize === "first" || field.serialize === "list")
+    (field.serialize === "first" || field.serialize === "list" || field.serialize === "numbered") &&
+    (field.maxItems === undefined || (typeof field.maxItems === "number" && Number.isInteger(field.maxItems) && field.maxItems > 0))
   ) {
     return {
       source: "asset",
       key: field.key,
       vendorKey: field.vendorKey,
       serialize: field.serialize,
+      maxItems: field.maxItems,
     };
   }
   return null;

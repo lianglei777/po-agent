@@ -7,8 +7,10 @@ const composerSources = [
   new URL("../image-ai-composer.tsx", import.meta.url),
   new URL("../video-ai-composer.tsx", import.meta.url),
 ].map((url) => readFileSync(fileURLToPath(url), "utf8"));
+const audioComposerSource = readFileSync(fileURLToPath(new URL("../audio-ai-composer.tsx", import.meta.url)), "utf8");
 const imageNodeSource = readFileSync(fileURLToPath(new URL("../image-canvas-node.tsx", import.meta.url)), "utf8");
 const videoNodeSource = readFileSync(fileURLToPath(new URL("../video-canvas-node.tsx", import.meta.url)), "utf8");
+const audioNodeSource = readFileSync(fileURLToPath(new URL("../audio-canvas-node.tsx", import.meta.url)), "utf8");
 
 describe("canvas composer consistency", () => {
   it("keeps expand and submit interactions in shared components", () => {
@@ -21,7 +23,7 @@ describe("canvas composer consistency", () => {
   });
 
   it("uses the same flat model picker and information interaction for every generation composer", () => {
-    for (const source of composerSources) {
+    for (const source of [...composerSources, audioComposerSource]) {
       expect(source).toContain("<CanvasModelPicker");
       expect(source).toContain("itemDetailsLabel={t.pipeline.generationModelDetails}");
       expect(source).not.toContain("group:");
@@ -35,5 +37,12 @@ describe("canvas composer consistency", () => {
     }
     expect(videoNodeSource).not.toContain("videoSelection?.historical");
     expect(videoNodeSource).not.toContain("source.updatedAt > selectedAt");
+  });
+
+  it("mounts the audio generation composer from the audio node", () => {
+    expect(audioNodeSource).toContain("<AudioAiComposer");
+    expect(audioNodeSource).toContain("label={t.pipeline.audioAiGenerate}");
+    expect(audioComposerSource).toContain("audioGenerationRoutes(response.routes)");
+    expect(audioComposerSource).toContain("hasVideoReference");
   });
 });

@@ -88,6 +88,7 @@ export const GENERATION_CAPABILITIES = [
   "text-to-video",
   "image-to-video",
   "multimodal-to-video",
+  "video-to-audio",
 ] as const;
 
 export type GenerationCapability = (typeof GENERATION_CAPABILITIES)[number];

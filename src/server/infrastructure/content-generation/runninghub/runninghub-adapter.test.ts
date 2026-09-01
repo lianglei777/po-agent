@@ -301,6 +301,9 @@ describe("RunningHubAdapter", () => {
     ["seedance-2-fast-image-to-video", "/openapi/v2/rhart-video/sparkvideo-2.0-fast/image-to-video"],
     ["seedance-2-mini-multimodal-video", "/openapi/v2/rhart-video/sparkvideo-2.0-mini/multimodal-video"],
     ["seedance-2-fast-multimodal-video", "/openapi/v2/rhart-video/sparkvideo-2.0-fast/multimodal-video"],
+    ["extract-background-audio", "/openapi/v2/rhart-audio/extract-background"],
+    ["extract-vocal-audio", "/openapi/v2/rhart-audio/extract-vocal"],
+    ["minimax-h3-oss-multimodal-video", "/openapi/v2/rhart-video/minimax-h3-oss/fl2va-advanced"],
   ])("submits %s to its trusted endpoint", async (operation, path) => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
       taskId: "new-operation",

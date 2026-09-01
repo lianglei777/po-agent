@@ -329,7 +329,6 @@ export class CanvasStudioService {
     let data = node.data;
     let compiledPrompt: string | undefined;
     if (!data || !isMediaType(data.type)) throw new AppError("VALIDATION_ERROR", "This node cannot generate media", 400);
-    if (data.type === "audio") throw new AppError("VALIDATION_ERROR", "Audio generation is not configured in this project", 400);
     if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
       throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
     }
@@ -397,10 +396,10 @@ export class CanvasStudioService {
     const requestedRoute = data.params?.routeId
       ? await this.runs.getRoute(data.params.routeId)
       : null;
-    const requestedVideoCapability = requestedRoute?.enabled && data.type === "video"
+    const requestedCapability = requestedRoute?.enabled && (data.type === "video" || data.type === "audio")
       ? requestedRoute.capability
       : undefined;
-    const capability = canvasGenerationCapability(data, promptDocument, requestedVideoCapability);
+    const capability = canvasGenerationCapability(data, promptDocument, requestedCapability);
 
     try {
       await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
@@ -441,7 +440,7 @@ export class CanvasStudioService {
       const updated = await this.updateNode(node.id, {
         data: {
           ...data,
-          action: data.type === "image" ? "image_generate" : "video_generate",
+          action: `${data.type}_generate`,
           taskInfo: { runId: result.run.id, status: "processing", progressPercent: 0 },
         },
       });
@@ -794,36 +793,39 @@ export class CanvasStudioService {
   async completeGeneration(nodeId: string, runId: string, artifacts: GenerationArtifact[]): Promise<void> {
     const node = await this.repository.getCanvasNode(nodeId);
     if (!node?.data) return;
-    const videoArtifact = node.data.type === "video"
+    const selectedArtifact = node.data.type === "video"
       ? artifacts.findLast((artifact) => artifact.kind === "video")
-      : undefined;
-    if (node.data.type === "video" && !videoArtifact) {
-      await this.failGeneration(node.id, runId, "The generation completed without a video artifact");
+      : node.data.type === "audio"
+        ? artifacts.findLast((artifact) => artifact.kind === "audio")
+        : undefined;
+    if ((node.data.type === "video" || node.data.type === "audio") && !selectedArtifact) {
+      const article = node.data.type === "audio" ? "an" : "a";
+      await this.failGeneration(node.id, runId, `The generation completed without ${article} ${node.data.type} artifact`);
       return;
     }
     const completedRun = await this.runs.getRun(runId);
     const inputFingerprint = completedRun?.run.input?.sourceFingerprint;
     // Take 只属于视频节点；其他媒体继续保留一次生成返回的全部 Artifact。
-    const urls = videoArtifact
-      ? videoArtifact.remoteUrl ? [videoArtifact.remoteUrl] : []
+    const urls = selectedArtifact
+      ? selectedArtifact.remoteUrl ? [selectedArtifact.remoteUrl] : []
       : artifacts.map((artifact) => artifact.remoteUrl).filter((value): value is string => Boolean(value));
-    const artifactIds = videoArtifact ? [videoArtifact.id] : artifacts.map((artifact) => artifact.id);
+    const artifactIds = selectedArtifact ? [selectedArtifact.id] : artifacts.map((artifact) => artifact.id);
     const activeGroupRun = node.data.groupRun?.status === "running" ? node.data.groupRun : undefined;
     const data: CanvasNodeData = {
       ...node.data,
       url: urls.length ? urls : artifacts.length ? [canvasFileUrl(node.id)] : node.data.url,
       artifactIds,
       taskInfo: { runId, status: "completed", progressPercent: 100 },
-      ...(videoArtifact ? {
+      ...(node.data.type === "video" && selectedArtifact ? {
         videoSelection: {
           runId,
-          artifactId: videoArtifact.id,
-          completedAt: completedRun?.run.completedAt ?? videoArtifact.createdAt,
+          artifactId: selectedArtifact.id,
+          completedAt: completedRun?.run.completedAt ?? selectedArtifact.createdAt,
           historical: false,
         },
         videoMetadata: undefined,
       } : {}),
-      generationProvenance: inputFingerprint && (node.data.type === "image" || node.data.type === "video")
+      generationProvenance: inputFingerprint && (node.data.type === "image" || node.data.type === "video" || node.data.type === "audio")
         ? { runId, inputFingerprint, stale: false }
         : undefined,
       groupRun: activeGroupRun ? { ...activeGroupRun, status: "completed" } : node.data.groupRun,
@@ -976,7 +978,7 @@ export class CanvasStudioService {
   async preflightWorkflowNode(nodeId: string, plannedNodeIds: ReadonlySet<string>): Promise<void> {
     const node = await this.requireNode(nodeId);
     const data = node.data;
-    if (!data || data.generatorType === "resource" || data.type === "audio") {
+    if (!data || data.generatorType === "resource") {
       throw new AppError("VALIDATION_ERROR", "This node cannot run in a canvas workflow", 400);
     }
     if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
@@ -1109,7 +1111,7 @@ export class CanvasStudioService {
   private async refreshGenerationProvenance(nodeId: string): Promise<CanvasNode | null> {
     const node = await this.repository.getCanvasNode(nodeId);
     const provenance = node?.data?.generationProvenance;
-    if (!node?.data || !provenance || (node.data.type !== "image" && node.data.type !== "video")) {
+    if (!node?.data || !provenance || (node.data.type !== "image" && node.data.type !== "video" && node.data.type !== "audio")) {
       return node;
     }
     const currentFingerprint = await this.currentGenerationInputFingerprint(node);
@@ -1126,7 +1128,7 @@ export class CanvasStudioService {
 
   private async currentGenerationInputFingerprint(node: CanvasNode): Promise<string | null> {
     const data = node.data;
-    if (!data || (data.type !== "image" && data.type !== "video")) return null;
+    if (!data || (data.type !== "image" && data.type !== "video" && data.type !== "audio")) return null;
     const storedReferences = referencesFromParams(data.params);
     const connectedReferences = storedReferences.filter((reference) => reference.referenceId?.startsWith("edge:"));
     const document = data.params?.promptDocument;
@@ -1681,12 +1683,13 @@ function canvasGenerationCapability(
   data: CanvasNodeData,
   promptDocument: CanvasPromptDocument | undefined,
   requestedCapability?: string,
-): "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video" {
+): "text-to-image" | "image-to-image" | "text-to-video" | "image-to-video" | "multimodal-to-video" | "video-to-audio" {
   const params = data.params ?? { prompt: "" };
   const imageRefs = params.imageList ?? [];
   const videoRefs = params.videoList ?? [];
   const audioRefs = params.audioList ?? [];
   if (data.type === "image") return imageRefs.length ? "image-to-image" : "text-to-image";
+  if (data.type === "audio") return "video-to-audio";
   if (requestedCapability === "text-to-video"
     || requestedCapability === "image-to-video"
     || requestedCapability === "multimodal-to-video") return requestedCapability;

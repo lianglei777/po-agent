@@ -76,7 +76,8 @@ export function useChatGenerationState({
     let owned = true;
     void loadGenerationComposerOptions()
       .then((result) => {
-        if (owned) setRoutes(result.routes);
+        // Chat 工具目前只承载生图与生视频；音轨分离由 Generate 和 Pipeline 音频节点执行。
+        if (owned) setRoutes(result.routes.filter((route) => route.capability !== "video-to-audio"));
       })
       .catch((cause) => {
         if (owned) {

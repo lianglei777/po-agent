@@ -53,6 +53,7 @@ export function ContentGenerationComposer({
   const schema = route.inputSchema;
   const inputLabels = t.contentGeneration.inputs as Readonly<Record<string, string>>;
   const assetSlots = schema.assets ?? [];
+  const showPrompt = route.capability !== "video-to-audio";
 
   const missingRequiredAsset = assetSlots.some((slot) =>
     slot.required && !assets.some((asset) => asset.slot === slot.key));
@@ -158,17 +159,19 @@ export function ContentGenerationComposer({
         </div>
       ) : null}
 
-      <Input.TextArea
-        aria-label={t.contentGeneration.prompt}
-        autoSize={{ minRows: 3, maxRows: 8 }}
-        className="bg-subtle"
-        disabled={busy}
-        onChange={(event) => setPrompt(event.target.value)}
-        placeholder={schema.prompt.required === false
-          ? t.contentGeneration.optionalPromptPlaceholder
-          : t.contentGeneration.promptPlaceholder}
-        value={prompt}
-      />
+      {showPrompt ? (
+        <Input.TextArea
+          aria-label={t.contentGeneration.prompt}
+          autoSize={{ minRows: 3, maxRows: 8 }}
+          className="bg-subtle"
+          disabled={busy}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder={schema.prompt.required === false
+            ? t.contentGeneration.optionalPromptPlaceholder
+            : t.contentGeneration.promptPlaceholder}
+          value={prompt}
+        />
+      ) : null}
 
       {allFields.length ? (
         <div className="mt-3 border-t border-line-subtle pt-3">

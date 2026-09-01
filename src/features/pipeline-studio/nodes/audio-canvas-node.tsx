@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasAudioMetadata, CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Copy, Download, FileMusic, RefreshCw, Trash2 } from "@/components/icons";
+import { AlertTriangle, Copy, Download, FileMusic, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import {
@@ -18,6 +18,7 @@ import {
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
 import { audioNodePresentation } from "../model/node-interaction";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
+import { AudioAiComposer } from "./audio-ai-composer";
 import { CanvasNodeConnectionHandle } from "./shared/canvas-node-connection-handle";
 import { CanvasNodeContextToolbar, CanvasNodeToolbarButton } from "./shared/canvas-node-context-toolbar";
 import { CanvasNodeResizeControl } from "./shared/canvas-node-resize-control";
@@ -47,15 +48,22 @@ export function AudioCanvasNode({
   const { message } = App.useApp();
   const store = useCanvasStoreApi();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
   const singleSelected = useCanvasStore((state) => state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id);
+  const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
+  const activateNodeComposer = useCanvasStore((state) => state.activateNodeComposer);
   const workflowLocked = useCanvasStore((state) => state.workflowLockedNodeIds.includes(id));
   const hasIncomingConnection = useCanvasStore((state) => state.edges.some((edge) => edge.targetNodeId === id));
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
+  )));
+  const waitingForSave = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
+    mutation.type === "node.create" ? mutation.node.id === id
+      : mutation.type === "node.update" && mutation.nodeId === id && mutation.patch.data !== undefined
   )));
   const canvas = node.data;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -64,6 +72,7 @@ export function AudioCanvasNode({
   const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
   const [mediaRevision, setMediaRevision] = useState(0);
   const [waveformResult, setWaveformResult] = useState<WaveformResultState | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const mediaSource = resolveCanvasMediaSource(id, canvas);
   const mediaUrl = mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
@@ -231,6 +240,14 @@ export function AudioCanvasNode({
       {presentation.showToolbar ? (
         <CanvasNodeContextToolbar offset={54}>
           <CanvasNodeToolbarButton
+            label={t.pipeline.audioAiGenerate}
+            icon={<Sparkles className="size-4" />}
+            onClick={() => {
+              activateNodeComposer(id);
+              setComposerOpen(true);
+            }}
+          />
+          <CanvasNodeToolbarButton
             label={t.pipeline.nodeAudioReplace}
             icon={<RefreshCw className="size-4" />}
             onClick={() => inputRef.current?.click()}
@@ -352,6 +369,19 @@ export function AudioCanvasNode({
           </div>
         )}
       </section>
+
+      {composerActive && !dragging && (!hasAudio || composerOpen) ? (
+        <AudioAiComposer
+          data={canvas}
+          nodeId={id}
+          waitingForSave={waitingForSave}
+          workflowLocked={workflowLocked}
+          onNodeUpdate={(serverNode) => {
+            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+            setComposerOpen(false);
+          }}
+        />
+      ) : null}
     </article>
   );
 }

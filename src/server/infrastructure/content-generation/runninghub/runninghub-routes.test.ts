@@ -5,7 +5,7 @@ describe("createRunningHubRoutes", () => {
   it("provides one stable catalog default for every supported capability", () => {
     const routes = createRunningHubRoutes("2026-08-06T00:00:00.000Z");
 
-    expect(routes).toHaveLength(22);
+    expect(routes).toHaveLength(25);
     expect(routes.every((route) =>
       route.providerId === "runninghub" &&
       !route.enabled &&
@@ -17,6 +17,7 @@ describe("createRunningHubRoutes", () => {
       "text-to-video",
       "image-to-video",
       "multimodal-to-video",
+      "video-to-audio",
     ] as const) {
       expect(routes.filter((route) => route.capability === capability && route.isDefault))
         .toHaveLength(1);
@@ -56,6 +57,8 @@ describe("createRunningHubRoutes", () => {
       "PixVerse V6",
       "Wan 2.7",
       "Wan 3.0",
+      "RunningHub 音频分离",
+      "MiniMax H3 OSS",
     ]);
     expect(routes.every((route) => route.product.length > 0)).toBe(true);
   });
@@ -74,6 +77,29 @@ describe("createRunningHubRoutes", () => {
       .toEqual([{ kind: "mutually-exclusive-parameters", keys: ["fileUrl", "linkUrl"] }]);
     expect(byOperation.get("wan-3-reference-to-video")?.defaults.resolution).toBe("1080P");
     expect(byOperation.get("wan-3-image-to-video")?.defaults.durationSeconds).toBe("auto");
+  });
+
+  it("models self-deploy audio extraction and advanced multimodal inputs", () => {
+    const routes = createRunningHubRoutes("2026-09-01T00:00:00.000Z");
+    const byOperation = new Map(routes.map((route) => [route.providerOperation, route]));
+    const vocal = byOperation.get("extract-vocal-audio")!;
+    const background = byOperation.get("extract-background-audio")!;
+    const multimodal = byOperation.get("minimax-h3-oss-multimodal-video")!;
+
+    expect([vocal, background].every((route) => route.capability === "video-to-audio")).toBe(true);
+    expect(vocal.inputSchema.assets).toMatchObject([
+      { key: "videoUrl", mediaType: "video", required: true, maxFiles: 1, maxFileSizeBytes: 200 * 1024 * 1024 },
+    ]);
+    expect(multimodal.inputSchema.assets?.map((slot) => [slot.key, slot.maxFiles, slot.maxFileSizeBytes]))
+      .toEqual([
+        ["imageUrls", 9, 100 * 1024 * 1024],
+        ["videoUrls", 3, 100 * 1024 * 1024],
+        ["audioUrls", 3, 100 * 1024 * 1024],
+      ]);
+    expect(multimodal.inputSchema.constraints).toEqual([{
+      kind: "at-least-one-asset",
+      slots: ["imageUrls", "videoUrls", "audioUrls"],
+    }]);
   });
 
   it("models Seedance 2.0 Mini and Fast limits from the provider contracts", () => {
