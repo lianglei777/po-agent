@@ -182,7 +182,7 @@ describe("agent HTTP validation", () => {
 
   it("parses Web Access settings and rejects incomplete provider lists", () => {
     const input = {
-      mode: "custom",
+      enabled: true,
       providers: [
         { id: "brave", enabled: true, apiKey: "secret" },
         { id: "tavily", enabled: false, apiKey: "" },
@@ -198,6 +198,28 @@ describe("agent HTTP validation", () => {
         providers: input.providers.slice(1),
       }),
     ).toThrow(/every supported provider/);
+    expect(() => {
+      const missingEnabled = { ...input } as Record<string, unknown>;
+      delete missingEnabled.enabled;
+      return parseUpdateWebAccessSettings(missingEnabled);
+    }).toThrow("enabled must be a boolean");
+    expect(() =>
+      parseUpdateWebAccessSettings({
+        ...input,
+        providers: input.providers.map((provider) => ({
+          ...provider,
+          enabled: false,
+        })),
+      }),
+    ).toThrow("enabled Web Search requires at least one enabled provider");
+    expect(parseUpdateWebAccessSettings({
+      ...input,
+      enabled: false,
+      providers: input.providers.map((provider) => ({
+        ...provider,
+        enabled: false,
+      })),
+    })).toMatchObject({ enabled: false });
   });
 
   it("accepts the skills market package contract", () => {

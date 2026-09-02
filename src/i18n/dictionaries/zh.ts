@@ -105,13 +105,13 @@ export const zh = {
   webAccess: {
     title: "Web 访问",
     description: "配置 Agent 进行网络研究时使用的搜索供应商和 API Key。",
-    strategy: "搜索策略",
-    strategyDescription: "使用自动供应商选择，或定义有序的回退路线。",
-    auto: "自动选择",
-    custom: "自定义回退",
+    enabled: "联网搜索",
+    enabledDescription: "关闭后，Agent 不会获得联网搜索或网页抓取工具。默认关闭。",
+    enable: "开启联网搜索",
+    disable: "关闭联网搜索",
     providers: "搜索供应商",
     providersDescription:
-      "API Key 保存在本地。编辑时可通过眼睛按钮直接显示或隐藏。",
+      "按列表顺序尝试已启用供应商。API Key 保存在本地，可通过眼睛按钮显示或隐藏。",
     keyRequired: "需要 API Key",
     keyOptional: "API Key 可选",
     noKeyRequired: "无需 API Key",

@@ -6,7 +6,7 @@ import { WebAccessSettingsService } from "./web-access-settings-service";
 describe("WebAccessSettingsService", () => {
   it("persists settings and invalidates loaded Web Access extensions", async () => {
     const input = {
-      mode: "auto" as const,
+      enabled: false,
       providers: [
         { id: "brave" as const, enabled: true, apiKey: "key" },
         { id: "tavily" as const, enabled: true, apiKey: "" },

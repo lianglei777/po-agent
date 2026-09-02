@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { link, mkdir, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   DefaultResourceLoader,
   getAgentDir,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { normalizeWebAccessConfig } from "./pi-web-access-config";
 
 export const BUILTIN_SKILL_SOURCE = "po-agent-builtin";
 
@@ -18,13 +19,14 @@ export const BUILTIN_WEB_TOOL_NAMES = [
 ] as const;
 
 const DEFAULT_WEB_ACCESS_CONFIG = {
+  poAgentWebAccessEnabled: false,
   workflow: "none",
   allowBrowserCookies: false,
   tools: {
-    webSearch: { enabled: true },
-    fetchContent: { enabled: true },
-    getSearchContent: { enabled: true },
-    sourceCheck: { enabled: true },
+    webSearch: { enabled: false },
+    fetchContent: { enabled: false },
+    getSearchContent: { enabled: false },
+    sourceCheck: { enabled: false },
   },
   fetchRouting: {
     providers: ["http", "jina"],
@@ -125,6 +127,20 @@ export async function ensureDefaultWebAccessConfig(
       if (!isMissingFileError(error)) throw error;
     });
   }
+  await normalizeExistingWebAccessConfig(configPath);
+}
+
+async function normalizeExistingWebAccessConfig(configPath: string): Promise<void> {
+  const raw = await readFile(configPath, "utf8");
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("web-search.json must contain a JSON object");
+  }
+  const normalized = normalizeWebAccessConfig(parsed as Record<string, unknown>);
+  if (!normalized.changed) return;
+  await writeFile(configPath, `${JSON.stringify(normalized.config, null, 2)}\n`, {
+    mode: 0o600,
+  });
 }
 
 function isFileExistsError(error: unknown): boolean {
@@ -170,6 +186,9 @@ export async function createPiResourceLoader({
     defaultConfigInitializations.set(normalizedAgentDir, initialization);
   }
   await initialization;
+  const webAccessEnabled = await readWebAccessEnabled(
+    path.join(normalizedAgentDir, "web-search.json"),
+  );
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
@@ -198,7 +217,7 @@ export async function createPiResourceLoader({
   const missingTools = BUILTIN_WEB_TOOL_NAMES.filter(
     (toolName) => !webAccessExtension?.tools.has(toolName),
   );
-  if (!webAccessExtension || missingTools.length > 0) {
+  if (!webAccessExtension || (webAccessEnabled && missingTools.length > 0)) {
     const diagnostic = extensions.errors.find((error) =>
       path.resolve(error.path).startsWith(path.resolve(webAccessDir)),
     );
@@ -230,6 +249,29 @@ export async function createPiResourceLoader({
     if (sourceInfo) skill.sourceInfo = sourceInfo;
   }
   return loader;
+}
+
+async function readWebAccessEnabled(configPath: string): Promise<boolean> {
+  const config: unknown = JSON.parse(await readFile(configPath, "utf8"));
+  return Boolean(
+    config &&
+      typeof config === "object" &&
+      !Array.isArray(config) &&
+      (config as Record<string, unknown>).poAgentWebAccessEnabled === true,
+  );
+}
+
+export function getAvailableBuiltinWebToolNames(
+  loader: DefaultResourceLoader,
+  webAccessDir = resolveBuiltinWebAccessDir(),
+): string[] {
+  const extension = loader.getExtensions().extensions.find((candidate) =>
+    path.resolve(candidate.resolvedPath).startsWith(
+      `${path.resolve(webAccessDir)}${path.sep}`,
+    ),
+  );
+  if (!extension) throw new Error("pi-web-access did not load");
+  return BUILTIN_WEB_TOOL_NAMES.filter((toolName) => extension.tools.has(toolName));
 }
 
 function applyWebAccessPolicy(

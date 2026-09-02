@@ -110,14 +110,14 @@ export const en = {
     title: "Web access",
     description:
       "Configure the search providers and API keys used by the agent for web research.",
-    strategy: "Search strategy",
-    strategyDescription:
-      "Use automatic provider selection or define an ordered fallback route.",
-    auto: "Automatic",
-    custom: "Custom fallback",
+    enabled: "Web search",
+    enabledDescription:
+      "When off, the agent cannot use web search or web fetching tools. It is off by default.",
+    enable: "Enable web search",
+    disable: "Disable web search",
     providers: "Search providers",
     providersDescription:
-      "API keys are stored locally. Use the eye button to show or hide a key while editing it.",
+      "Enabled providers are tried in list order. API keys are stored locally; use the eye button to show or hide a key while editing it.",
     keyRequired: "API Key required",
     keyOptional: "API Key optional",
     noKeyRequired: "No API Key required",

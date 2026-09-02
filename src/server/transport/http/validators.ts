@@ -105,10 +105,7 @@ export function parseUpdateWebAccessSettings(
   value: unknown,
 ): UpdateWebAccessSettingsRequest {
   const object = asObject(value);
-  const mode = requiredString(object, "mode");
-  if (mode !== "auto" && mode !== "custom") {
-    invalid("mode must be auto or custom");
-  }
+  const enabled = requiredBoolean(object, "enabled");
   if (!Array.isArray(object.providers)) {
     invalid("providers must be an array");
   }
@@ -142,11 +139,11 @@ export function parseUpdateWebAccessSettings(
   ) {
     invalid("fallbackOn contains an unsupported fallback kind");
   }
-  if (mode === "custom" && !providers.some(({ enabled }) => enabled)) {
-    invalid("custom mode requires at least one enabled provider");
+  if (enabled && !providers.some((provider) => provider.enabled)) {
+    invalid("enabled Web Search requires at least one enabled provider");
   }
   return {
-    mode,
+    enabled,
     providers,
     fallbackOn: [...new Set(fallbackOn)] as WebSearchFallbackKind[],
   };

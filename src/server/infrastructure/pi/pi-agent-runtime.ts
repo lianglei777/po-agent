@@ -20,8 +20,8 @@ import type {
 import type { AgentToolDefinition } from "@/server/ports/agent-tool";
 import { mapPiMessage } from "./message-mapper";
 import {
-  BUILTIN_WEB_TOOL_NAMES,
   createPiResourceLoader,
+  getAvailableBuiltinWebToolNames,
 } from "./pi-resource-loader";
 import { normalizePiModelBaseUrl } from "./pi-model-base-url";
 
@@ -48,7 +48,7 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
     const resourceLoader = await createPiResourceLoader({ cwd: input.cwd });
     const customTools = input.customTools?.map(toPiToolDefinition) ?? [];
     const requiredToolNames = [
-      ...BUILTIN_WEB_TOOL_NAMES,
+      ...getAvailableBuiltinWebToolNames(resourceLoader),
       ...customTools.map((tool) => tool.name),
     ];
     const selectedToolNames = [

@@ -1189,7 +1189,7 @@ Content-Type: application/json
 
 ### 6.6 Web Access 设置
 
-Web Access 设置管理 `pi-web-access` 使用的搜索供应商、API Key、顺序和回退条件。当前接口面向本机单用户设置页，响应包含完整 API Key，并设置 `Cache-Control: no-store`；不要将 Po Agent API 直接暴露到公网。
+Web Access 设置管理联网总开关以及 `pi-web-access` 使用的搜索供应商、API Key、顺序和回退条件。联网总开关默认关闭。当前接口面向本机单用户设置页，响应包含完整 API Key，并设置 `Cache-Control: no-store`；不要将 Po Agent API 直接暴露到公网。
 
 ```http
 GET /api/web-access
@@ -1201,7 +1201,7 @@ Content-Type: application/json
 
 ```json
 {
-  "mode": "custom",
+  "enabled": false,
   "providers": [
     { "id": "brave", "enabled": true, "apiKey": "BSA_..." },
     { "id": "exa", "enabled": true, "apiKey": "" },
@@ -1212,7 +1212,7 @@ Content-Type: application/json
 }
 ```
 
-`mode: "auto"` 删除显式 `searchRouting`，恢复 `pi-web-access` 自动选择；`mode: "custom"` 按启用 Provider 在数组中的顺序写入路由。保存后，存活 Runtime 会在下一次普通 Prompt 前重新加载 Extension，后续搜索使用新配置。
+`enabled: false` 会移除 Agent 的联网搜索和网页抓取工具；`enabled: true` 时至少要启用一个 Provider。服务始终按照已启用 Provider 在数组中的顺序搜索；命中勾选的回退条件后，才尝试下一个 Provider。保存后，存活 Runtime 会在下一次普通 Prompt 前重新加载 Extension，后续搜索使用新配置。
 
 浏览器示例：
 

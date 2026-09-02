@@ -23,7 +23,7 @@ export interface WebSearchProviderSettings {
 }
 
 export interface WebAccessSettingsResponse {
-  mode: "auto" | "custom";
+  enabled: boolean;
   providers: WebSearchProviderSettings[];
   fallbackOn: WebSearchFallbackKind[];
 }

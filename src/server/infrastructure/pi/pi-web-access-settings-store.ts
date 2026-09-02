@@ -10,6 +10,7 @@ import {
   type WebSearchProviderId,
 } from "@/contracts/web-access";
 import type { WebAccessSettingsStore } from "@/server/ports/web-access-settings";
+import { normalizeWebAccessConfig } from "./pi-web-access-config";
 
 type ConfigObject = Record<string, unknown>;
 
@@ -35,7 +36,7 @@ export class PiWebAccessSettingsStore implements WebAccessSettingsStore {
       ...WEB_SEARCH_PROVIDER_IDS.filter((id) => !enabled.has(id)),
     ];
     return {
-      mode: routing ? "custom" : "auto",
+      enabled: config.poAgentWebAccessEnabled === true,
       providers: providerOrder.map((id) => ({
         id,
         enabled: enabled.has(id),
@@ -51,16 +52,12 @@ export class PiWebAccessSettingsStore implements WebAccessSettingsStore {
       delete config.provider;
       delete config.searchProvider;
 
-      if (input.mode === "custom") {
-        config.searchRouting = {
-          providers: input.providers
-            .filter((provider) => provider.enabled)
-            .map((provider) => provider.id),
-          fallbackOn: input.fallbackOn,
-        };
-      } else {
-        delete config.searchRouting;
-      }
+      config.searchRouting = {
+        providers: input.providers
+          .filter((provider) => provider.enabled)
+          .map((provider) => provider.id),
+        fallbackOn: input.fallbackOn,
+      };
 
       for (const provider of input.providers) {
         if (provider.id === "duckduckgo") continue;
@@ -69,7 +66,8 @@ export class PiWebAccessSettingsStore implements WebAccessSettingsStore {
         if (apiKey) config[field] = apiKey;
         else delete config[field];
       }
-      await this.writeConfig(config);
+      config.poAgentWebAccessEnabled = input.enabled;
+      await this.writeConfig(normalizeWebAccessConfig(config).config);
     });
     this.writeQueue = operation.catch(() => {});
     return operation;
@@ -129,6 +127,6 @@ function readRouting(value: unknown): {
     (kind): kind is WebSearchFallbackKind =>
       WEB_SEARCH_FALLBACK_KINDS.includes(kind as WebSearchFallbackKind),
   );
-  if (providers.length === 0 || fallbackOn.length === 0) return null;
+  if (fallbackOn.length === 0) return null;
   return { providers, fallbackOn };
 }

@@ -35,6 +35,39 @@ async function createWebAccessExtension(root: string): Promise<string> {
 }
 
 describe("createPiResourceLoader", () => {
+  it("keeps Web Access tools unavailable by default", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "po-web-disabled-"));
+    const cwd = path.join(root, "workspace");
+    const agentDir = path.join(root, "agent");
+    const builtinSkillsDir = path.join(root, "builtins");
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    await fs.mkdir(cwd, { recursive: true });
+    await fs.mkdir(builtinSkillsDir, { recursive: true });
+
+    try {
+      const loader = await createPiResourceLoader({
+        cwd,
+        agentDir,
+        builtinSkillsDir,
+      });
+      const webAccess = loader.getExtensions().extensions.find((extension) =>
+        extension.resolvedPath.includes("pi-web-access"),
+      );
+
+      expect([...webAccess!.tools.keys()]).not.toEqual(expect.arrayContaining([
+        "web_search",
+        "fetch_content",
+        "get_search_content",
+        "source_check",
+      ]));
+    } finally {
+      if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+      await fs.rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("loads the installed pi-web-access extension and its required tools", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "po-web-installed-"));
     const cwd = path.join(root, "workspace");
@@ -44,6 +77,19 @@ describe("createPiResourceLoader", () => {
     process.env.PI_CODING_AGENT_DIR = agentDir;
     await fs.mkdir(cwd, { recursive: true });
     await fs.mkdir(builtinSkillsDir, { recursive: true });
+    await fs.mkdir(agentDir, { recursive: true });
+    await fs.writeFile(
+      path.join(agentDir, "web-search.json"),
+      JSON.stringify({
+        poAgentWebAccessEnabled: true,
+        tools: {
+          webSearch: { enabled: true },
+          fetchContent: { enabled: true },
+          getSearchContent: { enabled: true },
+          sourceCheck: { enabled: true },
+        },
+      }),
+    );
 
     try {
       const loader = await createPiResourceLoader({
@@ -210,6 +256,7 @@ describe("createPiResourceLoader", () => {
       const defaults = JSON.parse(await fs.readFile(configPath, "utf8"));
       expect(defaults).toMatchObject({
         workflow: "none",
+        poAgentWebAccessEnabled: false,
         allowBrowserCookies: false,
         githubClone: { enabled: false },
         youtube: { enabled: false },
@@ -220,9 +267,16 @@ describe("createPiResourceLoader", () => {
 
       await fs.writeFile(configPath, '{"provider":"brave"}\n');
       await ensureDefaultWebAccessConfig(agentDir);
-      expect(await fs.readFile(configPath, "utf8")).toBe(
-        '{"provider":"brave"}\n',
-      );
+      expect(JSON.parse(await fs.readFile(configPath, "utf8"))).toMatchObject({
+        provider: "brave",
+        poAgentWebAccessEnabled: false,
+        tools: {
+          webSearch: { enabled: false },
+          fetchContent: { enabled: false },
+          getSearchContent: { enabled: false },
+          sourceCheck: { enabled: false },
+        },
+      });
     } finally {
       await fs.rm(root, { force: true, recursive: true });
     }
@@ -237,6 +291,19 @@ describe("createPiResourceLoader", () => {
     await fs.mkdir(cwd, { recursive: true });
     await fs.mkdir(builtinSkillsDir, { recursive: true });
     await fs.mkdir(webAccessDir, { recursive: true });
+    await fs.mkdir(agentDir, { recursive: true });
+    await fs.writeFile(
+      path.join(agentDir, "web-search.json"),
+      JSON.stringify({
+        poAgentWebAccessEnabled: true,
+        tools: {
+          webSearch: { enabled: true },
+          fetchContent: { enabled: true },
+          getSearchContent: { enabled: true },
+          sourceCheck: { enabled: true },
+        },
+      }),
+    );
     await fs.writeFile(
       path.join(webAccessDir, "package.json"),
       JSON.stringify({

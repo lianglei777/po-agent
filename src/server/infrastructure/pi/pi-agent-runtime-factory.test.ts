@@ -8,7 +8,7 @@ const sdk = vi.hoisted(() => ({
 }));
 const resources = vi.hoisted(() => ({
   createPiResourceLoader: vi.fn(),
-  builtinWebToolNames: [
+  availableWebToolNames: [
     "web_search",
     "fetch_content",
     "get_search_content",
@@ -26,7 +26,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
 }));
 vi.mock("./pi-resource-loader", () => ({
   createPiResourceLoader: resources.createPiResourceLoader,
-  BUILTIN_WEB_TOOL_NAMES: resources.builtinWebToolNames,
+  getAvailableBuiltinWebToolNames: () => resources.availableWebToolNames,
 }));
 
 import { PiAgentRuntimeFactory } from "./pi-agent-runtime";
@@ -56,7 +56,7 @@ describe("PiAgentRuntimeFactory", () => {
           "grep",
           "find",
           "ls",
-          ...resources.builtinWebToolNames,
+          ...resources.availableWebToolNames,
         ],
       }),
     );
@@ -90,7 +90,7 @@ describe("PiAgentRuntimeFactory", () => {
     const options = sdk.createAgentSession.mock.calls.at(-1)?.[0];
     expect(options.tools).toEqual([
       "read",
-      ...resources.builtinWebToolNames,
+      ...resources.availableWebToolNames,
       "generate_image",
     ]);
     expect(options.customTools).toHaveLength(1);
@@ -120,5 +120,24 @@ describe("PiAgentRuntimeFactory", () => {
       name: "generate_image",
       arguments: { prompt: "lake" },
     })).toEqual({ prompt: "lake" });
+  });
+
+  it("does not register Web Access tools while the global switch is off", async () => {
+    sdk.createSessionManager.mockReturnValue({});
+    sdk.createAgentSession.mockResolvedValue({ session: {} });
+    resources.createPiResourceLoader.mockResolvedValue({});
+    const previous = resources.availableWebToolNames;
+    resources.availableWebToolNames = [];
+    try {
+      await new PiAgentRuntimeFactory(Promise.resolve(sdk.modelRuntime as never))
+        .create({ cwd: "C:\\workspace" });
+      expect(sdk.createAgentSession).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          tools: ["bash", "read", "edit", "write", "grep", "find", "ls"],
+        }),
+      );
+    } finally {
+      resources.availableWebToolNames = previous;
+    }
   });
 });

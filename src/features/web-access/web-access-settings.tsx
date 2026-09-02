@@ -13,7 +13,6 @@ import {
   Button,
   Checkbox,
   Input,
-  Segmented,
   Skeleton,
   Switch,
   Tooltip,
@@ -148,19 +147,17 @@ export function WebAccessSettings({
           <div className="space-y-8 py-6">
             <section>
               <h2 className="text-sm font-semibold text-primary">
-                {labels.strategy}
+                {labels.enabled}
               </h2>
               <p className="mt-1 text-body-sm text-muted">
-                {labels.strategyDescription}
+                {labels.enabledDescription}
               </p>
-              <Segmented
+              <Switch
+                aria-label={settings.enabled ? labels.disable : labels.enable}
+                checked={settings.enabled}
                 className="mt-3"
-                onChange={(mode) => setSettings({ ...settings, mode })}
-                options={[
-                  { label: labels.auto, value: "auto" as const },
-                  { label: labels.custom, value: "custom" as const },
-                ]}
-                value={settings.mode}
+                disabled={saving}
+                onChange={(enabled) => setSettings({ ...settings, enabled })}
               />
             </section>
 
@@ -198,7 +195,7 @@ export function WebAccessSettings({
                         <Input.Password
                           aria-label={`${PROVIDER_NAMES[provider.id]} API Key`}
                           autoComplete="off"
-                          disabled={saving}
+                          disabled={!settings.enabled || saving}
                           iconRender={(visible) =>
                             visible ? <EyeOff /> : <Eye />
                           }
@@ -212,44 +209,41 @@ export function WebAccessSettings({
                         />
                       )}
                       <div className="flex items-center gap-2">
-                        {settings.mode === "custom" ? (
-                          <>
-                            <Tooltip title={labels.moveUp}>
-                              <span className="inline-flex">
-                                <Button
-                                  aria-label={labels.moveUp}
-                                  disabled={index === 0}
-                                  icon={<ArrowUp />}
-                                  onClick={() => moveProvider(index, -1)}
-                                  shape="circle"
-                                  size="small"
-                                  type="text"
-                                />
-                              </span>
-                            </Tooltip>
-                            <Tooltip title={labels.moveDown}>
-                              <span className="inline-flex">
-                                <Button
-                                  aria-label={labels.moveDown}
-                                  disabled={index === settings.providers.length - 1}
-                                  icon={<ArrowDown />}
-                                  onClick={() => moveProvider(index, 1)}
-                                  shape="circle"
-                                  size="small"
-                                  type="text"
-                                />
-                              </span>
-                            </Tooltip>
-                            <Switch
-                              aria-label={`${PROVIDER_NAMES[provider.id]} ${provider.enabled ? labels.providerEnabled : labels.providerDisabled}`}
-                              checked={provider.enabled}
-                              onChange={(enabled) =>
-                                updateProvider(provider.id, { enabled })
-                              }
+                        <Tooltip title={labels.moveUp}>
+                          <span className="inline-flex">
+                            <Button
+                              aria-label={labels.moveUp}
+                              disabled={!settings.enabled || index === 0 || saving}
+                              icon={<ArrowUp />}
+                              onClick={() => moveProvider(index, -1)}
+                              shape="circle"
                               size="small"
+                              type="text"
                             />
-                          </>
-                        ) : null}
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={labels.moveDown}>
+                          <span className="inline-flex">
+                            <Button
+                              aria-label={labels.moveDown}
+                              disabled={!settings.enabled || index === settings.providers.length - 1 || saving}
+                              icon={<ArrowDown />}
+                              onClick={() => moveProvider(index, 1)}
+                              shape="circle"
+                              size="small"
+                              type="text"
+                            />
+                          </span>
+                        </Tooltip>
+                        <Switch
+                          aria-label={`${PROVIDER_NAMES[provider.id]} ${provider.enabled ? labels.providerEnabled : labels.providerDisabled}`}
+                          checked={provider.enabled}
+                          disabled={!settings.enabled || saving}
+                          onChange={(enabled) =>
+                            updateProvider(provider.id, { enabled })
+                          }
+                          size="small"
+                        />
                       </div>
                     </div>
                   );
@@ -257,27 +251,26 @@ export function WebAccessSettings({
               </div>
             </section>
 
-            {settings.mode === "custom" ? (
-              <section>
-                <h2 className="text-sm font-semibold text-primary">
-                  {labels.fallback}
-                </h2>
-                <p className="mt-1 text-body-sm text-muted">
-                  {labels.fallbackDescription}
-                </p>
-                <Checkbox.Group
-                  className="mt-3 flex flex-wrap gap-x-5 gap-y-2"
-                  onChange={(fallbackOn) =>
-                    setSettings({ ...settings, fallbackOn })
-                  }
-                  options={WEB_SEARCH_FALLBACK_KINDS.map((value) => ({
-                    label: labels.fallbackKinds[value],
-                    value,
-                  }))}
-                  value={settings.fallbackOn}
-                />
-              </section>
-            ) : null}
+            <section>
+              <h2 className="text-sm font-semibold text-primary">
+                {labels.fallback}
+              </h2>
+              <p className="mt-1 text-body-sm text-muted">
+                {labels.fallbackDescription}
+              </p>
+              <Checkbox.Group
+                className="mt-3 flex flex-wrap gap-x-5 gap-y-2"
+                disabled={!settings.enabled || saving}
+                onChange={(fallbackOn) =>
+                  setSettings({ ...settings, fallbackOn })
+                }
+                options={WEB_SEARCH_FALLBACK_KINDS.map((value) => ({
+                  label: labels.fallbackKinds[value],
+                  value,
+                }))}
+                value={settings.fallbackOn}
+              />
+            </section>
             {error ? <Alert showIcon title={error} type="error" /> : null}
           </div>
         ) : null}

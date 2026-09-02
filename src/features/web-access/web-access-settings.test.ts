@@ -21,4 +21,16 @@ describe("Web Access settings", () => {
     expect(source).toContain("value={provider.apiKey}");
     expect(source).toContain("iconRender={(visible)");
   });
+
+  it("binds the global Web Search switch to the persisted setting", () => {
+    expect(source).toContain("checked={settings.enabled}");
+    expect(source).toContain("onChange={(enabled) => setSettings({ ...settings, enabled })}");
+  });
+
+  it("always exposes ordered provider fallback without a strategy mode", () => {
+    expect(source).not.toContain("<Segmented");
+    expect(source).not.toContain("settings.mode");
+    expect(source).toContain("onClick={() => moveProvider(index, -1)}");
+    expect(source).toContain("onClick={() => moveProvider(index, 1)}");
+  });
 });

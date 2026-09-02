@@ -95,7 +95,7 @@ SDK 类型、文件格式和供应商差异必须在这一层转换成项目自�
 
 内容生成供应商在 infrastructure 内拥有各自的 Adapter、受信 Catalog、请求映射与资产准备协议。Catalog 编译为供应商无关的 `GenerationRoute` 和可持久化 execution config；不同供应商不共享任意 HTTP DSL，也不能从客户端或数据库动态注册生产 Provider。供应商准备后的素材引用对 domain/application 保持不透明，可以是 URL、文件 ID 或临时对象存储引用。
 
-Web 搜索和网页抓取由 infrastructure 内置的 `pi-web-access` Extension 提供。Po Agent 固定并随应用发布该依赖，由 Pi ResourceLoader 直接加载，不进入用户 Skill Pack 安装流程。正常 Session 始终开放 `web_search`、`fetch_content`、`get_search_content` 和 `source_check`；搜索供应商、API Key 和回退顺序保存在 `<PI_CODING_AGENT_DIR>/web-search.json`，由独立的 Web Access 设置端口管理并通过 `/api/web-access` 暴露给本机设置页。配置写入后，存活 Runtime 会在下一次 Prompt 前重新加载 Extension。远程内容按不可信数据处理，Po Agent 禁止 `fetch_content` 读取本地路径，本地文件仍必须经过已注册 workspace root 的文件能力。
+Web 搜索和网页抓取由 infrastructure 内置的 `pi-web-access` Extension 提供。Po Agent 固定并随应用发布该依赖，由 Pi ResourceLoader 直接加载，不进入用户 Skill Pack 安装流程。Web Access 总开关默认关闭；开启后，正常 Session 才开放 `web_search`、`fetch_content`、`get_search_content` 和 `source_check`。开关、搜索供应商、API Key 和回退顺序保存在 `<PI_CODING_AGENT_DIR>/web-search.json`，由独立的 Web Access 设置端口管理并通过 `/api/web-access` 暴露给本机设置页。配置写入后，存活 Runtime 会在下一次 Prompt 前重新加载 Extension。远程内容按不可信数据处理，Po Agent 禁止 `fetch_content` 读取本地路径，本地文件仍必须经过已注册 workspace root 的文件能力。
 
 ### Transport
 
