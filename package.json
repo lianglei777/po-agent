@@ -1,6 +1,6 @@
 {
   "name": "po-agent",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Local desktop workspace for the Pi coding agent.",
   "author": "Leon Wei",
   "private": true,

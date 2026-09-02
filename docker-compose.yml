@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
       args:
         NPM_REGISTRY: https://registry.npmmirror.com
-    image: po-agent:0.2.2
+    image: po-agent:0.2.3
     container_name: po-agent
     ports:
       - "51732:51732"
