@@ -100,54 +100,25 @@ Actions -> CI -> Run workflow
 
 ## 4. 发布新版本
 
-### 4.1 更新版本号
-
-使用 npm 同时修改 `package.json` 和 `package-lock.json`：
+使用统一发布脚本。它会同步 `package.json`、Compose 和部署文档中的版本号，将当前工作区的全部未提交改动创建为发布提交，创建注释 Tag，并一次推送当前分支和 Tag：
 
 ```powershell
-npm version patch --no-git-tag-version
+npm run release -- patch
 ```
 
-也可以使用：
+也可以升级 minor、major 或指定目标版本：
 
 ```powershell
-npm version minor --no-git-tag-version
-npm version major --no-git-tag-version
+npm run release -- minor
+npm run release -- major
+npm run release -- 1.2.3
 ```
 
-检查修改后的版本：
-
-```powershell
-node -p "require('./package.json').version"
-```
-
-### 4.2 提交版本修改
-
-以 `0.1.1` 为例：
+脚本不在本机构建或推送 Docker 镜像。推送的 `vX.Y.Z` Tag 必须与 `package.json.version` 完全一致，`Release` 工作流会验证这一点，再构建 GitHub Release 安装包和 Docker Hub 镜像。发布前建议自行运行：
 
 ```powershell
 npm run check
-git add package.json package-lock.json
-git commit -m "chore: release v0.1.1"
-git push origin master
 ```
-
-等待 `master` CI 全部通过。
-
-### 4.3 创建并推送 Tag
-
-```powershell
-git tag -a v0.1.1 -m "Release v0.1.1"
-git push origin v0.1.1
-```
-
-Tag 必须与 `package.json.version` 完全一致：
-
-```text
-package.json 0.1.1 -> Tag v0.1.1
-```
-
-推送 Tag 后，`Release` 工作流自动开始。
 
 ## 5. 检查发布结果
 
