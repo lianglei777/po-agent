@@ -4,9 +4,9 @@ import type {
 } from "@/contracts/generation";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   asObject,
   requiredString,
@@ -18,7 +18,7 @@ export async function GET(
   _request: Request,
   context: RouteContext<"/api/generation/credentials/[providerId]">,
 ) {
-  return handleRoute<GenerationCredentialStatusResponse>(async () => {
+  return protectedRoute<GenerationCredentialStatusResponse>(async () => {
     const { providerId } = await context.params;
     return container.generationProviderSettingsService.getCredentialStatus(
       providerId,
@@ -30,7 +30,7 @@ export async function PUT(
   request: Request,
   context: RouteContext<"/api/generation/credentials/[providerId]">,
 ) {
-  return handleRoute<GenerationCredentialStatusResponse>(async () => {
+  return protectedRoute<GenerationCredentialStatusResponse>(async () => {
     const { providerId } = await context.params;
     const body = asObject(await readJson(request));
     const input: SaveGenerationCredentialRequest = {
@@ -47,7 +47,7 @@ export async function DELETE(
   _request: Request,
   context: RouteContext<"/api/generation/credentials/[providerId]">,
 ) {
-  return handleRoute<GenerationCredentialStatusResponse>(async () => {
+  return protectedRoute<GenerationCredentialStatusResponse>(async () => {
     const { providerId } = await context.params;
     return container.generationProviderSettingsService.setCredential(
       providerId,

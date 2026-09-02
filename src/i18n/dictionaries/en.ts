@@ -73,6 +73,39 @@ export const en = {
     autoCompactSaveError:
       "Unable to save the auto-compaction setting. The previous value was restored.",
   },
+  accessControl: {
+    loginTitle: "Sign in to Po Agent",
+    loginDescription: "Enter the local administrator password to continue.",
+    login: "Sign in",
+    logout: "Sign out",
+    password: "Password",
+    passwordRequired: "Enter your password",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    confirmPassword: "Confirm new password",
+    passwordMismatch: "The new passwords do not match.",
+    passwordRules: "Use 8–128 characters and do not reuse the default password.",
+    changePassword: "Change password",
+    changePasswordDescription:
+      "Changing the password signs out every active browser session.",
+    changeRequiredTitle: "Change the default password",
+    changeRequiredDescription:
+      "The default admin password must be replaced before Po Agent can be used.",
+    passwordChanged: "Password changed. Sign in with the new password.",
+    settingsTitle: "Security",
+    settingsDescription:
+      "Control password verification for this single-user Po Agent installation.",
+    loginVerification: "Login verification",
+    loginVerificationDescription:
+      "Require the local administrator password before pages and server APIs can be accessed.",
+    developmentBypass:
+      "Development mode is bypassing login verification. This does not change the saved production setting.",
+    enableLoginVerification: "Enable login verification",
+    disableLoginVerification: "Disable login verification",
+    enableConfirm: "Enter the current password to require login verification.",
+    disableConfirm:
+      "Anyone who can reach this address will be able to use Po Agent. Enter the current password to continue.",
+  },
   webAccess: {
     title: "Web access",
     description:

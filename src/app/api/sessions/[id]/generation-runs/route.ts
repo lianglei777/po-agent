@@ -4,9 +4,9 @@ import type {
 } from "@/contracts/generation";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseCreateGenerationRun } from "@/server/transport/http/generation-validators";
 import { generationRunViewDto } from "@/server/transport/http/generation-response-mapper";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  return handleRoute<ListGenerationRunsResponse>(async () => {
+  return protectedRoute<ListGenerationRunsResponse>(async () => {
     const { id } = await context.params;
     const views = await container.generationRunService.listRuns(id);
     return views.map(generationRunViewDto);
@@ -23,7 +23,7 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<CreateGenerationRunResponse>(async () => {
+  return protectedRoute<CreateGenerationRunResponse>(async () => {
     const { id } = await context.params;
     const input = parseCreateGenerationRun(await readJson(request));
     const create = input.reviewFirst

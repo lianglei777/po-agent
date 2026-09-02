@@ -1,14 +1,14 @@
 import type { GenerationRouteDto } from "@/contracts/generation";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 import { generationRouteDto } from "@/server/transport/http/generation-response-mapper";
 import { updateGenerationRouteRequest } from "@/server/transport/http/generation-route-validator";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request, context: RouteContext<"/api/generation/routes/[id]">) {
-  return handleRoute<GenerationRouteDto>(async () => {
+  return protectedRoute<GenerationRouteDto>(async () => {
     const { id } = await context.params;
     const input = updateGenerationRouteRequest(await readJson(request));
     const route = input.enabled === undefined

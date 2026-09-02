@@ -5,9 +5,9 @@ import type {
 } from "@/contracts/auth";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   asObject,
   requiredString,
@@ -20,27 +20,29 @@ export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ provider: string }> };
 
 export async function GET(request: Request, context: Context) {
-  const { provider } = await context.params;
-  return createSseResponse<OAuthServerEvent>({
-    request,
-    eventName: "oauth",
-    subscribe: async (emit, signal) => {
-      void container.authService
-        .startOAuth(provider, emit, signal)
-        .catch((error) => {
-          emit({
-            type: "error",
-            message:
-              error instanceof Error ? error.message : String(error),
+  return protectedRoute(async () => {
+    const { provider } = await context.params;
+    return createSseResponse<OAuthServerEvent>({
+      request,
+      eventName: "oauth",
+      subscribe: async (emit, signal) => {
+        void container.authService
+          .startOAuth(provider, emit, signal)
+          .catch((error) => {
+            emit({
+              type: "error",
+              message:
+                error instanceof Error ? error.message : String(error),
+            });
           });
-        });
-      return () => {};
-    },
+        return () => {};
+      },
+    });
   });
 }
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<OAuthInputResponse>(async () => {
+  return protectedRoute<OAuthInputResponse>(async () => {
     const { provider } = await context.params;
     const body = asObject(await readJson(request));
     const input: OAuthInputRequest = {

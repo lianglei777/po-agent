@@ -1,15 +1,15 @@
 import type { CreateAgentResponse } from "@/contracts/agent";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseCreateAgent } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<CreateAgentResponse>(async () =>
+  return protectedRoute<CreateAgentResponse>(async () =>
     container.agentService.create(
       parseCreateAgent(await readJson(request)),
     ),

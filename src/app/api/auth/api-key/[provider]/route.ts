@@ -6,9 +6,9 @@ import type {
 } from "@/contracts/auth";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   asObject,
   requiredString,
@@ -19,14 +19,14 @@ export const runtime = "nodejs";
 type Context = { params: Promise<{ provider: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  return handleRoute<ApiKeyStatusResponse>(async () => {
+  return protectedRoute<ApiKeyStatusResponse>(async () => {
     const { provider } = await context.params;
     return container.authService.getApiKeyStatus(provider);
   });
 }
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<SaveApiKeyResponse>(async () => {
+  return protectedRoute<SaveApiKeyResponse>(async () => {
     const { provider } = await context.params;
     const body = asObject(await readJson(request));
     const input: SaveApiKeyRequest = {
@@ -38,7 +38,7 @@ export async function POST(request: Request, context: Context) {
 }
 
 export async function DELETE(_request: Request, context: Context) {
-  return handleRoute<RemoveApiKeyResponse>(async () => {
+  return protectedRoute<RemoveApiKeyResponse>(async () => {
     const { provider } = await context.params;
     await container.authService.removeApiKey(provider);
     return { success: true };

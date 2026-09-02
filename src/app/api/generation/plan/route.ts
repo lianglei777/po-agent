@@ -3,13 +3,13 @@ import type {
   PlanGenerationTurnResponse,
 } from "@/contracts/generation";
 import { container } from "@/server/composition/container";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 import { parsePlanGenerationTurnRequest } from "@/server/transport/http/generation-validators";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<PlanGenerationTurnResponse>(async () => {
+  return protectedRoute<PlanGenerationTurnResponse>(async () => {
     const input: PlanGenerationTurnRequest = parsePlanGenerationTurnRequest(
       await readJson(request),
     );

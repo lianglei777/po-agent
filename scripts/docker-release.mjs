@@ -75,7 +75,7 @@ export function updateVersionFiles(root, fromVersion, toVersion) {
   return planned;
 }
 
-function runCommand(root, command, args) {
+export function runCommand(root, command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
   if (result.error) {
     throw new Error(`无法执行 ${command}：${result.error.message}`);

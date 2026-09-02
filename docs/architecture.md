@@ -247,7 +247,9 @@ Provider Job 在创建时冻结 Route 的 execution config 与已解析参数；
 
 ### 安全
 
-当前服务面向本机单用户、单进程运行，不具备公网多租户认证边界。任何扩大部署范围的改动都必须先设计认证、授权、路径隔离、速率限制和凭证保护。
+当前服务面向单用户、单进程运行，不提供多租户权限模型。生产模式的应用页面、JSON API、SSE、文件流与媒体响应统一经过单用户访问控制；密码哈希持久化在 Pi Agent 数据目录，Session 只保存在服务端内存。`next dev` 的跳过状态只影响当前进程，不得写入生产设置。
+
+Access Control 登录、改密和开关接口是唯一公开例外。所有 `src/app/api/**/route.ts` 必须通过 `src/app/api/_route.ts` 的 `protectedRoute` 或 `publicRoute` 进入统一 HTTP Route Pipeline；业务 API 不得直接处理鉴权、错误映射或最终 Response 策略。具体约束见 [HTTP Route Pipeline 设计](designs/http-route-pipeline.md)。公网部署仍必须由 HTTPS 反向代理终止 TLS 并限制 Node.js 服务端口。
 
 文件访问必须经过 workspace root 校验。任何接受绝对路径或 skill 路径的接口都需要单独进行安全审查。
 

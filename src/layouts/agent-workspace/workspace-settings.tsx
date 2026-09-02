@@ -5,6 +5,7 @@ import {
   Cpu,
   Globe,
   Images,
+  Lock,
   ScrollText,
   Settings,
 } from "@/components/icons";
@@ -19,11 +20,17 @@ import { useI18n } from "@/i18n/use-i18n";
 import { ContentGenerationSettings } from "@/features/content-generation/content-generation-settings";
 import { useAgentSettings } from "@/features/agent-settings/use-agent-settings";
 import { WebAccessSettings } from "@/features/web-access/web-access-settings";
+import { AccessControlSettings } from "@/features/access-control/access-control-settings";
 import { ModelProviderSaveIndicator } from "./model-provider-save-indicator";
 import { SettingsRow } from "@/components/ui/settings-form";
 
 type SettingsSection =
-  "models" | "web-access" | "content-generation" | "instructions" | "general";
+  | "models"
+  | "web-access"
+  | "content-generation"
+  | "instructions"
+  | "security"
+  | "general";
 
 export function WorkspaceSettings({
   agentId,
@@ -92,6 +99,12 @@ export function WorkspaceSettings({
           selected={section === "general"}
         />
         <SettingsNavButton
+          icon={<Lock />}
+          label={t.accessControl.settingsTitle}
+          onClick={() => setSection("security")}
+          selected={section === "security"}
+        />
+        <SettingsNavButton
           icon={<Cpu />}
           label={t.workspace.modelProvider}
           onClick={() => setSection("models")}
@@ -129,6 +142,16 @@ export function WorkspaceSettings({
         </header>
 
         <div className="flex min-h-0 min-w-0 flex-1">
+          <div
+            className={
+              section === "security"
+                ? "flex min-h-0 min-w-0 flex-1"
+                : "hidden"
+            }
+          >
+            <AccessControlSettings />
+          </div>
+
           <div
             className={
               section === "web-access"

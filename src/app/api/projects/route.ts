@@ -6,29 +6,29 @@ import type {
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseProjectPath } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  return handleRoute<ListProjectsResponse>(() =>
+  return protectedRoute<ListProjectsResponse>(() =>
     container.projectService.list(),
   );
 }
 
 export function POST(request: Request) {
-  return handleRoute<AddProjectResponse>(async () => {
+  return protectedRoute<AddProjectResponse>(async () => {
     const { path } = parseProjectPath(await readJson(request));
     return container.projectService.add(path);
   });
 }
 
 export function DELETE(request: Request) {
-  return handleRoute<RemoveProjectResponse>(() => {
+  return protectedRoute<RemoveProjectResponse>(() => {
     const value = new URL(request.url).searchParams.get("path")?.trim();
     if (!value) {
       throw new AppError("VALIDATION_ERROR", "path is required", 400);

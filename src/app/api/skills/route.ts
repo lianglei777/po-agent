@@ -5,9 +5,9 @@ import type {
 } from "@/contracts/skills";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   asObject,
   requiredBoolean,
@@ -19,14 +19,14 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  return handleRoute<SkillLoadResponse>(() => {
+  return protectedRoute<SkillLoadResponse>(() => {
     const cwd = new URL(request.url).searchParams.get("cwd") ?? "";
     return container.skillService.load(cwd);
   });
 }
 
 export async function PATCH(request: Request) {
-  return handleRoute<SkillLoadResponse>(async () => {
+  return protectedRoute<SkillLoadResponse>(async () => {
     const body = asObject(await readJson(request));
     const input: SetSkillInvocationRequest = {
       cwd: requiredString(body, "cwd"),
@@ -39,7 +39,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  return handleRoute<RemoveSkillResponse>(async () =>
+  return protectedRoute<RemoveSkillResponse>(async () =>
     container.skillService.remove(
       parseSkillRemove(await readJson(request)),
     ),

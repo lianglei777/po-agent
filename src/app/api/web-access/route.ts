@@ -1,6 +1,6 @@
 import type { WebAccessSettingsResponse } from "@/contracts/web-access";
 import { container } from "@/server/composition/container";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 import { parseUpdateWebAccessSettings } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
@@ -8,19 +8,20 @@ export const runtime = "nodejs";
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 
 export async function GET() {
-  const response = await handleRoute<WebAccessSettingsResponse>(() =>
-    container.webAccessSettingsService.read(),
+  return protectedRoute<WebAccessSettingsResponse | Response>(async () =>
+    Response.json(await container.webAccessSettingsService.read(), {
+      headers: NO_STORE_HEADERS,
+    }),
   );
-  response.headers.set("Cache-Control", NO_STORE_HEADERS["Cache-Control"]);
-  return response;
 }
 
 export async function PUT(request: Request) {
-  const response = await handleRoute<WebAccessSettingsResponse>(async () =>
-    container.webAccessSettingsService.update(
-      parseUpdateWebAccessSettings(await readJson(request)),
+  return protectedRoute<WebAccessSettingsResponse | Response>(async () =>
+    Response.json(
+      await container.webAccessSettingsService.update(
+        parseUpdateWebAccessSettings(await readJson(request)),
+      ),
+      { headers: NO_STORE_HEADERS },
     ),
   );
-  response.headers.set("Cache-Control", NO_STORE_HEADERS["Cache-Control"]);
-  return response;
 }

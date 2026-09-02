@@ -1,13 +1,13 @@
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute } from "@/server/transport/http/api-response";
+import { protectedRoute } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, context: Context) {
-  return handleRoute<{ synced: boolean }>(async () => {
+  return protectedRoute<{ synced: boolean }>(async () => {
     const { id } = await context.params;
     const view = await container.generationRunService.getRun(id);
     if (!view) {

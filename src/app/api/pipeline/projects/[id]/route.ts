@@ -4,14 +4,14 @@ import type {
 } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  return handleRoute<ProjectResponse>(async () => {
+  return protectedRoute<ProjectResponse>(async () => {
     const { id } = await context.params;
     const project = await container.pipelineRepository.getProject(id);
     if (!project) {
@@ -22,7 +22,7 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
-  return handleRoute<ProjectResponse>(async () => {
+  return protectedRoute<ProjectResponse>(async () => {
     const { id } = await context.params;
     const body = (await readJson(request)) as UpdateProjectRequest;
     const updated = await container.pipelineRepository.updateProject(id, body);
@@ -34,7 +34,7 @@ export async function PATCH(request: Request, context: Context) {
 }
 
 export async function DELETE(_request: Request, context: Context) {
-  return handleRoute<{ success: true }>(async () => {
+  return protectedRoute<{ success: true }>(async () => {
     const { id } = await context.params;
     const deleted = await container.pipelineRepository.deleteProject(id);
     if (!deleted) {

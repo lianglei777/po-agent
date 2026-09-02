@@ -1,13 +1,13 @@
 import type { CanvasEdge } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<{ edge: CanvasEdge }>(async () => {
+  return protectedRoute<{ edge: CanvasEdge }>(async () => {
     const { id } = await context.params;
     const body = (await readJson(request)) as { sourceNodeId?: string; targetNodeId?: string };
     if (!body.sourceNodeId || !body.targetNodeId) {
@@ -18,7 +18,7 @@ export async function POST(request: Request, context: Context) {
 }
 
 export async function DELETE(request: Request, context: Context) {
-  return handleRoute<{ success: true }>(async () => {
+  return protectedRoute<{ success: true }>(async () => {
     const { id } = await context.params;
     const edgeId = new URL(request.url).searchParams.get("edgeId");
     if (!edgeId) throw new AppError("VALIDATION_ERROR", "edgeId query parameter is required", 400);

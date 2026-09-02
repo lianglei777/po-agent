@@ -6,21 +6,13 @@ export function json<T>(data: T, init?: ResponseInit): Response {
   return Response.json(data, init);
 }
 
-export async function handleRoute<T>(work: () => Promise<T>): Promise<Response> {
-  try {
-    return json(await work());
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
-
 export function errorResponse(error: unknown): Response {
   const appError =
     isAppError(error)
       ? error
       : new AppError(
           "INTERNAL_ERROR",
-          error instanceof Error ? error.message : "Internal server error",
+          "Internal server error",
           500,
         );
   const body: ApiErrorResponse = {
@@ -31,7 +23,12 @@ export function errorResponse(error: unknown): Response {
       details: appError.details,
     },
   };
-  return json(body, { status: appError.status });
+  const headers = new Headers();
+  if (appError.code === "AUTH_RATE_LIMITED") {
+    const seconds = retryAfterSeconds(appError.details);
+    if (seconds !== null) headers.set("Retry-After", String(seconds));
+  }
+  return json(body, { status: appError.status, headers });
 }
 
 function isAppError(error: unknown): error is Error & {
@@ -47,6 +44,16 @@ function isAppError(error: unknown): error is Error & {
     Number.isInteger((error as { status?: unknown }).status) &&
     Number((error as { status?: unknown }).status) >= 400 &&
     Number((error as { status?: unknown }).status) <= 599;
+}
+
+function retryAfterSeconds(details: unknown): number | null {
+  if (!details || typeof details !== "object" || Array.isArray(details)) {
+    return null;
+  }
+  const value = (details as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.ceil(value)
+    : null;
 }
 
 export async function readJson(request: Request): Promise<unknown> {

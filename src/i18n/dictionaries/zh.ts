@@ -71,6 +71,37 @@ export const zh = {
     autoCompactLoadError: "无法读取自动压缩设置。",
     autoCompactSaveError: "无法保存自动压缩设置，已恢复原状态。",
   },
+  accessControl: {
+    loginTitle: "登录 Po Agent",
+    loginDescription: "输入本地管理员密码后继续。",
+    login: "登录",
+    logout: "退出登录",
+    password: "密码",
+    passwordRequired: "请输入密码",
+    currentPassword: "当前密码",
+    newPassword: "新密码",
+    confirmPassword: "确认新密码",
+    passwordMismatch: "两次输入的新密码不一致。",
+    passwordRules: "使用 8–128 个字符，且不能继续使用默认密码。",
+    changePassword: "修改密码",
+    changePasswordDescription: "修改密码后，所有已登录的浏览器都需要重新登录。",
+    changeRequiredTitle: "修改默认密码",
+    changeRequiredDescription:
+      "使用 Po Agent 前，必须先替换默认的 admin 密码。",
+    passwordChanged: "密码已修改，请使用新密码重新登录。",
+    settingsTitle: "安全",
+    settingsDescription: "管理当前单用户 Po Agent 实例的登录验证。",
+    loginVerification: "登录验证",
+    loginVerificationDescription:
+      "访问页面和服务器接口前，要求输入本地管理员密码。",
+    developmentBypass:
+      "开发模式已自动跳过登录验证，不会修改已保存的生产环境设置。",
+    enableLoginVerification: "开启登录验证",
+    disableLoginVerification: "关闭登录验证",
+    enableConfirm: "输入当前密码以开启登录验证。",
+    disableConfirm:
+      "关闭后，任何能访问此地址的人都可以使用 Po Agent。输入当前密码以继续。",
+  },
   webAccess: {
     title: "Web 访问",
     description: "配置 Agent 进行网络研究时使用的搜索供应商和 API Key。",

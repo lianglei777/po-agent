@@ -1,14 +1,14 @@
 import type { GenerationAssetUploadResponse } from "@/contracts/generation";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute } from "@/server/transport/http/api-response";
+import { protectedRoute } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<GenerationAssetUploadResponse>(async () => {
+  return protectedRoute<GenerationAssetUploadResponse>(async () => {
     const { id } = await context.params;
     const form = await request.formData();
     const file = form.get("file");

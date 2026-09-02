@@ -1,11 +1,11 @@
 import type { ListSessionsResponse } from "@/contracts/sessions";
 import { container } from "@/server/composition/container";
-import { handleRoute } from "@/server/transport/http/api-response";
+import { protectedRoute } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  return handleRoute<ListSessionsResponse>(() =>
+  return protectedRoute<ListSessionsResponse>(() =>
     container.sessionService.list(),
   );
 }

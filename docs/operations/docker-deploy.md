@@ -12,6 +12,7 @@
 - po-agent 是**单个 Next.js 应用**:前端和"后端"(`src/app/api/*` 的 Route Handlers)同进程,只需构建**一个镜像、跑一个容器**。
 - Docker 部署统一用端口 **51732**,与本机 `npm run dev` 的 51731 错开,两者可同时运行。
 - 应用状态(凭证、模型配置、项目列表、会话历史)通过数据卷持久化,容器删除不丢。
+- 生产镜像默认启用单用户登录。初始密码为 `admin`,首次登录后必须修改;开发模式自动跳过登录验证。
 - 两种场景的核心差异:
 
 | 方面 | 本机 Docker Desktop | 云服务器 |
@@ -30,9 +31,11 @@
 | 本机 `npm run dev` | 51731 |
 | Docker 生产容器 | 51732 |
 | Docker 开发容器 | 51732 |
+| 本地登录验证 | 51733 |
 
 - 本机 dev 与 Docker 容器**可同时运行**(端口不冲突)。
 - 生产容器与开发容器都占 51732,**不能同时运行**。
+- 本地登录验证使用 51733,可与 `npm run dev` 及 Docker 容器同时运行。
 - 如需改端口:改 [docker-compose.yml](../../docker-compose.yml) 的 `ports` 映射(左是宿主机端口)和 `PORT` 环境变量,以及 [Dockerfile](../../Dockerfile) 的 `ENV PORT` / `EXPOSE`。
 
 ## 2. 涉及的仓库文件
@@ -54,9 +57,10 @@
 
 - ✅ 本机部署:51732 只在本机访问,不要暴露到公网
 - ✅ 云服务器部署:端口绑定 `127.0.0.1`,通过 SSH 隧道访问(见 5.8)
+- ✅ 公网域名:只由 HTTPS 反向代理访问回环地址上的 51732,并传递 `Host` 与 `X-Forwarded-Proto`
 - ❌ **绝对不要**把 51732 直接对公网开放
 
-> 若需公网 URL 访问,必须在前面加反向代理 + 认证。当前版本不支持应用层登录。
+> 若需公网 URL 访问,必须在前面加 HTTPS 反向代理。应用层登录不能替代 TLS、主机防火墙和反向代理的请求限制。Agent 与 Pipeline 使用 SSE,反向代理还需关闭响应缓冲。
 
 ## 4. 场景一:本机 Docker Desktop 部署
 
@@ -86,6 +90,8 @@ docker compose logs -f po-agent
 ```
 
 看到 `Ready` 之类日志后,浏览器访问 **http://localhost:51732**。
+
+生产容器首次打开时使用密码 `admin` 登录,随后页面会要求立即修改密码。新密码写入 `po-agent-data` 数据卷,容器重建后仍然有效;内存 Session 不持久化,容器重启后需要重新登录。
 
 > 也可以直接 `docker compose up --build -d`,但 compose 要求 `WORKSPACE_HOST_DIR` 已设置(见 4.3),否则报错退出。脚本会自动设好,推荐用脚本。
 
@@ -121,6 +127,25 @@ compose 把宿主机目录挂进容器的 `/workspace`,宿主机路径由 `WORKS
 - **改了依赖要重建**:`package.json` / `package-lock.json` 变化后,重新启动(脚本带 `--build`);必要时先 `docker compose -f docker-compose.dev.yml down` 清掉旧的 `/app/node_modules` 匿名卷再重建。
 - **Windows 文件监听**:跨 bind-mount 的文件监听偶有延迟,Fast Refresh 可能不灵;体验不佳时直接本机 `npm run dev`。
 - 开发容器与生产容器共用 `po-agent-data` 数据卷,凭证互通。
+- `next dev` 自动跳过登录验证,且不会把“跳过”写入数据卷或关闭生产环境验证。
+
+### 4.5 本地手动验证登录
+
+`npm run dev` 会刻意跳过登录验证。需要在不影响真实 Pi 数据的前提下手动验证生产登录流程时，使用：
+
+```powershell
+npm run login:test
+```
+
+该命令会先构建生产产物，再仅监听 `http://127.0.0.1:51733`，并把 Pi 数据写入仓库根目录的 `.po-agent-login-test/`。它不会修改当前 PowerShell 的环境变量，也不会读取或写入默认 Pi 数据目录。手动访问该地址后可依次验证默认密码 `admin`、强制修改密码、重新登录、退出登录及登录验证开关。
+
+需要从默认密码重新开始测试时，先按 `Ctrl+C` 停止测试服务，再执行：
+
+```powershell
+npm run login:test:reset
+```
+
+该命令只删除 `.po-agent-login-test/access-control.json`；若 51733 端口仍在使用会拒绝执行，避免运行中的服务持有旧配置。
 
 ## 5. 场景二:云服务器部署
 
@@ -360,6 +385,7 @@ services:
 | `auth.json` | provider 凭证 / API key |
 | `models.json` | 模型配置 |
 | `projects.json` | 已注册项目路径(workspace roots 启动时从这里回灌) |
+| `access-control.json` | 登录验证开关、首次改密状态和 scrypt 密码哈希 |
 | `sessions/` | 会话历史 |
 
 `docker compose down` 只删容器,数据卷保留;`docker compose down -v` 才会连数据卷一起删(凭证会丢)。

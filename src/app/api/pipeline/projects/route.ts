@@ -5,12 +5,12 @@ import type {
 } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  return handleRoute<ProjectListResponse>(async () => {
+  return protectedRoute<ProjectListResponse>(async () => {
     const projects = await container.pipelineRepository.listProjects();
     const summaries = await Promise.all(
       projects.map(async (p) => {
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  return handleRoute<ProjectResponse>(async () => {
+  return protectedRoute<ProjectResponse>(async () => {
     const body = (await readJson(request)) as CreateProjectRequest;
     if (!body.title?.trim()) {
       throw new AppError("VALIDATION_ERROR", "Project title is required", 400);

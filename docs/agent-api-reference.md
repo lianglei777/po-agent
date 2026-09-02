@@ -28,9 +28,11 @@ GET http://localhost:3000/api/sessions
 - 本机文件系统
 - 本机 Pi Session 和 Credential 存储
 - 不提供多租户隔离
-- 不提供面向公网部署的认证和授权保护
+- 提供单用户密码与 Cookie Session 访问控制
 
-除 OAuth 流程和 API Key 配置外，API 本身没有登录校验。不要直接暴露到公网。
+生产模式首次启动默认开启登录验证，初始密码为 `admin`，首次登录后必须修改密码。密码以 scrypt 加盐哈希写入 Pi Agent 数据目录的 `access-control.json`；Session 只保存在当前 Node.js 进程内，进程重启后需要重新登录。`next dev` 开发模式会在运行时跳过验证，但不会修改持久化设置。
+
+除下述 Access Control 接口外，页面使用的 JSON、SSE、文件和媒体 API 都要求有效的 `po_agent_session` HttpOnly Cookie。反向代理终止 HTTPS 时必须传递 `X-Forwarded-Proto: https`，服务端据此为 Cookie 添加 `Secure`。
 
 ### 1.3 Content Type
 
@@ -79,11 +81,21 @@ Content-Type: text/event-stream; charset=utf-8
 
 `details` 没有内容时可能不出现。
 
+所有 API 响应均由统一 HTTP Route Pipeline 收尾：会包含 `X-Request-Id`、
+`X-Content-Type-Options: nosniff` 和包含 `Cookie` 的 `Vary`；未显式声明缓存策略的
+响应使用 `Cache-Control: private, no-store`，错误响应使用 `no-store`。SSE、文件、
+Range 和媒体响应保留各自显式设置的响应头。未知服务端异常固定映射为
+`500 INTERNAL_ERROR`，不会暴露内部异常信息。
+
 ### 1.5 通用错误代码
 
 | Code                        |    常见状态码 | 含义                                                     |
 | --------------------------- | ------------: | -------------------------------------------------------- |
 | `VALIDATION_ERROR`          | 400、403、416 | 请求体、路径或 Range 参数不合法                          |
+| `AUTH_REQUIRED`             |           401 | 未提供有效的应用登录 Session                             |
+| `PASSWORD_CHANGE_REQUIRED`  |           403 | 首次登录后尚未修改默认密码                               |
+| `INVALID_PASSWORD`          |           401 | 登录、修改密码或设置开关时密码错误                       |
+| `AUTH_RATE_LIMITED`         |           429 | 同一客户端一分钟内连续登录失败达到五次                   |
 | `SESSION_NOT_FOUND`         |           404 | Session 或指定 Session Entry 不存在                      |
 | `FILE_NOT_FOUND`            |           404 | 文件或目录不存在                                         |
 | `NOT_A_FILE`                |           400 | 目标不是文件                                             |
@@ -117,6 +129,37 @@ Content-Type: text/event-stream; charset=utf-8
 | `INTERNAL_ERROR`            |           500 | 未归类的服务端错误                                       |
 
 ## 2. API 总览
+
+### 2.0 Access Control
+
+| Method | Path                                  | 用途                               |
+| ------ | ------------------------------------- | ---------------------------------- |
+| `GET`  | `/api/access-control/session`         | 获取当前登录、强制改密或跳过状态   |
+| `POST` | `/api/access-control/login`           | 使用单用户管理员密码登录           |
+| `POST` | `/api/access-control/logout`          | 删除当前 Session                   |
+| `POST` | `/api/access-control/change-password` | 修改密码并使全部 Session 失效       |
+| `GET`  | `/api/access-control/settings`        | 获取登录验证开关和开发模式跳过状态 |
+| `PUT`  | `/api/access-control/settings`        | 验证当前密码后开启或关闭登录验证   |
+
+登录请求：
+
+```json
+{ "password": "admin" }
+```
+
+修改密码请求：
+
+```json
+{ "currentPassword": "admin", "newPassword": "new-password" }
+```
+
+开关请求：
+
+```json
+{ "enabled": false, "currentPassword": "new-password" }
+```
+
+Session 状态为 `development-bypass`、`disabled`、`login-required`、`password-change-required` 或 `authenticated`。密码修改和开关变更会清理内存 Session；浏览器需要按返回状态重新登录或刷新。
 
 ### 2.1 Utility
 

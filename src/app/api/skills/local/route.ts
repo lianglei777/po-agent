@@ -1,15 +1,15 @@
 import type { CreateLocalSkillResponse } from "@/contracts/skills";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseSkillCreateLocal } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<CreateLocalSkillResponse>(async () =>
+  return protectedRoute<CreateLocalSkillResponse>(async () =>
     container.skillService.importLocal(
       parseSkillCreateLocal(await readJson(request)),
     ),

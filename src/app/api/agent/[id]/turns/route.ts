@@ -3,7 +3,7 @@ import type {
   AgentTurnSnapshotResponse,
 } from "@/contracts/agent";
 import { container } from "@/server/composition/container";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 import { parseAgentTurnRequest } from "@/server/transport/http/validators";
 import { generationRunViewDto } from "@/server/transport/http/generation-response-mapper";
 
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  return handleRoute<AgentTurnSnapshotResponse>(async () => {
+  return protectedRoute<AgentTurnSnapshotResponse>(async () => {
     const { id } = await context.params;
     const snapshot = await container.chatTurnService.getSnapshot(id);
     return {
@@ -23,7 +23,7 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<AgentTurnResponse>(async () => {
+  return protectedRoute<AgentTurnResponse>(async () => {
     const { id } = await context.params;
     const result = await container.chatTurnService.submit(
       id,

@@ -1,11 +1,11 @@
 import type { OAuthProvidersResponse } from "@/contracts/auth";
 import { container } from "@/server/composition/container";
-import { handleRoute } from "@/server/transport/http/api-response";
+import { protectedRoute } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  return handleRoute<OAuthProvidersResponse>(() =>
+  return protectedRoute<OAuthProvidersResponse>(() =>
     container.authService.listOAuthProviders(),
   );
 }

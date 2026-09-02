@@ -5,6 +5,7 @@ import { AgentService } from "@/server/application/agent-service";
 import { ChatTurnService } from "@/server/application/chat-turn-service";
 import { AgentSettingsService } from "@/server/application/agent-settings-service";
 import { WebAccessSettingsService } from "@/server/application/web-access-settings-service";
+import { AccessControlService } from "@/server/application/access-control-service";
 import { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
 import { GenerationProviderSettingsService } from "@/server/application/content-generation/generation-provider-settings-service";
 import { GenerationExecutionService } from "@/server/application/content-generation/generation-execution-service";
@@ -32,6 +33,7 @@ import { SessionService } from "@/server/application/session-service";
 import { SkillPackService } from "@/server/application/skill-pack-service";
 import { SkillService } from "@/server/application/skill-service";
 import { NodeWorkspaceFileService } from "@/server/infrastructure/filesystem/node-file-system";
+import { FileAccessControlStore } from "@/server/infrastructure/filesystem/file-access-control-store";
 import { FileGenerationCredentialStore } from "@/server/infrastructure/filesystem/file-generation-credential-store";
 import { NodeGenerationFileStore } from "@/server/infrastructure/filesystem/node-generation-file-store";
 import { StaticGenerationProviderDirectory } from "@/server/infrastructure/content-generation/static-generation-provider-directory";
@@ -69,9 +71,15 @@ import { CompositeAgentToolProvider } from "@/server/application/pipeline/compos
 import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import { AppError } from "@/server/domain/app-error";
+import { NodeAccessControlPasswordHasher } from "@/server/infrastructure/security/node-access-control-password-hasher";
 
 function createContainer() {
   const agentDir = getAgentDir();
+  const accessControlService = new AccessControlService(
+    new FileAccessControlStore(path.join(agentDir, "access-control.json")),
+    new NodeAccessControlPasswordHasher(),
+    { developmentBypass: process.env.NODE_ENV === "development" },
+  );
   // 模型、凭证与所有 Agent Session 必须共享同一 Runtime，避免配置和认证快照分叉。
   const modelRuntime = ModelRuntime.create({
     authPath: path.join(agentDir, "auth.json"),
@@ -387,6 +395,7 @@ function createContainer() {
   );
 
   return {
+    accessControlService,
     roots,
     planComposerGenerationTurn: generationTurnPlanningService.plan.bind(
       generationTurnPlanningService,
@@ -559,7 +568,7 @@ const globalContainer = globalThis as typeof globalThis & {
 };
 
 // 开发热更新会保留全局容器，而 Provider descriptor 在容器创建时已冻结；注册表变化必须使旧容器失效。
-const CONTAINER_VERSION = "generation-qianwen-production-v10";
+const CONTAINER_VERSION = "generation-qianwen-production-v11";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

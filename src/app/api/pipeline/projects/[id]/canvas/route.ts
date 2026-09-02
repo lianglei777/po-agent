@@ -7,20 +7,20 @@ import type {
 } from "@/contracts/pipeline";
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
-import { handleRoute, readJson } from "@/server/transport/http/api-response";
+import { protectedRoute, readJson } from "@/app/api/_route";
 
 export const runtime = "nodejs";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  return handleRoute<CanvasStateResponse>(async () => {
+  return protectedRoute<CanvasStateResponse>(async () => {
     const { id } = await context.params;
     return container.canvasStudioService.getState(id);
   });
 }
 
 export async function POST(request: Request, context: Context) {
-  return handleRoute<{ node: CanvasNode }>(async () => {
+  return protectedRoute<{ node: CanvasNode }>(async () => {
     const { id } = await context.params;
     const body = (await readJson(request)) as CreateCanvasNodeRequest;
     if (!["text", "image", "video", "audio"].includes(body.type)) {
@@ -32,7 +32,7 @@ export async function POST(request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
-  return handleRoute<{ success: true; node?: CanvasNode }>(async () => {
+  return protectedRoute<{ success: true; node?: CanvasNode }>(async () => {
     const { id } = await context.params;
     const url = new URL(request.url);
     const nodeId = url.searchParams.get("nodeId");
@@ -48,7 +48,7 @@ export async function PATCH(request: Request, context: Context) {
 }
 
 export async function DELETE(request: Request, context: Context) {
-  return handleRoute<{ success: true }>(async () => {
+  return protectedRoute<{ success: true }>(async () => {
     const { id } = await context.params;
     const url = new URL(request.url);
     const nodeId = url.searchParams.get("nodeId");

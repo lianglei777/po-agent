@@ -1,15 +1,15 @@
 import type { ModelDiscoveryResponse } from "@/contracts/models";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseModelDiscovery } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<ModelDiscoveryResponse>(async () =>
+  return protectedRoute<ModelDiscoveryResponse>(async () =>
     container.modelService.discoverModels(
       parseModelDiscovery(await readJson(request)),
     ),

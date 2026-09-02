@@ -4,9 +4,9 @@ import type {
 } from "@/contracts/skills";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   asObject,
   requiredString,
@@ -15,7 +15,7 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<SearchSkillsResponse>(async () => {
+  return protectedRoute<SearchSkillsResponse>(async () => {
     const body = asObject(await readJson(request));
     const input: SearchSkillsRequest = {
       query: requiredString(body, "query"),

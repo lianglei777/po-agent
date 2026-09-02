@@ -1,15 +1,15 @@
 import type { InstallSkillResponse } from "@/contracts/skills";
 import { container } from "@/server/composition/container";
 import {
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import { parseSkillInstall } from "@/server/transport/http/validators";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  return handleRoute<InstallSkillResponse>(async () =>
+  return protectedRoute<InstallSkillResponse>(async () =>
     container.skillService.install(
       parseSkillInstall(await readJson(request)),
     ),

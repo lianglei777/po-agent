@@ -1,10 +1,9 @@
 import { container } from "@/server/composition/container";
 import { AppError } from "@/server/domain/app-error";
 import {
-  errorResponse,
-  handleRoute,
+  protectedRoute,
   readJson,
-} from "@/server/transport/http/api-response";
+} from "@/app/api/_route";
 import {
   parseDeleteProjectInstructions,
   parseSaveProjectInstructions,
@@ -15,36 +14,29 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const cwd = url.searchParams.get("cwd");
-  if (!cwd) {
-    return errorResponse(
-      new AppError("VALIDATION_ERROR", "Query parameter 'cwd' is required", 400),
-    );
-  }
-  return handleRoute<ProjectInstructionsResponse>(() =>
-    container.instructionService.getProject(cwd),
-  );
+  return protectedRoute<ProjectInstructionsResponse>(() => {
+    const cwd = new URL(request.url).searchParams.get("cwd");
+    if (!cwd) {
+      throw new AppError("VALIDATION_ERROR", "Query parameter 'cwd' is required", 400);
+    }
+    return container.instructionService.getProject(cwd);
+  });
 }
 
 export async function PUT(request: Request) {
-  try {
+  return protectedRoute<ProjectInstructionsResponse>(async () => {
     const body = parseSaveProjectInstructions(await readJson(request));
-    return handleRoute<ProjectInstructionsResponse>(() =>
-      container.instructionService.saveProject(
-        body.cwd,
-        body.content,
-        body.expectedRevision,
-        body.force,
-      ),
+    return container.instructionService.saveProject(
+      body.cwd,
+      body.content,
+      body.expectedRevision,
+      body.force,
     );
-  } catch (error) {
-    return errorResponse(error);
-  }
+  });
 }
 
 export async function DELETE(request: Request) {
-  try {
+  return protectedRoute(async () => {
     const body = parseDeleteProjectInstructions(await readJson(request));
     await container.instructionService.deleteProject(
       body.cwd,
@@ -52,7 +44,5 @@ export async function DELETE(request: Request) {
       body.force,
     );
     return new Response(null, { status: 204 });
-  } catch (error) {
-    return errorResponse(error);
-  }
+  });
 }
