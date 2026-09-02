@@ -8,6 +8,9 @@
 // 可选参数：
 //   --user <DockerHub用户名>  额外打 <user>/po-agent:<版本> 与 :latest 两个仓库标签
 //   --push                   推送 Docker Hub（需先 docker login，必须配合 --user）
+
+// npm run docker:release -- patch --user lianglei777 --push
+
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,12 +70,35 @@ export function updateVersionFiles(root, fromVersion, toVersion) {
         `${file} 中没有找到版本 ${fromVersion} 的引用，版本引用已漂移，请先人工核对`,
       );
     }
-    return { filePath, content: result.content, count: result.count };
+    return {
+      filePath,
+      original,
+      content: result.content,
+      count: result.count,
+    };
   });
   for (const p of planned) {
     fs.writeFileSync(p.filePath, p.content, "utf8");
   }
   return planned;
+}
+
+export function restoreVersionFiles(planned) {
+  for (const file of planned) {
+    fs.writeFileSync(file.filePath, file.original, "utf8");
+  }
+}
+
+export function createBuildArguments(version, remoteTags = []) {
+  return [
+    "build",
+    "--platform",
+    "linux/amd64",
+    "-t",
+    `po-agent:${version}`,
+    ...remoteTags.flatMap((tag) => ["-t", tag]),
+    ".",
+  ];
 }
 
 export function runCommand(root, command, args) {
@@ -128,15 +154,21 @@ function main() {
     console.log(`  已更新 ${path.relative(root, p.filePath)}（${p.count} 处）`);
   }
 
-  // 固定 linux/amd64：本机可能是 arm64，显式指定保证镜像能在常见云服务器上运行。
-  const buildArgs = ["build", "--platform", "linux/amd64", "-t", `po-agent:${toVersion}`];
   const remoteTags = [];
   if (user) {
     remoteTags.push(`${user}/po-agent:${toVersion}`, `${user}/po-agent:latest`);
-    for (const tag of remoteTags) buildArgs.push("-t", tag);
   }
+  // 固定 linux/amd64：本机可能是 arm64，显式指定保证镜像能在常见云服务器上运行。
+  // docker build 的最后一个参数必须是构建上下文目录，避免把版本文件改完后才因缺少上下文失败。
+  const buildArgs = createBuildArguments(toVersion, remoteTags);
   console.log(`构建镜像：docker ${buildArgs.join(" ")}`);
-  runCommand(root, "docker", buildArgs);
+  try {
+    runCommand(root, "docker", buildArgs);
+  } catch (error) {
+    // 镜像尚未产出时恢复版本文件，允许用户修复环境后以同一个 patch 重新执行。
+    restoreVersionFiles(planned);
+    throw error;
+  }
 
   if (push) {
     for (const tag of remoteTags) {

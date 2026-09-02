@@ -5,7 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import {
   applyVersionToContent,
+  createBuildArguments,
   nextVersion,
+  restoreVersionFiles,
   updateVersionFiles,
 } from "./docker-release.mjs";
 
@@ -88,4 +90,34 @@ test("updateVersionFiles：版本引用漂移时整体报错且不落盘", () =>
   assert.throws(() => updateVersionFiles(root, "1.2.3", "1.3.0"), /docker-deploy\.md/);
   // 原子性：报错后其他文件不能已被改动
   assert.match(fs.readFileSync(path.join(root, "package.json"), "utf8"), /"version": "1\.2\.3"/);
+});
+
+test("createBuildArguments：包含镜像标签和构建上下文", () => {
+  assert.deepEqual(
+    createBuildArguments("1.2.3", ["example/po-agent:1.2.3", "example/po-agent:latest"]),
+    [
+      "build",
+      "--platform",
+      "linux/amd64",
+      "-t",
+      "po-agent:1.2.3",
+      "-t",
+      "example/po-agent:1.2.3",
+      "-t",
+      "example/po-agent:latest",
+      ".",
+    ],
+  );
+});
+
+test("restoreVersionFiles：构建失败时可恢复已更新的版本文件", () => {
+  const root = createFixtureRoot();
+  const planned = updateVersionFiles(root, "1.2.3", "1.3.0");
+  restoreVersionFiles(planned);
+
+  assert.match(fs.readFileSync(path.join(root, "package.json"), "utf8"), /"version": "1\.2\.3"/);
+  assert.match(
+    fs.readFileSync(path.join(root, "docker-compose.yml"), "utf8"),
+    /po-agent:1\.2\.3/,
+  );
 });
