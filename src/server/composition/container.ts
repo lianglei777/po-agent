@@ -72,6 +72,7 @@ import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipelin
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import { AppError } from "@/server/domain/app-error";
 import { NodeAccessControlPasswordHasher } from "@/server/infrastructure/security/node-access-control-password-hasher";
+import { FileHttpUnexpectedErrorLogger } from "@/server/infrastructure/observability/file-http-unexpected-error-logger";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -79,6 +80,9 @@ function createContainer() {
     new FileAccessControlStore(path.join(agentDir, "access-control.json")),
     new NodeAccessControlPasswordHasher(),
     { developmentBypass: process.env.NODE_ENV === "development" },
+  );
+  const httpUnexpectedErrorLogger = new FileHttpUnexpectedErrorLogger(
+    path.join(agentDir, "logs", "http-errors.jsonl"),
   );
   // 模型、凭证与所有 Agent Session 必须共享同一 Runtime，避免配置和认证快照分叉。
   const modelRuntime = ModelRuntime.create({
@@ -396,6 +400,7 @@ function createContainer() {
 
   return {
     accessControlService,
+    httpUnexpectedErrorLogger,
     roots,
     planComposerGenerationTurn: generationTurnPlanningService.plan.bind(
       generationTurnPlanningService,
@@ -568,7 +573,7 @@ const globalContainer = globalThis as typeof globalThis & {
 };
 
 // 开发热更新会保留全局容器，而 Provider descriptor 在容器创建时已冻结；注册表变化必须使旧容器失效。
-const CONTAINER_VERSION = "generation-qianwen-production-v11";
+const CONTAINER_VERSION = "generation-qianwen-production-v12";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

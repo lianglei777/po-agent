@@ -10,11 +10,16 @@ export { readJson } from "@/server/transport/http/api-response";
 export const ACCESS_CONTROL_COOKIE_NAME = "po_agent_session";
 
 export function protectedRoute<T>(work: RouteWork<T>): Promise<Response> {
-  return executeRoute(work, { authorize: assertApiAccess });
+  return executeRoute(work, {
+    authorize: assertApiAccess,
+    unexpectedErrorLogger: container.httpUnexpectedErrorLogger,
+  });
 }
 
 export function publicRoute<T>(work: RouteWork<T>): Promise<Response> {
-  return executeRoute(work);
+  return executeRoute(work, {
+    unexpectedErrorLogger: container.httpUnexpectedErrorLogger,
+  });
 }
 
 export async function sessionToken(): Promise<string | undefined> {

@@ -87,6 +87,11 @@ Content-Type: text/event-stream; charset=utf-8
 Range 和媒体响应保留各自显式设置的响应头。未知服务端异常固定映射为
 `500 INTERNAL_ERROR`，不会暴露内部异常信息。
 
+未知异常同时会以与响应 `X-Request-Id` 对应的 JSONL 记录写入
+`<PI_CODING_AGENT_DIR>/logs/http-errors.jsonl`。记录只用于服务器诊断，包含脱敏后的
+错误 message 和 stack；不会记录请求体、Cookie 或完整凭证。Docker 部署可在命名卷中
+读取该文件。
+
 ### 1.5 通用错误代码
 
 | Code                        |    常见状态码 | 含义                                                     |

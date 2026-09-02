@@ -31,7 +31,7 @@ export function errorResponse(error: unknown): Response {
   return json(body, { status: appError.status, headers });
 }
 
-function isAppError(error: unknown): error is Error & {
+export function isAppError(error: unknown): error is Error & {
   code: AppErrorCode;
   status: number;
   details?: unknown;

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { errorResponse, json } from "./api-response";
+import type { UnexpectedErrorLogger } from "@/server/ports/http-unexpected-error-logger";
+import { errorResponse, isAppError, json } from "./api-response";
 
 export type RouteWork<T> = () => Promise<T | Response> | T | Response;
 
 export interface RoutePipelineOptions {
   authorize?: () => Promise<void> | void;
   requestId?: string;
+  unexpectedErrorLogger?: UnexpectedErrorLogger;
 }
 
 export async function executeRoute<T>(
@@ -21,10 +23,25 @@ export async function executeRoute<T>(
       { requestId, error: false },
     );
   } catch (error) {
+    if (!isAppError(error)) {
+      logUnexpectedError(options.unexpectedErrorLogger, { requestId, error });
+    }
     return finalizeResponse(errorResponse(error), {
       requestId,
       error: true,
     });
+  }
+}
+
+function logUnexpectedError(
+  logger: UnexpectedErrorLogger | undefined,
+  input: Parameters<UnexpectedErrorLogger["log"]>[0],
+): void {
+  try {
+    // 诊断日志是尽力写入：磁盘变慢或写入失败都不能延迟、替换原始 HTTP 响应。
+    void Promise.resolve(logger?.log(input)).catch(() => {});
+  } catch {
+    // 同时隔离 logger 在返回 Promise 前同步抛出的异常。
   }
 }
 

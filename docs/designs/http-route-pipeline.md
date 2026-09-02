@@ -133,6 +133,8 @@ return protectedRoute(() => createSseResponse(options));
 ```
 
 不得把未知 `Error.message`、文件路径、供应商响应、凭证或堆栈直接返回客户端。
+未知异常必须写入服务端诊断日志，并与响应 `X-Request-Id` 关联；日志写入失败不能改变
+客户端脱敏响应。
 
 ## Response Finalizer
 

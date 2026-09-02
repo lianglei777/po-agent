@@ -105,6 +105,7 @@ Web 搜索和网页抓取由 infrastructure 内置的 `pi-web-access` Extension 
 
 - JSON 输入验证
 - `AppError` 到 HTTP 响应的映射
+- 未知 HTTP 异常的请求关联与脱敏诊断日志
 - SSE 编码、心跳和资源清理
 
 Transport 可以调用或描述 application 输入，但不直接访问 infrastructure。

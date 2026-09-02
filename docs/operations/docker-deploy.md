@@ -48,6 +48,7 @@
 | [.dockerignore](../../.dockerignore) | 构建上下文排除 |
 | [docker-compose.yml](../../docker-compose.yml) | 生产运行编排 |
 | [docker-compose.dev.yml](../../docker-compose.dev.yml) | 开发运行编排 |
+| [docker-compose.server.yml](../../docker-compose.server.yml) | 服务器运行编排（Docker Hub 镜像 + 回环端口） |
 | [scripts/docker-up.ps1](../../scripts/docker-up.ps1) | Windows 启动脚本(自动挂工作区) |
 | [scripts/docker-up.sh](../../scripts/docker-up.sh) | Mac/Linux 启动脚本(自动挂工作区) |
 
@@ -194,18 +195,18 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
 ```powershell
 # 构建指定架构镜像
-docker build --platform linux/amd64 -t po-agent:0.2.1 .
+docker build --platform linux/amd64 -t po-agent:0.2.2 .
 
 # 导出为 tar(Windows PowerShell 没有 gzip,直接导出未压缩 tar)
-docker save po-agent:0.2.1 -o po-agent.tar
+docker save po-agent:0.2.2 -o po-agent.tar
 ```
 
 > `--platform linux/amd64` 必须显式指定,否则本机可能构建出架构不匹配的镜像,服务器上跑不起来。
 >
 > [Dockerfile](../../Dockerfile) 默认走 npmmirror 加速;如需切回官方源:
-> `docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.1 .`
+> `docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.2 .`
 >
-> **想要更小的压缩文件**:Windows PowerShell 没有 `gzip`。若装了 Git for Windows,在 **Git Bash**(非 PowerShell)里执行 `docker save po-agent:0.2.1 | gzip > po-agent.tar.gz` 可得到压缩包,上传更快。`docker load` 对 `.tar` 和 `.tar.gz` 都能自动识别。
+> **想要更小的压缩文件**:Windows PowerShell 没有 `gzip`。若装了 Git for Windows,在 **Git Bash**(非 PowerShell)里执行 `docker save po-agent:0.2.2 | gzip > po-agent.tar.gz` 可得到压缩包,上传更快。`docker load` 对 `.tar` 和 `.tar.gz` 都能自动识别。
 
 ### 5.4 上传镜像到服务器
 
@@ -229,7 +230,7 @@ scp po-agent.tar root@你的服务器IP:/opt/
 
 ```bash
 docker load -i /opt/po-agent.tar
-docker images   # 确认 po-agent:0.2.1 在列
+docker images   # 确认 po-agent:0.2.2 在列
 ```
 
 > `docker load` 能自动识别 `.tar` 和 `.tar.gz`,压缩包用 `docker load < /opt/po-agent.tar.gz` 亦可。
@@ -241,15 +242,22 @@ docker images   # 确认 po-agent:0.2.1 在列
 在服务器上创建运行目录和工作区目录:
 
 ```bash
-mkdir -p /opt/po-agent /root/po-agent-workspace
+mkdir -p /opt/po-agent /www/docker/po-agent/workspace
 ```
 
-创建 `/opt/po-agent/docker-compose.yml`(可用宝塔文件管理器或 `nano`):
+复制仓库中的 [docker-compose.server.yml](../../docker-compose.server.yml) 到
+`/opt/po-agent/docker-compose.yml`。它默认使用 `lianglei777/po-agent:latest`、
+仅绑定回环端口，并把服务器 `/www/docker/po-agent/workspace` 挂载为 `/workspace`；如果你的
+项目目录不同，只修改该挂载路径即可。
+
+`latest` 适合始终跟随最新发布；需要可重复部署或回滚时，将镜像标签替换为明确版本号。
+
+等价的完整配置如下（可用宝塔文件管理器或 `nano` 创建）：
 
 ```yaml
 services:
   po-agent:
-    image: po-agent:0.2.1
+    image: lianglei777/po-agent:latest
     container_name: po-agent
     ports:
       # 关键:只绑 127.0.0.1,不对公网开放
@@ -262,7 +270,7 @@ services:
       # 持久化:凭证 / 模型配置 / 项目列表 / 会话历史
       - po-agent-data:/data/pi-agent
       # 服务器工作区:改成你放项目的目录
-      - /root/po-agent-workspace:/workspace
+      - /www/docker/po-agent/workspace:/workspace
     restart: unless-stopped
 
 volumes:
@@ -337,11 +345,11 @@ docker compose up -d   # 自动用新镜像重启容器
 docker login
 
 # 给镜像打 Docker Hub 格式的标签(版本号 + latest)
-docker tag po-agent:0.2.1 你的用户名/po-agent:0.2.1
-docker tag po-agent:0.2.1 你的用户名/po-agent:latest
+docker tag po-agent:0.2.2 你的用户名/po-agent:0.2.2
+docker tag po-agent:0.2.2 你的用户名/po-agent:latest
 
 # 推送
-docker push 你的用户名/po-agent:0.2.1
+docker push 你的用户名/po-agent:0.2.2
 docker push 你的用户名/po-agent:latest
 ```
 
@@ -358,7 +366,7 @@ docker pull 你的用户名/po-agent:latest
 ```yaml
 services:
   po-agent:
-    image: 你的用户名/po-agent:latest   # 原来是 po-agent:0.2.1
+    image: 你的用户名/po-agent:latest   # 原来是 po-agent:0.2.2
     ...
 ```
 
@@ -405,7 +413,7 @@ docker compose -f docker-compose.dev.yml build --build-arg NPM_REGISTRY=https://
 **云服务器部署**在 `docker build` 时传 build-arg:
 
 ```powershell
-docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.1 .
+docker build --platform linux/amd64 --build-arg NPM_REGISTRY=https://registry.npmjs.org -t po-agent:0.2.2 .
 ```
 
 ## 10. 常用运维命令

@@ -56,6 +56,7 @@ describe("executeRoute", () => {
   });
 
   it("keeps explicit response status and redacts unknown errors", async () => {
+    const logger = { log: vi.fn() };
     const empty = await executeRoute(
       () => new Response(null, { status: 204 }),
       { requestId: "request-4" },
@@ -64,14 +65,57 @@ describe("executeRoute", () => {
 
     const failure = await executeRoute(() => {
       throw new Error("C:\\private\\credentials.json");
-    }, { requestId: "request-5" });
+    }, { requestId: "request-5", unexpectedErrorLogger: logger });
     expect(failure.status).toBe(500);
+    expect(logger.log).toHaveBeenCalledWith({
+      requestId: "request-5",
+      error: expect.any(Error),
+    });
     await expect(failure.json()).resolves.toEqual({
       success: false,
       error: {
         code: "INTERNAL_ERROR",
         message: "Internal server error",
       },
+    });
+  });
+
+  it("does not log expected AppError failures", async () => {
+    const logger = { log: vi.fn() };
+    await executeRoute(() => {
+      throw new AppError("MODEL_NOT_FOUND", "Model was not found", 404);
+    }, { unexpectedErrorLogger: logger });
+
+    expect(logger.log).not.toHaveBeenCalled();
+  });
+
+  it("does not wait for unexpected-error logging before returning the response", async () => {
+    const logger = { log: vi.fn(() => new Promise<void>(() => {})) };
+    const outcome = await Promise.race([
+      executeRoute(() => {
+        throw new Error("disk logging is pending");
+      }, { requestId: "request-6", unexpectedErrorLogger: logger }),
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 50)),
+    ]);
+
+    expect(outcome).not.toBe("timeout");
+    expect(logger.log).toHaveBeenCalledOnce();
+  });
+
+  it("ignores synchronous unexpected-error logger failures", async () => {
+    const logger = {
+      log: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+    };
+
+    const response = await executeRoute(() => {
+      throw new Error("original failure");
+    }, { unexpectedErrorLogger: logger });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INTERNAL_ERROR" },
     });
   });
 

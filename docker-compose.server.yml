@@ -1,0 +1,34 @@
+# 服务器部署：使用 Docker Hub 已发布镜像，应用端口只允许本机 Nginx 访问。
+# 使用前确认 /www/docker/po-agent/workspace 已创建，并按需替换为你的服务器工作区目录。
+
+## 命令部署
+# docker stop po-agent && docker rm po-agent && docker run -d --name po-agent \
+#   --restart unless-stopped \
+#   -p 127.0.0.1:51732:51732 \
+#   -v po-agent-data:/data/pi-agent \
+#   -v /www/docker/po-agent/workspace:/workspace \
+#   -e PI_CODING_AGENT_DIR=/data/pi-agent \
+#   -e PORT=51732 \
+#   -e HOSTNAME=0.0.0.0 \
+#   lianglei777/po-agent:latest
+##
+services:
+  po-agent:
+    image: lianglei777/po-agent:latest
+    container_name: po-agent
+    ports:
+      # 不直接暴露公网；Nginx 反向代理至 http://127.0.0.1:51732。
+      - "127.0.0.1:51732:51732"
+    environment:
+      PI_CODING_AGENT_DIR: /data/pi-agent
+      PORT: "51732"
+      HOSTNAME: "0.0.0.0"
+    volumes:
+      # 持久化登录密码、模型配置、凭证、项目列表和会话历史。
+      - po-agent-data:/data/pi-agent
+      # 宿主机上的项目目录；应用内通过 /workspace 注册和访问项目。
+      - /www/docker/po-agent/workspace:/workspace
+    restart: unless-stopped
+
+volumes:
+  po-agent-data:
