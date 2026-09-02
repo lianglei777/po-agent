@@ -76,6 +76,91 @@ jobs:
           cache-from: type=gha,scope=ci-docker
           cache-to: type=gha,mode=max,scope=ci-docker
 
+      - name: Verify dynamically loaded runtime dependencies
+        shell: bash
+        run: |
+          docker run --rm --entrypoint node po-agent:ci --input-type=module -e '
+            import fs from "node:fs";
+            import path from "node:path";
+
+            const runtimeRoot = process.cwd();
+            const pending = [
+              path.join(runtimeRoot, "node_modules", "pi-web-access"),
+              path.join(runtimeRoot, "node_modules", "@earendil-works", "pi-ai"),
+              path.join(runtimeRoot, "node_modules", "@earendil-works", "pi-coding-agent"),
+            ];
+            const visited = new Set();
+            while (pending.length > 0) {
+              const packageRoot = pending.pop();
+              const packageJsonPath = path.join(packageRoot, "package.json");
+              const realPackageJsonPath = fs.realpathSync(packageJsonPath);
+              if (visited.has(realPackageJsonPath)) continue;
+              visited.add(realPackageJsonPath);
+              const packageJson = JSON.parse(fs.readFileSync(realPackageJsonPath, "utf8"));
+              for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
+                let searchRoot = packageRoot;
+                let dependencyRoot;
+                while (true) {
+                  const candidate = path.join(searchRoot, "node_modules", dependency);
+                  if (fs.existsSync(path.join(candidate, "package.json"))) {
+                    dependencyRoot = candidate;
+                    break;
+                  }
+                  if (searchRoot === runtimeRoot) break;
+                  searchRoot = path.dirname(searchRoot);
+                }
+                if (!dependencyRoot) {
+                  throw new Error(`Missing runtime dependency ${dependency} required by ${packageJson.name}`);
+                }
+                pending.push(dependencyRoot);
+              }
+            }
+          '
+
+      - name: Load bundled Web Access extension
+        shell: bash
+        run: |
+          docker run --rm --entrypoint node po-agent:ci --input-type=module -e '
+            import fs from "node:fs/promises";
+            import os from "node:os";
+            import path from "node:path";
+            import { DefaultResourceLoader, SettingsManager } from "@earendil-works/pi-coding-agent";
+
+            const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "po-agent-web-access-"));
+            try {
+              await fs.writeFile(path.join(agentDir, "web-search.json"), JSON.stringify({
+                workflow: "none",
+                allowBrowserCookies: false,
+                tools: {
+                  webSearch: { enabled: true },
+                  fetchContent: { enabled: true },
+                  getSearchContent: { enabled: true },
+                  sourceCheck: { enabled: true },
+                },
+                fetchRouting: { providers: ["http", "jina"], allowRemoteHostedProviders: false },
+                githubClone: { enabled: false },
+                youtube: { enabled: false },
+                video: { enabled: false },
+                image: { enabled: false },
+              }));
+              const cwd = process.cwd();
+              const loader = new DefaultResourceLoader({
+                cwd,
+                agentDir,
+                settingsManager: SettingsManager.create(cwd, agentDir),
+                additionalExtensionPaths: [path.join(cwd, "node_modules", "pi-web-access")],
+              });
+              await loader.reload();
+              const extension = loader.getExtensions().extensions.find((item) => item.resolvedPath.includes("pi-web-access"));
+              const requiredTools = ["web_search", "fetch_content", "get_search_content", "source_check"];
+              if (!extension || requiredTools.some((name) => !extension.tools.has(name))) {
+                throw new Error(JSON.stringify(loader.getExtensions().errors));
+              }
+            } finally {
+              await fs.rm(agentDir, { recursive: true, force: true });
+            }
+          '
+
       - name: Start container
         run: docker run --detach --name po-agent-ci --publish 51732:51732 po-agent:ci
 

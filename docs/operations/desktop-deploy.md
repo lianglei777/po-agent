@@ -73,7 +73,7 @@ npm run desktop:dev
 等价于 `npm run build && npm run desktop:prepare && electron .`:
 
 1. `next build` 产出 `.next/standalone`(含精简 `node_modules` + `server.js`)
-2. `desktop:prepare` 把 `.next/static`、`public` 补进 standalone
+2. `desktop:prepare` 把 `.next/static`、`public` 和完整生产依赖补进 standalone，保证动态 Pi 扩展可加载
 3. `electron .` 启动 Electron,加载本机的 standalone server
 
 适合开发 desktop 主进程代码([desktop/main.mjs](../../desktop/main.mjs) 等)时验证。注意改 Next.js 源码需要重新 `build`(不像 `npm run dev` 有热更新);只改 desktop 主进程代码,重启 `electron .` 即可。

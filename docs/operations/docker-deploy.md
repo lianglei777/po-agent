@@ -43,7 +43,7 @@
 | 文件 | 作用 |
 |---|---|
 | [next.config.ts](../../next.config.ts) | `output: "standalone"` 产出独立运行产物 |
-| [Dockerfile](../../Dockerfile) | 生产镜像(多阶段构建) |
+| [Dockerfile](../../Dockerfile) | 生产镜像(多阶段构建，保留完整生产依赖以支持动态 Pi 扩展) |
 | [Dockerfile.dev](../../Dockerfile.dev) | 开发镜像(热更新) |
 | [.dockerignore](../../.dockerignore) | 构建上下文排除 |
 | [docker-compose.yml](../../docker-compose.yml) | 生产运行编排 |

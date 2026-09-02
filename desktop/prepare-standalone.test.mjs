@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -58,6 +58,47 @@ test("copies bundled RunningHub API documentation", () => {
     assert.equal(
       readFileSync(path.join(target, "text-to-video.md"), "utf8"),
       "# API 文档",
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("copies production dependencies but excludes development-only dependencies", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "po-agent-runtime-deps-"));
+  try {
+    const productionPackage = path.join(root, "node_modules", "runtime-package");
+    const developmentPackage = path.join(root, "node_modules", "dev-package");
+    mkdirSync(productionPackage, { recursive: true });
+    mkdirSync(developmentPackage, { recursive: true });
+    mkdirSync(path.join(root, ".next", "standalone"), { recursive: true });
+    writeFileSync(path.join(productionPackage, "index.js"), "runtime", { flush: true });
+    writeFileSync(path.join(developmentPackage, "index.js"), "development", { flush: true });
+    writeFileSync(
+      path.join(root, "package-lock.json"),
+      JSON.stringify({
+        packages: {
+          "node_modules/runtime-package": {},
+          "node_modules/dev-package": { dev: true },
+        },
+      }),
+      { flush: true },
+    );
+
+    copyStandaloneStaticAssets(root);
+
+    assert.equal(
+      readFileSync(
+        path.join(root, ".next", "standalone", "node_modules", "runtime-package", "index.js"),
+        "utf8",
+      ),
+      "runtime",
+    );
+    assert.equal(
+      existsSync(
+        path.join(root, ".next", "standalone", "node_modules", "dev-package"),
+      ),
+      false,
     );
   } finally {
     rmSync(root, { force: true, recursive: true });
