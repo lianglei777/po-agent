@@ -45,10 +45,10 @@ describe("workspace primary navigation", () => {
     expect(projectSource).toContain("navigation.projects.map");
   });
 
-  it("keeps icon-only settings and locale actions in the bottom group", () => {
+  it("keeps settings followed by Pipeline Studio in the bottom group", () => {
     expect(source).toContain("mt-auto");
     expect(source).toContain("t.workspace.settings");
-    expect(source).toContain("setLocale(nextLocale)");
+    expect(source).toContain("t.pipeline.enterPipeline");
     expect(source).toContain("border-line-strong");
     expect(source).toContain("flex items-center");
     expect(source).not.toContain("onOpenSystemPrompt");
@@ -56,8 +56,15 @@ describe("workspace primary navigation", () => {
     expect(source).toContain('"size-6! shrink-0! p-0!"');
     expect(source).toContain('"size-8! shrink-0! p-0!"');
     expect(source).toContain('<Settings className="size-4" />');
-    expect(source).toContain('<Languages className="size-4" />');
+    expect(source).toContain('<Film className="size-4" />');
+    expect(source).not.toContain("setLocale(");
+    expect(source).not.toContain("Languages");
     expect(topBarSource).not.toContain("onOpenSystemPrompt");
+  });
+
+  it("shows the current package version beside the Agent brand", () => {
+    expect(source).toContain('import packageJson from "../../../package.json"');
+    expect(source).toContain("v{packageJson.version}");
   });
 
   it("keeps project titles stable when the more action appears", () => {

@@ -1,11 +1,11 @@
 import {
   Film,
-  Languages,
   PanelLeftClose,
   Settings,
 } from "@/components/icons";
 import Image from "next/image";
 import { Button, Tooltip } from "antd";
+import packageJson from "../../../package.json";
 import { ProjectNavigation } from "@/features/sessions/project-navigation";
 import type { SessionNavigationController } from "@/features/sessions/use-session-navigation";
 import { useI18n } from "@/i18n/use-i18n";
@@ -27,9 +27,8 @@ export function WorkspaceSidebar({
   onOpenSettings,
   onToggleCompact,
 }: WorkspaceSidebarProps) {
-  const { locale, setLocale, t } = useI18n();
+  const { t } = useI18n();
   const setMode = useWorkspaceMode((s) => s.setMode);
-  const nextLocale = locale === "zh" ? "en" : "zh";
 
   return (
     <div
@@ -43,13 +42,18 @@ export function WorkspaceSidebar({
         }`}
       >
         {compact ? null : (
-          <Image
-            alt="Po Agent"
-            className="size-8 shrink-0"
-            height={32}
-            src="/po-agent-icon.png"
-            width={32}
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <Image
+              alt="Po Agent"
+              className="size-8 shrink-0"
+              height={32}
+              src="/po-agent-icon.png"
+              width={32}
+            />
+            <span className="font-ui-mono text-caption text-muted">
+              v{packageJson.version}
+            </span>
+          </div>
         )}
         <Tooltip
           mouseEnterDelay={0.35}
@@ -74,6 +78,13 @@ export function WorkspaceSidebar({
           compact ? "justify-center gap-1" : "gap-1"
         }`}
       >
+        <SidebarIconAction
+          active={activeView === "model-provider"}
+          compact={compact}
+          icon={<Settings className="size-4" />}
+          label={t.workspace.settings}
+          onClick={onOpenSettings}
+        />
         <Tooltip
           mouseEnterDelay={0.35}
           placement={compact ? "right" : "top"}
@@ -89,40 +100,6 @@ export function WorkspaceSidebar({
             htmlType="button"
             icon={<Film className="size-4" />}
             onClick={() => setMode("pipeline")}
-            size="small"
-            type="text"
-          />
-        </Tooltip>
-        <SidebarIconAction
-          active={activeView === "model-provider"}
-          compact={compact}
-          icon={<Settings className="size-4" />}
-          label={t.workspace.settings}
-          onClick={onOpenSettings}
-        />
-        <Tooltip
-          mouseEnterDelay={0.35}
-          placement={compact ? "right" : "top"}
-          title={
-            nextLocale === "zh"
-              ? t.common.switchToChinese
-              : t.common.switchToEnglish
-          }
-        >
-          <Button
-            aria-label={
-              nextLocale === "zh"
-                ? t.common.switchToChinese
-                : t.common.switchToEnglish
-            }
-            className={
-              compact
-                ? "size-6! shrink-0! p-0!"
-                : "size-8! shrink-0! p-0!"
-            }
-            htmlType="button"
-            icon={<Languages className="size-4" />}
-            onClick={() => setLocale(nextLocale)}
             size="small"
             type="text"
           />

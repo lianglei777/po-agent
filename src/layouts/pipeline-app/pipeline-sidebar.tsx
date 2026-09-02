@@ -131,19 +131,15 @@ export function PipelineSidebar({
         <Tooltip
           mouseEnterDelay={0.35}
           placement="right"
-          title={collapsed ? t.pipeline.backToAgent : undefined}
+          title={t.pipeline.backToAgent}
         >
           <button
             type="button"
             onClick={() => setMode("agent")}
             aria-label={t.pipeline.backToAgent}
-            className={
-              "flex min-h-9 w-full items-center rounded-lg text-[var(--pl-text-secondary)] transition-[background-color,color,transform] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)] " +
-              (collapsed ? "justify-center px-2" : "gap-3 px-3")
-            }
+            className="flex size-9 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-[background-color,color,transform] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--pl-accent)]"
           >
             <Bot className="size-[17px] shrink-0" />
-            {!collapsed ? <span className="truncate text-sm font-medium">{t.pipeline.backToAgent}</span> : null}
           </button>
         </Tooltip>
       </div>
