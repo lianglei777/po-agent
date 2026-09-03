@@ -70,7 +70,12 @@ type CanvasStoreState = CanvasDocument & {
   commitNodeSize: (nodeId: string, previous: { width: number; height: number }) => void;
   deleteNodes: (nodeIds: string[]) => void;
   duplicateNodes: (nodeIds: string[], offset?: { x: number; y: number }) => string[];
-  createEdge: (sourceNodeId: string, targetNodeId: string, intent?: "connect" | "restore") => void;
+  createEdge: (
+    sourceNodeId: string,
+    targetNodeId: string,
+    intent?: "connect" | "prompt-reference" | "restore",
+    role?: CanvasResourceRole,
+  ) => void;
   updateEdgeBinding: (edgeId: string, patch: { role?: CanvasResourceRole; order?: number }) => void;
   deleteEdges: (edgeIds: string[]) => void;
   setViewport: (viewport: CanvasViewport, persist?: boolean) => void;
@@ -449,12 +454,13 @@ export function createCanvasStore(projectId: string) {
       return createdIds;
     },
 
-    createEdge: (sourceNodeId, targetNodeId, intent = "connect") => {
+    createEdge: (sourceNodeId, targetNodeId, intent = "connect", role = "reference") => {
       const state = get();
       if (state.workflowLockedNodeIds.includes(sourceNodeId) || state.workflowLockedNodeIds.includes(targetNodeId)) return;
       if (intent === "connect" && state.uploadingNodeIds.includes(targetNodeId)) return;
       const problem = canvasConnectionProblem(state.nodes, state.edges, sourceNodeId, targetNodeId);
-      if (problem && !(intent === "restore" && problem === "target-has-content")) return;
+      const acceptsFilledTarget = intent === "restore" || intent === "prompt-reference";
+      if (problem && !(acceptsFilledTarget && problem === "target-has-content")) return;
       const now = new Date().toISOString();
       const edge: CanvasEdge = {
         id: crypto.randomUUID(),
@@ -462,7 +468,7 @@ export function createCanvasStore(projectId: string) {
         sourceNodeId,
         targetNodeId,
         edgeType: "references",
-        role: "reference",
+        role,
         order: state.edges
           .filter((candidate) => candidate.targetNodeId === targetNodeId)
           .reduce((highest, candidate) => Math.max(highest, candidate.order ?? -1), -1) + 1,

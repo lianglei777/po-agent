@@ -111,6 +111,7 @@ export function ResourcePromptEditor({
   const projectId = useCanvasStore((state) => state.projectId);
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const canvasEdges = useCanvasStore((state) => state.edges);
+  const createEdge = useCanvasStore((state) => state.createEdge);
   const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const updateEdgeBinding = useCanvasStore((state) => state.updateEdgeBinding);
   const [assets, setAssets] = useState<PipelineAsset[]>([]);
@@ -158,6 +159,16 @@ export function ResourcePromptEditor({
     ? connectedCanvasReferences(connectedTargetNodeId, canvasNodes, canvasEdges)
     : [], [canvasEdges, canvasNodes, connectedTargetNodeId]);
   const promptReferences = useMemo(() => promptDocumentResourceAttrs(value), [value]);
+  useEffect(() => {
+    if (!connectedTargetNodeId) return;
+    const seenSourceIds = new Set<string>();
+    for (const reference of promptReferences) {
+      if (reference.sourceType !== "canvas-node" || seenSourceIds.has(reference.sourceId)) continue;
+      seenSourceIds.add(reference.sourceId);
+      // 兼容已有 Prompt：打开 Composer 时补齐过去未建立的 @ 引用连线。
+      createEdge(reference.sourceId, connectedTargetNodeId, "prompt-reference", reference.role);
+    }
+  }, [canvasEdges, canvasNodes, connectedTargetNodeId, createEdge, promptReferences]);
   const referencedResources = useMemo(() => promptResourceBindings(
     connectedTargetNodeId,
     canvasNodes,
@@ -308,6 +319,10 @@ export function ResourcePromptEditor({
       { type: "resourceReference", attrs },
       { type: "text", text: " " },
     ]).run();
+    if (option.sourceType === "canvas-node" && connectedTargetNodeId) {
+      // 画布节点的 @ 引用同时建立可见连线；正文 token 删除不会反向删除这条用户可管理的引用。
+      createEdge(option.sourceId, connectedTargetNodeId, "prompt-reference", role);
+    }
     setMention(null);
     onResourceInserted?.();
   }

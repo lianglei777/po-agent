@@ -13,6 +13,7 @@ export function imageNodePresentation(input: {
 
 export function videoNodeToolbarPresentation(input: {
   selected: boolean;
+  composerActive: boolean;
   dragging: boolean;
   mediaDeferred: boolean;
   hasVideo: boolean;
@@ -24,6 +25,7 @@ export function videoNodeToolbarPresentation(input: {
       && !input.mediaDeferred
       && (input.hasVideo || input.hasHistory),
     showGenerateAction: input.hasVideo,
+    showComposer: input.composerActive && !input.dragging,
   };
 }
 

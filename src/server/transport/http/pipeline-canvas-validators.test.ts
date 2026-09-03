@@ -70,6 +70,27 @@ describe("parseCanvasMutationBatch", () => {
       .toThrow("mutations must contain between 1 and 500 operations");
   });
 
+  it("accepts a prompt reference edge creation intent", () => {
+    const edge = {
+      id: "edge-1",
+      projectId: "project-1",
+      sourceNodeId: "source-1",
+      targetNodeId: "target-1",
+      edgeType: "references",
+      role: "reference",
+      order: 0,
+    };
+    expect(parseCanvasMutationBatch({
+      baseRevision: 1,
+      requestId: "request-prompt-reference",
+      mutations: [{ type: "edge.create", intent: "prompt-reference", edge }],
+    }).mutations[0]).toEqual({
+      type: "edge.create",
+      intent: "prompt-reference",
+      edge: { ...edge, createdAt: undefined, updatedAt: undefined },
+    });
+  });
+
   it("accepts a bounded rich text document", () => {
     const richNode = {
       ...node,

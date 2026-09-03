@@ -367,6 +367,48 @@ describe("CanvasStudioService connection policy", () => {
     })).rejects.toMatchObject({ status: 409 });
     expect(repository.createCanvasEdge).not.toHaveBeenCalled();
   });
+
+  it("accepts a prompt reference connection into an idle node with generated content", async () => {
+    const source = { ...imageNode(), id: "source-1" };
+    let target: CanvasNode = {
+      ...videoNode(),
+      id: "target-1",
+      data: { ...videoNode().data!, url: ["/generated.mp4"] },
+    };
+    const edge = {
+      id: "edge-prompt-1",
+      projectId: project.id,
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+      edgeType: "references" as const,
+      role: "reference" as const,
+      order: 0,
+    };
+    let edges: typeof edge[] = [];
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => id === source.id ? source : id === target.id ? target : null),
+      listCanvasNodes: vi.fn().mockImplementation(async () => [source, target]),
+      listCanvasEdges: vi.fn().mockImplementation(async () => edges),
+      applyCanvasMutationBatch: vi.fn().mockImplementation(async () => {
+        edges = [edge];
+        return { applied: true, revision: 1 };
+      }),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        target = { ...target, ...patch };
+        return target;
+      }),
+      getCanvasViewport: vi.fn().mockResolvedValue({ x: 0, y: 0, zoom: 1 }),
+      getCanvasRevision: vi.fn().mockResolvedValue(1),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await expect(service.applyMutationBatch(project.id, {
+      baseRevision: 0,
+      requestId: "prompt-reference-edge",
+      mutations: [{ type: "edge.create", intent: "prompt-reference", edge }],
+    })).resolves.toMatchObject({ edges: [edge] });
+  });
 });
 
 describe("CanvasStudioService image AI", () => {

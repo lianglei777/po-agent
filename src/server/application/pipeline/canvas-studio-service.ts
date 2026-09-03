@@ -1328,7 +1328,18 @@ export class CanvasStudioService {
         const source = nodes.get(mutation.edge.sourceNodeId);
         const target = nodes.get(mutation.edge.targetNodeId);
         if (!source || !target) throw new AppError("VALIDATION_ERROR", "Canvas connection references a missing node", 400);
-        assertCanvasConnectionAllowed(projectId, source, target, edges, mutation.intent !== "restore", mutation.edge.id);
+        if (mutation.intent === "prompt-reference"
+          && (target.data?.taskInfo?.status === "queued" || target.data?.taskInfo?.status === "processing")) {
+          throw new AppError("VALIDATION_ERROR", "A generating node cannot accept a new upstream connection", 409);
+        }
+        assertCanvasConnectionAllowed(
+          projectId,
+          source,
+          target,
+          edges,
+          mutation.intent !== "restore" && mutation.intent !== "prompt-reference",
+          mutation.edge.id,
+        );
         edges.push(mutation.edge);
         affectedTargets.add(mutation.edge.targetNodeId);
       }

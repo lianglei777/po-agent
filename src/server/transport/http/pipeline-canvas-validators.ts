@@ -135,12 +135,15 @@ function parseMutation(value: unknown, index: number): CanvasMutationBatch["muta
     if (edge.order !== undefined && (!Number.isInteger(edge.order) || Number(edge.order) < 0)) {
       throw validationError(`mutations[${index}].edge.order is invalid`);
     }
-    if (value.intent !== undefined && value.intent !== "connect" && value.intent !== "restore") {
+    if (value.intent !== undefined
+      && value.intent !== "connect"
+      && value.intent !== "prompt-reference"
+      && value.intent !== "restore") {
       throw validationError(`mutations[${index}].intent is invalid`);
     }
     return {
       type: value.type,
-      intent: value.intent as "connect" | "restore" | undefined,
+      intent: value.intent as "connect" | "prompt-reference" | "restore" | undefined,
       edge: {
         id: edge.id,
         projectId: edge.projectId,

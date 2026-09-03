@@ -290,6 +290,35 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().pendingMutations).toHaveLength(mutationCount);
   });
 
+  it("creates one prompt reference edge into a node that already has generated content", () => {
+    const store = createCanvasStore("project-1");
+    const source = store.getState().createNode("image", { x: 0, y: 0 }, "Source");
+    const target = store.getState().createNode("video", { x: 400, y: 0 }, "Target");
+    store.getState().hydrate({
+      revision: 1,
+      nodes: [source, {
+        ...target,
+        data: { ...target.data!, url: ["/generated.mp4"] },
+      }],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+    });
+
+    store.getState().createEdge(source.id, target.id, "prompt-reference", "first-frame");
+    store.getState().createEdge(source.id, target.id, "prompt-reference", "first-frame");
+
+    expect(store.getState().edges).toEqual([
+      expect.objectContaining({
+        sourceNodeId: source.id,
+        targetNodeId: target.id,
+        role: "first-frame",
+      }),
+    ]);
+    expect(store.getState().pendingMutations).toEqual([
+      expect.objectContaining({ type: "edge.create", intent: "prompt-reference" }),
+    ]);
+  });
+
   it("does not record a resize when the node returns to its original size", () => {
     const store = createCanvasStore("project-1");
     const node = {

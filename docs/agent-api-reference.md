@@ -3199,7 +3199,7 @@ type CanvasMutation =
   | { type: "node.create"; node: CanvasNode }
   | { type: "node.update"; nodeId: string; patch: CanvasNodePatch }
   | { type: "node.delete"; nodeId: string }
-  | { type: "edge.create"; edge: CanvasEdge; intent?: "connect" | "restore" }
+  | { type: "edge.create"; edge: CanvasEdge; intent?: "connect" | "prompt-reference" | "restore" }
   | { type: "edge.update"; edgeId: string; patch: { role?: CanvasResourceRole; order?: number } }
   | { type: "edge.delete"; edgeId: string }
   | { type: "viewport.update"; viewport: CanvasViewport };
@@ -3217,6 +3217,7 @@ type CanvasMutation =
 - revision 不一致时返回 HTTP `409` 和错误码 `PIPELINE_CANVAS_REVISION_CONFLICT`。
 - 所有节点和 edge 必须属于 URL 指定的项目；跨项目端点会被拒绝。
 - `edge.create` 缺省按 `connect` 处理：仅空闲且无内容的目标节点可接受新入边，并拒绝自连、重复边和环路。
+- `edge.create` 使用 `prompt-reference` 时允许为已有内容的空闲目标节点建立 `@` 引用连线；仍拒绝生成中的目标节点、自连、重复边和环路。
 - `restore` 仅用于撤销、重做、复制或工作流恢复已有拓扑；它可恢复指向已有内容节点的边，但不会绕过项目、重复边和环路校验。
 
 ### Canvas 自动保存

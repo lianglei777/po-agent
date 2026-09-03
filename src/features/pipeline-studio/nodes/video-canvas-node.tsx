@@ -59,7 +59,6 @@ export function VideoCanvasNode({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  const [composerOpen, setComposerOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [composerInputDirty, setComposerInputDirty] = useState(false);
   const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
@@ -77,6 +76,7 @@ export function VideoCanvasNode({
   const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
   const toolbarPresentation = videoNodeToolbarPresentation({
     selected: singleSelected,
+    composerActive,
     dragging,
     mediaDeferred: deferMediaLoad,
     hasVideo,
@@ -113,7 +113,6 @@ export function VideoCanvasNode({
         id,
       );
       insertServerNode(result.node);
-      setComposerOpen(false);
     } catch (error) {
       void message.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -185,7 +184,6 @@ export function VideoCanvasNode({
               icon={<Sparkles className="size-4" />}
               onClick={() => {
                 activateNodeComposer(id);
-                setComposerOpen(true);
               }}
             />
           ) : null}
@@ -343,7 +341,7 @@ export function VideoCanvasNode({
         )}
       </section>
 
-      {composerActive && !dragging && (!hasVideo || composerOpen) ? (
+      {toolbarPresentation.showComposer ? (
         <VideoAiComposer
           key={id}
           nodeId={id}
@@ -353,7 +351,6 @@ export function VideoCanvasNode({
           onNodeUpdate={(serverNode) => {
             if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
             setComposerInputDirty(false);
-            setComposerOpen(false);
           }}
           onInputDirtyChange={setComposerInputDirty}
         />

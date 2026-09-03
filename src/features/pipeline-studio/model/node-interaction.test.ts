@@ -26,18 +26,31 @@ describe("canvas node interaction", () => {
   it("keeps video history reachable after an empty node generation fails", () => {
     expect(videoNodeToolbarPresentation({
       selected: true,
+      composerActive: true,
       dragging: false,
       mediaDeferred: false,
       hasVideo: false,
       hasHistory: true,
-    })).toEqual({ showToolbar: true, showGenerateAction: false });
+    })).toEqual({ showToolbar: true, showGenerateAction: false, showComposer: true });
     expect(videoNodeToolbarPresentation({
       selected: true,
+      composerActive: true,
       dragging: false,
       mediaDeferred: false,
       hasVideo: false,
       hasHistory: false,
     }).showToolbar).toBe(false);
+  });
+
+  it("keeps the video composer available after a video has content", () => {
+    expect(videoNodeToolbarPresentation({
+      selected: true,
+      composerActive: true,
+      dragging: false,
+      mediaDeferred: false,
+      hasVideo: true,
+      hasHistory: true,
+    }).showComposer).toBe(true);
   });
 
   it("shows audio asset actions only for one selected stable node", () => {
