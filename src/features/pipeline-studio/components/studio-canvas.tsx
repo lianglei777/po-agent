@@ -401,6 +401,9 @@ export function StudioCanvas({
 
       <div
         className="h-full w-full"
+        // 右键被 panOnDrag 注册为平移键后，React Flow 会在 mouseup 阶段打开创建菜单，
+        // 而原生 contextmenu 菜单只能在容器层统一拦截，否则会与创建菜单同时弹出。
+        onContextMenu={(event) => event.preventDefault()}
         onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
         onDrop={(event: DragEvent<HTMLDivElement>) => {
           event.preventDefault();
