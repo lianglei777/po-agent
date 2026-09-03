@@ -5,6 +5,7 @@ import type { MutableRefObject } from "react";
 import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type {
+  CanvasEdge,
   CanvasGenerationSettingValue,
   CanvasNode,
   CanvasNodeData,
@@ -22,7 +23,7 @@ import {
   videoCapabilityForPrompt,
 } from "../model/prompt-reference-validation";
 import { selectInitialVideoGenerationRoute, videoGenerationRoutes } from "../model/video-generation-options";
-import { connectedCanvasReferences } from "../model/canvas-connection-policy";
+import { canvasNodeHasContent, connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
@@ -40,19 +41,21 @@ export function VideoAiComposer({
   waitingForSave,
   workflowLocked,
   onNodeUpdate,
-  onInputDirtyChange,
 }: {
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
   workflowLocked: boolean;
-  onNodeUpdate: (node: CanvasNode) => void;
-  onInputDirtyChange?: (dirty: boolean) => void;
+  onNodeUpdate: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { t } = useI18n();
   const draftKey = composerDraftKey(nodeId, "video");
   const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
+  const storedReferenceDraft = useCanvasStore((state) => state.composerReferenceDrafts[draftKey]);
   const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
+  const clearComposerDraft = useCanvasStore((state) => state.clearComposerDraft);
+  const setComposerReferenceDraft = useCanvasStore((state) => state.setComposerReferenceDraft);
+  const clearComposerReferenceDraft = useCanvasStore((state) => state.clearComposerReferenceDraft);
   const promptDocument = storedDraft
     ?? data.params?.promptDocument
     ?? promptDocumentFromPlainText(data.params?.prompt ?? "");
@@ -74,10 +77,13 @@ export function VideoAiComposer({
   const preparationController = useRef<AbortController | null>(null);
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const canvasEdges = useCanvasStore((state) => state.edges);
-  const connectedReferences = useMemo(
-    () => connectedCanvasReferences(nodeId, canvasNodes, canvasEdges),
-    [canvasEdges, canvasNodes, nodeId],
-  );
+  const sourceNode = canvasNodes.find((node) => node.id === nodeId);
+  const useReferenceDraft = Boolean(sourceNode && (
+    canvasNodeHasContent(sourceNode)
+    || sourceNode.data?.taskInfo?.status !== undefined && sourceNode.data.taskInfo.status !== "idle"
+ ));
+  const connectedReferences = useMemo(() => storedReferenceDraft
+    ?? connectedCanvasReferences(nodeId, canvasNodes, canvasEdges), [canvasEdges, canvasNodes, nodeId, storedReferenceDraft]);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
@@ -220,10 +226,6 @@ export function VideoAiComposer({
     }
     const nextSettings = route ? reconcileComposerSettings(route, settings) : {};
     if (route) setSettings(nextSettings);
-    onInputDirtyChange?.(
-      routeId !== data.params?.routeId
-      || JSON.stringify(nextSettings) !== JSON.stringify(data.params?.settings ?? {}),
-    );
   };
 
   const submit = async () => {
@@ -259,8 +261,11 @@ export function VideoAiComposer({
           routeId: selectedRoute.id,
           settings: generationRequestSettings(nextSettings),
           lipSync: { preparationId: preparation.id, faceKey: face.key },
+          references: useReferenceDraft ? generationReferences(connectedReferences) : undefined,
         });
-        onNodeUpdate(response.node);
+        clearComposerDraft(nodeId, "video");
+        clearComposerReferenceDraft(nodeId, "video");
+        onNodeUpdate(response.node, response.edges);
         setExpanded(false);
         return;
       }
@@ -269,8 +274,11 @@ export function VideoAiComposer({
         promptDocument,
         routeId: selectedRoute.id,
         settings: generationRequestSettings(settings),
+        references: useReferenceDraft ? generationReferences(connectedReferences) : undefined,
       });
-      onNodeUpdate(response.node);
+      clearComposerDraft(nodeId, "video");
+      clearComposerReferenceDraft(nodeId, "video");
+      onNodeUpdate(response.node, response.edges);
       setExpanded(false);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : t.pipeline.videoAiError);
@@ -319,7 +327,6 @@ export function VideoAiComposer({
       }}
       onSettingsChange={(nextSettings) => {
         setSettings(nextSettings);
-        onInputDirtyChange?.(true);
       }}
       onAutomaticTimingChange={(value) => {
         setAutomaticTiming(value);
@@ -354,13 +361,13 @@ export function VideoAiComposer({
         setUnsupportedReferenceCount(unsupportedCount);
       }}
       onResourceRoleChange={setResourceRole}
+      referenceDraft={useReferenceDraft ? connectedReferences : undefined}
+      onReferenceDraftChange={useReferenceDraft
+        ? (references) => setComposerReferenceDraft(nodeId, "video", references)
+        : undefined}
       onRouteChange={changeRoute}
       onSettingsChange={(nextSettings) => {
         setSettings(nextSettings);
-        onInputDirtyChange?.(
-          selectedRouteId !== data.params?.routeId
-          || JSON.stringify(nextSettings) !== JSON.stringify(data.params?.settings ?? {}),
-        );
       }}
       onSubmit={() => void submit()}
       onCancel={() => void cancel()}
@@ -393,6 +400,7 @@ function VideoComposerSurface({
   large, nodeId, promptDocument, resourceRole, routes, selectedRoute, selectedRouteId, settings,
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
   onPromptDocumentChange, onReferenceStateChange, onResourceRoleChange, onRouteChange,
+  referenceDraft, onReferenceDraftChange,
   onSettingsChange, onSubmit, onCancel, onExpand,
 }: {
   large: boolean;
@@ -412,6 +420,8 @@ function VideoComposerSurface({
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onResourceRoleChange: (role: CanvasResourceRole) => void;
+  referenceDraft?: CanvasResourceReferenceAttrs[];
+  onReferenceDraftChange?: (references: CanvasResourceReferenceAttrs[]) => void;
   onRouteChange: (routeId: string) => void;
   onSettingsChange: (settings: Record<string, JsonValue>) => void;
   onSubmit: () => void;
@@ -444,6 +454,8 @@ function VideoComposerSurface({
             allowedMediaTypes={["text", "image", "video", "audio"]}
             excludedCanvasNodeId={nodeId}
             connectedTargetNodeId={nodeId}
+            draftConnectionReferences={referenceDraft}
+            onDraftConnectionReferencesChange={onReferenceDraftChange}
             defaultResourceRole={resourceRole}
             onResourceInserted={() => onResourceRoleChange("reference")}
             placeholder={t.pipeline.videoAiPlaceholder}
@@ -544,6 +556,12 @@ function generationRequestSettings(values: Record<string, JsonValue>): Record<st
       typeof item === "string" || typeof item === "number" || typeof item === "boolean"
     )))
   )));
+}
+
+function generationReferences(references: CanvasResourceReferenceAttrs[]) {
+  return references
+    .filter((reference) => reference.sourceType === "canvas-node")
+    .map(({ sourceId, role }) => ({ sourceId, role }));
 }
 
 async function prepareLipSync(

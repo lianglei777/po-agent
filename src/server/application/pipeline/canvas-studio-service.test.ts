@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
-import type { CanvasMutationBatch, CanvasNode, CanvasPromptDocument, PipelineProject } from "@/server/domain/pipeline";
+import type { CanvasEdge, CanvasMutationBatch, CanvasNode, CanvasPromptDocument, PipelineProject } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
 import type { LlmPort } from "@/server/ports/llm-port";
-import type { GenerationRunService } from "@/server/application/content-generation/generation-run-service";
+import type { GenerationRunService, GenerationRunView } from "@/server/application/content-generation/generation-run-service";
 import type { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
 import { CanvasStudioService } from "./canvas-studio-service";
 import type { LipSyncPreparationService } from "./lip-sync-preparation-service";
@@ -113,13 +113,27 @@ describe("CanvasStudioService mutation batches", () => {
 
 describe("CanvasStudioService text AI", () => {
   it("revises current text with the selected model and stores the complete result", async () => {
-    let currentNode = textNode("Existing draft");
+    const source = textNode("Existing draft");
+    const nodes = new Map<string, CanvasNode>([[source.id, source]]);
+    const edges: CanvasEdge[] = [];
     const repository = {
-      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
-      listCanvasEdges: vi.fn().mockResolvedValue([]),
-      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
-        currentNode = { ...currentNode, ...patch, updatedAt: "2026-08-20T00:00:00.000Z" };
-        return currentNode;
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasNodes: vi.fn().mockImplementation(async () => [...nodes.values()]),
+      listCanvasEdges: vi.fn().mockImplementation(async () => edges),
+      createCanvasNode: vi.fn().mockImplementation(async (input: Omit<CanvasNode, "createdAt" | "updatedAt">) => {
+        const created = { ...input, createdAt: "2026-08-20T00:00:00.000Z", updatedAt: "2026-08-20T00:00:00.000Z" };
+        nodes.set(created.id, created);
+        return created;
+      }),
+      createCanvasEdge: vi.fn().mockImplementation(async (input: Omit<CanvasEdge, "id">) => {
+        const edge = { ...input, id: `edge-${edges.length + 1}` };
+        edges.push(edge);
+        return edge;
+      }),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-08-20T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
       }),
     } as unknown as PipelineRepository;
     const llm = {
@@ -137,12 +151,15 @@ describe("CanvasStudioService text AI", () => {
       expect.arrayContaining([expect.objectContaining({ role: "user", content: expect.stringContaining("Existing draft") })]),
       { model: "provider:model-1", temperature: 0.6, maxTokens: 8_192 },
     );
-    expect(result.data).toMatchObject({
+    expect(result.node.data).toMatchObject({
       action: "text_revise",
       content: ["Revised final text"],
       textDocument: { plainText: "Revised final text" },
       taskInfo: { status: "completed", progressPercent: 100 },
     });
+    expect(result.node.id).not.toBe(source.id);
+    expect(result.edges).toEqual([expect.objectContaining({ sourceNodeId: source.id, targetNodeId: result.node.id })]);
+    expect(nodes.get(source.id)).toEqual(source);
   });
 
   it("emits and propagates a text generation failure through the normal node update path", async () => {
@@ -175,29 +192,15 @@ describe("CanvasStudioService text AI", () => {
 });
 
 describe("CanvasStudioService local media upload", () => {
-  it("fills an existing empty image node instead of creating another node", async () => {
-    let currentNode = imageNode();
+  it("rejects replacing any node that already has content or generation history", async () => {
+    const currentNode = imageNode();
     const repository = {
       getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
-      listCanvasEdges: vi.fn().mockResolvedValue([]),
-      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
-      createCanvasNode: vi.fn(),
-      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
-        currentNode = { ...currentNode, ...patch, updatedAt: "2026-08-21T00:00:00.000Z" };
-        return currentNode;
-      }),
     } as unknown as PipelineRepository;
-    const runs = { ensureSession: vi.fn() } as unknown as GenerationRunService;
-    const assets = {
-      upload: vi.fn().mockResolvedValue({
-        name: "reference.png",
-        contentType: "image/png",
-        ref: { type: "workspace-file", relativePath: "assets/imports/reference.png" },
-      }),
-    } as unknown as GenerationAssetService;
-    const service = createService(repository, {} as LlmPort, runs, assets);
+    const assets = { upload: vi.fn() } as unknown as GenerationAssetService;
+    const service = createService(repository, {} as LlmPort, {} as GenerationRunService, assets);
 
-    const result = await service.upload({
+    await expect(service.upload({
       projectId: "project-1",
       nodeId: "image-node-1",
       name: "reference.png",
@@ -205,21 +208,31 @@ describe("CanvasStudioService local media upload", () => {
       data: new Uint8Array([1, 2, 3]),
       positionX: 120,
       positionY: 180,
-    });
+    })).rejects.toMatchObject({ status: 409 });
+    expect(assets.upload).not.toHaveBeenCalled();
+  });
 
-    expect(repository.createCanvasNode).not.toHaveBeenCalled();
-    expect(result.id).toBe("image-node-1");
-    expect(result.data).toMatchObject({
-      type: "image",
-      name: "reference.png",
-      generatorType: "resource",
-      workspaceFile: {
-        relativePath: "assets/imports/reference.png",
-        contentType: "image/png",
-        name: "reference.png",
-      },
-      url: ["/api/pipeline/canvas-nodes/image-node-1/media"],
-    });
+  it("rejects replacing a video node that already has generated content", async () => {
+    const currentNode: CanvasNode = {
+      ...videoNode(),
+      data: { ...videoNode().data!, url: ["https://media.example/current.mp4"], taskInfo: { runId: "run-video-1", status: "completed" } },
+    };
+    const repository = {
+      getCanvasNode: vi.fn().mockResolvedValue(currentNode),
+    } as unknown as PipelineRepository;
+    const assets = { upload: vi.fn() } as unknown as GenerationAssetService;
+    const service = createService(repository, {} as LlmPort, {} as GenerationRunService, assets);
+
+    await expect(service.upload({
+      projectId: "project-1",
+      nodeId: currentNode.id,
+      name: "replacement.mp4",
+      contentType: "video/mp4",
+      data: new Uint8Array([1]),
+      positionX: 120,
+      positionY: 180,
+    })).rejects.toMatchObject({ status: 409 });
+    expect(assets.upload).not.toHaveBeenCalled();
   });
 });
 
@@ -259,7 +272,7 @@ describe("CanvasStudioService asset media", () => {
   });
 
   it("rejects local replacement while the target has an upstream connection", async () => {
-    const currentNode = imageNode();
+    const currentNode = videoNode();
     const repository = {
       getCanvasNode: vi.fn().mockResolvedValue(currentNode),
       listCanvasEdges: vi.fn().mockResolvedValue([{
@@ -276,8 +289,8 @@ describe("CanvasStudioService asset media", () => {
     await expect(service.upload({
       projectId: "project-1",
       nodeId: currentNode.id,
-      name: "replacement.png",
-      contentType: "image/png",
+      name: "replacement.mp4",
+      contentType: "video/mp4",
       data: new Uint8Array([1]),
       positionX: 0,
       positionY: 0,
@@ -368,12 +381,12 @@ describe("CanvasStudioService connection policy", () => {
     expect(repository.createCanvasEdge).not.toHaveBeenCalled();
   });
 
-  it("accepts a prompt reference connection into an idle node with generated content", async () => {
+  it("rejects a prompt reference connection into a failed node without content", async () => {
     const source = { ...imageNode(), id: "source-1" };
     let target: CanvasNode = {
       ...videoNode(),
       id: "target-1",
-      data: { ...videoNode().data!, url: ["/generated.mp4"] },
+      data: { ...videoNode().data!, taskInfo: { status: "failed" } },
     };
     const edge = {
       id: "edge-prompt-1",
@@ -407,12 +420,13 @@ describe("CanvasStudioService connection policy", () => {
       baseRevision: 0,
       requestId: "prompt-reference-edge",
       mutations: [{ type: "edge.create", intent: "prompt-reference", edge }],
-    })).resolves.toMatchObject({ edges: [edge] });
+    })).rejects.toMatchObject({ status: 409 });
+    expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
   });
 });
 
 describe("CanvasStudioService image AI", () => {
-  it("stores the submitted image prompt and starts the selected text-to-image route", async () => {
+  it("stores the submitted image prompt without marking its completed result stale when the draft changes", async () => {
     let currentNode = imageNode();
     const repository = {
       getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
@@ -502,7 +516,48 @@ describe("CanvasStudioService image AI", () => {
       },
     };
     await service.syncTargetReferences(currentNode.id);
-    expect(currentNode.data?.generationProvenance?.stale).toBe(true);
+    expect(currentNode.data?.generationProvenance?.stale).toBe(false);
+  });
+
+  it("marks only a direct generated dependent stale when its referenced text changes", async () => {
+    let source = { ...textNode("Morning"), id: "text-source" };
+    let target: CanvasNode = {
+      ...imageNode(),
+      id: "image-target",
+      data: {
+        ...imageNode().data!,
+        artifactIds: ["artifact-image-1"],
+        url: ["https://media.example/image.png"],
+        taskInfo: { runId: "run-image-1", status: "completed" },
+        generationProvenance: { runId: "run-image-1", inputFingerprint: "before-text-change", stale: false },
+        params: {
+          prompt: "A morning scene",
+          textList: [{ nodeId: source.id, sourceId: source.id, sourceType: "canvas-node", mediaType: "text", label: "Text source", content: ["Morning"], referenceId: "edge:text-image", role: "reference", order: 0 }],
+          imageList: [], videoList: [], audioList: [], mixedListOrder: ["edge:text-image"],
+        },
+      },
+    };
+    const nodes = new Map([[source.id, source], [target.id, target]]);
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (nodeId: string) => nodes.get(nodeId) ?? null),
+      listCanvasEdges: vi.fn().mockResolvedValue([{
+        id: "edge:text-image", projectId: project.id, sourceNodeId: source.id, targetNodeId: target.id, edgeType: "references", role: "reference", order: 0,
+      }]),
+      updateCanvasNode: vi.fn().mockImplementation(async (nodeId: string, patch: Partial<CanvasNode>) => {
+        const current = nodes.get(nodeId)!;
+        const updated = { ...current, ...patch, updatedAt: "2026-09-03T00:00:00.000Z" };
+        nodes.set(nodeId, updated);
+        if (nodeId === source.id) source = updated;
+        if (nodeId === target.id) target = updated;
+        return updated;
+      }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await service.updateNode(source.id, { data: { ...source.data!, content: ["Evening"] } });
+
+    expect(target.data?.generationProvenance?.stale).toBe(true);
+    expect(source.data?.generationProvenance).toBeUndefined();
   });
 
   it("cancels the active run and returns the image node to an editable state", async () => {
@@ -524,7 +579,7 @@ describe("CanvasStudioService image AI", () => {
     const result = await service.cancelGeneration("image-node-1");
 
     expect(runs.cancelRun).toHaveBeenCalledWith("run-image-1");
-    expect(result.data?.taskInfo).toEqual({ status: "idle" });
+    expect(result.data?.taskInfo).toEqual({ runId: "run-image-1", status: "idle" });
   });
 
   it("rejects an unavailable route explicitly instead of silently using another model", async () => {
@@ -612,13 +667,12 @@ describe("CanvasStudioService image AI", () => {
       prompt: "Change daytime into a rainy night",
       routeId: route.id,
       settings: { aspectRatio: "4:3", resolution: "2k" },
-      createNewNode: true,
     });
 
     expect(repository.createCanvasNode).toHaveBeenCalledWith(expect.objectContaining({
       projectId: source.projectId,
       type: "image",
-      data: expect.objectContaining({ name: "Reference · AI" }),
+      data: expect.objectContaining({ name: "Reference" }),
       positionX: 700,
       positionY: 80,
     }));
@@ -635,7 +689,7 @@ describe("CanvasStudioService image AI", () => {
     }));
     expect(result).toMatchObject({
       runId: "run-image-edit-1",
-      edge: { sourceNodeId: source.id, targetNodeId: result.node.id },
+      edges: [{ sourceNodeId: source.id, targetNodeId: result.node.id }],
       node: { data: { taskInfo: { status: "processing" } } },
     });
     expect(nodes.get(source.id)).toEqual(source);
@@ -643,6 +697,93 @@ describe("CanvasStudioService image AI", () => {
 });
 
 describe("CanvasStudioService video AI", () => {
+  it("starts a failed node again with its submitted reference plan only", async () => {
+    const source: CanvasNode = {
+      ...videoNode(),
+      data: {
+        ...videoNode().data!,
+        params: { prompt: "Old prompt", routeId: "route-video-retry", settings: {} },
+        taskInfo: { runId: "run-video-failed", status: "failed", errorMessage: "provider failed" },
+      },
+    };
+    const upstream: CanvasNode = {
+      ...imageNode(),
+      id: "upstream-image",
+      data: {
+        ...imageNode().data!,
+        workspaceFile: { relativePath: "assets/input.png", contentType: "image/png", name: "input.png" },
+      },
+    };
+    const downstream = { ...textNode("Downstream"), id: "downstream-text" };
+    const replacement = {
+      ...upstream,
+      id: "replacement-image",
+      data: {
+        ...upstream.data!,
+        name: "replacement.png",
+        workspaceFile: { relativePath: "assets/replacement.png", contentType: "image/png", name: "replacement.png" },
+      },
+    };
+    const nodes = new Map([[source.id, source], [upstream.id, upstream], [replacement.id, replacement], [downstream.id, downstream]]);
+    const edges: CanvasEdge[] = [
+      { id: "edge-in", projectId: source.projectId, sourceNodeId: upstream.id, targetNodeId: source.id, edgeType: "references", role: "reference", order: 0 },
+      { id: "edge-out", projectId: source.projectId, sourceNodeId: source.id, targetNodeId: downstream.id, edgeType: "references", role: "reference", order: 0 },
+    ];
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (id: string) => nodes.get(id) ?? null),
+      listCanvasNodes: vi.fn().mockImplementation(async () => [...nodes.values()]),
+      listCanvasEdges: vi.fn().mockImplementation(async () => edges),
+      createCanvasNode: vi.fn().mockImplementation(async (input: Omit<CanvasNode, "createdAt" | "updatedAt">) => {
+        const created = { ...input, createdAt: "2026-08-21T00:00:00.000Z", updatedAt: "2026-08-21T00:00:00.000Z" };
+        nodes.set(created.id, created);
+        return created;
+      }),
+      createCanvasEdge: vi.fn().mockImplementation(async (input: Omit<CanvasEdge, "id">) => {
+        const edge = { ...input, id: `edge-new-${edges.length}` };
+        edges.push(edge);
+        return edge;
+      }),
+      updateCanvasNode: vi.fn().mockImplementation(async (id: string, patch: Partial<CanvasNode>) => {
+        const updated = { ...nodes.get(id)!, ...patch, updatedAt: "2026-08-21T00:00:01.000Z" };
+        nodes.set(id, updated);
+        return updated;
+      }),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-video-retry",
+      enabled: true,
+      isDefault: true,
+      capability: "image-to-video",
+      inputSchema: {
+        prompt: { required: true },
+        assets: [{ key: "firstFrameUrl", label: "First frame", mediaType: "image", maxFiles: 1 }],
+      },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-video-new" } }),
+    } as unknown as GenerationRunService;
+
+    const result = await createService(repository, {} as LlmPort, runs).generate(source.id, {
+      references: [{ sourceId: replacement.id, role: "reference" }],
+    });
+
+    expect(result.node.id).not.toBe(source.id);
+    expect(result.edges).toEqual([
+      expect.objectContaining({ sourceNodeId: replacement.id, targetNodeId: result.node.id }),
+    ]);
+    expect(result.edges).not.toEqual([expect.objectContaining({ sourceNodeId: upstream.id })]);
+    expect(edges.some((edge) => edge.sourceNodeId === result.node.id && edge.targetNodeId === downstream.id)).toBe(false);
+    expect(nodes.get(source.id)).toEqual(source);
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: "Old prompt",
+      routeId: route.id,
+      sourceRef: `pipeline:canvas:${result.node.id}`,
+    }));
+  });
+
   it("binds explicit first and last frame mentions to stable route slots in prompt order", async () => {
     const target = videoNode();
     const first = {
@@ -785,14 +926,45 @@ describe("CanvasStudioService video AI", () => {
     expect(runs.listRunsForContext).toHaveBeenCalledWith("pipeline:project-1");
   });
 
-  it("selects a video artifact from this node without mutating run history", async () => {
-    let current = videoNode();
+  it("retries a failed direct generation in a new node and a new run", async () => {
+    const source = {
+      ...videoNode(),
+      data: { ...videoNode().data!, taskInfo: { runId: "run-video-failed", status: "failed" as const } },
+    };
+    const target = { ...videoNode(), id: "video-node-retry" };
+    const newView = { run: { id: "run-video-new" }, jobs: [], artifacts: [] } as unknown as GenerationRunView;
     const repository = {
-      getCanvasNode: vi.fn().mockImplementation(async () => current),
+      getCanvasNode: vi.fn().mockResolvedValue(source),
+    } as unknown as PipelineRepository;
+    const runs = {
+      getRun: vi.fn().mockImplementation(async (runId: string) => runId === "run-video-failed"
+        ? { run: { id: runId, sourceRef: `pipeline:canvas:${source.id}` }, jobs: [], artifacts: [] }
+        : newView),
+      retryRun: vi.fn(),
+    } as unknown as GenerationRunService;
+    const service = createService(repository, {} as LlmPort, runs);
+    vi.spyOn(service, "generate").mockResolvedValue({ node: target, runId: "run-video-new", edges: [] });
+
+    const result = await service.retryNodeGeneration(source.id, "run-video-failed", "retry-key");
+
+    expect(service.generate).toHaveBeenCalledWith(source.id, undefined, { idempotencyKey: "retry-key" });
+    expect(runs.retryRun).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ node: target, view: newView });
+  });
+
+  it("adds a video artifact as a new node without changing the source node", async () => {
+    const current = videoNode();
+    let selected: CanvasNode | null = null;
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async (nodeId: string) => nodeId === current.id ? current : selected),
       listCanvasEdges: vi.fn().mockResolvedValue([]),
+      createCanvasNode: vi.fn().mockImplementation(async (input: CanvasNode) => {
+        selected = { ...input, createdAt: "2026-08-22T00:00:00.000Z", updatedAt: "2026-08-22T00:00:00.000Z" };
+        return selected;
+      }),
       updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
-        current = { ...current, ...patch, updatedAt: "2026-08-22T00:00:00.000Z" };
-        return current;
+        selected = { ...selected!, ...patch, updatedAt: "2026-08-22T00:00:00.000Z" };
+        return selected;
       }),
     } as unknown as PipelineRepository;
     const runs = {
@@ -838,6 +1010,20 @@ describe("CanvasStudioService video AI", () => {
         completedAt: "2026-08-21T12:00:00.000Z",
       },
     });
+    expect(result.id).not.toBe(current.id);
+    expect(current.data?.artifactIds).toBeUndefined();
+  });
+
+  it("rejects switching an image node to another historical artifact", async () => {
+    const repository = {
+      getCanvasNode: vi.fn().mockResolvedValue(imageNode()),
+    } as unknown as PipelineRepository;
+    const runs = { getRun: vi.fn() } as unknown as GenerationRunService;
+
+    await expect(createService(repository, {} as LlmPort, runs)
+      .selectNodeGenerationArtifact("image-node-1", "run-image-1", "artifact-image-1"))
+      .rejects.toMatchObject({ status: 409 });
+    expect(runs.getRun).not.toHaveBeenCalled();
   });
 
   it("rejects selecting a partial artifact from a failed video run", async () => {
@@ -967,8 +1153,8 @@ describe("CanvasStudioService video AI", () => {
     expect(current.data?.videoSelection).toBeUndefined();
   });
 
-  it("switches back to the retained upload source without deleting history", async () => {
-    let current: CanvasNode = {
+  it("adds the retained upload source as a new node without changing the generated node", async () => {
+    const current: CanvasNode = {
       ...videoNode(),
       data: {
         ...videoNode().data!,
@@ -981,12 +1167,17 @@ describe("CanvasStudioService video AI", () => {
         },
       },
     };
+    let selected: CanvasNode | null = null;
     const repository = {
-      getCanvasNode: vi.fn().mockImplementation(async () => current),
+      getCanvasNode: vi.fn().mockImplementation(async (nodeId: string) => nodeId === current.id ? current : selected),
       listCanvasEdges: vi.fn().mockResolvedValue([]),
+      createCanvasNode: vi.fn().mockImplementation(async (input: CanvasNode) => {
+        selected = { ...input, createdAt: "2026-08-22T00:00:00.000Z", updatedAt: "2026-08-22T00:00:00.000Z" };
+        return selected;
+      }),
       updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
-        current = { ...current, ...patch };
-        return current;
+        selected = { ...selected!, ...patch };
+        return selected;
       }),
     } as unknown as PipelineRepository;
 
@@ -994,11 +1185,13 @@ describe("CanvasStudioService video AI", () => {
 
     expect(result.data).toMatchObject({
       workspaceFile: { relativePath: "assets/imports/original.mp4" },
-      url: ["/api/pipeline/canvas-nodes/video-node-1/media"],
+      url: [`/api/pipeline/canvas-nodes/${result.id}/media`],
       taskInfo: { status: "idle" },
     });
     expect(result.data?.artifactIds).toBeUndefined();
     expect(result.data?.videoSelection).toBeUndefined();
+    expect(result.id).not.toBe(current.id);
+    expect(current.data?.artifactIds).toEqual(["artifact-video-2"]);
   });
 
   it("rejects a last-frame edge role without a first frame", async () => {
@@ -1024,39 +1217,6 @@ describe("CanvasStudioService video AI", () => {
       requestId: "edge-role-1",
       mutations: [{ type: "edge.update", edgeId: "edge-1", patch: { role: "last-frame" } }],
     })).rejects.toMatchObject({ status: 409 });
-    expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
-  });
-
-  it("blocks node cancellation and destructive edits owned by an active workflow", async () => {
-    const node = imageNode();
-    node.data = { ...node.data!, taskInfo: { runId: "generation-1", status: "processing" } };
-    const repository = {
-      ...repositoryStub({ applied: true, revision: 1 }),
-      getCanvasNode: vi.fn().mockResolvedValue(node),
-      listCanvasNodes: vi.fn().mockResolvedValue([node]),
-      listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([{
-        id: "workflow-1",
-        projectId: project.id,
-        status: "running",
-        nodeIds: [node.id],
-        edges: [],
-        steps: [{ nodeId: node.id, status: "running", generationRunId: "generation-1" }],
-      }]),
-    } as unknown as PipelineRepository;
-    const runs = { cancelRun: vi.fn() } as unknown as GenerationRunService;
-    const service = createService(repository, {} as LlmPort, runs);
-
-    await expect(service.cancelGeneration(node.id)).rejects.toMatchObject({
-      code: "PIPELINE_WORKFLOW_RUN_ACTIVE",
-      status: 409,
-    });
-    await expect(service.applyMutationBatch(project.id, {
-      baseRevision: 0,
-      requestId: "delete-active-workflow-node",
-      mutations: [{ type: "node.delete", nodeId: node.id }],
-    })).rejects.toMatchObject({ code: "PIPELINE_WORKFLOW_RUN_ACTIVE" });
-
-    expect(runs.cancelRun).not.toHaveBeenCalled();
     expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
   });
 

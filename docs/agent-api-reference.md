@@ -3000,8 +3000,7 @@ interface CanvasSnapshot {
 ### `POST /api/pipeline/projects/{projectId}/canvas/upload`
 
 通过 `multipart/form-data` 将本地素材导入项目。字段包括 `file`、`positionX`、`positionY`，以及可选的
-`nodeId`。未提供 `nodeId` 时创建新的媒体节点；提供后，文件媒体类型必须与目标节点一致，服务端会把
-素材写入该节点并保留节点位置、尺寸、分组和已有参数。图片、视频和音频节点使用该能力完成空节点导入和安全替换；目标节点已有入边时拒绝本地上传，避免“上游引用”和“本地文件”同时成为隐式主输入。音频文件单独限制为 10 MiB，其他素材沿用 Generation Asset 的 50 MiB 上限。音频节点会将浏览器读取到的时长、格式、采样率和声道作为 `audioMetadata` 写回画布，服务端在 mutation 边界校验这些有界元数据；波形采样不进入持久化合同，并且只在该音频节点成为唯一选中节点时按需执行。
+`nodeId`。未提供 `nodeId` 时创建新的媒体节点。提供 `nodeId` 时，文件媒体类型必须与目标节点一致，且目标必须是从未包含内容、从未生成且没有入边的空节点；任何已有本地素材、生成结果或生成记录的图片、视频、音频、文本节点都不能被上传覆盖，用户应导入为新节点。音频文件单独限制为 10 MiB，其他素材沿用 Generation Asset 的 50 MiB 上限。音频节点会将浏览器读取到的时长、格式、采样率和声道作为 `audioMetadata` 写回画布，服务端在 mutation 边界校验这些有界元数据；波形采样不进入持久化合同，并且只在该音频节点成为唯一选中节点时按需执行。
 
 #### 文本节点富文本数据
 
@@ -3043,15 +3042,18 @@ interface GenerateTextNodeRequest {
 ```ts
 interface GenerateTextNodeResponse {
   node: CanvasNode;
+  edges?: CanvasEdge[];
 }
 ```
 
 - `instruction` 去除首尾空白后不能为空，最大 20,000 字符。
+- `references?: Array<{ sourceId; role }>` 提供时只会作为新节点的上游连线，旧节点的连线不会被修改；省略时沿用当前节点已有连线。
 - `promptDocument` 使用下文的语义资源引用；文本生成当前只接受文本资源，不能把图片、视频或音频伪装成文本模型输入。
-- `revise` 要求节点已经包含文本；模型必须返回修改后的完整内容，而不是差异片段。
+- `revise` 要求源节点已经包含文本；服务端创建新文本节点，将源文本作为输入并保留源节点。模型必须返回修改后的完整内容，而不是差异片段。
 - 指定 `model` 时必须对应 `/api/models` 返回的可用模型；省略时由模型运行时选择默认可用模型。
 - 连入该节点的上游文本节点会作为参考材料加入请求；当前版本不会把图片 URL 伪装成视觉模型输入。
-- 成功响应会同时更新 `textDocument`、兼容 `content`、最后一次 instruction/model 和任务状态。
+- 从未生成的空节点承载第一次生成；已有内容或已有生成尝试的节点再次生成时返回新节点及其输入连线。
+- 成功响应会同时更新目标节点的 `textDocument`、兼容 `content`、最后一次 instruction/model 和任务状态。
 - 生成结果为空或超过 200,000 字符时请求失败，并将节点任务状态标记为 `failed`。
 
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/generate`
@@ -3062,9 +3064,8 @@ interface GenerateTextNodeResponse {
 interface GenerateCanvasNodeRequest {
   prompt?: string;
   promptDocument?: CanvasPromptDocument;
+  references?: Array<{ sourceId: string; role: "reference" | "first-frame" | "last-frame" }>;
   routeId?: string;
-  // 仅用于已有图片：保留源节点，并在旁边创建一个图生图结果节点。
-  createNewNode?: boolean;
   settings?: Record<string, string | number | boolean | Array<string | number | boolean>>;
   // 仅用于可灵对口型；来自下述准备接口，供应商 sessionId/faceId 不下发浏览器。
   lipSync?: { preparationId: string; faceKey: string };
@@ -3091,6 +3092,7 @@ interface CanvasResourceReferenceAttrs {
 }
 ```
 
+- `references` 是已生成节点的 Composer 引用草稿。提供它时，服务端只为新节点建立其中的画布连线，不会复制旧节点的入边；省略时保留旧的兼容行为。
 - 服务端只信任 `sourceType + sourceId`，并重新校验资源属于当前项目、媒体类型一致且文件仍可用。
 - 编译器按资源在提示词中的首次出现顺序生成 `图片1`、`图片2` 等模型令牌；重复引用同一资源会复用编号。
 - 每个输入文件携带 `bindingId` 和显式 `order`，Provider 适配器按该顺序构造 URL 数组，因此上传完成顺序不会改变提示词与文件的对应关系。
@@ -3102,21 +3104,21 @@ interface CanvasResourceReferenceAttrs {
 interface GenerateCanvasNodeResponse {
   node: CanvasNode;
   runId?: string;
-  edge?: CanvasEdge;
+  edges?: CanvasEdge[];
 }
 ```
 
 - 图片节点没有上游图片参考时使用 `text-to-image` Route；音频节点连接视频素材后使用 `video-to-audio` Route。
 - 视频节点选择可灵对口型 Route 时使用 `audio-to-video`：必须连接且仅连接一个人物视频和一个配音音频。服务端以视频内容指纹复用人脸识别准备态；单人脸可直接续跑，多人脸需要客户端明确提交所选人物。
-- 对已有图片提交 `createNewNode: true` 时，服务端保留源节点，在其右侧寻找空位创建结果节点，以源图片作为 `image-to-image` 输入，并返回两节点之间的来源连线。失败或取消只影响新节点。
+- 从未生成的空节点承载第一次生成。节点已有内容，或已经成功、失败、取消过一次生成时，服务端在旁边创建同类型节点并启动新的 Run；源节点不被覆盖。新节点复制有效入边，不复制出边。已有图片执行修改时只把当前图片作为直接图生图输入。
 - 视频提示词中标记为 `first-frame` / `last-frame` 的图片优先绑定 Route Schema 声明的对应语义槽；普通图片、视频或音频参考按媒体类型绑定 Schema 中唯一或标准命名的槽位。最终 capability 以用户选定且可用的 Route 为准；未选 Route 时才按引用类型选择默认能力。
 - Route Schema 的必填素材槽、最大文件数和全部参数字段会在 Composer 中即时校验；服务端仍会再次校验请求，且只把 Schema 声明并通过类型/范围检查的参数转发给 Provider。
 - `routeId` 必须对应已启用且能力匹配的生成路线；省略时使用该能力的默认路线。
-- 图片、视频和音频处理参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态同时持久化到当前节点。
+- 图片、视频和音频处理参数只按所选 Route Schema 声明的字段提交；画布不会额外合成比例、宽高或供应商参数。生成配置与任务状态持久化到本次实际生成的目标节点。
 - 同一节点已有排队或执行中的任务时拒绝重复生成。
 - 生成完成或失败后通过项目 SSE 通知客户端重新读取 Canvas Snapshot。
 - 画布生成时由应用层为 Prompt、Route、参数、引用顺序/角色及引用资源版本计算输入指纹，并随 Run 输入持久化；该字段是服务端审计信息，不接受客户端指定。
-- 成功结果在节点 `data.generationProvenance` 中只保存当前 Run、输入指纹和 `stale` 状态。上游资源、Prompt、Route 或参数变化时服务端重算状态，图片和视频节点共同显示“旧版本”，但不会清空结果或自动重新生成。
+- 成功结果在节点 `data.generationProvenance` 中保存当前 Run、输入指纹和 `stale` 状态。只有被直接引用的文本节点正文原地修改时，服务端才重新比较该下游结果的输入指纹并显示“旧版本”；提示词、Route、参数、布局、媒体元数据、引用边变化及媒体节点再次生成都不会标记已有结果，后者会创建新节点。
 
 ### 可灵对口型人脸准备
 
@@ -3149,7 +3151,7 @@ interface LipSyncPreparationDto {
 
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/cancel-generation`
 
-取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点没有活动 Run 时返回冲突错误。
+取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点保留已取消 Run 的 ID，因此再次生成会创建新节点。节点没有活动 Run 时返回冲突错误。
 
 ### 视频节点 Generation Run / Take
 
@@ -3167,12 +3169,12 @@ GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/media
 ```
 
 - 列表接口只返回 `sourceRef === pipeline:canvas:{nodeId}` 的 Run，并按创建时间倒序返回标准 `GenerationRunViewDto[]`。
-- `select` 请求体为 `{ artifactId: string }`。Run 必须属于该节点，Artifact 必须属于该 Run 且媒体类型与节点一致；选择仅移动当前 Take 指针，不修改或删除历史。
-- `retry` 请求体为 `{ idempotencyKey: string }`。它复用原 Run 的输入创建下一次 Provider Job，并把节点任务状态恢复为 `processing`；重试可能产生费用。
+- `select` 请求体为 `{ artifactId: string }`。该能力只用于视频和音频节点；图片结果需要作为新图片节点加入画布。Run 必须属于该节点，Artifact 必须属于该 Run 且媒体类型与节点一致；选择会以该 Artifact 创建一个新的资源节点，源节点、历史和已有连线均不会被修改。
+- `retry` 请求体为 `{ idempotencyKey: string }`。它以原节点当前保存的输入创建新节点和新的 Generation Run，原失败节点保持不变；重试可能产生费用。
 - Artifact media 接口同样校验 Run 与节点的 `sourceRef` 归属，只读取项目已注册 workspace root 内的本地结果。
-- 节点保留本地上传源时，历史面板将其与生成 Take 统一展示；`upload-source/select` 可无损切回上传源，media 接口始终读取原上传文件，不受当前 Take 影响。
-- 切换 Take 后 `/api/pipeline/canvas-nodes/{nodeId}/media` 优先读取当前选中的 `artifactIds[0]`，不会被最后一次失败或重试 Run 覆盖。
-- 上游节点内容更新时，服务端会重建直接下游节点的引用快照、比较输入指纹并发出 `node_updated` SSE；前端只消费服务端 `stale` 状态，同时保留视频供比较和再次生成。
+- 节点保留本地上传源时，历史面板将其与生成 Take 统一展示；`upload-source/select` 会以该上传源创建新的资源节点，media 接口始终读取原上传文件。
+- 新建的 Take 节点通过自身的 `artifactIds[0]` 读取对应结果，不会改变来源节点当前展示的媒体。
+- 文本正文原地更新时，服务端会重建直接下游节点的引用快照、比较输入指纹并发出 `node_updated` SSE；该检查只覆盖直接下游，不递归传播。前端只消费服务端 `stale` 状态，同时保留结果供比较和再次生成。
 
 ### `GET /api/pipeline/assets/{assetId}/media`
 
@@ -3216,40 +3218,9 @@ type CanvasMutation =
 - 成功后 revision 增加 `1`，响应返回完整的最新 `CanvasSnapshot`。
 - revision 不一致时返回 HTTP `409` 和错误码 `PIPELINE_CANVAS_REVISION_CONFLICT`。
 - 所有节点和 edge 必须属于 URL 指定的项目；跨项目端点会被拒绝。
-- `edge.create` 缺省按 `connect` 处理：仅空闲且无内容的目标节点可接受新入边，并拒绝自连、重复边和环路。
-- `edge.create` 使用 `prompt-reference` 时允许为已有内容的空闲目标节点建立 `@` 引用连线；仍拒绝生成中的目标节点、自连、重复边和环路。
+- `edge.create` 的 `connect` 与 `prompt-reference` 都只允许指向从未生成、空闲且无内容的目标节点，并拒绝自连、重复边和环路。已有结果、已有 Run 或失败过的节点必须通过 Composer 引用草稿生成新节点。
 - `restore` 仅用于撤销、重做、复制或工作流恢复已有拓扑；它可恢复指向已有内容节点的边，但不会绕过项目、重复边和环路校验。
 
 ### Canvas 自动保存
 
 前端 Pipeline Studio feature 将交互产生的 mutation 暂存在 feature-scoped Zustand Store 中，并在短暂防抖后提交。保存期间继续产生的操作保留在下一批中，不会被上一批响应覆盖。浏览器刷新后重新通过 Canvas Snapshot 恢复节点、连线、viewport 和 revision。
-
-### Workflow Run
-
-Pipeline Studio 可以把当前明确选中的生成节点作为一次持久化 Workflow Run 执行。Run 在启动时冻结节点 ID 和内部边拓扑；每个步骤关联现有 Generation Run，Provider Job 和 Artifact 仍以 Generation API 的记录为事实来源。
-
-创建 Run 会在任何 Generation Run 入库前预检全部所选步骤；任一静态 Route、Provider、Prompt、参数或素材槽位无效时，整个请求失败且不会启动付费任务。项目数据库保证同一项目最多有一个活动 Workflow Run。活动 Run 覆盖的节点数据和连接不可修改或删除，节点也不能通过单节点接口取消；应使用 Workflow Run cancel 接口统一取消。
-
-```text
-GET  /api/pipeline/projects/{projectId}/canvas/workflow-runs?limit=1
-POST /api/pipeline/projects/{projectId}/canvas/workflow-runs
-GET  /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}
-POST /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}/cancel
-POST /api/pipeline/projects/{projectId}/canvas/workflow-runs/{runId}/retry
-```
-
-创建请求：
-
-```ts
-interface CreateCanvasWorkflowRunRequest {
-  nodeIds: string[];
-}
-```
-
-`nodeIds` 接受 1–100 个当前项目节点。application 层过滤其中真正可生成的文本、图片和视频节点，并在任何 Generation Run 创建前拒绝空选区、跨项目节点、环路、重复活动运行和已经单独生成中的节点。
-
-Workflow Run 状态为 `pending | running | completed | failed | cancelling | cancelled`；Step 状态为 `pending | running | completed | failed | cancelled`。失败不会回滚已完成步骤，尚未执行的下游保持 `pending`。显式重试复用失败媒体节点的 Generation Run retry 语义，并从失败步骤继续；已完成步骤不会重复付费执行。
-
-取消会阻止等待步骤启动，并通过现有 Generation Run 取消用例处理活动媒体任务。供应商已经接受任务时，仍遵守 Generation API 的取消与计费限制。
-
-项目重新打开或读取 Workflow Run 列表时，application 会读取活动 Run，并按关联 Generation Run 的持久化状态恢复成功、失败、取消或继续运行的步骤。恢复操作使用稳定幂等键，不能为同一步骤重复创建 Provider 任务。

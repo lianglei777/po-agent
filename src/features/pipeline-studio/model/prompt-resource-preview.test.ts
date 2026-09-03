@@ -45,6 +45,26 @@ describe("prompt resource previews", () => {
     expect(promptDocumentPreviewReferences(document).map((item) => item.referenceId)).toEqual(["ref-1", "ref-3"]);
   });
 
+  it("renders a connection draft without treating the old node edge as mutable", () => {
+    const source = canvasNode("node-1", "image", "图一");
+    const target = canvasNode("target", "video", "目标");
+    const bindings = promptResourceBindings(target.id, [source, target], [], [], [{
+      referenceId: "draft:node-1",
+      sourceType: "canvas-node",
+      sourceId: source.id,
+      mediaType: "image",
+      label: "图一",
+      role: "first-frame",
+    }]);
+
+    expect(bindings).toEqual([expect.objectContaining({
+      key: "canvas-node:node-1",
+      edgeIds: [],
+      promptReferenceIds: [],
+      reference: expect.objectContaining({ role: "first-frame" }),
+    })]);
+  });
+
   it("resolves canvas and project asset media without persisting preview URLs", () => {
     const canvasReference = promptDocumentPreviewReferences(document)[0]!;
     expect(resolvePromptResourcePreview(canvasReference, [{

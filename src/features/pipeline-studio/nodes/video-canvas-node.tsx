@@ -4,12 +4,12 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { App, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Clock3, Copy, Download, FileVideo, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { AlertTriangle, Clock3, Copy, Download, FileVideo, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
 import { videoNodeToolbarPresentation } from "../model/node-interaction";
-import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
+import { useCanvasStore } from "../state/canvas-store";
 import { VideoAiComposer } from "./video-ai-composer";
 import { VideoGenerationHistory } from "./video-generation-history";
 import { CanvasNodeConnectionHandle } from "./shared/canvas-node-connection-handle";
@@ -33,6 +33,7 @@ export function VideoCanvasNode({
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
+  const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
   const singleSelected = useCanvasStore((state) => state.selectedNodeIds.length === 1 && state.selectedNodeIds[0] === id);
   const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
   const activateNodeComposer = useCanvasStore((state) => state.activateNodeComposer);
@@ -45,7 +46,6 @@ export function VideoCanvasNode({
     [canvasEdges, id],
   );
   const hasIncomingConnection = incomingEdges.length > 0;
-  const videoDraft = useCanvasStore((state) => state.composerDrafts[composerDraftKey(id, "video")]);
   const awaitingNodeCreation = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" && mutation.node.id === id
   )));
@@ -60,19 +60,15 @@ export function VideoCanvasNode({
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [composerInputDirty, setComposerInputDirty] = useState(false);
   const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
   const mediaSource = resolveCanvasMediaSource(id, canvas);
   const mediaUrl = mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
   const hasVideo = Boolean(mediaUrl);
   const hasGenerationHistory = Boolean(canvas?.workspaceFile || canvas?.artifactIds?.length || canvas?.taskInfo?.runId);
+  const canUploadIntoNode = !hasVideo && !hasGenerationHistory && !hasIncomingConnection;
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
-  const hasLocalInputChanges = Boolean(
-    (videoDraft && JSON.stringify(videoDraft) !== JSON.stringify(canvas?.params?.promptDocument))
-    || composerInputDirty,
-  );
-  const outputStale = Boolean(canvas?.generationProvenance?.stale || hasLocalInputChanges);
+  const outputStale = Boolean(canvas?.generationProvenance?.stale);
   const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
   const toolbarPresentation = videoNodeToolbarPresentation({
     selected: singleSelected,
@@ -94,7 +90,7 @@ export function VideoCanvasNode({
   }, []);
 
   const uploadVideo = useCallback(async (file: File) => {
-    if (hasIncomingConnection) {
+    if (!canUploadIntoNode) {
       void message.warning(t.pipeline.canvasUploadBlockedByConnection);
       return;
     }
@@ -119,7 +115,7 @@ export function VideoCanvasNode({
       setUploading(false);
       setNodeUploading(id, false);
     }
-  }, [hasIncomingConnection, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeVideoOnlyError]);
+  }, [canUploadIntoNode, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeVideoOnlyError]);
 
   if (!canvas || canvas.type !== "video") return null;
 
@@ -140,8 +136,8 @@ export function VideoCanvasNode({
       onDragOver={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        event.dataTransfer.dropEffect = hasIncomingConnection ? "none" : "copy";
-        setDragActive(!hasIncomingConnection);
+        event.dataTransfer.dropEffect = canUploadIntoNode ? "copy" : "none";
+        setDragActive(canUploadIntoNode);
       }}
       onDragLeave={(event) => {
         const nextTarget = event.relatedTarget;
@@ -151,7 +147,7 @@ export function VideoCanvasNode({
         event.preventDefault();
         event.stopPropagation();
         setDragActive(false);
-        if (hasIncomingConnection) {
+        if (!canUploadIntoNode) {
           void message.warning(t.pipeline.canvasUploadBlockedByConnection);
           return;
         }
@@ -163,7 +159,7 @@ export function VideoCanvasNode({
         ref={inputRef}
         type="file"
         accept="video/*"
-        disabled={hasIncomingConnection}
+        disabled={!canUploadIntoNode}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -196,13 +192,6 @@ export function VideoCanvasNode({
           ) : null}
           {hasVideo ? (
             <>
-          <CanvasNodeToolbarButton
-            label={t.pipeline.nodeVideoReplace}
-            icon={<RefreshCw className="size-4" />}
-            onClick={() => inputRef.current?.click()}
-            disabled={hasIncomingConnection}
-            disabledReason={t.pipeline.canvasUploadBlockedByConnection}
-          />
           <CanvasNodeToolbarButton label={t.pipeline.nodeVideoDownload} icon={<Download className="size-4" />} onClick={downloadVideo} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
           <CanvasNodeToolbarButton danger disabled={workflowLocked} disabledReason={t.pipeline.canvasWorkflowNodeLocked} label={t.pipeline.nodeDelete} icon={<Trash2 className="size-4" />} onClick={() => deleteNodes([id])} />
@@ -231,7 +220,7 @@ export function VideoCanvasNode({
                   <span className="inline-flex">
                     <button
                       type="button"
-                      disabled={hasIncomingConnection}
+                  disabled={!canUploadIntoNode}
                       onClick={() => inputRef.current?.click()}
                       className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                     >
@@ -259,7 +248,7 @@ export function VideoCanvasNode({
         ) : null}
         {dragActive && !uploading ? (
           <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)] px-5 text-center text-sm font-medium text-[var(--pl-accent-hover)]">
-            {hasVideo ? t.pipeline.nodeVideoDropReplace : t.pipeline.nodeVideoDropHere}
+            {t.pipeline.nodeVideoDropHere}
           </div>
         ) : null}
         {mediaUrl ? (
@@ -348,11 +337,10 @@ export function VideoCanvasNode({
           data={canvas}
           waitingForSave={waitingForSave}
           workflowLocked={workflowLocked}
-          onNodeUpdate={(serverNode) => {
-            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
-            setComposerInputDirty(false);
+          onNodeUpdate={(serverNode, edges) => {
+            if (serverNode.id !== id) insertServerGenerationResult(serverNode, edges);
+            else if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}
-          onInputDirtyChange={setComposerInputDirty}
         />
       ) : null}
 
@@ -360,8 +348,12 @@ export function VideoCanvasNode({
         node={node}
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        onNodeUpdate={(serverNode) => {
-          if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+        onNodeUpdate={(serverNode, edges) => {
+          if (serverNode.id !== id) {
+            if (edges?.length) insertServerGenerationResult(serverNode, edges);
+            else insertServerNode(serverNode);
+          }
+          else if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
         }}
       />
     </article>

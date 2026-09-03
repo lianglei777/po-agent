@@ -7,7 +7,7 @@ describe("video generation history", () => {
     expect(videoGenerationHistoryAction("cancelled", true)).toBe("retry");
   });
 
-  it("allows only completed video artifacts to become the current Take", () => {
+  it("allows only completed video artifacts to be added as a new node", () => {
     expect(videoGenerationHistoryAction("succeeded", true)).toBe("select");
     expect(videoGenerationHistoryAction("running", true)).toBeNull();
     expect(videoGenerationHistoryAction("succeeded", false)).toBeNull();

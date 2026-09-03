@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { App, Drawer, Dropdown, Input, Modal, Slider, Tooltip } from "antd";
-import { canvasWorkflowNodeIsRunnable, type CanvasMediaType, type CanvasNode, type CanvasWorkflowRun } from "@/contracts/pipeline";
+import { type CanvasMediaType, type CanvasNode } from "@/contracts/pipeline";
 import {
   ArrowLeft,
   ChevronDown,
@@ -30,12 +30,6 @@ import {
   Project,
   LineSquiggle,
   FileVideo,
-  AlertTriangle,
-  CheckCircle2,
-  LoaderCircle,
-  PlayCircle,
-  RefreshCw,
-  Square,
 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -43,7 +37,6 @@ import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
 import { reconcileStudioFlowNodes, type StudioFlowNode } from "../model/studio-flow-nodes";
 import { getCanvasZoomShortcut, isPlainCanvasShortcut, resolveCanvasDeleteSelection } from "../model/canvas-shortcuts";
 import { canvasConnectionProblem, connectedCanvasEdgeIds } from "../model/canvas-connection-policy";
-import { canvasWorkflowRunIsActive, canvasWorkflowRunProgress } from "../model/workflow-run";
 import { studioNodeTypes } from "../nodes/studio-canvas-node";
 import { CanvasShortcutsPopover } from "./canvas-shortcuts-popover";
 import { CanvasAssetBrowser } from "./canvas-asset-browser";
@@ -70,26 +63,16 @@ type ClipboardBundle = {
 export function StudioCanvas({
   projectId,
   projectTitle,
-  workflowRun,
-  workflowRunBusy,
   onBack,
   onRenameProject,
-  onRunWorkflow,
-  onCancelWorkflow,
-  onRetryWorkflow,
 }: {
   projectId: string;
   projectTitle: string;
-  workflowRun: CanvasWorkflowRun | null;
-  workflowRunBusy: boolean;
   onBack: () => void;
   onRenameProject: (title: string) => Promise<void>;
-  onRunWorkflow: (nodeIds: string[]) => Promise<CanvasWorkflowRun>;
-  onCancelWorkflow: () => Promise<CanvasWorkflowRun | null>;
-  onRetryWorkflow: () => Promise<CanvasWorkflowRun | null>;
 }) {
   const { t } = useI18n();
-  const { message, modal } = App.useApp();
+  const { message } = App.useApp();
   const store = useCanvasStoreApi();
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
@@ -131,23 +114,6 @@ export function StudioCanvas({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [previewZoom, setPreviewZoom] = useState<number | null>(null);
   const displayZoom = previewZoom ?? viewport.zoom;
-  const workflowActive = canvasWorkflowRunIsActive(workflowRun);
-  const selectedRunnableNodes = nodes.filter((node) => (
-    selectedNodeIds.includes(node.id) && node.data && canvasWorkflowNodeIsRunnable(node.data)
-  ));
-  const workflowRunDisabledReason = selectedNodeIds.length === 0
-    ? t.pipeline.canvasWorkflowSelectNodes
-    : selectedRunnableNodes.length === 0
-      ? t.pipeline.canvasWorkflowNoRunnableNodes
-      : selectedRunnableNodes.some((node) => node.data?.taskInfo?.status === "queued" || node.data?.taskInfo?.status === "processing")
-        ? t.pipeline.canvasWorkflowNodeBusy
-    : saveState === "idle" || saveState === "saving"
-      ? t.pipeline.canvasWorkflowWaitForSave
-      : saveState === "error"
-        ? t.pipeline.canvasWorkflowResolveSaveError
-      : workflowActive
-        ? t.pipeline.canvasWorkflowAlreadyRunning
-        : "";
   const defaultNodeNames = useMemo<Record<CanvasMediaType, string>>(() => ({
     text: t.pipeline.nodeText,
     image: t.pipeline.nodeImage,
@@ -214,7 +180,6 @@ export function StudioCanvas({
   const uploadFiles = useCallback(async (
     files: File[],
     position?: { x: number; y: number },
-    targetNodeId?: string,
   ) => {
     if (!files.length) return;
     const instance = instanceRef.current;
@@ -228,7 +193,6 @@ export function StudioCanvas({
           files[index],
           origin.x + index * 36,
           origin.y + index * 36,
-          index === 0 ? targetNodeId : undefined,
         );
         insertServerNode(result.node);
       }
@@ -366,18 +330,7 @@ export function StudioCanvas({
       if (isEditingTarget(event.target)) return;
       const files = Array.from(event.clipboardData?.files ?? []);
       if (!files.length) return;
-      const selectedImage = selectedNodeIds.length === 1
-        ? nodes.find((node) => node.id === selectedNodeIds[0] && node.data?.type === "image")
-        : undefined;
-      if (selectedImage && edges.some((edge) => edge.targetNodeId === selectedImage.id)) {
-        event.preventDefault();
-        void message.warning(t.pipeline.canvasUploadBlockedByConnection);
-        return;
-      }
-      const targetNodeId = files.length === 1 && files[0].type.startsWith("image/")
-        ? selectedImage?.id
-        : undefined;
-      void uploadFiles(files, undefined, targetNodeId);
+      void uploadFiles(files);
     };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("paste", handlePaste);
@@ -385,7 +338,7 @@ export function StudioCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("paste", handlePaste);
     };
-  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, edges, message, nodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, t.pipeline.canvasUploadBlockedByConnection, undo, uploadFiles, zoomInCanvas, zoomOutCanvas]);
+  }, [activeSelectedEdgeId, copySelection, deleteNodes, duplicateNodes, pasteSelection, redo, removeEdge, selectedNodeIds, setInteractionMode, setSelection, undo, uploadFiles, zoomInCanvas, zoomOutCanvas]);
 
   const handleNodesChange = useCallback((changes: NodeChange<StudioFlowNode>[]) => {
     setReactFlowNodes((currentNodes) => {
@@ -432,65 +385,6 @@ export function StudioCanvas({
     setCreateMenu({ screenX: event.clientX, screenY: event.clientY, flowX: flow.x, flowY: flow.y });
   }, []);
 
-  const startWorkflow = useCallback(async () => {
-    if (workflowRunDisabledReason || workflowRunBusy) return;
-    const confirmed = await modal.confirm({
-      cancelText: t.common.cancel,
-      centered: true,
-      content: t.pipeline.canvasWorkflowConfirmDescription,
-      focusable: { autoFocusButton: "cancel" },
-      keyboard: false,
-      mask: { closable: false },
-      okText: t.common.confirm,
-      title: t.pipeline.canvasWorkflowConfirmTitle,
-    });
-    if (!confirmed) return;
-    try {
-      await onRunWorkflow(selectedRunnableNodes.map((node) => node.id));
-    } catch (workflowError) {
-      message.error(workflowError instanceof Error ? workflowError.message : t.pipeline.canvasWorkflowStartFailed);
-    }
-  }, [message, modal, onRunWorkflow, selectedRunnableNodes, t.common.cancel, t.common.confirm, t.pipeline.canvasWorkflowConfirmDescription, t.pipeline.canvasWorkflowConfirmTitle, t.pipeline.canvasWorkflowStartFailed, workflowRunBusy, workflowRunDisabledReason]);
-
-  const cancelWorkflow = useCallback(async () => {
-    const confirmed = await modal.confirm({
-      cancelText: t.common.cancel,
-      centered: true,
-      content: t.pipeline.canvasWorkflowCancelConfirm,
-      focusable: { autoFocusButton: "cancel" },
-      keyboard: false,
-      mask: { closable: false },
-      okButtonProps: { danger: true },
-      okText: t.pipeline.canvasWorkflowCancel,
-      title: t.pipeline.canvasWorkflowCancel,
-    });
-    if (!confirmed) return;
-    try {
-      await onCancelWorkflow();
-    } catch (workflowError) {
-      message.error(workflowError instanceof Error ? workflowError.message : t.pipeline.canvasWorkflowCancelFailed);
-    }
-  }, [message, modal, onCancelWorkflow, t.common.cancel, t.pipeline.canvasWorkflowCancel, t.pipeline.canvasWorkflowCancelConfirm, t.pipeline.canvasWorkflowCancelFailed]);
-
-  const retryWorkflow = useCallback(async () => {
-    const confirmed = await modal.confirm({
-      cancelText: t.common.cancel,
-      centered: true,
-      content: t.pipeline.canvasWorkflowRetryConfirm,
-      focusable: { autoFocusButton: "cancel" },
-      keyboard: false,
-      mask: { closable: false },
-      okText: t.pipeline.canvasWorkflowRetry,
-      title: t.pipeline.canvasWorkflowRetry,
-    });
-    if (!confirmed) return;
-    try {
-      await onRetryWorkflow();
-    } catch (workflowError) {
-      message.error(workflowError instanceof Error ? workflowError.message : t.pipeline.canvasWorkflowRetryFailed);
-    }
-  }, [message, modal, onRetryWorkflow, t.common.cancel, t.pipeline.canvasWorkflowRetry, t.pipeline.canvasWorkflowRetryConfirm, t.pipeline.canvasWorkflowRetryFailed]);
-
   if (!loaded) {
     return <div className="flex h-full flex-1 items-center justify-center bg-[var(--pl-surface)] text-sm text-[var(--pl-text-muted)]">{t.pipeline.canvasLoading}</div>;
   }
@@ -504,16 +398,6 @@ export function StudioCanvas({
         onRename={() => { setRenameValue(projectTitle); setRenameOpen(true); }}
         onFit={() => instanceRef.current?.fitView({ padding: 0.2, duration: 220 })}
       />
-
-      {workflowRun ? (
-        <WorkflowRunStatusBar
-          busy={workflowRunBusy}
-          nodes={nodes}
-          onCancel={() => void cancelWorkflow()}
-          onRetry={() => void retryWorkflow()}
-          run={workflowRun}
-        />
-      ) : null}
 
       <div
         className="h-full w-full"
@@ -632,8 +516,6 @@ export function StudioCanvas({
 
       {editingNodeId === null ? (
         <BottomCenterToolbar
-          disabledReason={workflowRunDisabledReason}
-          running={workflowRunBusy || workflowActive}
           onCreate={() => {
             const instance = instanceRef.current;
             const center = instance
@@ -641,7 +523,6 @@ export function StudioCanvas({
               : { x: 200, y: 160 };
             setCreateMenu({ screenX: window.innerWidth / 2 - 90, screenY: window.innerHeight - 150, flowX: center.x, flowY: center.y });
           }}
-          onRun={() => void startWorkflow()}
         />
       ) : null}
 
@@ -832,104 +713,14 @@ function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisib
     </div>
   );
 }
-function WorkflowRunStatusBar({ run, nodes, busy, onCancel, onRetry }: {
-  run: CanvasWorkflowRun;
-  nodes: CanvasNode[];
-  busy: boolean;
-  onCancel: () => void;
-  onRetry: () => void;
-}) {
-  const { t } = useI18n();
-  const progress = canvasWorkflowRunProgress(run);
-  const activeStep = run.steps.find((step) => step.status === "running");
-  const failedStep = run.steps.find((step) => step.status === "failed");
-  const activeNode = nodes.find((node) => node.id === activeStep?.nodeId);
-  const failedNode = nodes.find((node) => node.id === failedStep?.nodeId);
-  const hasRunningStep = run.steps.some((step) => step.status === "running");
-  const presentation = workflowRunPresentation(run.status, t.pipeline);
-  const detail = run.status === "failed"
-    ? failedNode?.data?.name && run.errorMessage
-      ? t.pipeline.canvasWorkflowFailureDetail
-        .replace("{name}", failedNode.data.name)
-        .replace("{message}", run.errorMessage)
-      : failedNode?.data?.name ?? run.errorMessage
-    : activeNode?.data?.name
-      ? t.pipeline.canvasWorkflowCurrentNode.replace("{name}", activeNode.data.name)
-      : t.pipeline.canvasWorkflowProgress
-        .replace("{completed}", String(progress.completed))
-        .replace("{total}", String(progress.total));
-
-  return (
-    <aside
-      aria-live="polite"
-      className="pointer-events-auto absolute right-4 top-4 z-30 flex min-h-10 max-w-[min(440px,calc(100%-32px))] items-center gap-2 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 px-2.5 py-1.5 shadow-[var(--pl-shadow-card)] backdrop-blur"
-    >
-      <span className={presentation.iconClass}>{presentation.icon}</span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="text-caption font-semibold text-[var(--pl-text)]">{presentation.label}</span>
-          <span className="font-mono text-caption tabular-nums text-[var(--pl-text-muted)]">
-            {t.pipeline.canvasWorkflowProgress
-              .replace("{completed}", String(progress.completed))
-              .replace("{total}", String(progress.total))}
-          </span>
-        </div>
-        {detail ? <p className="truncate text-caption text-[var(--pl-text-muted)]">{detail}</p> : null}
-      </div>
-      {run.status === "pending" || run.status === "running" || run.status === "cancelling" || (run.status === "failed" && hasRunningStep) ? (
-        <Tooltip title={t.pipeline.canvasWorkflowCancel}>
-          <span>
-            <button
-              aria-label={t.pipeline.canvasWorkflowCancel}
-              className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-danger)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={busy || run.status === "cancelling"}
-              onClick={onCancel}
-              type="button"
-            >
-              {busy || run.status === "cancelling" ? <LoaderCircle className="size-4 animate-spin" /> : <Square className="size-3.5" />}
-            </button>
-          </span>
-        </Tooltip>
-      ) : run.status === "failed" ? (
-        <Tooltip title={hasRunningStep ? t.pipeline.canvasWorkflowWaitForActiveSteps : t.pipeline.canvasWorkflowRetry}>
-          <span>
-            <button
-              aria-label={t.pipeline.canvasWorkflowRetry}
-              className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-caption font-medium text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={busy || hasRunningStep}
-              onClick={onRetry}
-              type="button"
-            >
-              {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-              {t.pipeline.canvasWorkflowRetry}
-            </button>
-          </span>
-        </Tooltip>
-      ) : null}
-    </aside>
-  );
-}
-
-function BottomCenterToolbar({ disabledReason, running, onCreate, onRun }: {
-  disabledReason: string;
-  running: boolean;
+function BottomCenterToolbar({ onCreate }: {
   onCreate: () => void;
-  onRun: () => void;
 }) {
   const { t } = useI18n();
   return (
     <div className="absolute bottom-4 left-1/2 z-30 flex h-10 -translate-x-1/2 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-hover)] backdrop-blur" onClick={(event) => event.stopPropagation()}>
       <ToolButton title={t.pipeline.canvasAddNode} icon={<Plus className="size-5" />} onClick={onCreate} />
       <CanvasShortcutsPopover />
-      <div className="mx-0.5 h-5 w-px bg-[var(--pl-border)]" />
-      <ToolButton
-        disabled={Boolean(disabledReason) || running}
-        icon={running ? <LoaderCircle className="size-4 animate-spin" /> : <PlayCircle className="size-4" />}
-        label={t.pipeline.canvasWorkflowRunSelected}
-        onClick={onRun}
-        primary
-        title={disabledReason || t.pipeline.canvasWorkflowRunSelected}
-      />
     </div>
   );
 }
@@ -949,14 +740,6 @@ function ToolButton({ title, icon, label, active, primary, disabled, onClick }: 
       </span>
     </Tooltip>
   );
-}
-
-function workflowRunPresentation(status: CanvasWorkflowRun["status"], copy: ReturnType<typeof useI18n>["t"]["pipeline"]) {
-  if (status === "completed") return { label: copy.canvasWorkflowCompleted, icon: <CheckCircle2 className="size-4" />, iconClass: "text-[var(--pl-success)]" };
-  if (status === "failed") return { label: copy.canvasWorkflowFailed, icon: <AlertTriangle className="size-4" />, iconClass: "text-[var(--pl-danger)]" };
-  if (status === "cancelled") return { label: copy.canvasWorkflowCancelled, icon: <Square className="size-3.5" />, iconClass: "text-[var(--pl-text-muted)]" };
-  if (status === "cancelling") return { label: copy.canvasWorkflowCancelling, icon: <LoaderCircle className="size-4 animate-spin" />, iconClass: "text-[var(--pl-warn)]" };
-  return { label: copy.canvasWorkflowRunning, icon: <LoaderCircle className="size-4 animate-spin" />, iconClass: "text-[var(--pl-accent)]" };
 }
 
 function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number; screenY: number; onCreate: (type: CanvasMediaType) => void; onUpload: () => void }) {

@@ -9,8 +9,6 @@ import type {
   PipelineProject,
   GenerateTextNodeRequest,
   GenerateTextNodeResponse,
-  CanvasWorkflowRunListResponse,
-  CanvasWorkflowRunResponse,
   CreateLipSyncPreparationResponse,
 } from "@/contracts/pipeline";
 import type { ModelsResponse } from "@/contracts/models";
@@ -120,6 +118,7 @@ export const pipelineStudioApi = {
 
   retryCanvasNodeGeneration: (nodeId: string, runId: string, idempotencyKey: string) => request<{
     node: CanvasNode;
+    edges?: CanvasEdge[];
     generation: GenerationRunViewDto;
   }>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/${encodeURIComponent(runId)}/retry`,
@@ -129,26 +128,6 @@ export const pipelineStudioApi = {
   generateText: (nodeId: string, input: GenerateTextNodeRequest) => request<GenerateTextNodeResponse>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generate-text`,
     { method: "POST", body: JSON.stringify(input) },
-  ),
-
-  listWorkflowRuns: (projectId: string, limit = 1, signal?: AbortSignal) => request<CanvasWorkflowRunListResponse>(
-    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/workflow-runs?limit=${limit}`,
-    { signal },
-  ),
-
-  createWorkflowRun: (projectId: string, nodeIds: string[]) => request<CanvasWorkflowRunResponse>(
-    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/workflow-runs`,
-    { method: "POST", body: JSON.stringify({ nodeIds }) },
-  ),
-
-  cancelWorkflowRun: (projectId: string, runId: string) => request<CanvasWorkflowRunResponse>(
-    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/workflow-runs/${encodeURIComponent(runId)}/cancel`,
-    { method: "POST" },
-  ),
-
-  retryWorkflowRun: (projectId: string, runId: string) => request<CanvasWorkflowRunResponse>(
-    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/workflow-runs/${encodeURIComponent(runId)}/retry`,
-    { method: "POST" },
   ),
 
   uploadFile: async (projectId: string, file: File, positionX: number, positionY: number, nodeId?: string) => {

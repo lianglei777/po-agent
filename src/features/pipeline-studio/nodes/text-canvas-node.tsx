@@ -33,6 +33,7 @@ export function TextCanvasNode({
   const stopEditingNode = useCanvasStore((state) => state.stopEditingNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
+  const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
   const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
   const waitingForSave = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" ? mutation.node.id === id :
@@ -150,14 +151,15 @@ export function TextCanvasNode({
         ) : null}
       </section>
 
-      {composerActive && !dragging && !textDocument?.plainText.trim() ? (
+      {composerActive && !dragging ? (
         <TextAiComposer
           key={id}
           nodeId={id}
           data={canvas}
           waitingForSave={waitingForSave}
-          onGenerated={(serverNode) => {
-            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+          onGenerated={(serverNode, edges) => {
+            if (serverNode.id !== id) insertServerGenerationResult(serverNode, edges);
+            else if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
           }}
         />
       ) : null}

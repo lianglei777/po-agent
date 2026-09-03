@@ -28,11 +28,17 @@ export function promptResourceBindings(
   nodes: CanvasNode[],
   edges: CanvasEdge[],
   promptReferences: CanvasResourceReferenceAttrs[],
+  connectionReferences?: CanvasResourceReferenceAttrs[],
 ): PromptResourceBinding[] {
   const bindings = new Map<string, PromptResourceBinding>();
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
-  if (targetNodeId) {
+  if (connectionReferences) {
+    for (const reference of connectionReferences) {
+      const key = promptResourceSourceKey(reference);
+      if (!bindings.has(key)) bindings.set(key, { key, reference, edgeIds: [], promptReferenceIds: [] });
+    }
+  } else if (targetNodeId) {
     for (const edge of [...edges].sort((left, right) => (left.order ?? 0) - (right.order ?? 0))) {
       if (edge.targetNodeId !== targetNodeId) continue;
       const source = nodesById.get(edge.sourceNodeId);

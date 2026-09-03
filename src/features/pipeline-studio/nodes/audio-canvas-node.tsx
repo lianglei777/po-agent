@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasAudioMetadata, CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Copy, Download, FileMusic, RefreshCw, Sparkles, Trash2 } from "@/components/icons";
+import { AlertTriangle, Copy, Download, FileMusic, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import {
@@ -50,6 +50,7 @@ export function AudioCanvasNode({
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
+  const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
   const deleteNodes = useCanvasStore((state) => state.deleteNodes);
   const duplicateNodes = useCanvasStore((state) => state.duplicateNodes);
   const setNodeUploading = useCanvasStore((state) => state.setNodeUploading);
@@ -77,6 +78,8 @@ export function AudioCanvasNode({
   const mediaUrl = mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
   const hasAudio = Boolean(mediaUrl);
+  const hasGenerationHistory = Boolean(canvas?.workspaceFile || canvas?.artifactIds?.length || canvas?.taskInfo?.runId);
+  const canUploadIntoNode = !hasAudio && !hasGenerationHistory && !hasIncomingConnection;
   const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
   const waveformAssetKey = mediaSource ? `${mediaSource.assetKey}:${mediaRevision}` : null;
   const presentation = audioNodePresentation({
@@ -127,7 +130,7 @@ export function AudioCanvasNode({
   }, [mediaFailed, mediaUrl, persistMetadata, presentation.analyzeWaveform, waveformAssetKey]);
 
   const uploadAudio = useCallback(async (file: File) => {
-    if (hasIncomingConnection) {
+    if (!canUploadIntoNode) {
       void message.warning(t.pipeline.canvasUploadBlockedByConnection);
       return;
     }
@@ -159,7 +162,7 @@ export function AudioCanvasNode({
       setUploading(false);
       setNodeUploading(id, false);
     }
-  }, [hasIncomingConnection, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeAudioOnlyError, t.pipeline.nodeAudioTooLarge]);
+  }, [canUploadIntoNode, id, insertServerNode, message, node.positionX, node.positionY, node.projectId, setNodeUploading, t.pipeline.canvasUploadBlockedByConnection, t.pipeline.nodeAudioOnlyError, t.pipeline.nodeAudioTooLarge]);
 
   if (!canvas || canvas.type !== "audio") return null;
 
@@ -200,8 +203,8 @@ export function AudioCanvasNode({
       onDragOver={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        event.dataTransfer.dropEffect = hasIncomingConnection ? "none" : "copy";
-        setDragActive(!hasIncomingConnection);
+        event.dataTransfer.dropEffect = canUploadIntoNode ? "copy" : "none";
+        setDragActive(canUploadIntoNode);
       }}
       onDragLeave={(event) => {
         const nextTarget = event.relatedTarget;
@@ -211,7 +214,7 @@ export function AudioCanvasNode({
         event.preventDefault();
         event.stopPropagation();
         setDragActive(false);
-        if (hasIncomingConnection) {
+        if (!canUploadIntoNode) {
           void message.warning(t.pipeline.canvasUploadBlockedByConnection);
           return;
         }
@@ -224,7 +227,7 @@ export function AudioCanvasNode({
         ref={inputRef}
         type="file"
         accept={AUDIO_ACCEPT}
-        disabled={hasIncomingConnection}
+        disabled={!canUploadIntoNode}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -246,13 +249,6 @@ export function AudioCanvasNode({
               activateNodeComposer(id);
               setComposerOpen(true);
             }}
-          />
-          <CanvasNodeToolbarButton
-            label={t.pipeline.nodeAudioReplace}
-            icon={<RefreshCw className="size-4" />}
-            onClick={() => inputRef.current?.click()}
-            disabled={hasIncomingConnection}
-            disabledReason={t.pipeline.canvasUploadBlockedByConnection}
           />
           <CanvasNodeToolbarButton label={t.pipeline.nodeAudioDownload} icon={<Download className="size-4" />} onClick={downloadAudio} />
           <CanvasNodeToolbarButton label={t.pipeline.nodeCreateCopy} icon={<Copy className="size-4" />} onClick={() => duplicateNodes([id])} />
@@ -283,7 +279,7 @@ export function AudioCanvasNode({
                   <span className="inline-flex">
                     <button
                       type="button"
-                      disabled={hasIncomingConnection}
+                      disabled={!canUploadIntoNode}
                       onClick={() => inputRef.current?.click()}
                       className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                     >
@@ -307,7 +303,7 @@ export function AudioCanvasNode({
         ) : null}
         {dragActive && !uploading ? (
           <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-lg border border-dashed border-[var(--pl-accent)] bg-[var(--pl-accent-soft)] px-5 text-center text-sm font-medium text-[var(--pl-accent-hover)]">
-            {hasAudio ? t.pipeline.nodeAudioDropReplace : t.pipeline.nodeAudioDropHere}
+            {t.pipeline.nodeAudioDropHere}
           </div>
         ) : null}
 
@@ -348,7 +344,6 @@ export function AudioCanvasNode({
                   <span className="text-sm text-[var(--pl-text-secondary)]">{t.pipeline.nodeAudioUnavailable}</span>
                   <div className="flex gap-2">
                     <Button size="small" onClick={retryMedia}>{t.pipeline.nodeAudioRetry}</Button>
-                    <Button size="small" type="primary" disabled={hasIncomingConnection} onClick={() => inputRef.current?.click()}>{t.pipeline.nodeAudioReplace}</Button>
                   </div>
                 </div>
               ) : null}
@@ -376,8 +371,9 @@ export function AudioCanvasNode({
           nodeId={id}
           waitingForSave={waitingForSave}
           workflowLocked={workflowLocked}
-          onNodeUpdate={(serverNode) => {
-            if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
+          onNodeUpdate={(serverNode, edges) => {
+            if (serverNode.id !== id) insertServerGenerationResult(serverNode, edges);
+            else if (serverNode.data) applyServerNodeData(id, serverNode.data, serverNode.updatedAt);
             setComposerOpen(false);
           }}
         />

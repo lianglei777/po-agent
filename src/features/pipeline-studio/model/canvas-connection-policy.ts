@@ -23,6 +23,11 @@ export function canvasNodeHasContent(node: CanvasNode | undefined): boolean {
   return Boolean(data.workspaceFile || data.artifactIds?.length || data.url?.length);
 }
 
+export function canvasNodeHasGenerationAttempt(node: CanvasNode | undefined): boolean {
+  const task = node?.data?.taskInfo;
+  return canvasNodeHasContent(node) || Boolean(task?.runId) || Boolean(task && task.status !== "idle");
+}
+
 export function canvasConnectionProblem(
   nodes: CanvasNode[],
   edges: CanvasEdge[],
@@ -40,7 +45,7 @@ export function canvasConnectionProblem(
   if (target.data?.taskInfo?.status === "queued" || target.data?.taskInfo?.status === "processing") {
     return "target-busy";
   }
-  if (canvasNodeHasContent(target)) return "target-has-content";
+  if (canvasNodeHasGenerationAttempt(target)) return "target-has-content";
   if (canReachNode(edges, targetNodeId, sourceNodeId)) return "cycle";
   return null;
 }

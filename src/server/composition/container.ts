@@ -15,7 +15,6 @@ import { GenerationAgentToolProvider } from "@/server/application/content-genera
 import { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
 import { GenerationTurnPlanningService } from "@/server/application/content-generation/generation-turn-planning-service";
 import { GenerationTurnExecutor } from "@/server/application/content-generation/generation-turn-executor";
-import { CanvasWorkflowRunService } from "@/server/application/pipeline/canvas-workflow-run-service";
 import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import {
@@ -188,11 +187,6 @@ function createContainer() {
         if (run.sourceRef.startsWith("pipeline:canvas:")) {
           const nodeId = run.sourceRef.slice("pipeline:canvas:".length);
           await getPipelineServices().canvasStudioService!.completeGeneration(nodeId, runId, artifacts);
-          await getPipelineServices().canvasWorkflowRunService!.handleGenerationCompleted(
-            run.sessionId.replace("pipeline:", ""),
-            nodeId,
-            runId,
-          );
         } else if (run.sourceRef.includes(":image:")) {
           // 分镜图生成完成 — 回填 frame.selectedImageArtifactId
           const frameId = run.sourceRef.split(":")[2];
@@ -230,12 +224,6 @@ function createContainer() {
         if (!run?.sourceRef?.startsWith("pipeline:canvas:")) return;
         const nodeId = run.sourceRef.slice("pipeline:canvas:".length);
         await getPipelineServices().canvasStudioService!.failGeneration(nodeId, runId, message);
-        await getPipelineServices().canvasWorkflowRunService!.handleGenerationFailed(
-          run.sessionId.replace("pipeline:", ""),
-          nodeId,
-          runId,
-          message,
-        );
       } catch {
         // 回填失败不影响 Worker 主流程。
       }
@@ -271,7 +259,6 @@ function createContainer() {
 
   let pipelineRepository: PipelineRepository | undefined;
   let canvasStudioService: CanvasStudioService | undefined;
-  let canvasWorkflowRunService: CanvasWorkflowRunService | undefined;
 
   function getPipelineRepository() {
     if (pipelineRepository) return pipelineRepository;
@@ -296,12 +283,6 @@ function createContainer() {
       pipelineSse,
       lipSyncPreparations,
     );
-    canvasWorkflowRunService = new CanvasWorkflowRunService(
-      pipelineRepository,
-      getGenerationRunService(),
-      canvasStudioService,
-      pipelineSse,
-    );
     pipelineAgentTools = new PipelineAgentToolProvider(
       scriptAnalysisService, storyboardService, assetGenerationService, videoGenerationService, pipelineRepository,
     );
@@ -324,7 +305,6 @@ function createContainer() {
       scriptAnalysisService,
       storyboardService,
       canvasStudioService,
-      canvasWorkflowRunService,
       pipelineAgentTools,
     };
   }
@@ -463,10 +443,6 @@ function createContainer() {
     get canvasStudioService() {
       getPipelineServices();
       return canvasStudioService!;
-    },
-    get canvasWorkflowRunService() {
-      getPipelineServices();
-      return canvasWorkflowRunService!;
     },
     async createPipelineAgentSession(projectId: string) {
       const cwd = await getPipelineRepository().getProjectRoot(projectId);

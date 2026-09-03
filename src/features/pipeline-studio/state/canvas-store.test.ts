@@ -198,13 +198,23 @@ describe("pipeline studio canvas store", () => {
     const store = createCanvasStore("project-1");
     store.getState().hydrate({ revision: 1, nodes: [node], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
     store.getState().setComposerDraft(node.id, "image-create", document);
+    store.getState().setComposerReferenceDraft(node.id, "image-create", [{
+      referenceId: "draft:source-1",
+      sourceType: "canvas-node",
+      sourceId: "source-1",
+      mediaType: "image",
+      label: "Source",
+      role: "reference",
+    }]);
     store.getState().setSelection([]);
 
     const restored = createCanvasStore("project-1");
     expect(restored.getState().composerDrafts[`${node.id}:image-create`]).toEqual(document);
+    expect(restored.getState().composerReferenceDrafts[`${node.id}:image-create`]).toEqual([expect.objectContaining({ sourceId: "source-1" })]);
 
     store.getState().deleteNodes([node.id]);
     expect(createCanvasStore("project-1").getState().composerDrafts).toEqual({});
+    expect(createCanvasStore("project-1").getState().composerReferenceDrafts).toEqual({});
     vi.unstubAllGlobals();
   });
 
@@ -290,7 +300,7 @@ describe("pipeline studio canvas store", () => {
     expect(store.getState().pendingMutations).toHaveLength(mutationCount);
   });
 
-  it("creates one prompt reference edge into a node that already has generated content", () => {
+  it("does not create a prompt reference edge into a node that already has generated content", () => {
     const store = createCanvasStore("project-1");
     const source = store.getState().createNode("image", { x: 0, y: 0 }, "Source");
     const target = store.getState().createNode("video", { x: 400, y: 0 }, "Target");
@@ -307,16 +317,8 @@ describe("pipeline studio canvas store", () => {
     store.getState().createEdge(source.id, target.id, "prompt-reference", "first-frame");
     store.getState().createEdge(source.id, target.id, "prompt-reference", "first-frame");
 
-    expect(store.getState().edges).toEqual([
-      expect.objectContaining({
-        sourceNodeId: source.id,
-        targetNodeId: target.id,
-        role: "first-frame",
-      }),
-    ]);
-    expect(store.getState().pendingMutations).toEqual([
-      expect.objectContaining({ type: "edge.create", intent: "prompt-reference" }),
-    ]);
+    expect(store.getState().edges).toEqual([]);
+    expect(store.getState().pendingMutations).toEqual([]);
   });
 
   it("does not record a resize when the node returns to its original size", () => {
@@ -460,7 +462,7 @@ describe("pipeline studio canvas store", () => {
       edgeType: "references" as const,
     };
 
-    store.getState().insertServerGenerationResult(node, edge);
+    store.getState().insertServerGenerationResult(node, [edge]);
 
     expect(store.getState().nodes).toEqual([node]);
     expect(store.getState().edges).toEqual([edge]);

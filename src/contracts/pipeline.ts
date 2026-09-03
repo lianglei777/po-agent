@@ -453,19 +453,20 @@ export interface UpdateCanvasViewportRequest {
 export interface GenerateCanvasNodeResponse {
   node: CanvasNode;
   runId?: string;
-  edge?: CanvasEdge;
+  edges?: CanvasEdge[];
 }
 
 export interface GenerateCanvasNodeRequest {
   prompt?: string;
   promptDocument?: CanvasPromptDocument;
+  /** 生成新节点时采用的画布上游引用；省略时沿用当前节点已有连线。 */
+  references?: CanvasGenerationReference[];
   routeId?: string;
   settings?: Record<string, CanvasGenerationSettingValue>;
   lipSync?: {
     preparationId: string;
     faceKey: string;
   };
-  createNewNode?: boolean;
 }
 
 export type LipSyncPreparationStatus = "analyzing" | "ready" | "failed";
@@ -495,12 +496,20 @@ export interface CreateLipSyncPreparationResponse {
 export interface GenerateTextNodeRequest {
   instruction: string;
   promptDocument?: CanvasPromptDocument;
+  /** 生成新节点时采用的画布上游引用；省略时沿用当前节点已有连线。 */
+  references?: CanvasGenerationReference[];
   mode: "generate" | "revise";
   model?: string;
 }
 
+export interface CanvasGenerationReference {
+  sourceId: string;
+  role: CanvasResourceRole;
+}
+
 export interface GenerateTextNodeResponse {
   node: CanvasNode;
+  edges?: CanvasEdge[];
 }
 
 export interface CanvasWorkflowListResponse {

@@ -10,6 +10,7 @@ import type {
   CanvasNode,
   CanvasNodeData,
   CanvasPromptDocument,
+  CanvasResourceReferenceAttrs,
   CanvasResourceRole,
   CanvasSnapshot,
   CanvasViewport,
@@ -31,6 +32,7 @@ type CanvasStoreState = CanvasDocument & {
   editingNodeId: string | null;
   activeComposerNodeId: string | null;
   composerDrafts: Record<string, CanvasPromptDocument>;
+  composerReferenceDrafts: Record<string, CanvasResourceReferenceAttrs[]>;
   interactionMode: CanvasInteractionMode;
   connectionsVisible: boolean;
   minimapVisible: boolean;
@@ -51,6 +53,9 @@ type CanvasStoreState = CanvasDocument & {
   activateNodeComposer: (nodeId: string) => void;
   closeNodeComposer: (nodeId?: string) => void;
   setComposerDraft: (nodeId: string, kind: CanvasComposerDraftKind, document: CanvasPromptDocument) => void;
+  clearComposerDraft: (nodeId: string, kind: CanvasComposerDraftKind) => void;
+  setComposerReferenceDraft: (nodeId: string, kind: CanvasComposerDraftKind, references: CanvasResourceReferenceAttrs[]) => void;
+  clearComposerReferenceDraft: (nodeId: string, kind: CanvasComposerDraftKind) => void;
   setInteractionMode: (mode: CanvasInteractionMode) => void;
   toggleConnections: () => void;
   toggleMinimap: () => void;
@@ -58,7 +63,7 @@ type CanvasStoreState = CanvasDocument & {
   setWorkflowLockedNodeIds: (nodeIds: string[]) => void;
   createNode: (type: CanvasMediaType, position: { x: number; y: number }, name: string) => CanvasNode;
   insertServerNode: (node: CanvasNode) => void;
-  insertServerGenerationResult: (node: CanvasNode, edge?: CanvasEdge) => void;
+  insertServerGenerationResult: (node: CanvasNode, edges?: CanvasEdge[]) => void;
   applyServerNodeData: (nodeId: string, data: CanvasNodeData, updatedAt?: string) => void;
   updateNodeData: (nodeId: string, data: CanvasNodeData) => void;
   updateNodePositionLive: (nodeId: string, position: { x: number; y: number }) => void;
@@ -116,6 +121,7 @@ export function createCanvasStore(projectId: string) {
     editingNodeId: null,
     activeComposerNodeId: null,
     composerDrafts: loadComposerDrafts(projectId),
+    composerReferenceDrafts: loadComposerReferenceDrafts(projectId),
     interactionMode: "select",
     connectionsVisible: true,
     minimapVisible: false,
@@ -133,7 +139,12 @@ export function createCanvasStore(projectId: string) {
         state.composerDrafts,
         new Set(snapshot.nodes.map((node) => node.id)),
       );
+      const composerReferenceDrafts = filterComposerReferenceDrafts(
+        state.composerReferenceDrafts,
+        new Set(snapshot.nodes.map((node) => node.id)),
+      );
       if (composerDrafts !== state.composerDrafts) persistComposerDrafts(projectId, composerDrafts);
+      if (composerReferenceDrafts !== state.composerReferenceDrafts) persistComposerReferenceDrafts(projectId, composerReferenceDrafts);
       return {
         revision: snapshot.revision,
         nodes: snapshot.nodes,
@@ -143,6 +154,7 @@ export function createCanvasStore(projectId: string) {
         editingNodeId: null,
         activeComposerNodeId: null,
         composerDrafts,
+        composerReferenceDrafts,
         loaded: true,
         error: null,
         saveState: "saved",
@@ -159,7 +171,9 @@ export function createCanvasStore(projectId: string) {
       const documentChanged = JSON.stringify(state.nodes) !== JSON.stringify(snapshot.nodes)
         || JSON.stringify(state.edges) !== JSON.stringify(snapshot.edges);
       const composerDrafts = filterComposerDrafts(state.composerDrafts, nodeIds);
+      const composerReferenceDrafts = filterComposerReferenceDrafts(state.composerReferenceDrafts, nodeIds);
       if (composerDrafts !== state.composerDrafts) persistComposerDrafts(projectId, composerDrafts);
+      if (composerReferenceDrafts !== state.composerReferenceDrafts) persistComposerReferenceDrafts(projectId, composerReferenceDrafts);
       return {
         revision: snapshot.revision,
         nodes: snapshot.nodes,
@@ -171,6 +185,7 @@ export function createCanvasStore(projectId: string) {
           ? state.activeComposerNodeId
           : null,
         composerDrafts,
+        composerReferenceDrafts,
         loaded: true,
         error: null,
         saveState: "saved",
@@ -213,6 +228,30 @@ export function createCanvasStore(projectId: string) {
       persistComposerDrafts(projectId, composerDrafts);
       return { composerDrafts };
     }),
+    clearComposerDraft: (nodeId, kind) => set((state) => {
+      const key = composerDraftKey(nodeId, kind);
+      if (!(key in state.composerDrafts)) return state;
+      const composerDrafts = { ...state.composerDrafts };
+      delete composerDrafts[key];
+      persistComposerDrafts(projectId, composerDrafts);
+      return { composerDrafts };
+    }),
+    setComposerReferenceDraft: (nodeId, kind, references) => set((state) => {
+      const composerReferenceDrafts = {
+        ...state.composerReferenceDrafts,
+        [composerDraftKey(nodeId, kind)]: references,
+      };
+      persistComposerReferenceDrafts(projectId, composerReferenceDrafts);
+      return { composerReferenceDrafts };
+    }),
+    clearComposerReferenceDraft: (nodeId, kind) => set((state) => {
+      const key = composerDraftKey(nodeId, kind);
+      if (!(key in state.composerReferenceDrafts)) return state;
+      const composerReferenceDrafts = { ...state.composerReferenceDrafts };
+      delete composerReferenceDrafts[key];
+      persistComposerReferenceDrafts(projectId, composerReferenceDrafts);
+      return { composerReferenceDrafts };
+    }),
 
     setInteractionMode: (interactionMode) => set({ interactionMode }),
     toggleConnections: () => set((state) => ({ connectionsVisible: !state.connectionsVisible })),
@@ -238,9 +277,11 @@ export function createCanvasStore(projectId: string) {
       activeComposerNodeId: state.activeComposerNodeId === node.id ? node.id : null,
     })),
 
-    insertServerGenerationResult: (node, edge) => set((state) => ({
+    insertServerGenerationResult: (node, edges) => set((state) => ({
       nodes: [...state.nodes.filter((item) => item.id !== node.id), node],
-      edges: edge ? [...state.edges.filter((item) => item.id !== edge.id), edge] : state.edges,
+      edges: edges?.length
+        ? [...state.edges.filter((item) => !edges.some((edge) => edge.id === item.id)), ...edges]
+        : state.edges,
       selectedNodeIds: [node.id],
       editingNodeId: null,
       activeComposerNodeId: node.id,
@@ -404,6 +445,7 @@ export function createCanvasStore(projectId: string) {
           ? null
           : current.activeComposerNodeId,
         composerDrafts: removeNodeComposerDrafts(projectId, current.composerDrafts, ids),
+        composerReferenceDrafts: removeNodeComposerReferenceDrafts(projectId, current.composerReferenceDrafts, ids),
       }));
     },
 
@@ -459,8 +501,7 @@ export function createCanvasStore(projectId: string) {
       if (state.workflowLockedNodeIds.includes(sourceNodeId) || state.workflowLockedNodeIds.includes(targetNodeId)) return;
       if (intent === "connect" && state.uploadingNodeIds.includes(targetNodeId)) return;
       const problem = canvasConnectionProblem(state.nodes, state.edges, sourceNodeId, targetNodeId);
-      const acceptsFilledTarget = intent === "restore" || intent === "prompt-reference";
-      if (problem && !(acceptsFilledTarget && problem === "target-has-content")) return;
+      if (problem && !(intent === "restore" && problem === "target-has-content")) return;
       const now = new Date().toISOString();
       const edge: CanvasEdge = {
         id: crypto.randomUUID(),
@@ -705,6 +746,10 @@ function composerDraftStorageKey(projectId: string) {
   return `pipeline-composer-drafts:v1:${projectId}`;
 }
 
+function composerReferenceDraftStorageKey(projectId: string) {
+  return `pipeline-composer-reference-drafts:v1:${projectId}`;
+}
+
 function loadComposerDrafts(projectId: string): Record<string, CanvasPromptDocument> {
   if (typeof window === "undefined") return {};
   try {
@@ -729,10 +774,45 @@ function persistComposerDrafts(projectId: string, drafts: Record<string, CanvasP
   }
 }
 
+function loadComposerReferenceDrafts(projectId: string): Record<string, CanvasResourceReferenceAttrs[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(composerReferenceDraftStorageKey(projectId));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.drafts)) return {};
+    return Object.fromEntries(Object.entries(parsed.drafts).filter((entry): entry is [string, CanvasResourceReferenceAttrs[]] => (
+      Array.isArray(entry[1]) && entry[1].every(isCanvasResourceReference)
+    )));
+  } catch {
+    return {};
+  }
+}
+
+function persistComposerReferenceDrafts(projectId: string, drafts: Record<string, CanvasResourceReferenceAttrs[]>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(composerReferenceDraftStorageKey(projectId), JSON.stringify({ version: 1, drafts }));
+  } catch {
+    // 引用草稿仅影响下一次生成；存储失败时仍保留当前画布内存，不能中断输入。
+  }
+}
+
 function filterComposerDrafts(
   drafts: Record<string, CanvasPromptDocument>,
   nodeIds: ReadonlySet<string>,
 ): Record<string, CanvasPromptDocument> {
+  const allowedKeys = new Set([...nodeIds].flatMap((nodeId) => (
+    COMPOSER_DRAFT_KINDS.map((kind) => composerDraftKey(nodeId, kind))
+  )));
+  const entries = Object.entries(drafts).filter(([key]) => allowedKeys.has(key));
+  return entries.length === Object.keys(drafts).length ? drafts : Object.fromEntries(entries);
+}
+
+function filterComposerReferenceDrafts(
+  drafts: Record<string, CanvasResourceReferenceAttrs[]>,
+  nodeIds: ReadonlySet<string>,
+): Record<string, CanvasResourceReferenceAttrs[]> {
   const allowedKeys = new Set([...nodeIds].flatMap((nodeId) => (
     COMPOSER_DRAFT_KINDS.map((kind) => composerDraftKey(nodeId, kind))
   )));
@@ -753,6 +833,19 @@ function removeNodeComposerDrafts(
   return next;
 }
 
+function removeNodeComposerReferenceDrafts(
+  projectId: string,
+  drafts: Record<string, CanvasResourceReferenceAttrs[]>,
+  nodeIds: ReadonlySet<string>,
+) {
+  const deletedKeys = new Set([...nodeIds].flatMap((nodeId) => (
+    COMPOSER_DRAFT_KINDS.map((kind) => composerDraftKey(nodeId, kind))
+  )));
+  const next = Object.fromEntries(Object.entries(drafts).filter(([key]) => !deletedKeys.has(key)));
+  if (Object.keys(next).length !== Object.keys(drafts).length) persistComposerReferenceDrafts(projectId, next);
+  return next;
+}
+
 function isCanvasPromptDocument(value: unknown): value is CanvasPromptDocument {
   return isRecord(value)
     && value.schemaVersion === 1
@@ -760,6 +853,16 @@ function isCanvasPromptDocument(value: unknown): value is CanvasPromptDocument {
     && typeof value.plainText === "string"
     && isRecord(value.content)
     && value.content.type === "doc";
+}
+
+function isCanvasResourceReference(value: unknown): value is CanvasResourceReferenceAttrs {
+  return isRecord(value)
+    && typeof value.referenceId === "string"
+    && (value.sourceType === "canvas-node" || value.sourceType === "asset")
+    && typeof value.sourceId === "string"
+    && (value.mediaType === "text" || value.mediaType === "image" || value.mediaType === "video" || value.mediaType === "audio")
+    && typeof value.label === "string"
+    && (value.role === "reference" || value.role === "first-frame" || value.role === "last-frame");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

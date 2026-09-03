@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { App, Modal, Spin } from "antd";
 import type { GenerationRunViewDto } from "@/contracts/generation";
-import type { CanvasNode } from "@/contracts/pipeline";
+import type { CanvasEdge, CanvasNode } from "@/contracts/pipeline";
 import { Check, FileVideo, RotateCcw } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { canvasNodeGenerationArtifactUrl, canvasNodeUploadSourceUrl, pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -18,7 +18,7 @@ export function VideoGenerationHistory({
   node: CanvasNode;
   open: boolean;
   onClose: () => void;
-  onNodeUpdate: (node: CanvasNode) => void;
+  onNodeUpdate: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { locale, t } = useI18n();
   const { message } = App.useApp();
@@ -50,7 +50,7 @@ export function VideoGenerationHistory({
     return () => controller.abort();
   }, [load, node.updatedAt, open]);
 
-  const selectTake = async (runId: string, artifactId: string) => {
+  const addTake = async (runId: string, artifactId: string) => {
     setBusyRunId(runId);
     try {
       const result = await pipelineStudioApi.selectCanvasNodeGenerationArtifact(node.id, runId, artifactId);
@@ -66,7 +66,7 @@ export function VideoGenerationHistory({
     setBusyRunId(runId);
     try {
       const result = await pipelineStudioApi.retryCanvasNodeGeneration(node.id, runId, crypto.randomUUID());
-      onNodeUpdate(result.node);
+      onNodeUpdate(result.node, result.edges);
     } catch (error) {
       void message.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -74,7 +74,7 @@ export function VideoGenerationHistory({
     }
   };
 
-  const selectUploadSource = async () => {
+  const addUploadSource = async () => {
     setBusyRunId("upload-source");
     try {
       const result = await pipelineStudioApi.selectCanvasNodeUploadSource(node.id);
@@ -123,7 +123,7 @@ export function VideoGenerationHistory({
                 <button
                   type="button"
                   disabled={uploadSelected || busyRunId === "upload-source"}
-                  onClick={() => void selectUploadSource()}
+                  onClick={() => void addUploadSource()}
                   className="h-8 w-full rounded-lg border border-[var(--pl-border)] text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] disabled:cursor-default disabled:opacity-50"
                 >
                   {busyRunId === "upload-source" ? t.pipeline.videoHistoryWorking : uploadSelected ? t.pipeline.videoHistoryCurrent : t.pipeline.videoHistoryUseTake}
@@ -166,7 +166,7 @@ export function VideoGenerationHistory({
                     <button
                       type="button"
                       disabled={selected || busy}
-                      onClick={() => void selectTake(view.run.id, artifact.id)}
+                      onClick={() => void addTake(view.run.id, artifact.id)}
                       className="h-8 w-full rounded-lg border border-[var(--pl-border)] text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] disabled:cursor-default disabled:opacity-50"
                     >
                       {busy ? t.pipeline.videoHistoryWorking : selected ? t.pipeline.videoHistoryCurrent : t.pipeline.videoHistoryUseTake}

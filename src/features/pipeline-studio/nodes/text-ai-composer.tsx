@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import type { ModelInfo } from "@/contracts/models";
-import type { CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
+import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
 import { Brain } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -13,6 +13,7 @@ import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
 import { CanvasModelPicker } from "./shared/canvas-model-picker";
+import { connectedCanvasReferences, canvasNodeHasContent } from "../model/canvas-connection-policy";
 import { composerDraftKey, useCanvasStore } from "../state/canvas-store";
 
 export function TextAiComposer({
@@ -24,17 +25,30 @@ export function TextAiComposer({
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
-  onGenerated: (node: CanvasNode) => void;
+  onGenerated: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { t } = useI18n();
   const draftKey = composerDraftKey(nodeId, "text");
   const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
+  const storedReferenceDraft = useCanvasStore((state) => state.composerReferenceDrafts[draftKey]);
   const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
+  const clearComposerDraft = useCanvasStore((state) => state.clearComposerDraft);
+  const setComposerReferenceDraft = useCanvasStore((state) => state.setComposerReferenceDraft);
+  const clearComposerReferenceDraft = useCanvasStore((state) => state.clearComposerReferenceDraft);
+  const canvasNodes = useCanvasStore((state) => state.nodes);
+  const canvasEdges = useCanvasStore((state) => state.edges);
   const promptDocument = storedDraft
     ?? data.params?.promptDocument
     ?? promptDocumentFromPlainText("");
   const setPromptDocument = (document: CanvasPromptDocument) => setComposerDraft(nodeId, "text", document);
   const instruction = promptDocument.plainText;
+  const sourceNode = canvasNodes.find((node) => node.id === nodeId);
+  const useReferenceDraft = Boolean(sourceNode && (
+    canvasNodeHasContent(sourceNode)
+    || sourceNode.data?.taskInfo?.status !== undefined && sourceNode.data.taskInfo.status !== "idle"
+  ));
+  const connectedReferences = useMemo(() => storedReferenceDraft
+    ?? connectedCanvasReferences(nodeId, canvasNodes, canvasEdges), [canvasEdges, canvasNodes, nodeId, storedReferenceDraft]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState(data.params?.model ?? "");
   const [loadingModels, setLoadingModels] = useState(true);
@@ -93,8 +107,13 @@ export function TextAiComposer({
         promptDocument,
         mode,
         model: selectedModel,
+        references: useReferenceDraft ? connectedReferences
+          .filter((reference) => reference.sourceType === "canvas-node")
+          .map(({ sourceId, role }) => ({ sourceId, role })) : undefined,
       });
-      onGenerated(response.node);
+      clearComposerDraft(nodeId, "text");
+      clearComposerReferenceDraft(nodeId, "text");
+      onGenerated(response.node, response.edges);
       setExpanded(false);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t.pipeline.textAiError);
@@ -121,6 +140,10 @@ export function TextAiComposer({
         setUnsupportedReferenceCount(unsupportedCount);
       }}
       onModelChange={setSelectedModel}
+      referenceDraft={useReferenceDraft ? connectedReferences : undefined}
+      onReferenceDraftChange={useReferenceDraft
+        ? (references) => setComposerReferenceDraft(nodeId, "text", references)
+        : undefined}
       onSubmit={() => void submit()}
       nodeId={nodeId}
       onExpand={() => setExpanded(true)}
@@ -162,6 +185,8 @@ function ComposerSurface({
   onPromptDocumentChange,
   onReferenceStateChange,
   onModelChange,
+  referenceDraft,
+  onReferenceDraftChange,
   onSubmit,
   onExpand,
   nodeId,
@@ -179,6 +204,8 @@ function ComposerSurface({
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onModelChange: (value: string) => void;
+  referenceDraft?: import("@/contracts/pipeline").CanvasResourceReferenceAttrs[];
+  onReferenceDraftChange?: (references: import("@/contracts/pipeline").CanvasResourceReferenceAttrs[]) => void;
   onSubmit: () => void;
   onExpand: () => void;
   nodeId: string;
@@ -202,6 +229,8 @@ function ComposerSurface({
           allowedMediaTypes={["text"]}
           excludedCanvasNodeId={nodeId}
           connectedTargetNodeId={nodeId}
+          draftConnectionReferences={referenceDraft}
+          onDraftConnectionReferencesChange={onReferenceDraftChange}
           placeholder={mode === "revise" ? t.pipeline.textAiRevisePlaceholder : t.pipeline.textAiGeneratePlaceholder}
           ariaLabel={mode === "revise" ? t.pipeline.textAiRevise : t.pipeline.textAiGenerate}
         />

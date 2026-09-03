@@ -11,7 +11,7 @@ import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../mod
 import { ResourcePromptEditor } from "../prompt-editor/resource-prompt-editor";
 import { imageGenerationRoutes, imagePromptProblem, selectImageGenerationRoute } from "../model/image-generation-options";
 import { promptReferenceRouteProblem } from "../model/prompt-reference-validation";
-import { connectedCanvasReferences } from "../model/canvas-connection-policy";
+import { canvasNodeHasContent, connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { CanvasNodeComposerShell } from "./shared/canvas-node-composer-shell";
 import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { InlineCanvasNodeComposer } from "./shared/inline-canvas-node-composer";
@@ -31,20 +31,22 @@ export function ImageAiComposer({
   workflowLocked,
   mode = "create",
   onNodeUpdate,
-  onGenerationStarted,
 }: {
   nodeId: string;
   data: CanvasNodeData;
   waitingForSave: boolean;
   workflowLocked: boolean;
   mode?: "create" | "modify";
-  onNodeUpdate: (node: CanvasNode) => void;
-  onGenerationStarted?: (node: CanvasNode, edge?: CanvasEdge) => void;
+  onNodeUpdate: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { t } = useI18n();
   const draftKey = composerDraftKey(nodeId, mode === "modify" ? "image-modify" : "image-create");
   const storedDraft = useCanvasStore((state) => state.composerDrafts[draftKey]);
+  const storedReferenceDraft = useCanvasStore((state) => state.composerReferenceDrafts[draftKey]);
   const setComposerDraft = useCanvasStore((state) => state.setComposerDraft);
+  const clearComposerDraft = useCanvasStore((state) => state.clearComposerDraft);
+  const setComposerReferenceDraft = useCanvasStore((state) => state.setComposerReferenceDraft);
+  const clearComposerReferenceDraft = useCanvasStore((state) => state.clearComposerReferenceDraft);
   // 已生成节点进入修改模式时沿用生成它的提示词；只有用户自己的修改草稿可以覆盖该基线。
   const promptDocument = storedDraft
     ?? data.params?.promptDocument
@@ -69,9 +71,14 @@ export function ImageAiComposer({
   const [unsupportedReferenceCount, setUnsupportedReferenceCount] = useState(0);
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const canvasEdges = useCanvasStore((state) => state.edges);
+  const sourceNode = canvasNodes.find((node) => node.id === nodeId);
+  const useReferenceDraft = Boolean(sourceNode && (
+    canvasNodeHasContent(sourceNode)
+    || sourceNode.data?.taskInfo?.status !== undefined && sourceNode.data.taskInfo.status !== "idle"
+ ));
   const connectedReferences = useMemo(() => mode === "create"
-    ? connectedCanvasReferences(nodeId, canvasNodes, canvasEdges)
-    : [], [canvasEdges, canvasNodes, mode, nodeId]);
+    ? storedReferenceDraft ?? connectedCanvasReferences(nodeId, canvasNodes, canvasEdges)
+    : [], [canvasEdges, canvasNodes, mode, nodeId, storedReferenceDraft]);
   const selectedRoute = useMemo(
     () => routes.find((route) => route.id === selectedRouteId),
     [routes, selectedRouteId],
@@ -173,10 +180,13 @@ export function ImageAiComposer({
         promptDocument,
         routeId: selectedRoute.id,
         settings: generationRequestSettings(settings),
-        createNewNode: mode === "modify",
+        references: useReferenceDraft ? connectedReferences
+          .filter((reference) => reference.sourceType === "canvas-node")
+          .map(({ sourceId, role }) => ({ sourceId, role })) : undefined,
       });
-      if (onGenerationStarted) onGenerationStarted(response.node, response.edge);
-      else onNodeUpdate(response.node);
+      clearComposerDraft(nodeId, mode === "modify" ? "image-modify" : "image-create");
+      clearComposerReferenceDraft(nodeId, mode === "modify" ? "image-modify" : "image-create");
+      onNodeUpdate(response.node, response.edges);
       setExpanded(false);
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : t.pipeline.imageAiError);
@@ -219,6 +229,10 @@ export function ImageAiComposer({
         setInvalidReferenceCount(invalidCount);
         setUnsupportedReferenceCount(unsupportedCount);
       }}
+      referenceDraft={useReferenceDraft ? connectedReferences : undefined}
+      onReferenceDraftChange={useReferenceDraft
+        ? (references) => setComposerReferenceDraft(nodeId, mode === "modify" ? "image-modify" : "image-create", references)
+        : undefined}
       onRouteChange={changeRoute}
       onSettingsChange={setSettings}
       onSubmit={() => void submit()}
@@ -254,6 +268,7 @@ function ComposerSurface({
   loadingRoutes, generating, cancellable, cancelling, disabledReason, error,
   onPromptDocumentChange, onRouteChange, onSettingsChange,
   onReferenceStateChange,
+  referenceDraft, onReferenceDraftChange,
   onSubmit, onCancel, onExpand, nodeId,
 }: {
   large: boolean;
@@ -271,6 +286,8 @@ function ComposerSurface({
   error: string | null;
   onPromptDocumentChange: (value: CanvasPromptDocument) => void;
   onReferenceStateChange: (state: { invalidCount: number; unsupportedCount: number }) => void;
+  referenceDraft?: import("@/contracts/pipeline").CanvasResourceReferenceAttrs[];
+  onReferenceDraftChange?: (references: import("@/contracts/pipeline").CanvasResourceReferenceAttrs[]) => void;
   onRouteChange: (value: string) => void;
   onSettingsChange: (value: Record<string, JsonValue>) => void;
   onSubmit: () => void;
@@ -308,6 +325,8 @@ function ComposerSurface({
             allowedMediaTypes={mode === "modify" ? ["text"] : ["text", "image"]}
             excludedCanvasNodeId={nodeId}
             connectedTargetNodeId={mode === "create" ? nodeId : undefined}
+            draftConnectionReferences={referenceDraft}
+            onDraftConnectionReferencesChange={onReferenceDraftChange}
             placeholder={mode === "modify" ? t.pipeline.imageAiModifyPlaceholder : t.pipeline.imageAiPlaceholder}
             ariaLabel={t.pipeline.imageAiInstruction}
           />

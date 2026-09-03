@@ -348,12 +348,23 @@ describe("parseGenerateCanvasNodeRequest", () => {
     })).toThrow("lipSync is invalid");
   });
 
-  it("accepts an explicit request to create a derived image node", () => {
-    expect(parseGenerateCanvasNodeRequest({ prompt: "change the lighting", createNewNode: true }))
-      .toMatchObject({ prompt: "change the lighting", createNewNode: true });
-    expect(() => parseGenerateCanvasNodeRequest({ createNewNode: "yes" }))
-      .toThrow("createNewNode is invalid");
-    expect(() => parseGenerateCanvasNodeRequest({ createNewNode: true }))
-      .toThrow("prompt is required when createNewNode is true");
+  it("accepts a distinct ordered generation reference plan", () => {
+    expect(parseGenerateCanvasNodeRequest({
+      prompt: "valid prompt",
+      references: [
+        { sourceId: "image-1", role: "first-frame" },
+        { sourceId: "image-2", role: "last-frame" },
+      ],
+    })).toMatchObject({
+      references: [
+        { sourceId: "image-1", role: "first-frame" },
+        { sourceId: "image-2", role: "last-frame" },
+      ],
+    });
+    expect(() => parseGenerateCanvasNodeRequest({
+      prompt: "valid prompt",
+      references: [{ sourceId: "image-1", role: "reference" }, { sourceId: "image-1", role: "reference" }],
+    })).toThrow("references contains duplicate sources");
   });
+
 });

@@ -10,6 +10,6 @@ export async function POST(request: Request, context: Context) {
   return protectedRoute<GenerateTextNodeResponse>(async () => {
     const { nodeId } = await context.params;
     const input = parseGenerateTextNodeRequest(await readJson(request));
-    return { node: await container.canvasStudioService.generateText(nodeId, input) };
+    return container.canvasStudioService.generateText(nodeId, input);
   });
 }

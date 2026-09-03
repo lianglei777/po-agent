@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { GenerationRouteDto } from "@/contracts/generation";
-import type { CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
+import type { CanvasEdge, CanvasNode, CanvasNodeData } from "@/contracts/pipeline";
 import { FileMusic, FileVideo } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -23,7 +23,7 @@ export function AudioAiComposer({
   data: CanvasNodeData;
   waitingForSave: boolean;
   workflowLocked: boolean;
-  onNodeUpdate: (node: CanvasNode) => void;
+  onNodeUpdate: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { t } = useI18n();
   const [routes, setRoutes] = useState<GenerationRouteDto[]>([]);
@@ -82,7 +82,7 @@ export function AudioAiComposer({
         prompt: "",
         routeId: selectedRouteId,
       });
-      onNodeUpdate(response.node);
+      onNodeUpdate(response.node, response.edges);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

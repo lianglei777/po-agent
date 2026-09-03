@@ -6,7 +6,6 @@ describe("canvas node interaction", () => {
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: false, hasImage: true })).toEqual({
       showToolbar: true,
       showComposer: true,
-      showUploadAction: false,
     });
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: true }).showToolbar).toBe(false);
     expect(imageNodePresentation({ selected: false, composerActive: false, dragging: false, hasImage: true }).showToolbar).toBe(false);
@@ -14,11 +13,10 @@ describe("canvas node interaction", () => {
     expect(imageNodePresentation({ selected: true, composerActive: false, dragging: false, hasImage: true }).showComposer).toBe(false);
   });
 
-  it("shows upload controls only for a selected empty image node that is not moving", () => {
+  it("keeps an empty image node focused on model generation", () => {
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: false, hasImage: false })).toEqual({
       showToolbar: false,
       showComposer: true,
-      showUploadAction: true,
     });
     expect(imageNodePresentation({ selected: true, composerActive: true, dragging: true, hasImage: false }).showComposer).toBe(false);
   });

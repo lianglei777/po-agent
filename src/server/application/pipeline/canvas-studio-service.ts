@@ -5,6 +5,7 @@ import { AppError } from "@/server/domain/app-error";
 import { canvasWorkflowNodeIsRunnable } from "@/contracts/pipeline";
 import type {
   CanvasEdge,
+  CanvasGenerationReference,
   CanvasGenerationParams,
   CanvasMediaReference,
   CanvasMutationBatch,
@@ -87,8 +88,15 @@ export class CanvasStudioService {
     if (!await this.repository.getProject(projectId)) {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
     }
-    await this.assertWorkflowMutationAllowed(projectId, batch);
+    const currentNodes = new Map(
+      (await this.repository.listCanvasNodes(projectId)).map((node) => [node.id, node]),
+    );
     const sanitizedBatch = await this.preserveServerOwnedNodeData(projectId, batch);
+    const changedTextNodeIds = new Set(sanitizedBatch.mutations.flatMap((mutation) => {
+      if (mutation.type !== "node.update" || mutation.patch.data === undefined || mutation.patch.data === null) return [];
+      const current = currentNodes.get(mutation.nodeId);
+      return textNodeContentChanged(current?.data, mutation.patch.data) ? [mutation.nodeId] : [];
+    }));
     const affectedTargets = await this.validateMutationConnections(projectId, sanitizedBatch);
     const result = await this.repository.applyCanvasMutationBatch(projectId, sanitizedBatch.baseRevision, sanitizedBatch.mutations);
     if (!result.applied) {
@@ -98,13 +106,7 @@ export class CanvasStudioService {
     for (const targetId of affectedTargets) {
       await this.syncTargetReferences(targetId);
     }
-    const updatedNodeIds = new Set(sanitizedBatch.mutations.flatMap((mutation) => (
-      mutation.type === "node.update" && mutation.patch.data !== undefined ? [mutation.nodeId] : []
-    )));
-    for (const nodeId of updatedNodeIds) {
-      const refreshed = await this.refreshGenerationProvenance(nodeId);
-      if (refreshed) this.emit("node_updated", projectId, refreshed);
-    }
+    for (const sourceNodeId of changedTextNodeIds) await this.syncDependentTargets(projectId, sourceNodeId, true);
     return this.getState(projectId);
   }
 
@@ -142,9 +144,6 @@ export class CanvasStudioService {
     if (projectId && current.projectId !== projectId) {
       throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found in this project", 404);
     }
-    if (projectId && patch.data !== undefined) {
-      await this.assertWorkflowNodesMutable(current.projectId, [nodeId]);
-    }
     const normalizedData = patch.data ? normalizeData(patch.data, current) : undefined;
     const updated = await this.repository.updateCanvasNode(nodeId, {
       ...patch,
@@ -153,12 +152,12 @@ export class CanvasStudioService {
         : normalizedData,
     });
     if (!updated) throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found", 404);
-    const refreshed = patch.data ? await this.refreshGenerationProvenance(updated.id) : updated;
-    const finalNode = refreshed ?? updated;
-    this.emit("node_updated", current.projectId, finalNode);
-    // 上游内容变化后立即重建直接下游的引用快照；连线身份不变，引用内容随节点更新。
-    await this.syncDependentTargets(current.projectId, current.id);
-    return finalNode;
+    this.emit("node_updated", current.projectId, updated);
+    // 只有文本正文可原地修改；媒体重生成会创建新节点，不能让旧引用失效。
+    if (textNodeContentChanged(current.data, updated.data)) {
+      await this.syncDependentTargets(current.projectId, current.id, true);
+    }
+    return updated;
   }
 
   async updateViewport(projectId: string, viewport: CanvasViewport): Promise<void> {
@@ -171,7 +170,6 @@ export class CanvasStudioService {
     sourceNodeId: string;
     targetNodeId: string;
   }): Promise<CanvasEdge> {
-    await this.assertWorkflowNodesMutable(input.projectId, [input.sourceNodeId, input.targetNodeId]);
     const [source, target, edges] = await Promise.all([
       this.requireNode(input.sourceNodeId),
       this.requireNode(input.targetNodeId),
@@ -196,7 +194,6 @@ export class CanvasStudioService {
   async deleteEdge(edgeId: string, projectId?: string): Promise<void> {
     const edge = await this.repository.getCanvasEdge(edgeId);
     if (!edge || (projectId && edge.projectId !== projectId)) return;
-    await this.assertWorkflowNodesMutable(edge.projectId, [edge.sourceNodeId, edge.targetNodeId]);
     await this.repository.deleteCanvasEdge(edgeId);
     await this.syncTargetReferences(edge.targetNodeId);
     this.emit("edge_deleted", edge.projectId, { id: edgeId });
@@ -207,7 +204,6 @@ export class CanvasStudioService {
     if (projectId && node.projectId !== projectId) {
       throw new AppError("PIPELINE_CANVAS_NODE_NOT_FOUND", "Canvas node was not found in this project", 404);
     }
-    await this.assertWorkflowNodesMutable(node.projectId, [nodeId]);
     const edges = await this.repository.listCanvasEdges(node.projectId);
     const affectedTargets = [...new Set(edges.filter((edge) => edge.sourceNodeId === nodeId).map((edge) => edge.targetNodeId))];
     await this.repository.deleteCanvasEdgesByNode(nodeId);
@@ -245,6 +241,12 @@ export class CanvasStudioService {
     if (targetNode && (targetNode.projectId !== input.projectId || targetNode.data?.type !== type)) {
       throw new AppError("VALIDATION_ERROR", "The uploaded file type does not match the target canvas node", 400);
     }
+    if (targetNode?.data?.type === "image") {
+      throw new AppError("VALIDATION_ERROR", "Imported images must be added as new canvas nodes", 409);
+    }
+    if (targetNode && canvasNodeHasGenerationAttempt(targetNode)) {
+      throw new AppError("VALIDATION_ERROR", "A node with content or generation history cannot be replaced; add the file as a new canvas node", 409);
+    }
     if (targetNode) {
       const hasIncoming = (await this.repository.listCanvasEdges(input.projectId))
         .some((edge) => edge.targetNodeId === targetNode.id);
@@ -268,9 +270,8 @@ export class CanvasStudioService {
     });
     let content: string[] | undefined;
     if (type === "text") content = [new TextDecoder().decode(input.data)];
-    const hadMedia = Boolean(node.data?.workspaceFile || node.data?.artifactIds?.length || node.data?.url?.length);
     const data = {
-      ...createNodeData(type, hadMedia ? node.data?.name ?? input.name : input.name, "resource"),
+      ...createNodeData(type, input.name, "resource"),
       params: node.data?.params ?? createNodeData(type, input.name).params,
       group: node.data?.group,
       groupRun: node.data?.groupRun,
@@ -343,22 +344,134 @@ export class CanvasStudioService {
     });
   }
 
+  private async prepareGenerationTarget(
+    source: CanvasNode,
+    options: {
+      reuseNode: boolean;
+      sourceIsInput: boolean;
+      copyIncoming: boolean;
+      promptDocument?: CanvasPromptDocument;
+      references?: CanvasGenerationReference[];
+    },
+  ): Promise<{ node: CanvasNode; edges?: CanvasEdge[] }> {
+    if (options.reuseNode || !canvasNodeHasGenerationAttempt(source)) return { node: source };
+    if (!source.data || !isMediaType(source.data.type)) return { node: source };
+
+    const [nodes, projectEdges] = await Promise.all([
+      this.repository.listCanvasNodes(source.projectId),
+      this.repository.listCanvasEdges(source.projectId),
+    ]);
+    const target = await this.createNode({
+      projectId: source.projectId,
+      type: source.data.type,
+      name: source.data.name,
+      ...derivedNodePosition(source, nodes, source.data.type),
+    });
+    const targetData: CanvasNodeData = {
+      ...target.data!,
+      generatorType: "default",
+      params: source.data.params ? structuredClone(source.data.params) : target.data?.params,
+      taskInfo: { status: "idle" },
+    };
+    const initializedTarget = await this.repository.updateCanvasNode(target.id, { data: targetData }) ?? target;
+    const incoming = projectEdges
+      .filter((edge) => options.copyIncoming && options.references === undefined && edge.targetNodeId === source.id)
+      .sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
+    const templates = options.references
+      ? options.references.map((reference, order) => ({
+          id: randomUUID(),
+          projectId: source.projectId,
+          sourceNodeId: reference.sourceId,
+          targetNodeId: target.id,
+          edgeType: "references" as const,
+          role: reference.role,
+          order,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }))
+      : [...incoming];
+    if (options.sourceIsInput && !templates.some((edge) => edge.sourceNodeId === source.id)) {
+      templates.push({
+        id: randomUUID(),
+        projectId: source.projectId,
+        sourceNodeId: source.id,
+        targetNodeId: target.id,
+        edgeType: "references",
+        role: "reference",
+        order: templates.length,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    for (const reference of options.references === undefined && options.promptDocument ? collectPromptResourceReferences(options.promptDocument) : []) {
+      if (reference.sourceType !== "canvas-node" || templates.some((edge) => edge.sourceNodeId === reference.sourceId)) continue;
+      templates.push({
+        id: randomUUID(),
+        projectId: source.projectId,
+        sourceNodeId: reference.sourceId,
+        targetNodeId: target.id,
+        edgeType: "references",
+        role: reference.role,
+        order: templates.length,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // 引用草稿只在提交时落为新节点的连线；这里重新校验源节点和帧角色，不能信任浏览器传来的 ID。
+    const validationNodes = new Map([...nodes, initializedTarget].map((node) => [node.id, node]));
+    for (const template of templates) {
+      const upstream = validationNodes.get(template.sourceNodeId);
+      if (!upstream) throw new AppError("VALIDATION_ERROR", "Canvas reference source was not found", 400);
+      assertCanvasConnectionAllowed(source.projectId, upstream, initializedTarget, projectEdges, true);
+    }
+    validateCanvasEdgeBindings(validationNodes, [...projectEdges, ...templates]);
+
+    const edges: CanvasEdge[] = [];
+    for (const template of templates) {
+      const edge = await this.repository.createCanvasEdge({
+        projectId: source.projectId,
+        sourceNodeId: template.sourceNodeId,
+        targetNodeId: target.id,
+        edgeType: template.edgeType,
+        role: template.role,
+        order: template.order,
+      });
+      edges.push(edge);
+      this.emit("edge_created", source.projectId, edge);
+    }
+    const synced = await this.syncTargetReferences(target.id);
+    return { node: synced ?? initializedTarget, edges };
+  }
+
   async generate(
     nodeId: string,
     input?: GenerateCanvasNodeInput,
-    execution?: { idempotencyKey?: string },
-  ): Promise<{ node: CanvasNode; runId?: string; edge?: CanvasEdge }> {
-    if (input?.createNewNode) {
-      return this.generateDerivedImage(nodeId, input);
+    execution?: { idempotencyKey?: string; reuseNode?: boolean },
+  ): Promise<{ node: CanvasNode; runId?: string; edges?: CanvasEdge[] }> {
+    let source = await this.requireNode(nodeId);
+    if (!canvasNodeHasGenerationAttempt(source)) {
+      await this.syncTargetReferences(nodeId);
+      source = await this.requireNode(nodeId);
     }
-    await this.syncTargetReferences(nodeId);
-    let node = await this.requireNode(nodeId);
+    if (source.data?.taskInfo?.status === "processing" || source.data?.taskInfo?.status === "queued") {
+      throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
+    }
+    const sourceIsInput = source.data?.type === "image" && canvasNodeHasContent(source);
+    if (sourceIsInput && !input?.prompt?.trim()) {
+      throw new AppError("VALIDATION_ERROR", "Enter an image modification instruction first", 400);
+    }
+    const prepared = await this.prepareGenerationTarget(source, {
+      reuseNode: execution?.reuseNode ?? false,
+      sourceIsInput,
+      copyIncoming: !sourceIsInput,
+      promptDocument: input?.promptDocument ?? source.data?.params?.promptDocument,
+      references: input?.references,
+    });
+    let node = prepared.node;
     let data = node.data;
     let compiledPrompt: string | undefined;
     if (!data || !isMediaType(data.type)) throw new AppError("VALIDATION_ERROR", "This node cannot generate media", 400);
-    if (data.taskInfo?.status === "processing" || data.taskInfo?.status === "queued") {
-      throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
-    }
 
     const promptDocument = input?.promptDocument ?? data.params?.promptDocument;
     let promptReferences: CanvasMediaReference[] | undefined;
@@ -413,7 +526,7 @@ export class CanvasStudioService {
             taskInfo: { status: "completed", progressPercent: 100 },
           },
         });
-        return { node: updated };
+        return { node: updated, edges: prepared.edges };
       } catch (error) {
         await this.markFailed(node, error);
         throw error;
@@ -498,59 +611,15 @@ export class CanvasStudioService {
           taskInfo: { runId: result.run.id, status: "processing", progressPercent: 0 },
         },
       });
-      return { node: updated, runId: result.run.id };
+      return { node: updated, runId: result.run.id, edges: prepared.edges };
     } catch (error) {
       await this.markFailed(node, error);
       throw error;
     }
   }
 
-  private async generateDerivedImage(
-    sourceNodeId: string,
-    input: GenerateCanvasNodeInput,
-  ): Promise<{ node: CanvasNode; runId?: string; edge: CanvasEdge }> {
-    const source = await this.requireNode(sourceNodeId);
-    const sourceReference = mediaReference(source);
-    if (!input.prompt?.trim()) {
-      throw new AppError("VALIDATION_ERROR", "Enter an image modification instruction first", 400);
-    }
-    if (source.data?.type !== "image" || !sourceReference || !referenceAssets([sourceReference], "imageUrls").length) {
-      throw new AppError("VALIDATION_ERROR", "AI image modification requires a locally available source image", 400);
-    }
-
-    const nodes = await this.repository.listCanvasNodes(source.projectId);
-    const position = derivedImagePosition(source, nodes);
-    const target = await this.createNode({
-      projectId: source.projectId,
-      type: "image",
-      name: `${source.data.name} · AI`,
-      ...position,
-    });
-    const edge = await this.connect({
-      projectId: source.projectId,
-      sourceNodeId: source.id,
-      targetNodeId: target.id,
-    });
-    const result = await this.generate(target.id, {
-      prompt: input.prompt,
-      promptDocument: input.promptDocument,
-      routeId: input.routeId,
-      settings: input.settings,
-    });
-    return { ...result, edge };
-  }
-
-  async cancelGeneration(nodeId: string, context?: { workflowRunId?: string }): Promise<CanvasNode> {
+  async cancelGeneration(nodeId: string): Promise<CanvasNode> {
     const node = await this.requireNode(nodeId);
-    const activeRuns = await this.repository.listActiveCanvasWorkflowRuns(node.projectId);
-    const owningRun = activeRuns.find((run) => run.nodeIds.includes(nodeId));
-    if (owningRun && context?.workflowRunId !== owningRun.id) {
-      throw new AppError(
-        "PIPELINE_WORKFLOW_RUN_ACTIVE",
-        "Cancel this node from the active canvas workflow instead",
-        409,
-      );
-    }
     const data = node.data;
     const runId = data?.taskInfo?.runId;
     if (!data || !runId || (data.taskInfo?.status !== "processing" && data.taskInfo?.status !== "queued")) {
@@ -558,7 +627,8 @@ export class CanvasStudioService {
     }
     await this.runs.cancelRun(runId);
     return this.updateNode(node.id, {
-      data: { ...data, taskInfo: { status: "idle" } },
+      // 保留 runId，确保取消过的节点不会在下一次生成时被当作全新空节点复用。
+      data: { ...data, taskInfo: { runId, status: "idle" } },
     });
   }
 
@@ -576,6 +646,9 @@ export class CanvasStudioService {
     if (!data || (data.type !== "image" && data.type !== "video" && data.type !== "audio")) {
       throw new AppError("VALIDATION_ERROR", "This canvas node cannot select generated media", 400);
     }
+    if (data.type === "image") {
+      throw new AppError("VALIDATION_ERROR", "An image result must be added as a new canvas node", 409);
+    }
     const view = await this.runs.getRun(runId);
     if (!view || view.run.sourceRef !== canvasSourceRef(node.id)) {
       throw new AppError("GENERATION_RUN_NOT_FOUND", "Generation run was not found for this canvas node", 404);
@@ -587,14 +660,18 @@ export class CanvasStudioService {
     if (!artifact) {
       throw new AppError("FILE_NOT_FOUND", "Generation artifact was not found for this canvas node", 404);
     }
+    const selectedNode = await this.createNode({
+      projectId: node.projectId,
+      type: data.type,
+      name: `${data.name} Take`,
+      positionX: node.positionX + 40,
+      positionY: node.positionY + 40,
+    });
     const completedAt = view.run.completedAt ?? artifact.createdAt;
-    const newestSuccessfulRun = (await this.listNodeGenerationRuns(node.id))
-      .find((candidate) => candidate.run.status === "succeeded" && candidate.artifacts.some((item) => item.kind === data.type));
-    const inputFingerprint = view.run.input?.sourceFingerprint;
-    return this.updateNode(node.id, {
+    return this.updateNode(selectedNode.id, {
       data: {
-        ...data,
-        url: [artifact.remoteUrl ?? canvasFileUrl(node.id)],
+        ...createNodeData(data.type, selectedNode.data?.name ?? `${data.name} Take`, "resource"),
+        url: [artifact.remoteUrl ?? canvasFileUrl(selectedNode.id)],
         artifactIds: [artifact.id],
         taskInfo: { runId, status: "completed", progressPercent: 100 },
         ...(data.type === "video" ? {
@@ -602,13 +679,9 @@ export class CanvasStudioService {
             runId,
             artifactId: artifact.id,
             completedAt,
-            historical: newestSuccessfulRun?.run.id !== runId,
+            historical: true,
           },
-          videoMetadata: undefined,
         } : {}),
-        generationProvenance: inputFingerprint && (data.type === "image" || data.type === "video")
-          ? { runId, inputFingerprint, stale: false }
-          : undefined,
       },
     }, undefined, true);
   }
@@ -635,14 +708,18 @@ export class CanvasStudioService {
     if (node.data?.type !== "video" || !node.data.workspaceFile) {
       throw new AppError("FILE_NOT_FOUND", "This video node has no uploaded source", 404);
     }
-    return this.updateNode(node.id, {
+    const selectedNode = await this.createNode({
+      projectId: node.projectId,
+      type: "video",
+      name: node.data.workspaceFile.name,
+      positionX: node.positionX + 40,
+      positionY: node.positionY + 40,
+    });
+    return this.updateNode(selectedNode.id, {
       data: {
-        ...node.data,
-        url: [canvasFileUrl(node.id)],
-        artifactIds: undefined,
-        videoSelection: undefined,
-        videoMetadata: undefined,
-        generationProvenance: undefined,
+        ...createNodeData("video", selectedNode.data?.name ?? node.data.workspaceFile.name, "resource"),
+        workspaceFile: node.data.workspaceFile,
+        url: [canvasFileUrl(selectedNode.id)],
         taskInfo: { status: "idle" },
       },
     }, undefined, true);
@@ -664,38 +741,48 @@ export class CanvasStudioService {
     nodeId: string,
     runId: string,
     idempotencyKey: string,
-  ): Promise<{ node: CanvasNode; view: GenerationRunView }> {
+    context?: { reuseNode?: boolean },
+  ): Promise<{ node: CanvasNode; edges?: CanvasEdge[]; view: GenerationRunView }> {
     const node = await this.requireNode(nodeId);
     if (!node.data) throw new AppError("VALIDATION_ERROR", "This canvas node cannot retry generation", 400);
     const current = await this.runs.getRun(runId);
     if (!current || current.run.sourceRef !== canvasSourceRef(node.id)) {
       throw new AppError("GENERATION_RUN_NOT_FOUND", "Generation run was not found for this canvas node", 404);
     }
-    const view = await this.runs.retryRun(runId, idempotencyKey);
-    const updated = await this.updateNode(node.id, {
-      data: {
-        ...node.data,
-        taskInfo: { runId, status: "processing", progressPercent: 0 },
-      },
-    });
-    return { node: updated, view };
+    if (context?.reuseNode) {
+      const view = await this.runs.retryRun(runId, idempotencyKey);
+      const updated = await this.updateNode(node.id, {
+        data: {
+          ...node.data,
+          taskInfo: { runId, status: "processing", progressPercent: 0 },
+        },
+      });
+      return { node: updated, view };
+    }
+    const generated = await this.generate(node.id, undefined, { idempotencyKey });
+    const view = generated.runId ? await this.runs.getRun(generated.runId) : null;
+    if (!view) throw new AppError("GENERATION_RUN_NOT_FOUND", "The new generation run was not created", 500);
+    return { node: generated.node, edges: generated.edges, view };
   }
 
-  async generateText(nodeId: string, input: GenerateTextNodeInput): Promise<CanvasNode> {
-    await this.syncTargetReferences(nodeId);
-    const node = await this.requireNode(nodeId);
-    const data = node.data;
-    if (!data || data.type !== "text") {
+  async generateText(nodeId: string, input: GenerateTextNodeInput): Promise<{ node: CanvasNode; edges?: CanvasEdge[] }> {
+    let source = await this.requireNode(nodeId);
+    if (!canvasNodeHasGenerationAttempt(source)) {
+      await this.syncTargetReferences(nodeId);
+      source = await this.requireNode(nodeId);
+    }
+    const sourceData = source.data;
+    if (!sourceData || sourceData.type !== "text") {
       throw new AppError("VALIDATION_ERROR", "AI text generation is only available for text nodes", 400);
     }
 
-    const currentText = data.textDocument?.plainText ?? data.content?.join("\n") ?? "";
+    const currentText = sourceData.textDocument?.plainText ?? sourceData.content?.join("\n") ?? "";
     if (input.mode === "revise" && !currentText.trim()) {
       throw new AppError("VALIDATION_ERROR", "This text node has no content to revise", 400);
     }
 
     const compiled = input.promptDocument
-      ? await this.compilePromptDocument(node.projectId, input.promptDocument)
+      ? await this.compilePromptDocument(source.projectId, input.promptDocument)
       : null;
     if (compiled?.issues.length) {
       throw new AppError("VALIDATION_ERROR", "One or more referenced resources are no longer available", 400);
@@ -703,15 +790,25 @@ export class CanvasStudioService {
     if (compiled?.references.some((reference) => reference.mediaType !== "text")) {
       throw new AppError("VALIDATION_ERROR", "The selected text model currently accepts text references only", 400);
     }
-    const connectedReferences = referencesFromParams(data.params);
-    if (connectedReferences.some((reference) => !mediaReferenceIsUsable(reference))) {
+    const prepared = await this.prepareGenerationTarget(source, {
+      reuseNode: false,
+      sourceIsInput: input.mode === "revise" && Boolean(currentText.trim()),
+      copyIncoming: true,
+      promptDocument: input.promptDocument,
+      references: input.references,
+    });
+    const node = prepared.node;
+    const data = node.data!;
+    const targetReferences = referencesFromParams(data.params);
+    if (targetReferences.some((reference) => !mediaReferenceIsUsable(reference))) {
       throw new AppError("VALIDATION_ERROR", "An upstream node has no usable content yet", 409);
     }
-    if (connectedReferences.some((reference) => reference.mediaType !== "text")) {
+    if (targetReferences.some((reference) => reference.mediaType !== "text")) {
       throw new AppError("VALIDATION_ERROR", "The selected text model currently accepts text references only", 400);
     }
     const instruction = compiled?.prompt ?? input.instruction;
-    const referenceText = data.params?.textList
+    const referenceText = targetReferences
+      .filter((reference) => reference.nodeId !== source.id)
       ?.flatMap((reference) => reference.content ?? [])
       .filter((content) => content.trim())
       .join("\n\n")
@@ -724,7 +821,7 @@ export class CanvasStudioService {
           prompt: input.instruction,
           promptDocument: input.promptDocument,
           model: input.model,
-          ...(compiled ? referenceParams(mergeReferences(connectedReferences, compiled.references)) : {}),
+          ...(compiled ? referenceParams(mergeReferences(targetReferences, compiled.references)) : {}),
         },
         taskInfo: { status: "processing" },
       },
@@ -739,7 +836,7 @@ export class CanvasStudioService {
       if (result.length > MAX_GENERATED_TEXT_LENGTH) {
         throw new AppError("PIPELINE_LLM_FAILED", "The text model response exceeds the node content limit", 502);
       }
-      return await this.updateNode(node.id, {
+      const updated = await this.updateNode(node.id, {
         data: {
           ...data,
           action: input.mode === "revise" ? "text_revise" : "text_generate",
@@ -749,6 +846,7 @@ export class CanvasStudioService {
           taskInfo: { status: "completed", progressPercent: 100 },
         },
       });
+      return { node: updated, edges: prepared.edges };
     } catch (error) {
       await this.markFailed(node, error);
       throw error;
@@ -815,7 +913,7 @@ export class CanvasStudioService {
             data: { ...node.data, groupRun: { id: groupRunId, status: "running" } },
           });
           try {
-            const generated = await this.generate(node.id);
+            const generated = await this.generate(node.id, undefined, { reuseNode: true });
             if (!generated.runId) {
               const latest = await this.requireNode(node.id);
               if (latest.data?.groupRun?.id === groupRunId) {
@@ -885,8 +983,7 @@ export class CanvasStudioService {
       groupRun: activeGroupRun ? { ...activeGroupRun, status: "completed" } : node.data.groupRun,
     };
     await this.repository.updateCanvasNode(node.id, { data });
-    const refreshed = await this.refreshGenerationProvenance(node.id);
-    this.emit("node_updated", node.projectId, refreshed ?? { ...node, data });
+    this.emit("node_updated", node.projectId, { ...node, data });
     await this.syncDependentTargets(node.projectId, node.id);
     if (activeGroupRun && data.group) {
       await this.advanceGroupRun(node.projectId, data.group.id, activeGroupRun.id);
@@ -1024,9 +1121,8 @@ export class CanvasStudioService {
       },
     };
     const updated = await this.repository.updateCanvasNode(targetNodeId, { data: next });
-    const refreshed = updated ? await this.refreshGenerationProvenance(updated.id) : null;
-    if (updated) this.emit("node_updated", target.projectId, refreshed ?? updated);
-    return refreshed ?? updated;
+    if (updated) this.emit("node_updated", target.projectId, updated);
+    return updated;
   }
 
   async preflightWorkflowNode(nodeId: string, plannedNodeIds: ReadonlySet<string>): Promise<void> {
@@ -1155,39 +1251,6 @@ export class CanvasStudioService {
     };
   }
 
-  private async assertWorkflowMutationAllowed(projectId: string, batch: CanvasMutationBatch): Promise<void> {
-    const edges = await this.repository.listCanvasEdges(projectId);
-    const edgesById = new Map(edges.map((edge) => [edge.id, edge]));
-    const protectedNodeIds = new Set<string>();
-    for (const mutation of batch.mutations) {
-      if (mutation.type === "node.delete" || (mutation.type === "node.update" && mutation.patch.data !== undefined)) {
-        protectedNodeIds.add(mutation.nodeId);
-      } else if (mutation.type === "edge.create") {
-        protectedNodeIds.add(mutation.edge.sourceNodeId);
-        protectedNodeIds.add(mutation.edge.targetNodeId);
-      } else if (mutation.type === "edge.update" || mutation.type === "edge.delete") {
-        const edge = edgesById.get(mutation.edgeId);
-        if (edge) {
-          protectedNodeIds.add(edge.sourceNodeId);
-          protectedNodeIds.add(edge.targetNodeId);
-        }
-      }
-    }
-    await this.assertWorkflowNodesMutable(projectId, protectedNodeIds);
-  }
-
-  private async assertWorkflowNodesMutable(projectId: string, nodeIds: Iterable<string>): Promise<void> {
-    const requested = new Set(nodeIds);
-    if (!requested.size) return;
-    const activeRuns = await this.repository.listActiveCanvasWorkflowRuns(projectId);
-    if (!activeRuns.some((run) => run.nodeIds.some((nodeId) => requested.has(nodeId)))) return;
-    throw new AppError(
-      "PIPELINE_WORKFLOW_RUN_ACTIVE",
-      "Canvas workflow nodes and connections cannot be changed while the workflow is active",
-      409,
-    );
-  }
-
   private async refreshGenerationProvenance(nodeId: string): Promise<CanvasNode | null> {
     const node = await this.repository.getCanvasNode(nodeId);
     const provenance = node?.data?.generationProvenance;
@@ -1276,12 +1339,21 @@ export class CanvasStudioService {
       .digest("hex");
   }
 
-  private async syncDependentTargets(projectId: string, sourceNodeId: string): Promise<void> {
+  private async syncDependentTargets(
+    projectId: string,
+    sourceNodeId: string,
+    refreshProvenance = false,
+  ): Promise<void> {
     const edges = await this.repository.listCanvasEdges(projectId);
     const targetIds = [...new Set(edges
       .filter((edge) => edge.sourceNodeId === sourceNodeId)
       .map((edge) => edge.targetNodeId))];
-    for (const targetId of targetIds) await this.syncTargetReferences(targetId);
+    for (const targetId of targetIds) {
+      await this.syncTargetReferences(targetId);
+      if (!refreshProvenance) continue;
+      const refreshed = await this.refreshGenerationProvenance(targetId);
+      if (refreshed) this.emit("node_updated", projectId, refreshed);
+    }
   }
 
   private async validateMutationConnections(projectId: string, batch: CanvasMutationBatch): Promise<Set<string>> {
@@ -1328,16 +1400,12 @@ export class CanvasStudioService {
         const source = nodes.get(mutation.edge.sourceNodeId);
         const target = nodes.get(mutation.edge.targetNodeId);
         if (!source || !target) throw new AppError("VALIDATION_ERROR", "Canvas connection references a missing node", 400);
-        if (mutation.intent === "prompt-reference"
-          && (target.data?.taskInfo?.status === "queued" || target.data?.taskInfo?.status === "processing")) {
-          throw new AppError("VALIDATION_ERROR", "A generating node cannot accept a new upstream connection", 409);
-        }
         assertCanvasConnectionAllowed(
           projectId,
           source,
           target,
           edges,
-          mutation.intent !== "restore" && mutation.intent !== "prompt-reference",
+          mutation.intent !== "restore",
           mutation.edge.id,
         );
         edges.push(mutation.edge);
@@ -1579,6 +1647,21 @@ function canvasNodeHasContent(node: CanvasNode): boolean {
     : Boolean(reference.artifactId || reference.workspaceFile || reference.url);
 }
 
+function textNodeContentChanged(
+  previous: CanvasNodeData | null | undefined,
+  next: CanvasNodeData | null | undefined,
+): boolean {
+  if (previous?.type !== "text" || next?.type !== "text") return false;
+  const previousText = previous.textDocument?.plainText ?? previous.content?.join("\n") ?? "";
+  const nextText = next.textDocument?.plainText ?? next.content?.join("\n") ?? "";
+  return previousText !== nextText;
+}
+
+function canvasNodeHasGenerationAttempt(node: CanvasNode): boolean {
+  const task = node.data?.taskInfo;
+  return canvasNodeHasContent(node) || Boolean(task?.runId) || Boolean(task && task.status !== "idle");
+}
+
 function assertCanvasConnectionAllowed(
   projectId: string,
   source: CanvasNode,
@@ -1598,7 +1681,7 @@ function assertCanvasConnectionAllowed(
   if (requireEmptyTarget && (target.data?.taskInfo?.status === "queued" || target.data?.taskInfo?.status === "processing")) {
     throw new AppError("VALIDATION_ERROR", "A generating node cannot accept a new upstream connection", 409);
   }
-  if (requireEmptyTarget && canvasNodeHasContent(target)) {
+  if (requireEmptyTarget && canvasNodeHasGenerationAttempt(target)) {
     throw new AppError("VALIDATION_ERROR", "Only an empty node can accept a new upstream connection", 409);
   }
   if (canvasPathExists(edges, target.id, source.id)) {
@@ -1898,9 +1981,10 @@ function nextIncomingOrder(edges: CanvasEdge[], targetNodeId: string) {
     .reduce((highest, edge) => Math.max(highest, edge.order ?? -1), -1) + 1;
 }
 
-function derivedImagePosition(source: CanvasNode, nodes: CanvasNode[]) {
-  const width = 350;
-  const height = 350;
+function derivedNodePosition(source: CanvasNode, nodes: CanvasNode[], type: CanvasMediaType) {
+  const size = defaultSize(type);
+  const width = size.width;
+  const height = size.height;
   const startX = source.positionX + (source.width ?? width) + 120;
   const startY = source.positionY;
   for (let index = 0; index < 40; index += 1) {

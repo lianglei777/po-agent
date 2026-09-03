@@ -88,6 +88,8 @@ export function ResourcePromptEditor({
   allowedMediaTypes,
   excludedCanvasNodeId,
   connectedTargetNodeId,
+  draftConnectionReferences,
+  onDraftConnectionReferencesChange,
   defaultResourceRole = "reference",
   onResourceInserted,
   onReferenceStateChange,
@@ -102,6 +104,8 @@ export function ResourcePromptEditor({
   allowedMediaTypes: CanvasMediaType[];
   excludedCanvasNodeId?: string;
   connectedTargetNodeId?: string;
+  draftConnectionReferences?: CanvasResourceReferenceAttrs[];
+  onDraftConnectionReferencesChange?: (references: CanvasResourceReferenceAttrs[]) => void;
   defaultResourceRole?: CanvasResourceRole;
   onResourceInserted?: () => void;
   onReferenceStateChange?: (state: { invalidCount: number; unsupportedCount: number }) => void;
@@ -114,6 +118,7 @@ export function ResourcePromptEditor({
   const createEdge = useCanvasStore((state) => state.createEdge);
   const deleteEdges = useCanvasStore((state) => state.deleteEdges);
   const updateEdgeBinding = useCanvasStore((state) => state.updateEdgeBinding);
+  const hasDraftConnections = draftConnectionReferences !== undefined && onDraftConnectionReferencesChange !== undefined;
   const [assets, setAssets] = useState<PipelineAsset[]>([]);
   const [mention, setMention] = useState<{ from: number; to: number; query: string; cursor: CursorRect } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -155,12 +160,13 @@ export function ResourcePromptEditor({
       .sort((left, right) => Number(right.available) - Number(left.available))
       .slice(0, 12);
   }, [mention?.query, options]);
-  const connectedReferences = useMemo(() => connectedTargetNodeId
+  const liveConnectedReferences = useMemo(() => connectedTargetNodeId
     ? connectedCanvasReferences(connectedTargetNodeId, canvasNodes, canvasEdges)
     : [], [canvasEdges, canvasNodes, connectedTargetNodeId]);
+  const connectedReferences = draftConnectionReferences ?? liveConnectedReferences;
   const promptReferences = useMemo(() => promptDocumentResourceAttrs(value), [value]);
   useEffect(() => {
-    if (!connectedTargetNodeId) return;
+    if (!connectedTargetNodeId || hasDraftConnections) return;
     const seenSourceIds = new Set<string>();
     for (const reference of promptReferences) {
       if (reference.sourceType !== "canvas-node" || seenSourceIds.has(reference.sourceId)) continue;
@@ -168,16 +174,17 @@ export function ResourcePromptEditor({
       // 兼容已有 Prompt：打开 Composer 时补齐过去未建立的 @ 引用连线。
       createEdge(reference.sourceId, connectedTargetNodeId, "prompt-reference", reference.role);
     }
-  }, [canvasEdges, canvasNodes, connectedTargetNodeId, createEdge, promptReferences]);
+  }, [canvasEdges, canvasNodes, connectedTargetNodeId, createEdge, hasDraftConnections, promptReferences]);
   const referencedResources = useMemo(() => promptResourceBindings(
     connectedTargetNodeId,
     canvasNodes,
     canvasEdges,
     promptReferences,
+    hasDraftConnections ? connectedReferences : undefined,
   ).map((binding) => ({
     binding,
     preview: resolvePromptResourcePreview(binding.reference, canvasNodes, assets),
-  })), [assets, canvasEdges, canvasNodes, connectedTargetNodeId, promptReferences]);
+  })), [assets, canvasEdges, canvasNodes, connectedReferences, connectedTargetNodeId, hasDraftConnections, promptReferences]);
   const allReferences = useMemo(() => [
     ...connectedReferences,
     ...promptReferences,
@@ -319,7 +326,11 @@ export function ResourcePromptEditor({
       { type: "resourceReference", attrs },
       { type: "text", text: " " },
     ]).run();
-    if (option.sourceType === "canvas-node" && connectedTargetNodeId) {
+    if (option.sourceType === "canvas-node" && hasDraftConnections) {
+      if (!connectedReferences.some((reference) => reference.sourceType === option.sourceType && reference.sourceId === option.sourceId)) {
+        onDraftConnectionReferencesChange([...connectedReferences, attrs]);
+      }
+    } else if (option.sourceType === "canvas-node" && connectedTargetNodeId) {
       // 画布节点的 @ 引用同时建立可见连线；正文 token 删除不会反向删除这条用户可管理的引用。
       createEdge(option.sourceId, connectedTargetNodeId, "prompt-reference", role);
     }
@@ -351,7 +362,11 @@ export function ResourcePromptEditor({
     ))) {
       onChange(removePromptResourceReferences(value, sourceType, sourceId));
     }
-    if (edgeIds.length) deleteEdges(edgeIds);
+    if (hasDraftConnections) {
+      onDraftConnectionReferencesChange(connectedReferences.filter((reference) => (
+        reference.sourceType !== sourceType || reference.sourceId !== sourceId
+      )));
+    } else if (edgeIds.length) deleteEdges(edgeIds);
   }
   useEffect(() => {
     mentionRef.current = mention;
@@ -371,12 +386,22 @@ export function ResourcePromptEditor({
           className="flex min-h-16 shrink-0 items-center gap-2 overflow-x-auto px-5 py-2"
         >
           {referencedResources.map(({ binding, preview }, index) => {
-            const removeLabel = binding.edgeIds.length && binding.promptReferenceIds.length
+            const removeLabel = hasDraftConnections
+              ? t.pipeline.promptResourceRemoveAll.replace("{label}", preview.reference.label)
+              : binding.edgeIds.length && binding.promptReferenceIds.length
               ? t.pipeline.promptResourceRemoveAll.replace("{label}", preview.reference.label)
               : binding.edgeIds.length
                 ? t.pipeline.promptResourceRemoveConnection.replace("{label}", preview.reference.label)
                 : t.pipeline.promptResourceRemoveMentions.replace("{label}", preview.reference.label);
-            const roleMenu = connectedTargetNodeId
+            const isConnectedReference = connectedReferences.some((reference) => (
+              reference.sourceType === binding.reference.sourceType && reference.sourceId === binding.reference.sourceId
+            ));
+            const roleMenu = hasDraftConnections
+              && isConnectedReference
+              && preview.reference.mediaType === "image"
+              && canvasNodes.find((node) => node.id === connectedTargetNodeId)?.data?.type === "video"
+              ? draftRoleMenu(binding.reference, connectedReferences, onDraftConnectionReferencesChange!, t.pipeline)
+              : connectedTargetNodeId
               && binding.edgeIds.length
               && preview.reference.mediaType === "image"
               && canvasNodes.find((node) => node.id === connectedTargetNodeId)?.data?.type === "video"
@@ -579,6 +604,33 @@ function connectedRoleMenu(
         label: pipeline.promptReferenceRoleLastFrame,
         disabled: otherRoles.has("last-frame") || !otherRoles.has("first-frame"),
       },
+    ],
+  };
+}
+
+function draftRoleMenu(
+  reference: CanvasResourceReferenceAttrs,
+  references: CanvasResourceReferenceAttrs[],
+  onChange: (references: CanvasResourceReferenceAttrs[]) => void,
+  pipeline: ReturnType<typeof useI18n>["t"]["pipeline"],
+) {
+  const currentRole = reference.role;
+  const otherRoles = new Set(references
+    .filter((candidate) => candidate.sourceId !== reference.sourceId)
+    .map((candidate) => candidate.role));
+  const changingOnlyFirstFrame = currentRole === "first-frame" && otherRoles.has("last-frame");
+  return {
+    selectable: true,
+    selectedKeys: [currentRole],
+    onClick: ({ key }: { key: string }) => onChange(references.map((candidate) => (
+      candidate.sourceType === reference.sourceType && candidate.sourceId === reference.sourceId
+        ? { ...candidate, role: key as CanvasResourceRole }
+        : candidate
+    ))),
+    items: [
+      { key: "reference", label: pipeline.promptReferenceRoleReference, disabled: changingOnlyFirstFrame },
+      { key: "first-frame", label: pipeline.promptReferenceRoleFirstFrame, disabled: otherRoles.has("first-frame") },
+      { key: "last-frame", label: pipeline.promptReferenceRoleLastFrame, disabled: otherRoles.has("last-frame") || !otherRoles.has("first-frame") },
     ],
   };
 }

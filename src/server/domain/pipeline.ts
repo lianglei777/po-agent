@@ -308,6 +308,7 @@ export interface CanvasPromptDocument {
 export interface GenerateTextNodeInput {
   instruction: string;
   promptDocument?: CanvasPromptDocument;
+  references?: CanvasGenerationReference[];
   mode: "generate" | "revise";
   model?: string;
 }
@@ -315,13 +316,18 @@ export interface GenerateTextNodeInput {
 export interface GenerateCanvasNodeInput {
   prompt?: string;
   promptDocument?: CanvasPromptDocument;
+  references?: CanvasGenerationReference[];
   routeId?: string;
   settings?: Record<string, CanvasGenerationSettingValue>;
   lipSync?: {
     preparationId: string;
     faceKey: string;
   };
-  createNewNode?: boolean;
+}
+
+export interface CanvasGenerationReference {
+  sourceId: string;
+  role: CanvasResourceRole;
 }
 
 export type LipSyncPreparationStatus = "analyzing" | "ready" | "failed";

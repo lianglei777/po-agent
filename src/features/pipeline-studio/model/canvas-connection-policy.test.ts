@@ -24,6 +24,13 @@ describe("canvas connection policy", () => {
     expect(canvasNodeHasContent(node("image", "image", { artifactIds: ["artifact"] }))).toBe(true);
   });
 
+  it("rejects a connection into a failed generation even when it produced no content", () => {
+    const source = node("source", "image");
+    const failed = node("failed", "video", { taskInfo: { status: "failed" } });
+
+    expect(canvasConnectionProblem([source, failed], [], source.id, failed.id)).toBe("target-has-content");
+  });
+
   it("creates stable direct-upstream references in edge order, including empty sources", () => {
     const image = node("image", "image");
     const text = node("text", "text");

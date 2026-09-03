@@ -34,13 +34,8 @@ function PipelineStudioController({
     <StudioCanvas
       projectId={projectId}
       projectTitle={controller.projectTitle}
-      workflowRun={controller.workflowRun}
-      workflowRunBusy={controller.workflowRunBusy}
       onBack={onBack}
       onRenameProject={controller.renameProject}
-      onRunWorkflow={controller.runWorkflow}
-      onCancelWorkflow={controller.cancelWorkflow}
-      onRetryWorkflow={controller.retryWorkflow}
     />
   );
 }

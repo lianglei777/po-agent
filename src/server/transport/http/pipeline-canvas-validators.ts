@@ -17,16 +17,11 @@ const MAX_MULTI_SETTING_VALUES = 50;
 
 export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNodeRequest {
   if (!isRecord(value)) throw validationError("Canvas generation request must be an object");
-  if (value.createNewNode !== undefined && typeof value.createNewNode !== "boolean") {
-    throw validationError("createNewNode is invalid");
-  }
-  if (value.createNewNode === true && (typeof value.prompt !== "string" || !value.prompt.trim())) {
-    throw validationError("prompt is required when createNewNode is true");
-  }
   if (value.prompt !== undefined && (
     typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > MAX_AI_INSTRUCTION_LENGTH
   )) throw validationError("prompt is invalid");
   if (value.promptDocument !== undefined) validatePromptDocument(value.promptDocument, "promptDocument");
+  const references = value.references === undefined ? undefined : parseGenerationReferences(value.references);
   if (value.routeId !== undefined && (
     typeof value.routeId !== "string" || !value.routeId.trim() || value.routeId.length > 300
   )) throw validationError("routeId is invalid");
@@ -47,10 +42,10 @@ export function parseGenerateCanvasNodeRequest(value: unknown): GenerateCanvasNo
   return {
     prompt: typeof value.prompt === "string" ? value.prompt.trim() : undefined,
     promptDocument: value.promptDocument as GenerateCanvasNodeRequest["promptDocument"],
+    references,
     routeId: typeof value.routeId === "string" ? value.routeId.trim() : undefined,
     settings,
     lipSync,
-    ...(typeof value.createNewNode === "boolean" ? { createNewNode: value.createNewNode } : {}),
   };
 }
 
@@ -63,15 +58,30 @@ export function parseGenerateTextNodeRequest(value: unknown): GenerateTextNodeRe
     throw validationError("mode is invalid");
   }
   if (value.promptDocument !== undefined) validatePromptDocument(value.promptDocument, "promptDocument");
+  const references = value.references === undefined ? undefined : parseGenerationReferences(value.references);
   if (value.model !== undefined && (typeof value.model !== "string" || !value.model.trim() || value.model.length > 300)) {
     throw validationError("model is invalid");
   }
   return {
     instruction: value.instruction.trim(),
     promptDocument: value.promptDocument as GenerateTextNodeRequest["promptDocument"],
+    references,
     mode: value.mode,
     model: typeof value.model === "string" ? value.model.trim() : undefined,
   };
+}
+
+function parseGenerationReferences(value: unknown): Array<{ sourceId: string; role: CanvasResourceRole }> {
+  if (!Array.isArray(value) || value.length > 100) throw validationError("references is invalid");
+  const seen = new Set<string>();
+  return value.map((reference, index) => {
+    if (!isRecord(reference) || !validId(reference.sourceId) || typeof reference.role !== "string" || !RESOURCE_ROLES.has(reference.role)) {
+      throw validationError(`references[${index}] is invalid`);
+    }
+    if (seen.has(reference.sourceId)) throw validationError("references contains duplicate sources");
+    seen.add(reference.sourceId);
+    return { sourceId: reference.sourceId, role: reference.role as CanvasResourceRole };
+  });
 }
 
 export function parseCanvasMutationBatch(value: unknown): CanvasMutationBatch {
