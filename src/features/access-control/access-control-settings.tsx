@@ -137,7 +137,7 @@ export function AccessControlSettings() {
         cancelText={t.common.cancel}
         closable
         confirmLoading={toggling}
-        maskClosable={false}
+        mask={{ closable: false }}
         okButtonProps={{ disabled: !togglePassword }}
         okText={t.common.confirm}
         onCancel={() => {
