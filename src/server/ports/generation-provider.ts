@@ -1,8 +1,11 @@
 import type { JsonValue } from "@/contracts/generation";
 import type {
   GenerationInput,
+  GenerationFailure,
   PreparedGenerationAsset,
 } from "@/server/domain/generation";
+export type { ProviderOutput } from "@/server/domain/generation";
+import type { ProviderOutput } from "@/server/domain/generation";
 
 export interface ProviderInputAsset {
   slot: string;
@@ -13,12 +16,6 @@ export interface ProviderInputAsset {
   data: Uint8Array;
 }
 
-export interface ProviderOutput {
-  url?: string;
-  text?: string;
-  outputType?: string;
-}
-
 export interface ProviderSubmitResult {
   state: "pending" | "succeeded" | "failed";
   remoteTaskId?: string;
@@ -26,6 +23,7 @@ export interface ProviderSubmitResult {
   outputs: ProviderOutput[];
   errorCode?: string;
   errorMessage?: string;
+  failure?: GenerationFailure;
   requestSnapshot?: JsonValue;
   rawSnapshot?: JsonValue;
   retryAfterMs?: number;

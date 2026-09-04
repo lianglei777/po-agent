@@ -73,6 +73,7 @@ function providerJobDto(job: ProviderJob): ProviderJobDto {
     lastErrorCode: job.lastErrorCode,
     lastErrorMessage: job.lastErrorMessage,
     transientFailureCount: job.transientFailureCount,
+    failure: job.failure,
     requestSnapshot: job.requestSnapshot,
     responseSnapshot: job.responseSnapshot,
     createdAt: job.createdAt,

@@ -12,7 +12,8 @@ export type PipelineSseEventType =
   | "workflow_run_updated"
   | "agent_message"
   | "agent_thinking"
-  | "agent_tool_call";
+  | "agent_tool_call"
+  | "canvas_updated";
 
 export interface PipelineSseEvent {
   type: PipelineSseEventType;

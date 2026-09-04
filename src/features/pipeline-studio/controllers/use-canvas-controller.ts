@@ -17,12 +17,15 @@ export function useCanvasController(projectId: string, initialTitle: string) {
   const saveRetryAttemptRef = useRef(0);
   const saveRetryableRef = useRef(true);
 
-  const reloadSnapshot = useCallback(async (signal?: AbortSignal) => {
+  const reloadSnapshot = useCallback(async (
+    signal?: AbortSignal,
+    options: { discardLocalChanges?: boolean } = {},
+  ) => {
     try {
       const snapshot = await pipelineStudioApi.getSnapshot(projectId, signal);
       const state = store.getState();
-      if (state.loaded) state.reconcileSnapshot(snapshot);
-      else state.hydrate(snapshot);
+      if (options.discardLocalChanges || !state.loaded) state.hydrate(snapshot);
+      else state.reconcileSnapshot(snapshot);
     } catch (error) {
       if (signal?.aborted) return;
       store.getState().setError(error instanceof Error ? error.message : String(error));
@@ -76,7 +79,10 @@ export function useCanvasController(projectId: string, initialTitle: string) {
         saveRetryableRef.current = !revisionConflict && canvasSaveErrorIsRetryable(error);
         if (saveRetryableRef.current) saveRetryAttemptRef.current += 1;
         store.getState().failSaving(message);
-        if (revisionConflict) void reloadSnapshot();
+        if (!saveRetryableRef.current) {
+          // 服务端已拒绝这批 mutation，继续保留只会让 Agent 永远等待一个无法保存的画布。
+          void reloadSnapshot(undefined, { discardLocalChanges: true });
+        }
       }
     }, delay);
     return () => window.clearTimeout(timer);

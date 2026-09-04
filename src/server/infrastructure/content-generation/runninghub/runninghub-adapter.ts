@@ -240,7 +240,26 @@ function normalizeResponse(value: unknown): ProviderSubmitResult {
     errorMessage: providerMessage ?? (state === "failed" && !remoteTaskId
       ? "RunningHub response did not include a task ID"
       : undefined),
+    failure: state === "failed" ? runningHubFailure(providerCode) : undefined,
     rawSnapshot: createGenerationProviderSnapshot(value),
+  };
+}
+
+function runningHubFailure(code: string | undefined) {
+  // 1013 是 RunningHub 在任务侧拉取输入文件失败；此时没有可供本机重新下载的输出。
+  if (code === "1013") return {
+    phase: "provider-input-download" as const,
+    origin: "provider" as const,
+    outputAvailable: false,
+    recoveryAction: "resubmit" as const,
+    retryMayCharge: true,
+  };
+  return {
+    phase: "provider-processing" as const,
+    origin: "provider" as const,
+    outputAvailable: false,
+    recoveryAction: "resubmit" as const,
+    retryMayCharge: true,
   };
 }
 

@@ -29,6 +29,10 @@ describe("SqliteDatabase", () => {
       { version: 15, name: "pipeline_canvas_workflow_runs" },
       { version: 16, name: "pipeline_canvas_single_active_workflow_run" },
       { version: 17, name: "pipeline_lip_sync_preparations" },
+      { version: 18, name: "pipeline_agent_conversations" },
+      { version: 19, name: "canvas_agent_plans_and_actions" },
+      { version: 20, name: "canvas_asset_analysis_and_continuity" },
+      { version: 21, name: "generation_failure_recovery" },
     ]);
     expect(database.prepare("PRAGMA table_info(pipeline_canvas_edges)").all())
       .toEqual(expect.arrayContaining([
@@ -61,14 +65,24 @@ describe("SqliteDatabase", () => {
         'pipeline_canvas_drafts',
         'pipeline_canvas_workflows',
         'pipeline_canvas_workflow_runs',
-        'pipeline_canvas_workflow_run_steps'
-        ,'pipeline_lip_sync_preparations'
+        'pipeline_canvas_workflow_run_steps',
+        'pipeline_lip_sync_preparations',
+        'pipeline_agent_conversations',
+        'canvas_agent_plans',
+        'canvas_agent_actions',
+        'canvas_asset_analyses',
+        'canvas_continuity_bibles'
       )
       ORDER BY name
     `).all()).toEqual([
+    { name: "canvas_agent_actions" },
+    { name: "canvas_agent_plans" },
+    { name: "canvas_asset_analyses" },
+    { name: "canvas_continuity_bibles" },
     { name: "generation_artifacts" },
     { name: "generation_routes" },
     { name: "generation_runs" },
+    { name: "pipeline_agent_conversations" },
     { name: "pipeline_asset_variants" },
     { name: "pipeline_assets" },
     { name: "pipeline_canvas_drafts" },

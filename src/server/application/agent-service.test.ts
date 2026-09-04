@@ -110,6 +110,44 @@ describe("AgentService", () => {
     }));
   });
 
+  it("restores Pipeline sessions with their project scope and without built-in tools", async () => {
+    const runtime = runtimeStub();
+    const create = vi
+      .fn<(input: CreateRuntimeInput) => Promise<AgentRuntime>>()
+      .mockResolvedValue(runtime);
+    const getTools = vi.fn().mockReturnValue([]);
+    const sessions = {
+      findById: vi.fn(async () => ({
+        filePath: "C:\\work\\session.jsonl",
+        info: { cwd: "C:\\work" },
+      })),
+    } as unknown as SessionRepository;
+    const service = new AgentService(
+      sessions,
+      new InMemoryAgentRegistry(),
+      { create },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      { getTools },
+      undefined,
+      undefined,
+      undefined,
+      { getPipelineProjectId: vi.fn(async () => "project-1") },
+    );
+
+    await service.getState("session-1");
+
+    expect(getTools).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cwd: "C:\\work",
+      pipelineProjectId: "project-1",
+    });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      requestedSessionId: "session-1",
+      toolNames: [],
+      customTools: [],
+    }));
+  });
+
   it("destroys the original runtime after a successful fork", async () => {
     const destroy = vi.fn();
     const runtime: AgentRuntime = {
@@ -277,8 +315,9 @@ describe("AgentService", () => {
     expect(registry.get("created")).toBeUndefined();
   });
 
-  it("adds server-owned generation audit context to a prompt", async () => {
+  it("merges server-owned audit and canvas context into a prompt", async () => {
     const commands: unknown[] = [];
+    const onPromptSettled = vi.fn();
     const execute = async <T,>(command: unknown) => {
       commands.push(command);
       return undefined as T;
@@ -296,16 +335,21 @@ describe("AgentService", () => {
       { getPromptContext: vi.fn(async () => "trusted run audit") },
     );
 
-    await service.execute("session-1", {
-      type: "prompt",
-      message: "Why did the previous image look unchanged?",
-    });
+    await service.execute(
+      "session-1",
+      {
+        type: "prompt",
+        message: "Why did the previous image look unchanged?",
+      },
+      { trustedPromptContext: "trusted canvas state", onPromptSettled },
+    );
 
     await vi.waitFor(() => expect(commands).toContainEqual({
       type: "prompt",
       message: "Why did the previous image look unchanged?",
-      generationContext: "trusted run audit",
+      generationContext: "trusted run audit\ntrusted canvas state",
     }));
+    await vi.waitFor(() => expect(onPromptSettled).toHaveBeenCalledOnce());
   });
 });
 

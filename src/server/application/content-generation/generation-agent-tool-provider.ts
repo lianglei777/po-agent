@@ -9,6 +9,7 @@ import type {
 import { AppError } from "@/server/domain/app-error";
 import type {
   AgentToolDefinition,
+  AgentToolContext,
   AgentToolProvider,
   AgentToolResult,
 } from "@/server/ports/agent-tool";
@@ -54,7 +55,8 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
   }
 
-  getTools(input: { sessionId: string; cwd: string }): AgentToolDefinition[] {
+  getTools(input: AgentToolContext): AgentToolDefinition[] {
+    if (input.pipelineProjectId) return [];
     return [
       this.generateTool("generate_image", "Generate image", input.sessionId),
       this.generateTool("generate_video", "Generate video", input.sessionId),

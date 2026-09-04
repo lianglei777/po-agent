@@ -45,6 +45,21 @@ test("passes the built-in skills directory to the server", () => {
   );
 });
 
+test("passes the bundled Pipeline Skill directory to the server", () => {
+  const env = buildServerEnvironment({
+    baseEnv: {},
+    pipelineSkillsDir:
+      "C:\\Program Files\\Po Agent\\resources\\pipeline-skills",
+    piAgentDir: "C:\\agent",
+    port: 53123,
+  });
+
+  assert.equal(
+    env.PO_AGENT_PIPELINE_SKILLS_DIR,
+    "C:\\Program Files\\Po Agent\\resources\\pipeline-skills",
+  );
+});
+
 test("passes the official Skill Pack directory to the server", () => {
   const env = buildServerEnvironment({
     baseEnv: {},

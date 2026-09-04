@@ -2,6 +2,7 @@ import type {
   GenerationCapability,
   GenerationInput,
   GenerationInputSchema,
+  GenerationFailurePhase,
   JsonValue,
   GenerationRunStatus,
   GenerationSource,
@@ -94,8 +95,25 @@ export interface ProviderJob {
   transientFailureCount?: number;
   requestSnapshot?: JsonValue;
   responseSnapshot?: JsonValue;
+  pendingOutputs?: ProviderOutput[];
+  downloadRetryKey?: string;
+  failure?: GenerationFailure;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProviderOutput {
+  url?: string;
+  text?: string;
+  outputType?: string;
+}
+
+export interface GenerationFailure {
+  phase: GenerationFailurePhase;
+  origin: "provider" | "local";
+  outputAvailable: boolean;
+  recoveryAction: "resubmit" | "redownload" | "none";
+  retryMayCharge: boolean;
 }
 
 export interface PreparedGenerationAsset {

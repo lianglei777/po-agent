@@ -334,6 +334,40 @@ export class SqliteGenerationRepository implements GenerationRepository {
     });
   }
 
+  async resumeDownload(
+    run: GenerationRun,
+    job: ProviderJob,
+  ): Promise<CreateGenerationRetryResult | null> {
+    return this.database.transaction(() => {
+      if (!job.downloadRetryKey) throw new Error("Download recovery requires an idempotency key");
+      const existing = this.database.prepare(
+        "SELECT * FROM provider_jobs WHERE download_retry_key = ?",
+      ).get(job.downloadRetryKey);
+      if (existing) {
+        const existingJob = jobFromRow(existing);
+        const existingRunRow = this.database.prepare(
+          "SELECT * FROM generation_runs WHERE id = ?",
+        ).get(existingJob.runId);
+        if (!existingRunRow) throw new Error(`Generation run ${existingJob.runId} was not found`);
+        return { created: false, run: runFromRow(existingRunRow), job: existingJob };
+      }
+      const eligibleJob = this.database.prepare(`
+        SELECT id FROM provider_jobs
+        WHERE id = ? AND status = 'failed' AND pending_outputs_json IS NOT NULL
+      `).get(job.id);
+      if (!eligibleJob || !this.updateRunSync(run, ["failed"])) return null;
+      const updatedJob = this.database.prepare(`
+        UPDATE provider_jobs
+        SET status = 'downloading', download_retry_key = ?, next_poll_at = ?,
+            lease_owner = NULL, lease_expires_at = NULL, last_error_code = NULL,
+            last_error_message = NULL, failure_json = NULL, updated_at = ?
+        WHERE id = ? AND status = 'failed' AND pending_outputs_json IS NOT NULL
+      `).run(job.downloadRetryKey, job.nextPollAt ?? job.updatedAt, job.updatedAt, job.id);
+      if (updatedJob.changes !== 1) throw new Error(`Generation job ${job.id} could not resume its download`);
+      return { created: true, run, job: { ...job, status: "downloading" } };
+    });
+  }
+
   async getRun(id: string): Promise<GenerationRun | null> {
     const row = this.database
       .prepare("SELECT * FROM generation_runs WHERE id = ?")
@@ -436,6 +470,9 @@ export class SqliteGenerationRepository implements GenerationRepository {
       job.transientFailureCount ?? 0,
       job.requestSnapshot === undefined ? null : JSON.stringify(job.requestSnapshot),
       job.responseSnapshot === undefined ? null : JSON.stringify(job.responseSnapshot),
+      job.pendingOutputs === undefined ? null : JSON.stringify(job.pendingOutputs),
+      job.downloadRetryKey ?? null,
+      job.failure === undefined ? null : JSON.stringify(job.failure),
       job.updatedAt,
       job.id,
       ...(expected ?? []),
@@ -448,7 +485,7 @@ export class SqliteGenerationRepository implements GenerationRepository {
         remote_task_id = ?, remote_status = ?, next_poll_at = ?,
         lease_owner = ?, lease_expires_at = ?, last_error_code = ?,
         last_error_message = ?, transient_failure_count = ?, request_snapshot_json = ?,
-        response_snapshot_json = ?, updated_at = ?
+        response_snapshot_json = ?, pending_outputs_json = ?, download_retry_key = ?, failure_json = ?, updated_at = ?
       WHERE id = ?${where}
     `).run(...values);
     return result.changes === 1;
@@ -586,8 +623,8 @@ export class SqliteGenerationRepository implements GenerationRepository {
         remote_task_id, remote_status,
         next_poll_at, lease_owner, lease_expires_at, last_error_code,
         last_error_message, transient_failure_count, request_snapshot_json, response_snapshot_json,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        pending_outputs_json, download_retry_key, failure_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       job.id,
       job.runId,
@@ -610,6 +647,9 @@ export class SqliteGenerationRepository implements GenerationRepository {
       job.transientFailureCount ?? 0,
       job.requestSnapshot === undefined ? null : JSON.stringify(job.requestSnapshot),
       job.responseSnapshot === undefined ? null : JSON.stringify(job.responseSnapshot),
+      job.pendingOutputs === undefined ? null : JSON.stringify(job.pendingOutputs),
+      job.downloadRetryKey ?? null,
+      job.failure === undefined ? null : JSON.stringify(job.failure),
       job.createdAt,
       job.updatedAt,
     );
@@ -715,6 +755,9 @@ function jobFromRow(row: SqliteRow): ProviderJob {
       row,
       "response_snapshot_json",
     ),
+    pendingOutputs: optionalJson<ProviderJob["pendingOutputs"]>(row, "pending_outputs_json"),
+    downloadRetryKey: optionalString(row, "download_retry_key"),
+    failure: optionalJson<ProviderJob["failure"]>(row, "failure_json"),
     createdAt: requiredString(row, "created_at"),
     updatedAt: requiredString(row, "updated_at"),
   };

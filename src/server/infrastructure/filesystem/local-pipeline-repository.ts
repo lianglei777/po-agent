@@ -10,6 +10,9 @@ import type {
   CanvasViewport,
   CanvasWorkflow,
   PipelineAsset,
+  PipelineAgentConversation,
+  CanvasAssetAnalysis,
+  CanvasContinuityBible,
   PipelineAssetType,
   PipelineProject,
   PipelineStageStatus,
@@ -145,6 +148,75 @@ export class LocalPipelineRepository implements PipelineRepository {
     this.opened.delete(id);
     // “删除”在本地项目模型中仅从首页移除，绝不隐式删除用户目录。
     return this.registry.remove(id);
+  }
+
+  async getAgentConversation(projectId: string) {
+    return (await this.requireProject(projectId)).repository.getAgentConversation(projectId);
+  }
+
+  async findAgentConversationBySessionId(sessionId: string) {
+    return (await this.find((repository) => repository.findAgentConversationBySessionId(sessionId)))?.value ?? null;
+  }
+
+  async upsertAgentConversation(input: Omit<PipelineAgentConversation, "createdAt" | "updatedAt">) {
+    return (await this.requireProject(input.projectId)).repository.upsertAgentConversation(input);
+  }
+
+  async updateAgentConversation(
+    projectId: string,
+    patch: Partial<Pick<PipelineAgentConversation, "provider" | "modelId" | "allowAgentGeneration">>,
+  ) {
+    return (await this.requireProject(projectId)).repository.updateAgentConversation(projectId, patch);
+  }
+
+  async createCanvasAgentPlan(input: Parameters<PipelineRepository["createCanvasAgentPlan"]>[0]) {
+    return (await this.requireProject(input.projectId)).repository.createCanvasAgentPlan(input);
+  }
+
+  async getCanvasAgentPlan(id: string) {
+    return (await this.find((repository) => repository.getCanvasAgentPlan(id)))?.value ?? null;
+  }
+
+  async updateCanvasAgentPlan(id: string, patch: Parameters<PipelineRepository["updateCanvasAgentPlan"]>[1]) {
+    const owner = await this.find((repository) => repository.getCanvasAgentPlan(id));
+    return owner ? owner.repository.updateCanvasAgentPlan(id, patch) : null;
+  }
+
+  async createCanvasAgentAction(input: Parameters<PipelineRepository["createCanvasAgentAction"]>[0]) {
+    return (await this.requireProject(input.projectId)).repository.createCanvasAgentAction(input);
+  }
+
+  async getCanvasAgentAction(id: string) {
+    return (await this.find((repository) => repository.getCanvasAgentAction(id)))?.value ?? null;
+  }
+
+  async updateCanvasAgentAction(id: string, patch: Parameters<PipelineRepository["updateCanvasAgentAction"]>[1]) {
+    const owner = await this.find((repository) => repository.getCanvasAgentAction(id));
+    return owner ? owner.repository.updateCanvasAgentAction(id, patch) : null;
+  }
+
+  async createCanvasAssetAnalysis(input: Omit<CanvasAssetAnalysis, "createdAt">) {
+    return (await this.requireProject(input.projectId)).repository.createCanvasAssetAnalysis(input);
+  }
+
+  async findCanvasAssetAnalysis(input: Parameters<PipelineRepository["findCanvasAssetAnalysis"]>[0]) {
+    return (await this.find((repository) => repository.findCanvasAssetAnalysis(input)))?.value ?? null;
+  }
+
+  async getCanvasAssetAnalysis(id: string) {
+    return (await this.find((repository) => repository.getCanvasAssetAnalysis(id)))?.value ?? null;
+  }
+
+  async listCanvasAssetAnalyses(projectId: string, nodeIds?: string[]) {
+    return (await this.requireProject(projectId)).repository.listCanvasAssetAnalyses(projectId, nodeIds);
+  }
+
+  async getCanvasContinuityBible(projectId: string) {
+    return (await this.requireProject(projectId)).repository.getCanvasContinuityBible(projectId);
+  }
+
+  async saveCanvasContinuityBible(input: CanvasContinuityBible) {
+    return (await this.requireProject(input.projectId)).repository.saveCanvasContinuityBible(input);
   }
 
   async createAsset(input: Omit<PipelineAsset, "createdAt" | "updatedAt">) {

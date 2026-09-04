@@ -224,7 +224,7 @@ Pipeline Studio 使用可迁移的本地项目目录。创建项目时，用户�
 
 内容生成 Run 和供应商 Job 使用 `node:sqlite` 持久化。任务编排和状态机位于 application，SQLite、内容生成供应商、文件系统和凭证存储分别通过 ports 隔离。进程内 Worker 由 composition 启动，只通过 application 和 ports 推进 Job，不允许 Route Handler 或供应商 adapter 直接修改任务状态。Provider Module 声明该供应商的 Worker 并发上限；Worker 按 Provider 独立调度，并把查询/下载的连续可恢复错误次数、下一次执行时间和指数退避状态持久化到 Job。付费提交结果不确定时仍禁止自动重试。
 
-Pipeline Studio 的多节点执行使用项目数据库中的 Workflow Run 和 Step 作为编排事实来源。Run 冻结选中节点与内部边的拓扑快照，Step 只关联标准 Generation Run，不复制 Provider Job 或 Artifact。调度器按拓扑推进 ready 节点；刷新或应用重启后从项目数据库和关联 Generation Run 恢复。进程内锁只用于避免同一进程重复推进，不能作为运行状态来源。项目数据库以部分唯一索引保证一个项目最多存在一个活动 Run；application 在创建首个付费 Generation Run 前预检全部步骤的静态 Route、Provider、Prompt、参数和素材槽位，并在活动期间拒绝修改运行节点的数据或连接。
+Pipeline Studio 的多节点执行使用项目数据库中的 Workflow Run 和 Step 作为编排事实来源。Run 冻结选中节点与内部边的拓扑快照，Step 只关联标准 Generation Run，不复制 Provider Job 或 Artifact。调度器按拓扑推进 ready 节点；一个分支失败时，无依赖分支继续执行，依赖失败结果的步骤以带原因的阻塞状态结束。刷新或应用重启后从项目数据库和关联 Generation Run 恢复。进程内锁只用于避免同一进程重复推进，不能作为运行状态来源。项目数据库以部分唯一索引保证一个项目最多存在一个活动 Run；application 在创建首个付费 Generation Run 前预检全部步骤的静态 Route、Provider、Prompt、参数和素材槽位，并在活动期间拒绝修改运行节点的数据或连接。
 
 浏览器原始素材先经受控资产接口写入 workspace 的 `.po-agent/generation-inputs/`，再以 workspace-relative `AssetRef` 创建 Run。直接生成 UI 只读取持久化 Run view；它不会直接调用供应商查询接口。显式重试保留 Run，并原子新增带独立幂等键的 Provider Job。
 
@@ -236,13 +236,19 @@ Chat Composer 通过 `ChatTurnService` 提交一轮消息，不在浏览器中�
 
 新建 Runtime 返回前必须通过 `SessionLifecycleProjector` 建立持久化 Generation Session 投影。Chat 页面通过统一 Turn Snapshot 同时恢复 Agent Runtime 和 Generation Run；SSE 与轮询只提供增量变化。服务端在接受新 Turn 前同时检查 Agent streaming/compacting 状态和活动 Generation Run，前端禁用状态不能替代该并发守卫。
 
+Pipeline Canvas Agent 每轮先解析结构化意图，并在内存回合注册表中建立短期执行权限。画布修改先持久化为语义 Plan，application 编译器再解析临时节点引用、选择布局并生成现有 `CanvasMutationBatch`；模型不能直接提交底层 mutation。Plan 记录 base revision 与引用节点版本，无关画布变化可以安全 rebase，相关节点变化必须停止。每次应用保存正向和反向 mutations 形成 Action；只有画布此后没有新 revision 时才允许整组撤销。节点和连线仍由 Canvas Studio 的事务、连接校验和服务端字段保护规则统一处理。
+
+结果评审继续复用 Canvas 素材分析和持久化 Generation Run，不建立第二套版本数据。评审工具组装最近 Run 摘要和由画布边计算的下游影响范围；对本地可读取的成功产物，在一次最多八个分析预算中优先当前选择并补充近期历史版本，缓存仍按原节点和媒体指纹复用。建议与最终选择保持分离。局部调整仍通过语义 Plan 修改提示词或 Route，局部重跑仍进入 Workflow Run 与 Generation Run 状态机。成功子图保存为现有 `CanvasWorkflow`，不引入 Agent 专属模板格式。
+
+Canvas 素材理解通过 application 自有的 `CanvasAssetAnalyzer` 与 `CanvasMediaPreprocessor` ports 隔离多模态模型和 FFmpeg。图片字节只从 Canvas Studio 的受控媒体读取路径进入 Pi infrastructure adapter，不写入会话上下文或分析表；视频先在临时目录采样最多六帧，再把有界 JPEG 帧送入视觉模型，完整视频不会进入模型；音频解码为临时的 16 kHz 单声道 PCM，只计算节奏、动态和静音比例，处理结束即清理。项目数据库仅保存来源指纹、模型、结构化摘要和引用建议，同一素材指纹与分析配置组合复用结果。用户明确确认的角色、产品、场景、服装、色彩、风格和镜头语言单独保存为带 revision 的连续性设定；工具必须引用当前用户原文，模型分析建议不能自行提升为确认事实。后续 Agent 回合读取连续性设定，并仅为当前选中或引用节点附加最近的素材摘要。FFmpeg 默认从 `PATH` 解析，也可通过 `PO_AGENT_FFMPEG_PATH` 和 `PO_AGENT_FFPROBE_PATH` 指定；不可用时返回可操作的预处理器错误。
+
 Chat 的“执行前确认”是单轮执行策略，不是 Session 模式。Planner 选择 Route 后，application 可先创建 `awaiting_confirmation` Run；该状态没有 Provider Job，Worker 不会领取。application 按“字段默认值、Route 默认值、明确输入”的优先级解析并持久化完整参数。用户在 Assistant 消息动作中确认后，application 按 Route Schema 重新校验最终 Prompt 与参数，并由 repository 在同一 SQLite 事务中把 Run 切换为 `queued`、创建首个 Job。Chat 以本地 `runId` 查询持久化 Run，将最新状态投影到同一执行步骤并展示最终产物。参数动作展示 Route Schema 的全部参数，不定义或消费 `advanced` 展示字段。用户修改值不会重新交给模型转述。
 
 Chat 工作流生成由 Worker 独立推进并由 Run 轮询恢复，不占用一次长时间 Agent Prompt。确定性编排写入的 Assistant Tool Call 会触发 Pi Session 文件创建，随后无论 Run 创建成功或失败都会写入 Tool Result 闭合该步骤；因此仅执行内容生成、从未调用聊天模型的新 Session 也能在刷新后恢复完整过程。断开页面或 Agent SSE 不会取消持久化 Run；用户确认、取消和重试都直接作用于 Run 状态机。开放式 Agent Tool 仍可使用 `generate_image`、`generate_video`、`get_generation` 和 `cancel_generation`，但统一 Composer 已确认的生成 Plan 不再经过该模型决策链路。下载产物由 application 根据最终 Prompt 生成简短名称提示，filesystem adapter 负责过滤非法字符和 Windows 保留名，文件仍隔离在对应 Run 目录。
 
 Provider Job 在创建时冻结 Route 的 execution config 与已解析参数；资产准备、提交和轮询都使用该快照，不能在恢复时重新读取当前 Catalog 的协议语义。准备后的供应商资产引用随 Job 持久化但对 application 保持不透明，新重试 Job 会重新准备资产。Provider Job 还持久化脱敏且有大小上限的 `requestSnapshot` 与 `responseSnapshot`。凭据、密码、Cookie 字段以及 URL 查询参数中的 token、secret、authorization、签名等值在 adapter 边界替换为 `[REDACTED]`；超过上限的协议内容保留截断标记、原始字节数和受限预览。Chat 的生成工具步骤可展开查看模型工具入参、最终 Route 输入和审计快照，而不暴露凭据。
 
-付费内容生成采用服务端纵深防护：供应商总开关与逐 Route 开关共同控制新 Run，默认关闭并持久化于 SQLite；种子 Route 升级不得覆盖用户开关。Agent 生成工具还要求本轮用户明确授权，直接 Generate UI 在创建和重试前进行费用确认。前端隐藏或 Prompt 约束不能替代 application 层的开关校验。
+付费内容生成采用服务端纵深防护：供应商总开关与逐 Route 开关共同控制新 Run，默认关闭并持久化于 SQLite；种子 Route 升级不得覆盖用户开关。Agent 生成工具还要求本轮用户明确授权，直接 Generate UI 在创建和重试前进行费用确认。Provider adapter 将失败映射为供应商无关的结构化诊断；已返回的待下载输出在 Job 中持久化，使下载恢复不重新提交生成任务。供应商未返回输出时只能创建新的 attempt，并明确标记可能再次计费。前端隐藏或 Prompt 约束不能替代 application 层的开关校验。
 
 当前部署要求长期运行的 Node.js 进程。Electron 和自托管 Next.js 满足该约束；若迁移到 Serverless，必须先将 Worker 替换为独立常驻执行器或托管队列。
 

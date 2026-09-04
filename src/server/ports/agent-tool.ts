@@ -36,8 +36,15 @@ export interface AgentToolDefinition<TDetails = unknown> {
 }
 
 export interface AgentToolProvider {
-  getTools(input: {
-    sessionId: string;
-    cwd: string;
-  }): AgentToolDefinition[];
+  getTools(input: AgentToolContext): AgentToolDefinition[];
+}
+
+export interface AgentToolContext {
+  sessionId: string;
+  cwd: string;
+  pipelineProjectId?: string;
+}
+
+export interface AgentSessionScopeProvider {
+  getPipelineProjectId(sessionId: string): Promise<string | null>;
 }

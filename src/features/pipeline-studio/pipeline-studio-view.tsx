@@ -3,6 +3,7 @@
 import { CanvasStoreProvider } from "./state/canvas-store";
 import { useCanvasController } from "./controllers/use-canvas-controller";
 import { StudioCanvas } from "./components/studio-canvas";
+import { PipelineAgentPanel } from "./agent-panel/pipeline-agent-panel";
 
 export function PipelineStudioView({
   projectId,
@@ -31,11 +32,14 @@ function PipelineStudioController({
 }) {
   const controller = useCanvasController(projectId, projectTitle);
   return (
-    <StudioCanvas
-      projectId={projectId}
-      projectTitle={controller.projectTitle}
-      onBack={onBack}
-      onRenameProject={controller.renameProject}
-    />
+    <div className="flex h-full min-w-0 flex-1">
+      <StudioCanvas
+        projectId={projectId}
+        projectTitle={controller.projectTitle}
+        onBack={onBack}
+        onRenameProject={controller.renameProject}
+      />
+      <PipelineAgentPanel key={projectId} projectId={projectId} />
+    </div>
   );
 }

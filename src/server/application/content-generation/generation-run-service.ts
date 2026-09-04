@@ -378,6 +378,40 @@ export class GenerationRunService {
     };
   }
 
+  async retryDownload(id: string, idempotencyKey: string) {
+    await this.ready;
+    const run = await this.repository.getRun(id);
+    if (!run) throw new AppError("GENERATION_RUN_NOT_FOUND", "Generation run was not found", 404);
+    const retryKey = validateRetryKey(idempotencyKey);
+    const jobs = await this.repository.listJobsByRun(id);
+    const previous = jobs.at(-1);
+    if (!previous?.pendingOutputs?.length || previous.failure?.recoveryAction !== "redownload") {
+      throw new AppError(
+        "GENERATION_DOWNLOAD_RECOVERY_UNAVAILABLE",
+        "This generation did not retain a downloadable provider output",
+        409,
+      );
+    }
+    const timestamp = this.now().toISOString();
+    const nextRun: GenerationRun = {
+      ...run, status: "queued", errorCode: undefined, errorMessage: undefined,
+      updatedAt: timestamp, completedAt: undefined,
+    };
+    const result = await this.repository.resumeDownload(nextRun, {
+      ...previous, status: "downloading", downloadRetryKey: retryKey,
+      nextPollAt: timestamp, leaseOwner: undefined, leaseExpiresAt: undefined,
+      lastErrorCode: undefined, lastErrorMessage: undefined, failure: undefined,
+      updatedAt: timestamp,
+    });
+    if (!result) throw new AppError("GENERATION_DOWNLOAD_RECOVERY_UNAVAILABLE", "Generation download is no longer retryable", 409);
+    return {
+      created: result.created,
+      run: result.run,
+      jobs: await this.repository.listJobsByRun(id),
+      artifacts: await this.repository.listArtifactsByRun(id),
+    };
+  }
+
   async listRuns(sessionId: string): Promise<GenerationRunView[]> {
     await this.ready;
     await this.requireSession(sessionId);
@@ -527,6 +561,18 @@ export class GenerationRunService {
     await this.repository.upsertSession(projected);
     return projected;
   }
+}
+
+function validateRetryKey(value: string): string {
+  const key = value.trim();
+  if (!key || key.length > 200) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "Generation retry idempotency key must contain between 1 and 200 characters",
+      400,
+    );
+  }
+  return key;
 }
 
 function validatePrompt(

@@ -16,6 +16,135 @@ export interface PipelineProject {
   updatedAt: string;
 }
 
+export interface PipelineAgentConversation {
+  projectId: string;
+  sessionId: string;
+  provider: string | null;
+  modelId: string | null;
+  allowAgentGeneration: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CanvasAgentPlanOperation =
+  | {
+      type: "node.create";
+      tempId: string;
+      mediaType: CanvasMediaType;
+      name: string;
+      text?: string;
+      prompt?: string;
+      routeId?: string;
+      column?: number;
+      row?: number;
+    }
+  | {
+      type: "node.update";
+      nodeId: string;
+      name?: string;
+      text?: string;
+      prompt?: string;
+      routeId?: string;
+    }
+  | {
+      type: "edge.create";
+      source: string;
+      target: string;
+      role?: CanvasResourceRole;
+    };
+
+export type CanvasAgentPlanStatus = "draft" | "applied" | "superseded";
+
+export interface CanvasAgentPlan {
+  id: string;
+  projectId: string;
+  sessionId: string;
+  turnId: string;
+  summary: string;
+  baseRevision: number;
+  operations: CanvasAgentPlanOperation[];
+  referencedNodeVersions: Record<string, string>;
+  status: CanvasAgentPlanStatus;
+  appliedRevision: number | null;
+  actionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CanvasAgentAction {
+  id: string;
+  projectId: string;
+  planId: string;
+  forwardMutations: CanvasMutation[];
+  inverseMutations: CanvasMutation[];
+  appliedRevision: number;
+  status: "applied" | "undone";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CanvasAssetSuggestedRole =
+  | "subject"
+  | "scene"
+  | "style"
+  | "first-frame"
+  | "last-frame"
+  | "negative-reference";
+
+export interface CanvasAssetAnalysisContent {
+  summary: string;
+  subjects: string[];
+  composition: string | null;
+  materials: string[];
+  style: string | null;
+  lighting: string | null;
+  visibleText: string[];
+  brandElements: string[];
+  suggestedRoles: CanvasAssetSuggestedRole[];
+  technicalMetadata: Record<string, string | number | boolean>;
+}
+
+export interface CanvasAssetAnalysis {
+  id: string;
+  projectId: string;
+  nodeId: string;
+  nodeVersion: string;
+  sourceFingerprint: string;
+  mediaType: CanvasMediaType;
+  sourceName: string;
+  contentType: string;
+  modelProvider: string | null;
+  modelId: string | null;
+  content: CanvasAssetAnalysisContent;
+  createdAt: string;
+}
+
+export type CanvasContinuityCategory =
+  | "character"
+  | "product"
+  | "scene"
+  | "wardrobe"
+  | "palette"
+  | "style"
+  | "camera";
+
+export interface CanvasContinuityEntry {
+  id: string;
+  category: CanvasContinuityCategory;
+  label: string;
+  value: string;
+  sourceAnalysisIds: string[];
+  confirmationQuote: string;
+  updatedAt: string;
+}
+
+export interface CanvasContinuityBible {
+  projectId: string;
+  revision: number;
+  entries: CanvasContinuityEntry[];
+  updatedAt: string;
+}
+
 export type PipelineProjectStatus =
   | "draft"
   | "analyzing"

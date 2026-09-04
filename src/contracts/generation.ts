@@ -117,6 +117,21 @@ export type ProviderJobStatus =
   | "submission_unknown"
   | "cancelled";
 
+export type GenerationFailurePhase =
+  | "provider-input-download"
+  | "provider-processing"
+  | "output-download"
+  | "local-save"
+  | "unknown";
+
+export interface GenerationFailureDto {
+  phase: GenerationFailurePhase;
+  origin: "provider" | "local";
+  outputAvailable: boolean;
+  recoveryAction: "resubmit" | "redownload" | "none";
+  retryMayCharge: boolean;
+}
+
 export type GenerationSource =
   | "agent-tool"
   | "chat-workflow"
@@ -191,6 +206,7 @@ export interface ProviderJobDto {
   lastErrorMessage?: string;
   /** 连续可恢复错误次数，用于展示当前退避强度和排障。 */
   transientFailureCount?: number;
+  failure?: GenerationFailureDto;
   requestSnapshot?: JsonValue;
   responseSnapshot?: JsonValue;
   createdAt: string;

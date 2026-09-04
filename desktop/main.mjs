@@ -71,6 +71,7 @@ function waitForServer(url, deadlineMs = 30000) {
 function startServer({
   appRoot,
   builtinSkillsDir,
+  pipelineSkillsDir,
   officialPacksDir,
   port,
   piAgentDir,
@@ -82,6 +83,7 @@ function startServer({
     cwd: appRoot,
     env: buildServerEnvironment({
       builtinSkillsDir,
+      pipelineSkillsDir,
       officialPacksDir,
       piAgentDir,
       port,
@@ -103,6 +105,9 @@ async function createWindow() {
   const officialPacksDir = app.isPackaged
     ? path.join(process.resourcesPath, "resources", "official-packs")
     : path.join(appRoot, "resources", "official-packs");
+  const pipelineSkillsDir = app.isPackaged
+    ? path.join(process.resourcesPath, "resources", "pipeline-skills")
+    : path.join(appRoot, "resources", "pipeline-skills");
   const piAgentDir = getPiAgentDir(app.getPath("userData"));
   const port = await findFreePort();
   const url = getServerUrl(port);
@@ -110,6 +115,7 @@ async function createWindow() {
   startServer({
     appRoot,
     builtinSkillsDir,
+    pipelineSkillsDir,
     officialPacksDir,
     port,
     piAgentDir,

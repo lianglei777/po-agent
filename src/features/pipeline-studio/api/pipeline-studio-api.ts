@@ -10,8 +10,19 @@ import type {
   GenerateTextNodeRequest,
   GenerateTextNodeResponse,
   CreateLipSyncPreparationResponse,
+  CanvasWorkflowRunListResponse,
 } from "@/contracts/pipeline";
 import type { ModelsResponse } from "@/contracts/models";
+import type { AgentCommand, AgentCommandResult } from "@/contracts/agent";
+import type { SessionDetailResponse } from "@/contracts/sessions";
+import type {
+  PipelineAgentConversationResponse,
+  PipelineAgentTurnRequest,
+  PipelineAgentTurnResponse,
+  UndoCanvasAgentActionResponse,
+  UpdatePipelineAgentConversationRequest,
+} from "@/contracts/pipeline-agent";
+import type { PipelineSkillLoadResponse, PipelineSkillMutationResponse, PipelineSkillSearchResponse, UpdatePipelineSkillRequest } from "@/contracts/pipeline-agent";
 import type { GenerationComposerOptionsResponse, GenerationRunViewDto, ListGenerationRunsResponse } from "@/contracts/generation";
 
 export class PipelineStudioApiError extends Error {
@@ -76,6 +87,49 @@ export const pipelineStudioApi = {
 
   getTextModels: () => request<ModelsResponse>("/api/models"),
 
+  getAgentConversation: (projectId: string) => request<PipelineAgentConversationResponse>(
+    `/api/pipeline/projects/${encodeURIComponent(projectId)}/agent-session`,
+  ),
+
+  updateAgentConversation: (projectId: string, patch: UpdatePipelineAgentConversationRequest) =>
+    request<PipelineAgentConversationResponse>(
+      `/api/pipeline/projects/${encodeURIComponent(projectId)}/agent-session`,
+      { method: "PATCH", body: JSON.stringify(patch) },
+    ),
+
+  getPipelineSkills: (projectId: string) => request<PipelineSkillLoadResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills`),
+  updatePipelineSkill: (projectId: string, input: UpdatePipelineSkillRequest) => request<PipelineSkillMutationResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills`, { method: "PATCH", body: JSON.stringify(input) }),
+  installPipelineSkill: (projectId: string, input: { package: string }) => request<PipelineSkillMutationResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills`, { method: "POST", body: JSON.stringify(input) }),
+  importPipelineSkill: (projectId: string, input: { sourceFilePath: string }) => request<PipelineSkillMutationResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills/import`, { method: "POST", body: JSON.stringify(input) }),
+  searchPipelineSkills: (projectId: string, query: string) => request<PipelineSkillSearchResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills/search`, { method: "POST", body: JSON.stringify({ query }) }),
+  installShortDramaSkill: (projectId: string) => request<PipelineSkillMutationResponse>(`/api/pipeline/projects/${encodeURIComponent(projectId)}/skills/builtin/short-drama`, { method: "POST" }),
+
+  getAgentSession: (sessionId: string) => request<SessionDetailResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}?includeState=true`,
+  ),
+
+  sendAgentCommand: <C extends AgentCommand>(sessionId: string, command: C) =>
+    request<AgentCommandResult<C>>(`/api/agent/${encodeURIComponent(sessionId)}`, {
+      method: "POST",
+      body: JSON.stringify(command),
+    }),
+
+  submitAgentTurn: (projectId: string, input: PipelineAgentTurnRequest) =>
+    request<PipelineAgentTurnResponse>(
+      `/api/pipeline/projects/${encodeURIComponent(projectId)}/agent-session/turns`,
+      { method: "POST", body: JSON.stringify(input) },
+    ),
+
+  undoAgentAction: (projectId: string, actionId: string) => request<UndoCanvasAgentActionResponse>(
+    `/api/pipeline/projects/${encodeURIComponent(projectId)}/agent-actions/${encodeURIComponent(actionId)}/undo`,
+    { method: "POST" },
+  ),
+
+  getCanvasWorkflowRuns: (projectId: string, signal?: AbortSignal) => request<CanvasWorkflowRunListResponse>(
+    `/api/pipeline/projects/${encodeURIComponent(projectId)}/canvas/workflow-runs`,
+    { signal },
+  ),
+
   getGenerationOptions: (signal?: AbortSignal) => request<GenerationComposerOptionsResponse>(
     "/api/generation/composer-options",
     { signal },
@@ -118,8 +172,8 @@ export const pipelineStudioApi = {
 
   retryCanvasNodeGeneration: (nodeId: string, runId: string, idempotencyKey: string) => request<{
     node: CanvasNode;
-    edges?: CanvasEdge[];
     generation: GenerationRunViewDto;
+    action: "resubmit" | "redownload";
   }>(
     `/api/pipeline/canvas-nodes/${encodeURIComponent(nodeId)}/generation-runs/${encodeURIComponent(runId)}/retry`,
     { method: "POST", body: JSON.stringify({ idempotencyKey }) },

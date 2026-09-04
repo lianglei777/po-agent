@@ -11,6 +11,11 @@ import type {
   CanvasWorkflowRunStatus,
   CanvasWorkflowRunStep,
   PipelineAsset,
+  PipelineAgentConversation,
+  CanvasAgentAction,
+  CanvasAssetAnalysis,
+  CanvasContinuityBible,
+  CanvasAgentPlan,
   PipelineAssetType,
   PipelineProject,
   PipelineStageStatus,
@@ -26,6 +31,34 @@ export interface PipelineRepository {
   listProjects(): Promise<PipelineProject[]>;
   updateProject(id: string, patch: Partial<PipelineProject>): Promise<PipelineProject | null>;
   deleteProject(id: string): Promise<boolean>;
+
+  getAgentConversation(projectId: string): Promise<PipelineAgentConversation | null>;
+  findAgentConversationBySessionId(sessionId: string): Promise<PipelineAgentConversation | null>;
+  upsertAgentConversation(input: Omit<PipelineAgentConversation, "createdAt" | "updatedAt">): Promise<PipelineAgentConversation>;
+  updateAgentConversation(projectId: string, patch: Partial<Pick<PipelineAgentConversation,
+    "provider" | "modelId" | "allowAgentGeneration"
+  >>): Promise<PipelineAgentConversation | null>;
+
+  createCanvasAgentPlan(input: Omit<CanvasAgentPlan, "createdAt" | "updatedAt">): Promise<CanvasAgentPlan>;
+  getCanvasAgentPlan(id: string): Promise<CanvasAgentPlan | null>;
+  updateCanvasAgentPlan(id: string, patch: Partial<Pick<CanvasAgentPlan,
+    "summary" | "baseRevision" | "operations" | "referencedNodeVersions" | "status" | "appliedRevision" | "actionId"
+  >>): Promise<CanvasAgentPlan | null>;
+  createCanvasAgentAction(input: Omit<CanvasAgentAction, "createdAt" | "updatedAt">): Promise<CanvasAgentAction>;
+  getCanvasAgentAction(id: string): Promise<CanvasAgentAction | null>;
+  updateCanvasAgentAction(id: string, patch: Pick<CanvasAgentAction, "status">): Promise<CanvasAgentAction | null>;
+
+  createCanvasAssetAnalysis(input: Omit<CanvasAssetAnalysis, "createdAt">): Promise<CanvasAssetAnalysis>;
+  getCanvasAssetAnalysis(id: string): Promise<CanvasAssetAnalysis | null>;
+  findCanvasAssetAnalysis(input: {
+    nodeId: string;
+    sourceFingerprint: string;
+    modelProvider: string | null;
+    modelId: string | null;
+  }): Promise<CanvasAssetAnalysis | null>;
+  listCanvasAssetAnalyses(projectId: string, nodeIds?: string[]): Promise<CanvasAssetAnalysis[]>;
+  getCanvasContinuityBible(projectId: string): Promise<CanvasContinuityBible | null>;
+  saveCanvasContinuityBible(input: CanvasContinuityBible): Promise<CanvasContinuityBible>;
 
   createAsset(input: Omit<PipelineAsset, "createdAt" | "updatedAt">): Promise<PipelineAsset>;
   getAsset(id: string): Promise<PipelineAsset | null>;

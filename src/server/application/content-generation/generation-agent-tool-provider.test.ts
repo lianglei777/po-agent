@@ -12,6 +12,17 @@ import { GenerationReviewRegistry } from "./generation-review-registry";
 const NOW = "2026-08-06T00:00:00.000Z";
 
 describe("GenerationAgentToolProvider", () => {
+  it("does not expose generic generation tools to Pipeline Agent sessions", () => {
+    const provider = new GenerationAgentToolProvider(
+      () => ({}) as never,
+    );
+
+    expect(provider.getTools({
+      sessionId: "pipeline-session",
+      cwd: "D:\\project",
+      pipelineProjectId: "project-1",
+    })).toEqual([]);
+  });
   let database: SqliteDatabase;
   let repository: SqliteGenerationRepository;
   let service: GenerationRunService;

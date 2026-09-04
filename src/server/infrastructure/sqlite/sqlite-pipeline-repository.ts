@@ -2,6 +2,10 @@ import type { SQLOutputValue } from "node:sqlite";
 import type {
   AssetVariant,
   CanvasEdge,
+  CanvasAgentAction,
+  CanvasAgentPlan,
+  CanvasAssetAnalysis,
+  CanvasContinuityBible,
   CanvasMutation,
   CanvasNode,
   CanvasNodeType,
@@ -11,6 +15,7 @@ import type {
   CanvasWorkflowRun,
   CanvasWorkflowRunStep,
   PipelineAsset,
+  PipelineAgentConversation,
   PipelineAssetType,
   PipelineProject,
   PipelineStageStatus,
@@ -93,6 +98,212 @@ export class SqlitePipelineRepository implements PipelineRepository {
 
   async deleteProject(id: string): Promise<boolean> {
     return this.database.prepare("DELETE FROM pipeline_projects WHERE id = ?").run(id).changes > 0;
+  }
+
+  async getAgentConversation(projectId: string): Promise<PipelineAgentConversation | null> {
+    const row = this.database.prepare(
+      "SELECT * FROM pipeline_agent_conversations WHERE project_id = ?",
+    ).get(projectId);
+    return row ? agentConversationFromRow(row as SqliteRow) : null;
+  }
+
+  async findAgentConversationBySessionId(sessionId: string): Promise<PipelineAgentConversation | null> {
+    const row = this.database.prepare(
+      "SELECT * FROM pipeline_agent_conversations WHERE session_id = ?",
+    ).get(sessionId);
+    return row ? agentConversationFromRow(row as SqliteRow) : null;
+  }
+
+  async upsertAgentConversation(
+    input: Omit<PipelineAgentConversation, "createdAt" | "updatedAt">,
+  ): Promise<PipelineAgentConversation> {
+    const existing = await this.getAgentConversation(input.projectId);
+    const ts = nowIso();
+    const conversation: PipelineAgentConversation = {
+      ...input,
+      createdAt: existing?.createdAt ?? ts,
+      updatedAt: ts,
+    };
+    this.database.prepare(`
+      INSERT INTO pipeline_agent_conversations(
+        project_id, session_id, provider, model_id, allow_agent_generation, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        session_id = excluded.session_id,
+        provider = excluded.provider,
+        model_id = excluded.model_id,
+        allow_agent_generation = excluded.allow_agent_generation,
+        updated_at = excluded.updated_at
+    `).run(
+      conversation.projectId,
+      conversation.sessionId,
+      conversation.provider,
+      conversation.modelId,
+      conversation.allowAgentGeneration ? 1 : 0,
+      conversation.createdAt,
+      conversation.updatedAt,
+    );
+    return conversation;
+  }
+
+  async updateAgentConversation(
+    projectId: string,
+    patch: Partial<Pick<PipelineAgentConversation, "provider" | "modelId" | "allowAgentGeneration">>,
+  ): Promise<PipelineAgentConversation | null> {
+    const existing = await this.getAgentConversation(projectId);
+    if (!existing) return null;
+    return this.upsertAgentConversation({ ...existing, ...patch });
+  }
+
+  async createCanvasAgentPlan(
+    input: Omit<CanvasAgentPlan, "createdAt" | "updatedAt">,
+  ): Promise<CanvasAgentPlan> {
+    const ts = nowIso();
+    const plan = { ...input, createdAt: ts, updatedAt: ts };
+    this.database.prepare(`
+      INSERT INTO canvas_agent_plans(
+        id, project_id, session_id, turn_id, summary, base_revision, operations_json,
+        referenced_node_versions_json, status, applied_revision, action_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      plan.id, plan.projectId, plan.sessionId, plan.turnId, plan.summary, plan.baseRevision,
+      toJson(plan.operations), toJson(plan.referencedNodeVersions), plan.status,
+      plan.appliedRevision, plan.actionId, plan.createdAt, plan.updatedAt,
+    );
+    return plan;
+  }
+
+  async getCanvasAgentPlan(id: string): Promise<CanvasAgentPlan | null> {
+    const row = this.database.prepare("SELECT * FROM canvas_agent_plans WHERE id = ?").get(id);
+    return row ? canvasAgentPlanFromRow(row as SqliteRow) : null;
+  }
+
+  async updateCanvasAgentPlan(
+    id: string,
+    patch: Partial<Pick<CanvasAgentPlan,
+      "summary" | "baseRevision" | "operations" | "referencedNodeVersions" | "status" | "appliedRevision" | "actionId"
+    >>,
+  ): Promise<CanvasAgentPlan | null> {
+    const existing = await this.getCanvasAgentPlan(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...patch, updatedAt: nowIso() };
+    this.database.prepare(`
+      UPDATE canvas_agent_plans
+      SET summary = ?, base_revision = ?, operations_json = ?, referenced_node_versions_json = ?,
+          status = ?, applied_revision = ?, action_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      updated.summary, updated.baseRevision, toJson(updated.operations), toJson(updated.referencedNodeVersions),
+      updated.status, updated.appliedRevision, updated.actionId, updated.updatedAt, id,
+    );
+    return updated;
+  }
+
+  async createCanvasAgentAction(
+    input: Omit<CanvasAgentAction, "createdAt" | "updatedAt">,
+  ): Promise<CanvasAgentAction> {
+    const ts = nowIso();
+    const action = { ...input, createdAt: ts, updatedAt: ts };
+    this.database.prepare(`
+      INSERT INTO canvas_agent_actions(
+        id, project_id, plan_id, forward_mutations_json, inverse_mutations_json,
+        applied_revision, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      action.id, action.projectId, action.planId, toJson(action.forwardMutations),
+      toJson(action.inverseMutations), action.appliedRevision, action.status, action.createdAt, action.updatedAt,
+    );
+    return action;
+  }
+
+  async getCanvasAgentAction(id: string): Promise<CanvasAgentAction | null> {
+    const row = this.database.prepare("SELECT * FROM canvas_agent_actions WHERE id = ?").get(id);
+    return row ? canvasAgentActionFromRow(row as SqliteRow) : null;
+  }
+
+  async updateCanvasAgentAction(
+    id: string,
+    patch: Pick<CanvasAgentAction, "status">,
+  ): Promise<CanvasAgentAction | null> {
+    const existing = await this.getCanvasAgentAction(id);
+    if (!existing) return null;
+    const updated = { ...existing, ...patch, updatedAt: nowIso() };
+    this.database.prepare(
+      "UPDATE canvas_agent_actions SET status = ?, updated_at = ? WHERE id = ?",
+    ).run(updated.status, updated.updatedAt, id);
+    return updated;
+  }
+
+  async createCanvasAssetAnalysis(
+    input: Omit<CanvasAssetAnalysis, "createdAt">,
+  ): Promise<CanvasAssetAnalysis> {
+    const analysis = { ...input, createdAt: nowIso() };
+    this.database.prepare(`
+      INSERT INTO canvas_asset_analyses(
+        id, project_id, node_id, node_version, source_fingerprint, media_type,
+        source_name, content_type, model_provider, model_id, content_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      analysis.id, analysis.projectId, analysis.nodeId, analysis.nodeVersion,
+      analysis.sourceFingerprint, analysis.mediaType, analysis.sourceName,
+      analysis.contentType, analysis.modelProvider, analysis.modelId,
+      toJson(analysis.content), analysis.createdAt,
+    );
+    return analysis;
+  }
+
+  async findCanvasAssetAnalysis(input: {
+    nodeId: string;
+    sourceFingerprint: string;
+    modelProvider: string | null;
+    modelId: string | null;
+  }): Promise<CanvasAssetAnalysis | null> {
+    const row = this.database.prepare(`
+      SELECT * FROM canvas_asset_analyses
+      WHERE node_id = ? AND source_fingerprint = ?
+        AND IFNULL(model_provider, '') = IFNULL(?, '')
+        AND IFNULL(model_id, '') = IFNULL(?, '')
+      LIMIT 1
+    `).get(input.nodeId, input.sourceFingerprint, input.modelProvider, input.modelId);
+    return row ? canvasAssetAnalysisFromRow(row as SqliteRow) : null;
+  }
+
+  async getCanvasAssetAnalysis(id: string): Promise<CanvasAssetAnalysis | null> {
+    const row = this.database.prepare("SELECT * FROM canvas_asset_analyses WHERE id = ?").get(id);
+    return row ? canvasAssetAnalysisFromRow(row as SqliteRow) : null;
+  }
+
+  async listCanvasAssetAnalyses(projectId: string, nodeIds?: string[]): Promise<CanvasAssetAnalysis[]> {
+    if (nodeIds && nodeIds.length === 0) return [];
+    const rows = nodeIds
+      ? this.database.prepare(`
+          SELECT * FROM canvas_asset_analyses
+          WHERE project_id = ? AND node_id IN (${nodeIds.map(() => "?").join(",")})
+          ORDER BY created_at DESC
+        `).all(projectId, ...nodeIds)
+      : this.database.prepare(`
+          SELECT * FROM canvas_asset_analyses WHERE project_id = ? ORDER BY created_at DESC
+        `).all(projectId);
+    return (rows as SqliteRow[]).map(canvasAssetAnalysisFromRow);
+  }
+
+  async getCanvasContinuityBible(projectId: string): Promise<CanvasContinuityBible | null> {
+    const row = this.database.prepare(
+      "SELECT * FROM canvas_continuity_bibles WHERE project_id = ?",
+    ).get(projectId);
+    return row ? canvasContinuityBibleFromRow(row as SqliteRow) : null;
+  }
+
+  async saveCanvasContinuityBible(input: CanvasContinuityBible): Promise<CanvasContinuityBible> {
+    this.database.prepare(`
+      INSERT INTO canvas_continuity_bibles(project_id, revision, entries_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        revision = excluded.revision,
+        entries_json = excluded.entries_json,
+        updated_at = excluded.updated_at
+    `).run(input.projectId, input.revision, toJson(input.entries), input.updatedAt);
+    return input;
   }
 
   async createAsset(input: Omit<PipelineAsset, "createdAt" | "updatedAt">): Promise<PipelineAsset> {
@@ -781,6 +992,76 @@ function projectFromRow(row: SqliteRow): PipelineProject {
     status: row.status as PipelineProject["status"],
     coverArtifactId: row.cover_artifact_id as string | null,
     createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function agentConversationFromRow(row: SqliteRow): PipelineAgentConversation {
+  return {
+    projectId: row.project_id as string,
+    sessionId: row.session_id as string,
+    provider: row.provider as string | null,
+    modelId: row.model_id as string | null,
+    allowAgentGeneration: Boolean(row.allow_agent_generation),
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function canvasAgentPlanFromRow(row: SqliteRow): CanvasAgentPlan {
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    sessionId: row.session_id as string,
+    turnId: row.turn_id as string,
+    summary: row.summary as string,
+    baseRevision: Number(row.base_revision),
+    operations: parseJson<CanvasAgentPlan["operations"]>(row.operations_json) ?? [],
+    referencedNodeVersions: parseJson<Record<string, string>>(row.referenced_node_versions_json) ?? {},
+    status: row.status as CanvasAgentPlan["status"],
+    appliedRevision: row.applied_revision == null ? null : Number(row.applied_revision),
+    actionId: row.action_id as string | null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function canvasAgentActionFromRow(row: SqliteRow): CanvasAgentAction {
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    planId: row.plan_id as string,
+    forwardMutations: parseJson<CanvasAgentAction["forwardMutations"]>(row.forward_mutations_json) ?? [],
+    inverseMutations: parseJson<CanvasAgentAction["inverseMutations"]>(row.inverse_mutations_json) ?? [],
+    appliedRevision: Number(row.applied_revision),
+    status: row.status as CanvasAgentAction["status"],
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+function canvasAssetAnalysisFromRow(row: SqliteRow): CanvasAssetAnalysis {
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    nodeId: row.node_id as string,
+    nodeVersion: row.node_version as string,
+    sourceFingerprint: row.source_fingerprint as string,
+    mediaType: row.media_type as CanvasAssetAnalysis["mediaType"],
+    sourceName: row.source_name as string,
+    contentType: row.content_type as string,
+    modelProvider: row.model_provider as string | null,
+    modelId: row.model_id as string | null,
+    content: parseJson<CanvasAssetAnalysis["content"]>(row.content_json)!,
+    createdAt: row.created_at as string,
+  };
+}
+
+function canvasContinuityBibleFromRow(row: SqliteRow): CanvasContinuityBible {
+  return {
+    projectId: row.project_id as string,
+    revision: Number(row.revision),
+    entries: parseJson<CanvasContinuityBible["entries"]>(row.entries_json) ?? [],
     updatedAt: row.updated_at as string,
   };
 }

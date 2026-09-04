@@ -21,7 +21,7 @@ export function VideoGenerationHistory({
   onNodeUpdate: (node: CanvasNode, edges?: CanvasEdge[]) => void;
 }) {
   const { locale, t } = useI18n();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [runs, setRuns] = useState<GenerationRunViewDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyRunId, setBusyRunId] = useState<string | null>(null);
@@ -62,11 +62,23 @@ export function VideoGenerationHistory({
     }
   };
 
-  const retry = async (runId: string) => {
+  const retry = async (runId: string, retryMayCharge: boolean) => {
+    if (retryMayCharge) {
+      modal.confirm({
+        title: t.pipeline.videoHistoryResubmit,
+        content: t.pipeline.canvasWorkflowRetryConfirm,
+        onOk: () => retryNow(runId),
+      });
+      return;
+    }
+    await retryNow(runId);
+  };
+
+  const retryNow = async (runId: string) => {
     setBusyRunId(runId);
     try {
       const result = await pipelineStudioApi.retryCanvasNodeGeneration(node.id, runId, crypto.randomUUID());
-      onNodeUpdate(result.node, result.edges);
+      onNodeUpdate(result.node);
     } catch (error) {
       void message.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -135,7 +147,10 @@ export function VideoGenerationHistory({
             const artifact = view.artifacts.findLast((candidate) => candidate.kind === "video");
             const selected = artifact?.id === node.data?.videoSelection?.artifactId;
             const busy = busyRunId === view.run.id;
-            const action = videoGenerationHistoryAction(view.run.status, Boolean(artifact));
+            const failure = view.jobs.at(-1)?.failure;
+            const action = failure?.recoveryAction === "none"
+              ? null
+              : videoGenerationHistoryAction(view.run.status, Boolean(artifact));
             const mediaUrl = artifact?.remoteUrl ?? (artifact
               ? canvasNodeGenerationArtifactUrl(node.id, view.run.id, artifact.id)
               : null);
@@ -175,11 +190,22 @@ export function VideoGenerationHistory({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void retry(view.run.id)}
+                      onClick={() => void retry(view.run.id, failure?.retryMayCharge === true)}
                       className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--pl-border)] text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] disabled:opacity-50"
                     >
-                      <RotateCcw className="size-3.5" />{busy ? t.pipeline.videoHistoryWorking : t.pipeline.videoHistoryRetry}
+                      <RotateCcw className="size-3.5" />{busy
+                        ? t.pipeline.videoHistoryWorking
+                        : failure?.recoveryAction === "redownload"
+                          ? t.pipeline.videoHistoryRedownload
+                          : failure?.retryMayCharge
+                            ? t.pipeline.videoHistoryResubmit
+                            : t.pipeline.videoHistoryRetry}
                     </button>
+                  ) : null}
+                  {failure?.phase === "provider-input-download" ? (
+                    <p className="text-xs text-[var(--pl-danger)]">{t.pipeline.generationFailureProviderInputDownload}</p>
+                  ) : failure?.recoveryAction === "redownload" ? (
+                    <p className="text-xs text-[var(--pl-text-secondary)]">{t.pipeline.generationFailureOutputDownload}</p>
                   ) : null}
                   {view.run.errorMessage ? <p className="text-xs text-[var(--pl-danger)]">{view.run.errorMessage}</p> : null}
                 </div>

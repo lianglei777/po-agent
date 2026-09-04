@@ -15,7 +15,7 @@ import type {
   AgentRuntimeFactory,
   AgentRuntimeRegistry,
 } from "@/server/ports/agent-runtime";
-import type { AgentToolProvider } from "@/server/ports/agent-tool";
+import type { AgentSessionScopeProvider, AgentToolProvider } from "@/server/ports/agent-tool";
 import type { AgentPromptContextProvider } from "@/server/ports/agent-prompt-context-provider";
 import type { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
@@ -46,6 +46,7 @@ export class AgentService {
     private readonly generationReviews?: GenerationReviewRegistry,
     private readonly promptContextProvider?: AgentPromptContextProvider,
     private readonly sessionLifecycleProjector?: SessionLifecycleProjector,
+    private readonly sessionScopeProvider?: AgentSessionScopeProvider,
   ) {}
 
   /**
@@ -58,6 +59,7 @@ export class AgentService {
    */
   async create(
     input: CreateAgentRequest,
+    scope: { pipelineProjectId?: string } = {},
   ): Promise<CreateAgentResponse> {
     this.roots.addRoot(input.cwd);
     const requestedSessionId = randomUUID();
@@ -70,6 +72,7 @@ export class AgentService {
         customTools: this.tools?.getTools({
           sessionId: requestedSessionId,
           cwd: input.cwd,
+          pipelineProjectId: scope.pipelineProjectId,
         }),
       }),
     );
@@ -118,6 +121,7 @@ export class AgentService {
   async execute(
     sessionId: string,
     command: AgentCommand,
+    options: { trustedPromptContext?: string; onPromptSettled?: () => void } = {},
   ): Promise<AgentCommandResponse> {
     const runtime = await this.getOrRestore(sessionId);
     this.runtimes.touch(sessionId);
@@ -150,18 +154,18 @@ export class AgentService {
           generation,
           command.generationContextAssets,
         );
+        generationContext = mergePromptContexts(generationContext, options.trustedPromptContext);
       } catch (error) {
         // 上下文构建失败时必须释放本轮策略，避免后续普通对话继承错误的生成授权。
         this.generationReviews?.end(sessionId);
         this.activePrompts.delete(sessionId);
         throw error;
       }
-      this.runInBackground(runtime, { ...command, generationContext }, () =>
-        {
+      this.runInBackground(runtime, { ...command, generationContext }, () => {
           this.generationReviews?.end(sessionId);
           this.activePrompts.delete(sessionId);
-        },
-      );
+          options.onPromptSettled?.();
+        });
       return { accepted: true };
     }
     if (command.type === "fork") {
@@ -305,13 +309,17 @@ export class AgentService {
         );
       }
       this.roots.addRoot(detail.info?.cwd ?? process.cwd());
+      const pipelineProjectId = await this.sessionScopeProvider?.getPipelineProjectId(sessionId);
       return this.runtimeFactory.create({
         requestedSessionId: sessionId,
         sessionFile: detail.filePath,
         cwd: detail.info?.cwd ?? process.cwd(),
+        // 第一批 Pipeline Agent 恢复后仍保持只读工具边界，避免默认内置工具绕过画布用例。
+        toolNames: pipelineProjectId ? [] : undefined,
         customTools: this.tools?.getTools({
           sessionId,
           cwd: detail.info?.cwd ?? process.cwd(),
+          pipelineProjectId: pipelineProjectId ?? undefined,
         }),
       });
     });
@@ -336,4 +344,9 @@ export class AgentService {
       })
       .finally(onSettled);
   }
+}
+
+function mergePromptContexts(...contexts: Array<string | undefined>): string | undefined {
+  const present = contexts.filter((context): context is string => Boolean(context));
+  return present.length ? present.join("\n") : undefined;
 }

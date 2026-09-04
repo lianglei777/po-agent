@@ -124,6 +124,7 @@ Range 和媒体响应保留各自显式设置的响应头。未知服务端异�
 | `INSTRUCTION_WRITE_FAILED`  |           500 | 写入指令文件失败                                         |
 | `INSTRUCTION_DELETE_FAILED` |           500 | 删除指令文件失败                                         |
 | `AGENT_BUSY`                |           409 | Agent 正在流式输出或压缩中，无法重载                     |
+| `AGENT_GENERATION_DISABLED` |           403 | 当前 Pipeline 项目未允许 Agent 自动触发生成              |
 | `GENERATION_RUN_ACTIVE`     |           409 | 当前 Session 仍有活动生成任务，不能开始新一轮消息        |
 | `PIPELINE_WORKFLOW_RUN_ACTIVE` |        409 | 当前 Pipeline 项目已有活动工作流运行                    |
 | `PIPELINE_WORKFLOW_RUN_NOT_FOUND` |     404 | Pipeline Workflow Run 不存在或不属于当前项目           |
@@ -2974,6 +2975,122 @@ interface OpenPipelineProjectRequest {
 仅从当前设备的项目列表移除项目并关闭数据库，不删除用户的项目目录和资源。用户可以随后通过
 `POST /api/pipeline/projects/open` 再次打开。
 
+#### Pipeline 项目 Agent conversation
+
+```http
+GET   /api/pipeline/projects/{projectId}/agent-session
+POST  /api/pipeline/projects/{projectId}/agent-session
+PATCH /api/pipeline/projects/{projectId}/agent-session
+```
+
+`GET` 读取项目唯一的 Agent conversation；首次访问时创建并持久绑定一个 Pi session。
+`POST` 保留为兼容入口，行为与 `GET` 相同。conversation 只属于当前项目，恢复 Runtime 时由服务端根据 session ID 重新绑定 `projectId`，模型工具不接收可自行填写的项目 ID。
+
+```ts
+interface PipelineAgentConversationResponse {
+  projectId: string;
+  sessionId: string;
+  provider: string | null;
+  modelId: string | null;
+  allowAgentGeneration: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+`PATCH` 修改模型或自动生成权限。`provider` 和 `modelId` 必须同时提供；权限开关是项目级能力上限，关闭时 Pipeline 生成工具会在调用生成服务前返回 `403 AGENT_GENERATION_DISABLED`。
+
+```json
+{
+  "provider": "openai",
+  "modelId": "gpt-5.4",
+  "allowAgentGeneration": false
+}
+```
+
+#### `POST /api/pipeline/projects/{projectId}/agent-session/turns`
+
+提交一轮带可信画布上下文的 Agent 对话：
+
+```ts
+interface PipelineAgentTurnRequest {
+  turnId: string;
+  message: string;
+  canvasRevision: number;
+  selectedNodeIds: string[];
+  mentionedNodeIds?: string[];
+}
+```
+
+客户端只提交 revision 和节点指针。服务端重新读取项目当前 revision、节点、连线与阶段状态，校验节点归属，并把选中节点、`@` 引用及其一跳上下游组装为受信任上下文。客户端 revision 落后时使用最新画布并在上下文中标记；超前时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。已删除或跨项目节点返回 `404 PIPELINE_CANVAS_NODE_NOT_FOUND`。
+
+该上下文仅用于理解当前请求，不授予画布修改或内容生成权限。服务端会结合当前消息、最近对话和项目自动生成开关解析本轮范围。`requestedStage` 表示用户要求，`effectiveStage` 表示经过权限收紧后实际可执行到的阶段；自动生成开关关闭或用户明确要求手动生成时，生成请求会停在 `canvas`。
+
+成功响应：
+
+```json
+{
+  "accepted": true,
+  "intent": {
+    "type": "resolved",
+    "objective": "把当前剧本拆成六个镜头",
+    "requestedStage": "storyboard",
+    "effectiveStage": "storyboard",
+    "allowedStages": ["discuss", "script", "storyboard"],
+    "generationPermission": "not-requested",
+    "confidence": "high"
+  }
+}
+```
+
+阶段取值为 `discuss | script | storyboard | canvas | generate | review`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。项目开关只在用户本轮明确请求生成时授予 `generate`，不会自行扩大请求范围。
+
+画布写入通过四个项目作用域工具完成：
+
+- `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时更新 `prompt` 和已启用的 `routeId`，Route 兼容性在生成预检时再次校验。
+- `canvas_update_plan`：用用户修订后的完整计划替换未应用草稿。
+- `canvas_apply_plan`：将临时节点引用解析为稳定 ID，经现有连接规则校验后，以单个 `CanvasMutationBatch` 原子提交。
+- `canvas_undo_action`：在画布没有后续修改时撤销整组 Agent mutations；存在后续修改时返回 `409 PIPELINE_AGENT_ACTION_NOT_UNDOABLE`，避免覆盖用户工作。
+
+计划保存 `baseRevision` 和所引用节点的 `updatedAt`。当前 revision 变化但引用节点未变化时允许 rebase；任一引用节点变化时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。工具中的项目 ID 和 Session ID 均由服务端作用域绑定，模型不能填写。以上工具只修改普通画布节点和连线，不创建 Generation Run。
+
+素材理解和连续性通过两个项目作用域工具完成：
+
+- `canvas_inspect_assets`：接受 1 至 8 个当前项目的图片、视频或音频节点 ID。图片使用当前 Canvas Agent 模型的视觉输入；视频通过 FFmpeg 在前 120 秒内最多采样六帧，再由同一视觉模型总结主体、镜头变化和运动；音频最多解码前 300 秒为临时的 16 kHz 单声道 PCM，提取估算 BPM、节奏、动态与静音比例。模型不支持图片输入时，图片和视频返回 `409 PIPELINE_AGENT_MODEL_VISION_REQUIRED`；FFmpeg 不可用时返回 `503 PIPELINE_MEDIA_PREPROCESSOR_UNAVAILABLE`。分析按素材 SHA-256 指纹、分析版本与模型缓存，完整视频和音频不会发送给模型。
+- `canvas_update_continuity`：新增、修订或删除角色、产品、场景、服装、色彩、风格与镜头语言设定。每个 operation 的 `confirmationQuote` 必须是当前用户消息中的原文，否则返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。分析建议必须经用户确认后才能成为连续性事实。
+
+结果评审和质量收敛使用以下项目作用域工具：
+
+- `canvas_review_results`：接受 1 至 8 个已有媒体节点，复用素材分析能力，并返回每个节点的当前提示词、Route、最近六个 Generation Run 及其产物状态、当前产物标记，以及该节点变化会影响的最多 40 个下游节点。对于本地仍可读取的成功产物，工具在单次最多 8 个分析预算内优先分析当前选择，再分析近期历史版本；每个已分析版本返回独立的视觉或节奏摘要。视频摘要会保留采样时间，并要求模型将可定位的明显变化或问题写入对应时间点或近似区间。工具只提供观察和建议，不会选择主观最佳版本，也不会创建 Generation Run。
+- `canvas_save_workflow`：仅在用户明确要求时，将文本节点、源素材与状态为 `completed` 的生成节点保存为普通 workflow；未完成或失败的生成节点会被拒绝。
+
+Pipeline 项目级 Skills 使用 `/api/pipeline/projects/{id}/skills`：`GET` 返回当前项目的有效 Skill 集，`PATCH` 仅允许切换项目级 Skill 的模型调用开关，`POST` 将市场 Skill 安装到当前项目。`/skills/import` 导入本地 `SKILL.md` 或其目录，`/skills/search` 搜索市场。首个内置示例通过 `POST /api/pipeline/projects/{id}/skills/builtin/short-drama` 安装；服务端只会复制随应用交付的短剧 Skill 到该项目，不接收客户端路径或 Skill 内容。服务端从项目 ID 解析根目录，浏览器和模型都不能提交 `cwd`；修改后会尝试重载当前项目的 Agent 资源，运行中的 Agent 则保留已保存状态并等待后续重载。
+
+当用户明确要求“调整并重新生成”时，`generate` 回合同时允许 `review`、`canvas` 和 `generate` 阶段。Agent 可以先评审结果，再通过语义计划只修改受影响节点的提示词或 Route，应用后重新预检并局部运行。局部重跑会复用原画布节点，并把旧产物保留在 Generation Run 历史中；旧图片结果不会被误当作图生图输入。
+
+素材分析和项目连续性保存在项目 SQLite 中。后续 Agent 回合会收到完整的已确认连续性设定，并仅收到当前选中、`@` 引用及其一跳相关节点的最近分析摘要；原始媒体字节不会进入持久化 Prompt 上下文。素材节点在分析后发生变化时，旧摘要会标记为 stale。
+
+自动生成通过两个项目作用域工具完成：
+
+- `canvas_prepare_generation`：接受 1 至 30 个节点 ID，补齐没有可用结果或结果已过期的生成型上游，进行 DAG、Route Schema、参数与素材绑定预检。该工具不会创建 Workflow Run 或 Generation Run；`allowAgentGeneration` 关闭时仍可使用，并明确提示用户在节点上手动生成。
+- `canvas_run_generation`：只在当前回合包含 `generate` 权限、Session 属于当前项目且 `allowAgentGeneration` 当前为 `true` 时运行。服务端再次执行相同预检，将回合 ID 与规范化节点集合派生为稳定 Workflow Run ID，并为每个节点使用稳定 Generation Run 幂等键。
+
+Workflow Run 和步骤状态保存在项目 SQLite 中。执行按画布内部依赖顺序推进；同步文本步骤完成后立即推进下游，异步媒体步骤由 Generation Worker 完成回调继续推进。进程在步骤标记为 running、但尚未写入 Generation Run ID 时退出，下一次读取画布或运行列表会把该步骤恢复为 pending，并借助原幂等键安全续跑。同一进程中的状态轮询不会重置正在推进的步骤；若节点回调最终表明全部步骤成功，遗留的聚合失败状态会自愈为 `completed`。上游已有可用且未过期的结果不会被自动加入运行，`generationProvenance.stale` 为 `true` 时才会作为依赖重跑。
+
+```http
+GET /api/pipeline/projects/{projectId}/canvas/workflow-runs
+```
+
+返回 `{ "workflowRuns": CanvasWorkflowRun[] }`，按创建时间倒序，默认最多 20 条。Agent 面板用此接口恢复并轮询活跃运行；工具消息和画布节点共享持久化的 Workflow Run / Generation Run ID。已经创建的运行不因随后关闭自动生成开关而中断，取消继续遵循现有节点生成规则。
+
+用户可以从 Agent 工具结果直接撤销一次画布操作：
+
+```http
+POST /api/pipeline/projects/{projectId}/agent-actions/{actionId}/undo
+```
+
+成功返回 `{ "actionId": "...", "status": "undone" }`。接口重新校验 Action 的项目归属，并使用保存的反向 mutations；Action 后已有新 revision 时拒绝执行。
+
 Pipeline Studio 以项目级 Canvas Snapshot 作为详情页的初始化事实来源。浏览器在本地执行交互并将节点、连线和 viewport 变更合并为带 revision 的 mutation batch；服务端在一个 SQLite 事务中应用整个 batch。
 
 ### `GET /api/pipeline/projects/{projectId}/canvas`
@@ -3153,7 +3270,7 @@ interface LipSyncPreparationDto {
 
 取消当前节点的活动生成 Run，并把节点恢复为可编辑的 `idle` 状态。节点保留已取消 Run 的 ID，因此再次生成会创建新节点。节点没有活动 Run 时返回冲突错误。
 
-### 视频节点 Generation Run / Take
+### 画布节点 Generation Run / Take
 
 视频节点不复制生成历史。每次生成仍创建标准 Generation Run 和 Artifact，节点只在
 `data.videoSelection` 中保存当前 Take 的 `runId`、`artifactId` 和完成时间，并在
@@ -3170,7 +3287,8 @@ GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/media
 
 - 列表接口只返回 `sourceRef === pipeline:canvas:{nodeId}` 的 Run，并按创建时间倒序返回标准 `GenerationRunViewDto[]`。
 - `select` 请求体为 `{ artifactId: string }`。该能力只用于视频和音频节点；图片结果需要作为新图片节点加入画布。Run 必须属于该节点，Artifact 必须属于该 Run 且媒体类型与节点一致；选择会以该 Artifact 创建一个新的资源节点，源节点、历史和已有连线均不会被修改。
-- `retry` 请求体为 `{ idempotencyKey: string }`。它以原节点当前保存的输入创建新节点和新的 Generation Run，原失败节点保持不变；重试可能产生费用。
+- `retry` 请求体为 `{ idempotencyKey: string }`。服务端读取最后一个 Provider Job 的结构化失败诊断：供应商已返回输出但本地下载或保存失败时，仅重新下载并返回 `action: "redownload"`；供应商未返回输出时，在同一 Run 下创建新 attempt、重新准备引用素材并返回 `action: "resubmit"`。只有重新提交可能再次产生生成费用。
+- `ProviderJobDto.failure` 返回 `phase`、`origin`、`outputAvailable`、`recoveryAction` 与 `retryMayCharge`。RunningHub `1013` 被明确映射为 `provider-input-download`，不能表述为本机下载生成结果失败。
 - Artifact media 接口同样校验 Run 与节点的 `sourceRef` 归属，只读取项目已注册 workspace root 内的本地结果。
 - 节点保留本地上传源时，历史面板将其与生成 Take 统一展示；`upload-source/select` 会以该上传源创建新的资源节点，media 接口始终读取原上传文件。
 - 新建的 Take 节点通过自身的 `artifactIds[0]` 读取对应结果，不会改变来源节点当前展示的媒体。

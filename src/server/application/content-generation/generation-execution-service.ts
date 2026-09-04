@@ -62,6 +62,14 @@ export class GenerationExecutionService {
       await this.submit(job, run, provider, credential);
       return;
     }
+    if (job.status === "downloading") {
+      if (!job.pendingOutputs?.length) {
+        await this.fail(job, run, "GENERATION_DOWNLOAD_RECOVERY_UNAVAILABLE", "The provider did not retain downloadable output metadata");
+        return;
+      }
+      await this.complete(job, run, provider, job.pendingOutputs, job.remoteStatus);
+      return;
+    }
     await this.poll(job, run, provider, credential);
   }
 
@@ -240,6 +248,7 @@ export class GenerationExecutionService {
         run,
         result.errorCode || "GENERATION_PROVIDER_ERROR",
         result.errorMessage || "Generation provider reported a failure",
+        result.failure,
       );
       return;
     }
@@ -285,10 +294,12 @@ export class GenerationExecutionService {
     outputs: ProviderOutput[],
     remoteStatus?: string,
   ): Promise<void> {
+    let deliveryPhase: "output-download" | "local-save" = "output-download";
     const job = {
       ...originalJob,
       status: "downloading" as const,
       nextPollAt: undefined,
+      pendingOutputs: outputs,
       updatedAt: this.timestamp(),
     };
     if (!await this.repository.updateJob(
@@ -305,6 +316,7 @@ export class GenerationExecutionService {
         let sizeBytes: number | undefined;
         let checksum: string | undefined;
         if (output.url) {
+          deliveryPhase = "output-download";
           const downloaded = await provider.download(output.url);
           assertOutputContentType(output.outputType, downloaded.contentType);
           const kind = artifactKind(
@@ -312,6 +324,7 @@ export class GenerationExecutionService {
             downloaded.contentType,
             output.text,
           );
+          deliveryPhase = "local-save";
           localPath = await this.files.saveOutput({
             cwd: session.cwd,
             runId: run.id,
@@ -348,6 +361,8 @@ export class GenerationExecutionService {
         leaseExpiresAt: undefined,
         lastErrorCode: undefined,
         lastErrorMessage: undefined,
+        pendingOutputs: undefined,
+        failure: undefined,
         updatedAt: completedAt,
       }, ["downloading"]);
       await this.repository.updateRun({
@@ -364,7 +379,14 @@ export class GenerationExecutionService {
         // 回调失败不影响 Run 完成流程
       }
     } catch (error) {
-      await this.retryTransient(job, run, error, "downloading", "GENERATION_DOWNLOAD_FAILED");
+      await this.retryTransient(
+        job,
+        run,
+        error,
+        "downloading",
+        "GENERATION_DOWNLOAD_FAILED",
+        deliveryFailure(error, deliveryPhase),
+      );
     }
   }
 
@@ -374,10 +396,11 @@ export class GenerationExecutionService {
     error: unknown,
     status: "uploading" | "polling" | "downloading",
     fallbackCode: string,
+    failure?: ProviderJob["failure"],
   ): Promise<void> {
     const failureCount=(job.transientFailureCount??0)+1;
     if (!isTransient(error) || failureCount >= MAX_TRANSIENT_FAILURES) {
-      await this.fail(job,run,errorCode(error,fallbackCode),errorMessage(error));
+      await this.fail(job,run,errorCode(error,fallbackCode),errorMessage(error),failure);
       return;
     }
     // 退避计数持久化到 Job，进程重启后不会重新从最短间隔开始冲击供应商。
@@ -461,6 +484,7 @@ export class GenerationExecutionService {
     run: GenerationRun,
     code: string,
     message: string,
+    failure?: ProviderJob["failure"],
   ): Promise<void> {
     const completedAt = this.timestamp();
     await this.repository.updateJob({
@@ -470,6 +494,7 @@ export class GenerationExecutionService {
       leaseExpiresAt: undefined,
       lastErrorCode: code,
       lastErrorMessage: message,
+      failure: failure ?? inferFailure(job),
       updatedAt: completedAt,
     });
     await this.failRun(run, code, message, completedAt);
@@ -551,6 +576,43 @@ function isTransient(error:unknown):boolean {
     || error.code === "GENERATION_DOWNLOAD_URL_REJECTED"
     || error.code === "GENERATION_DOWNLOAD_TOO_LARGE") return false;
   return error.status === 429 || error.status >= 500;
+}
+
+function inferFailure(job: ProviderJob): ProviderJob["failure"] {
+  if (job.status === "downloading" || job.pendingOutputs?.length) {
+    return {
+      phase: "output-download",
+      origin: "local",
+      outputAvailable: true,
+      recoveryAction: "redownload",
+      retryMayCharge: false,
+    };
+  }
+  return {
+    phase: "unknown",
+    origin: "provider",
+    outputAvailable: false,
+    recoveryAction: "resubmit",
+    retryMayCharge: true,
+  };
+}
+
+function deliveryFailure(
+  error: unknown,
+  phase: "output-download" | "local-save",
+): NonNullable<ProviderJob["failure"]> {
+  const recoverable = !(error instanceof AppError) || ![
+    "GENERATION_PROVIDER_PROTOCOL_ERROR",
+    "GENERATION_DOWNLOAD_URL_REJECTED",
+    "GENERATION_DOWNLOAD_TOO_LARGE",
+  ].includes(error.code);
+  return {
+    phase,
+    origin: "local",
+    outputAvailable: true,
+    recoveryAction: recoverable ? "redownload" : "none",
+    retryMayCharge: false,
+  };
 }
 
 function retryAfterMs(error:unknown):number|undefined {

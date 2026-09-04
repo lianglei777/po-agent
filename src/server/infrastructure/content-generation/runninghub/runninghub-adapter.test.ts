@@ -228,6 +228,32 @@ describe("RunningHubAdapter", () => {
     });
   });
 
+  it("classifies RunningHub 1013 as a provider input download failure", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      taskId: "remote-input-timeout",
+      status: "FAILED",
+      errorCode: "1013",
+      errorMessage: "File download timed out",
+      results: null,
+    }));
+    const adapter = new RunningHubAdapter(fetcher as typeof fetch);
+
+    await expect(adapter.poll({
+      operation: "seedream-v5-pro-text-to-image",
+      remoteTaskId: "remote-input-timeout",
+      credential: "secret-key",
+    })).resolves.toMatchObject({
+      state: "failed",
+      failure: {
+        phase: "provider-input-download",
+        origin: "provider",
+        outputAvailable: false,
+        recoveryAction: "resubmit",
+        retryMayCharge: true,
+      },
+    });
+  });
+
   it("rejects output download URLs outside the allowlist", async () => {
     const adapter = new RunningHubAdapter(vi.fn() as unknown as typeof fetch);
 

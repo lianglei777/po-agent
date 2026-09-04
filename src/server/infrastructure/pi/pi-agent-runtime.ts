@@ -41,9 +41,23 @@ export class PiAgentRuntimeFactory implements AgentRuntimeFactory {
   async create(input: CreateRuntimeInput): Promise<AgentRuntime> {
     const manager = input.sessionFile
       ? SessionManager.open(input.sessionFile)
-      : SessionManager.create(input.cwd);
-    if (input.requestedSessionId && !input.sessionFile) {
-      manager.newSession({ id: input.requestedSessionId });
+      : SessionManager.create(
+          input.cwd,
+          undefined,
+          input.requestedSessionId ? { id: input.requestedSessionId } : undefined,
+        );
+    if (!input.sessionFile) {
+      // Pi 会在首个 assistant entry 到达前延迟创建 JSONL。空助手记录仅用于落盘，面板会滤除它，避免新项目首次加载历史接口时找不到会话。
+      manager.appendMessage({
+        role: "assistant",
+        content: [],
+        api: "openai-completions",
+        provider: "po-agent",
+        model: "po-agent-runtime-bootstrap",
+        stopReason: "stop",
+        usage: emptyUsage(),
+        timestamp: Date.now(),
+      });
     }
     const resourceLoader = await createPiResourceLoader({ cwd: input.cwd });
     const customTools = input.customTools?.map(toPiToolDefinition) ?? [];

@@ -33,7 +33,7 @@ import { PiAgentRuntimeFactory } from "./pi-agent-runtime";
 
 describe("PiAgentRuntimeFactory", () => {
   it("enables the full built-in tool set by default", async () => {
-    sdk.createSessionManager.mockReturnValue({});
+    sdk.createSessionManager.mockReturnValue({ appendMessage: vi.fn() });
     sdk.createAgentSession.mockResolvedValue({ session: {} });
     const resourceLoader = { reload: vi.fn() };
     resources.createPiResourceLoader.mockResolvedValue(resourceLoader);
@@ -63,7 +63,7 @@ describe("PiAgentRuntimeFactory", () => {
   });
 
   it("adapts project tools and keeps them active beside selected built-ins", async () => {
-    sdk.createSessionManager.mockReturnValue({});
+    sdk.createSessionManager.mockReturnValue({ appendMessage: vi.fn() });
     sdk.createAgentSession.mockResolvedValue({ session: {} });
     resources.createPiResourceLoader.mockResolvedValue({});
     const execute = vi.fn(async () => ({
@@ -122,8 +122,34 @@ describe("PiAgentRuntimeFactory", () => {
     })).toEqual({ prompt: "lake" });
   });
 
+  it("persists a requested session before the first prompt so history can restore it", async () => {
+    const manager = {
+      appendMessage: vi.fn(),
+    };
+    sdk.createSessionManager.mockReturnValue(manager);
+    sdk.createAgentSession.mockResolvedValue({ session: {} });
+    resources.createPiResourceLoader.mockResolvedValue({});
+
+    await new PiAgentRuntimeFactory(Promise.resolve(sdk.modelRuntime as never)).create({
+      cwd: "C:\\workspace",
+      requestedSessionId: "pipeline-session-1",
+      toolNames: [],
+    });
+
+    expect(sdk.createSessionManager).toHaveBeenCalledWith(
+      "C:\\workspace",
+      undefined,
+      { id: "pipeline-session-1" },
+    );
+    expect(manager.appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      role: "assistant",
+      content: [],
+      model: "po-agent-runtime-bootstrap",
+    }));
+  });
+
   it("does not register Web Access tools while the global switch is off", async () => {
-    sdk.createSessionManager.mockReturnValue({});
+    sdk.createSessionManager.mockReturnValue({ appendMessage: vi.fn() });
     sdk.createAgentSession.mockResolvedValue({ session: {} });
     resources.createPiResourceLoader.mockResolvedValue({});
     const previous = resources.availableWebToolNames;

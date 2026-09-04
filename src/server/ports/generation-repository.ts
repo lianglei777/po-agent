@@ -53,6 +53,10 @@ export interface GenerationRepository {
     run: GenerationRun,
     job: ProviderJob,
   ): Promise<CreateGenerationRetryResult | null>;
+  resumeDownload(
+    run: GenerationRun,
+    job: ProviderJob,
+  ): Promise<CreateGenerationRetryResult | null>;
   getRun(id: string): Promise<GenerationRun | null>;
   listRunsBySession(sessionId: string): Promise<GenerationRun[]>;
   updateRun(

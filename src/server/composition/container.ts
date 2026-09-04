@@ -50,6 +50,7 @@ import { PiModelProvider } from "@/server/infrastructure/pi/pi-model-provider";
 import { PiSessionRepository } from "@/server/infrastructure/pi/pi-session-repository";
 import { PiSkillPackProvider } from "@/server/infrastructure/pi/pi-skill-pack-provider";
 import { PiSkillProvider } from "@/server/infrastructure/pi/pi-skill-provider";
+import { BundledPipelineSkillSource } from "@/server/infrastructure/filesystem/bundled-pipeline-skill-source";
 import { PiWebAccessSettingsStore } from "@/server/infrastructure/pi/pi-web-access-settings-store";
 import { NodeProcessRunner } from "@/server/infrastructure/process/node-process-runner";
 import { InMemoryAgentRegistry } from "@/server/infrastructure/runtime/in-memory-agent-registry";
@@ -68,8 +69,17 @@ import { RunningHubLipSyncProvider } from "@/server/infrastructure/content-gener
 import { RUNNINGHUB_CREDENTIAL_REF } from "@/server/infrastructure/content-generation/runninghub/runninghub-provider-constants";
 import { CompositeAgentToolProvider } from "@/server/application/pipeline/composite-agent-tool-provider";
 import { PipelineAgentToolProvider } from "@/server/application/pipeline/pipeline-agent-tool-provider";
+import { PipelineAgentConversationService } from "@/server/application/pipeline/pipeline-agent-conversation-service";
+import { PipelineSkillService } from "@/server/application/pipeline/pipeline-skill-service";
+import { CanvasAgentContextAssembler } from "@/server/application/pipeline/canvas-agent-context-assembler";
+import { CanvasAgentIntentResolver } from "@/server/application/pipeline/canvas-agent-intent-resolver";
+import { CanvasAgentTurnPolicyRegistry } from "@/server/application/pipeline/canvas-agent-turn-policy-registry";
+import { CanvasAgentPlanService } from "@/server/application/pipeline/canvas-agent-plan-service";
+import { CanvasAssetAnalysisService } from "@/server/application/pipeline/canvas-asset-analysis-service";
+import { CanvasContinuityService } from "@/server/application/pipeline/canvas-continuity-service";
+import { PiCanvasAssetAnalyzer } from "@/server/infrastructure/pi/pi-canvas-asset-analyzer";
+import { FfmpegCanvasMediaPreprocessor } from "@/server/infrastructure/media/ffmpeg-canvas-media-preprocessor";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
-import { AppError } from "@/server/domain/app-error";
 import { NodeAccessControlPasswordHasher } from "@/server/infrastructure/security/node-access-control-password-hasher";
 import { FileHttpUnexpectedErrorLogger } from "@/server/infrastructure/observability/file-http-unexpected-error-logger";
 
@@ -257,6 +267,7 @@ function createContainer() {
     return generationProviderSettingsService;
   }
 
+  const canvasAgentTurnPolicies = new CanvasAgentTurnPolicyRegistry();
   let pipelineRepository: PipelineRepository | undefined;
   let canvasStudioService: CanvasStudioService | undefined;
 
@@ -283,8 +294,32 @@ function createContainer() {
       pipelineSse,
       lipSyncPreparations,
     );
+    pipelineAgentPlanService = new CanvasAgentPlanService(
+      pipelineRepository,
+      canvasStudioService,
+      canvasAgentTurnPolicies,
+    );
+    const canvasAssetAnalysisService = new CanvasAssetAnalysisService(
+      pipelineRepository,
+      canvasStudioService,
+      new PiCanvasAssetAnalyzer(modelRuntime),
+      new FfmpegCanvasMediaPreprocessor(),
+    );
+    const canvasContinuityService = new CanvasContinuityService(
+      pipelineRepository,
+      canvasAgentTurnPolicies,
+    );
     pipelineAgentTools = new PipelineAgentToolProvider(
-      scriptAnalysisService, storyboardService, assetGenerationService, videoGenerationService, pipelineRepository,
+      scriptAnalysisService,
+      storyboardService,
+      assetGenerationService,
+      videoGenerationService,
+      pipelineRepository,
+      canvasAgentTurnPolicies,
+      pipelineAgentPlanService,
+      canvasAssetAnalysisService,
+      canvasContinuityService,
+      canvasStudioService,
     );
     return pipelineRepository;
   }
@@ -296,6 +331,7 @@ function createContainer() {
   let scriptAnalysisService: ScriptAnalysisService | undefined;
   let storyboardService: StoryboardService | undefined;
   let pipelineAgentTools: PipelineAgentToolProvider | undefined;
+  let pipelineAgentPlanService: CanvasAgentPlanService | undefined;
 
   function getPipelineServices() {
     getPipelineRepository();
@@ -306,6 +342,7 @@ function createContainer() {
       storyboardService,
       canvasStudioService,
       pipelineAgentTools,
+      pipelineAgentPlanService,
     };
   }
 
@@ -332,10 +369,10 @@ function createContainer() {
         getGenerationCredentialStore().getCredential(reference),
     },
   );
-  // 选择 A 变体 — 合并工具: Agent 同时拥有普通生成工具和 Pipeline 工具
+  // 工具提供者按服务端会话作用域筛选，普通 Chat 与 Pipeline Agent 不共享写能力。
   const compositeAgentTools = new CompositeAgentToolProvider([
     generationAgentTools,
-    { getTools: () => getPipelineServices().pipelineAgentTools!.getTools() },
+    { getTools: (input) => getPipelineServices().pipelineAgentTools!.getTools(input) },
   ]);
   const agentService = new AgentService(
     sessions,
@@ -367,6 +404,19 @@ function createContainer() {
         });
       },
     },
+    {
+      async getPipelineProjectId(sessionId) {
+        return (await getPipelineRepository().findAgentConversationBySessionId(sessionId))?.projectId ?? null;
+      },
+    },
+  );
+  const pipelineAgentConversationService = new PipelineAgentConversationService(
+    getPipelineRepository(),
+    agentService,
+    sessions,
+    new CanvasAgentContextAssembler(getPipelineRepository()),
+    new CanvasAgentIntentResolver(getPipelineServices().pipelineLlm!, sessions),
+    canvasAgentTurnPolicies,
   );
   const chatTurnService = new ChatTurnService(
     agentService,
@@ -400,6 +450,16 @@ function createContainer() {
     },
     sessionService: new SessionService(sessions, runtimes),
     agentService,
+    pipelineAgentConversationService,
+    pipelineSkillService: new PipelineSkillService(
+      getPipelineRepository(),
+      skills,
+      agentService,
+      new BundledPipelineSkillSource(
+        process.env.PO_AGENT_PIPELINE_SKILLS_DIR
+          ?? path.join(process.cwd(), "resources", "pipeline-skills"),
+      ),
+    ),
     agentSettingsService: new AgentSettingsService(agentSettings, runtimes),
     webAccessSettingsService: new WebAccessSettingsService(
       webAccessSettings,
@@ -444,15 +504,13 @@ function createContainer() {
       getPipelineServices();
       return canvasStudioService!;
     },
-    async createPipelineAgentSession(projectId: string) {
-      const cwd = await getPipelineRepository().getProjectRoot(projectId);
-      if (!cwd) throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
-      return agentService.create({ cwd });
-    },
-
     get pipelineAgentTools() {
       getPipelineServices();
       return pipelineAgentTools!;
+    },
+    get pipelineAgentPlanService() {
+      getPipelineServices();
+      return pipelineAgentPlanService!;
     },
   };
 }

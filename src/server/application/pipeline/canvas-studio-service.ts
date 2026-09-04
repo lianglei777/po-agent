@@ -15,6 +15,7 @@ import type {
   CanvasPromptDocument,
   CanvasViewport,
   CanvasWorkflow,
+  CanvasWorkflowRun,
   GenerateCanvasNodeInput,
   GenerateTextNodeInput,
 } from "@/server/domain/pipeline";
@@ -31,10 +32,13 @@ import { LipSyncPreparationService } from "./lip-sync-preparation-service";
 
 const MAX_GENERATED_TEXT_LENGTH = 200_000;
 const MAX_TEXT_REFERENCE_LENGTH = 120_000;
+const MAX_WORKFLOW_GENERATION_CONCURRENCY = 3;
 
 export class CanvasStudioService {
   private readonly advancingGroupRuns = new Set<string>();
   private readonly requestedGroupAdvances = new Set<string>();
+  private readonly advancingWorkflowRuns = new Set<string>();
+  private readonly requestedWorkflowAdvances = new Set<string>();
 
   constructor(
     private readonly repository: PipelineRepository,
@@ -75,6 +79,7 @@ export class CanvasStudioService {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
     }
     await this.hydrateLegacyNodes(projectId);
+    await this.resumeActiveWorkflowRuns(projectId);
     const [nodes, edges, viewport, revision] = await Promise.all([
       this.repository.listCanvasNodes(projectId),
       this.repository.listCanvasEdges(projectId),
@@ -107,7 +112,9 @@ export class CanvasStudioService {
       await this.syncTargetReferences(targetId);
     }
     for (const sourceNodeId of changedTextNodeIds) await this.syncDependentTargets(projectId, sourceNodeId, true);
-    return this.getState(projectId);
+    const snapshot = await this.getState(projectId);
+    this.emit("canvas_updated", projectId, { revision: snapshot.revision });
+    return snapshot;
   }
 
   async createNode(input: {
@@ -457,7 +464,8 @@ export class CanvasStudioService {
     if (source.data?.taskInfo?.status === "processing" || source.data?.taskInfo?.status === "queued") {
       throw new AppError("VALIDATION_ERROR", "This canvas node is already generating", 409);
     }
-    const sourceIsInput = source.data?.type === "image" && canvasNodeHasContent(source);
+    // Workflow 局部重跑复用原节点时，节点上的旧产物是待替换结果，不应被误当作图生图输入。
+    const sourceIsInput = execution?.reuseNode !== true && source.data?.type === "image" && canvasNodeHasContent(source);
     if (sourceIsInput && !input?.prompt?.trim()) {
       throw new AppError("VALIDATION_ERROR", "Enter an image modification instruction first", 400);
     }
@@ -626,6 +634,8 @@ export class CanvasStudioService {
       throw new AppError("VALIDATION_ERROR", "This canvas node has no active generation", 409);
     }
     await this.runs.cancelRun(runId);
+    const workflowRun = await this.repository.findCanvasWorkflowRunByGenerationRunId(node.projectId, runId);
+    if (workflowRun) await this.cancelWorkflowRun(workflowRun, runId);
     return this.updateNode(node.id, {
       // 保留 runId，确保取消过的节点不会在下一次生成时被当作全新空节点复用。
       data: { ...data, taskInfo: { runId, status: "idle" } },
@@ -880,6 +890,271 @@ export class CanvasStudioService {
     return { groupRunId, nodeCount: runnable.length };
   }
 
+  async recoverNodeGeneration(
+    nodeId: string,
+    runId: string,
+    idempotencyKey: string,
+  ): Promise<{ node: CanvasNode; view: GenerationRunView; action: "resubmit" | "redownload" }> {
+    const node = await this.requireNode(nodeId);
+    if (!node.data) throw new AppError("VALIDATION_ERROR", "This canvas node cannot recover generation", 400);
+    const current = await this.runs.getRun(runId);
+    if (!current || current.run.sourceRef !== canvasSourceRef(node.id)) {
+      throw new AppError("GENERATION_RUN_NOT_FOUND", "Generation run was not found for this canvas node", 404);
+    }
+    const failure = current.jobs.at(-1)?.failure;
+    if (failure?.recoveryAction === "none") {
+      throw new AppError("GENERATION_DOWNLOAD_RECOVERY_UNAVAILABLE", "This generation failure cannot be recovered automatically", 409);
+    }
+    const action = failure?.recoveryAction === "redownload" ? "redownload" : "resubmit";
+    const view = action === "redownload"
+      ? await this.runs.retryDownload(runId, idempotencyKey)
+      : await this.runs.retryRun(runId, idempotencyKey);
+    const workflowRun = await this.repository.findCanvasWorkflowRunByGenerationRunId(node.projectId, runId);
+    if (workflowRun) {
+      await this.repository.updateCanvasWorkflowRunStep(workflowRun.id, node.id, {
+        status: "running", errorMessage: null, completedAt: null,
+      });
+      for (const step of workflowRun.steps.filter((candidate) =>
+        candidate.status === "cancelled" && candidate.errorMessage === "Blocked because an upstream generation failed")) {
+        await this.repository.updateCanvasWorkflowRunStep(workflowRun.id, step.nodeId, {
+          status: "pending", errorMessage: null, completedAt: null,
+        });
+      }
+      await this.repository.updateCanvasWorkflowRun(workflowRun.id, {
+        status: "running", errorMessage: null, completedAt: null,
+      });
+    }
+    const updated = await this.updateNode(node.id, {
+      data: { ...node.data, taskInfo: { runId, status: "processing", progressPercent: 0 } },
+    });
+    return { node: updated, view, action };
+  }
+
+  private async cancelWorkflowRun(workflowRun: CanvasWorkflowRun, alreadyCancelledRunId: string): Promise<void> {
+    await this.repository.updateCanvasWorkflowRun(workflowRun.id, { status: "cancelling" });
+    for (const step of workflowRun.steps.filter((candidate) => candidate.status === "pending" || candidate.status === "running")) {
+      if (step.generationRunId && step.generationRunId !== alreadyCancelledRunId) {
+        await this.runs.cancelRun(step.generationRunId).catch(() => undefined);
+      }
+      await this.repository.updateCanvasWorkflowRunStep(workflowRun.id, step.nodeId, {
+        status: "cancelled", completedAt: new Date().toISOString(),
+      });
+    }
+    await this.repository.updateCanvasWorkflowRun(workflowRun.id, {
+      status: "cancelled", completedAt: new Date().toISOString(),
+    });
+  }
+
+  async prepareWorkflowGeneration(input: { projectId: string; nodeIds: string[] }): Promise<{
+    nodeIds: string[];
+    edges: CanvasWorkflowRun["edges"];
+    nodes: Array<{ nodeId: string; name: string; type: CanvasMediaType; routeId?: string }>;
+  }> {
+    const requestedIds = [...new Set(input.nodeIds.map((id) => id.trim()).filter(Boolean))];
+    if (!requestedIds.length || requestedIds.length > 30) {
+      throw new AppError("VALIDATION_ERROR", "Select between 1 and 30 canvas nodes to generate", 400);
+    }
+    const [allNodes, allEdges] = await Promise.all([
+      this.repository.listCanvasNodes(input.projectId),
+      this.repository.listCanvasEdges(input.projectId),
+    ]);
+    const nodesById = new Map(allNodes.map((node) => [node.id, node]));
+    for (const nodeId of requestedIds) {
+      const node = nodesById.get(nodeId);
+      if (!node || node.projectId !== input.projectId) {
+        throw new AppError("VALIDATION_ERROR", "A selected canvas node was not found in this project", 404);
+      }
+      if (!node.data || !workflowNodeIsGenerative(node.data)) {
+        throw new AppError("VALIDATION_ERROR", "A selected canvas node cannot generate content", 400);
+      }
+    }
+
+    const selectedIds = new Set(requestedIds);
+    const visitDependencies = (targetId: string) => {
+      for (const edge of allEdges.filter((candidate) => candidate.targetNodeId === targetId)) {
+        const source = nodesById.get(edge.sourceNodeId);
+        if (!source?.data || selectedIds.has(source.id)) continue;
+        const stale = source.data.generationProvenance?.stale === true;
+        if (!workflowNodeIsGenerative(source.data) || (canvasNodeHasContent(source) && !stale)) continue;
+        selectedIds.add(source.id);
+        visitDependencies(source.id);
+      }
+    };
+    for (const nodeId of requestedIds) visitDependencies(nodeId);
+    if (selectedIds.size > 30) {
+      throw new AppError("VALIDATION_ERROR", "The generation workflow exceeds the 30-node limit", 400);
+    }
+    if (hasInternalCycle(selectedIds, allEdges)) {
+      throw new AppError("VALIDATION_ERROR", "The selected generation workflow contains a cycle", 400);
+    }
+
+    const internalEdges = allEdges
+      .filter((edge) => selectedIds.has(edge.sourceNodeId) && selectedIds.has(edge.targetNodeId))
+      .map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId }));
+    const orderedIds = topologicalNodeOrder(selectedIds, internalEdges);
+    const plannedIds = new Set(orderedIds);
+    const preparedNodes = [] as Array<{ nodeId: string; name: string; type: CanvasMediaType; routeId?: string }>;
+    for (const nodeId of orderedIds) {
+      await this.syncTargetReferences(nodeId);
+      const routeId = await this.preflightWorkflowNode(nodeId, plannedIds);
+      const node = await this.requireNode(nodeId);
+      preparedNodes.push({ nodeId, name: node.data!.name, type: node.data!.type, ...(routeId ? { routeId } : {}) });
+    }
+    return { nodeIds: orderedIds, edges: internalEdges, nodes: preparedNodes };
+  }
+
+  async startWorkflowGeneration(input: {
+    id: string;
+    projectId: string;
+    nodeIds: string[];
+  }): Promise<{ run: CanvasWorkflowRun; created: boolean }> {
+    const existing = await this.repository.getCanvasWorkflowRun(input.id);
+    if (existing) {
+      if (existing.projectId !== input.projectId) {
+        throw new AppError("VALIDATION_ERROR", "The workflow run belongs to another project", 409);
+      }
+      if (existing.status === "pending" || existing.status === "running") await this.advanceWorkflowRun(existing.id);
+      return { run: (await this.repository.getCanvasWorkflowRun(existing.id)) ?? existing, created: false };
+    }
+
+    const prepared = await this.prepareWorkflowGeneration(input);
+    const active = await this.repository.listActiveCanvasWorkflowRuns(input.projectId);
+    if (active.length) {
+      throw new AppError("VALIDATION_ERROR", "Another canvas workflow is already running in this project", 409, {
+        workflowRunId: active[0]!.id,
+      });
+    }
+    const run = await this.repository.createCanvasWorkflowRun({
+      id: input.id,
+      projectId: input.projectId,
+      nodeIds: prepared.nodeIds,
+      edges: prepared.edges,
+      steps: prepared.nodeIds.map((nodeId) => ({ nodeId, status: "pending" })),
+    });
+    await this.advanceWorkflowRun(run.id);
+    return { run: (await this.repository.getCanvasWorkflowRun(run.id)) ?? run, created: true };
+  }
+
+  async listWorkflowRuns(projectId: string, limit = 20): Promise<CanvasWorkflowRun[]> {
+    if (!await this.repository.getProject(projectId)) {
+      throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
+    }
+    await this.resumeActiveWorkflowRuns(projectId);
+    const workflowRuns = await this.repository.listCanvasWorkflowRuns(projectId, limit);
+    // 容错修复：旧进程可能在节点完成回调前已将工作流标为 failed。只要全部步骤最终都成功，
+    // 将聚合状态恢复为 completed，避免已产出内容却在界面上长期显示失败。
+    await Promise.all(workflowRuns
+      .filter((run) => run.status === "failed" && run.steps.length > 0 && run.steps.every((step) => step.status === "completed"))
+      .map((run) => this.repository.updateCanvasWorkflowRun(run.id, {
+        status: "completed", errorMessage: null, completedAt: new Date().toISOString(),
+      })));
+    return this.repository.listCanvasWorkflowRuns(projectId, limit);
+  }
+
+  private async resumeActiveWorkflowRuns(projectId: string): Promise<void> {
+    const activeRuns = await this.repository.listActiveCanvasWorkflowRuns(projectId);
+    for (const run of activeRuns) {
+      // 进程可能在把步骤标为 running 后、写入 Generation Run ID 前退出；稳定幂等键保证恢复不会重复付费。
+      // 同一进程内的轮询可能正好落在上述两个写入之间；此时不能把运行中的步骤重置为 pending，
+      // 否则当前 advance 返回后会重复调用 generate，并因节点已 processing 而把工作流误标记为失败。
+      if (!this.advancingWorkflowRuns.has(run.id)) {
+        for (const step of run.steps.filter((candidate) => candidate.status === "running" && !candidate.generationRunId)) {
+          await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+            status: "pending", startedAt: null,
+          });
+        }
+      }
+      await this.advanceWorkflowRun(run.id);
+    }
+  }
+
+  async advanceWorkflowRun(runId: string): Promise<void> {
+    if (this.advancingWorkflowRuns.has(runId)) {
+      this.requestedWorkflowAdvances.add(runId);
+      return;
+    }
+    this.advancingWorkflowRuns.add(runId);
+    try {
+      while (true) {
+        const run = await this.repository.getCanvasWorkflowRun(runId);
+        if (!run || (run.status !== "pending" && run.status !== "running")) return;
+        const completedIds = new Set(run.steps.filter((step) => step.status === "completed").map((step) => step.nodeId));
+        const failedIds = new Set(run.steps
+          .filter((step) => step.status === "failed" || step.status === "cancelled")
+          .map((step) => step.nodeId));
+        const blocked = run.steps.filter((step) => step.status === "pending" && run.edges
+          .filter((edge) => edge.targetNodeId === step.nodeId)
+          .some((edge) => failedIds.has(edge.sourceNodeId)));
+        for (const step of blocked) {
+          await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+            status: "cancelled",
+            errorMessage: "Blocked because an upstream generation failed",
+            completedAt: new Date().toISOString(),
+          });
+        }
+        if (blocked.length) continue;
+        const availableSlots = Math.max(
+          0,
+          MAX_WORKFLOW_GENERATION_CONCURRENCY - run.steps.filter((step) => step.status === "running").length,
+        );
+        const ready = run.steps.filter((step) => step.status === "pending" && run.edges
+          .filter((edge) => edge.targetNodeId === step.nodeId)
+          .every((edge) => completedIds.has(edge.sourceNodeId)))
+          .slice(0, availableSlots);
+        if (!ready.length) {
+          if (run.steps.every((step) => step.status === "completed")) {
+            await this.repository.updateCanvasWorkflowRun(run.id, {
+              status: "completed", errorMessage: null, completedAt: new Date().toISOString(),
+            });
+          } else if (!run.steps.some((step) => step.status === "pending" || step.status === "running")) {
+            const failedCount = run.steps.filter((step) => step.status === "failed").length;
+            const blockedCount = run.steps.filter((step) => step.status === "cancelled").length;
+            await this.repository.updateCanvasWorkflowRun(run.id, {
+              status: "failed",
+              errorMessage: `${failedCount} generation(s) failed; ${blockedCount} downstream generation(s) were blocked`,
+              completedAt: new Date().toISOString(),
+            });
+          }
+          return;
+        }
+        await this.repository.updateCanvasWorkflowRun(run.id, { status: "running", errorMessage: null });
+        let synchronousCompletion = false;
+        for (const step of ready) {
+          const startedAt = new Date().toISOString();
+          await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+            status: "running", startedAt, errorMessage: null,
+          });
+          try {
+            const generated = await this.generate(step.nodeId, undefined, {
+              reuseNode: true,
+              idempotencyKey: `pipeline:canvas-workflow:${run.id}:${step.nodeId}`,
+            });
+            if (generated.runId) {
+              await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+                generationRunId: generated.runId,
+              });
+            } else {
+              await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+                status: "completed", completedAt: new Date().toISOString(),
+              });
+              synchronousCompletion = true;
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Canvas workflow generation failed";
+            await this.repository.updateCanvasWorkflowRunStep(run.id, step.nodeId, {
+              status: "failed", errorMessage: message, completedAt: new Date().toISOString(),
+            });
+            synchronousCompletion = true;
+          }
+        }
+        if (!synchronousCompletion) return;
+      }
+    } finally {
+      this.advancingWorkflowRuns.delete(runId);
+      if (this.requestedWorkflowAdvances.delete(runId)) await this.advanceWorkflowRun(runId);
+    }
+  }
+
   private async advanceGroupRun(projectId: string, groupId: string, groupRunId: string): Promise<void> {
     const lockKey = `${projectId}:${groupId}:${groupRunId}`;
     if (this.advancingGroupRuns.has(lockKey)) {
@@ -988,6 +1263,20 @@ export class CanvasStudioService {
     if (activeGroupRun && data.group) {
       await this.advanceGroupRun(node.projectId, data.group.id, activeGroupRun.id);
     }
+    const workflowRun = await this.repository.findCanvasWorkflowRunByGenerationRunId(node.projectId, runId);
+    if (workflowRun) {
+      await this.repository.updateCanvasWorkflowRunStep(workflowRun.id, node.id, {
+        status: "completed", completedAt: new Date().toISOString(),
+      });
+      const latest = await this.repository.getCanvasWorkflowRun(workflowRun.id);
+      if (latest?.steps.length && latest.steps.every((step) => step.status === "completed")) {
+        await this.repository.updateCanvasWorkflowRun(workflowRun.id, {
+          status: "completed", errorMessage: null, completedAt: new Date().toISOString(),
+        });
+      } else {
+        await this.advanceWorkflowRun(workflowRun.id);
+      }
+    }
   }
 
   async failGeneration(nodeId: string, runId: string, message: string): Promise<void> {
@@ -1002,6 +1291,15 @@ export class CanvasStudioService {
       },
     });
     this.emit("generation_failed", node.projectId, { nodeId, runId, message });
+    const workflowRun = await this.repository.findCanvasWorkflowRunByGenerationRunId(node.projectId, runId);
+    if (workflowRun) {
+      const completedAt = new Date().toISOString();
+      await this.repository.updateCanvasWorkflowRunStep(workflowRun.id, node.id, {
+        status: "failed", errorMessage: message, completedAt,
+      });
+      // 单个分支失败不终止无依赖分支；调度器会继续执行可运行节点并阻塞其下游。
+      await this.advanceWorkflowRun(workflowRun.id);
+    }
   }
 
   async listWorkflows(projectId: string): Promise<CanvasWorkflow[]> {
@@ -1125,7 +1423,7 @@ export class CanvasStudioService {
     return updated;
   }
 
-  async preflightWorkflowNode(nodeId: string, plannedNodeIds: ReadonlySet<string>): Promise<void> {
+  async preflightWorkflowNode(nodeId: string, plannedNodeIds: ReadonlySet<string>): Promise<string | undefined> {
     const node = await this.requireNode(nodeId);
     const data = node.data;
     if (!data || data.generatorType === "resource") {
@@ -1152,7 +1450,7 @@ export class CanvasStudioService {
       if (!effectivePrompt(data).trim() && !hasPlannedText) {
         throw new AppError("VALIDATION_ERROR", "Enter a prompt or connect a text reference first", 400);
       }
-      return;
+      return undefined;
     }
 
     const requestedRoute = data.params?.routeId ? await this.runs.getRoute(data.params.routeId) : null;
@@ -1214,6 +1512,7 @@ export class CanvasStudioService {
       assets: generationAssets,
       parameters,
     });
+    return route?.id;
   }
 
   private async preserveServerOwnedNodeData(
@@ -1525,7 +1824,7 @@ export class CanvasStudioService {
   }
 }
 
-function createNodeData(type: CanvasMediaType, name: string, generatorType: "default" | "resource" = "default"): CanvasNodeData {
+export function createNodeData(type: CanvasMediaType, name: string, generatorType: "default" | "resource" = "default"): CanvasNodeData {
   const action = generatorType === "resource" ? `${type}_resource` : `${type}_generate`;
   return {
     type,
@@ -1647,6 +1946,45 @@ function canvasNodeHasContent(node: CanvasNode): boolean {
     : Boolean(reference.artifactId || reference.workspaceFile || reference.url);
 }
 
+function workflowNodeIsGenerative(data: CanvasNodeData): boolean {
+  if (data.generatorType === "resource") return false;
+  if (data.type === "text") {
+    return Boolean(data.params?.promptDocument?.plainText.trim() || data.params?.prompt.trim());
+  }
+  return data.type === "image" || data.type === "video" || data.type === "audio";
+}
+
+function topologicalNodeOrder(
+  nodeIds: ReadonlySet<string>,
+  edges: CanvasWorkflowRun["edges"],
+): string[] {
+  const remainingDependencies = new Map([...nodeIds].map((nodeId) => [
+    nodeId,
+    edges.filter((edge) => edge.targetNodeId === nodeId).length,
+  ]));
+  const ready = [...remainingDependencies.entries()]
+    .filter(([, count]) => count === 0)
+    .map(([nodeId]) => nodeId)
+    .sort();
+  const ordered: string[] = [];
+  while (ready.length) {
+    const nodeId = ready.shift()!;
+    ordered.push(nodeId);
+    for (const edge of edges.filter((candidate) => candidate.sourceNodeId === nodeId)) {
+      const nextCount = (remainingDependencies.get(edge.targetNodeId) ?? 0) - 1;
+      remainingDependencies.set(edge.targetNodeId, nextCount);
+      if (nextCount === 0) {
+        ready.push(edge.targetNodeId);
+        ready.sort();
+      }
+    }
+  }
+  if (ordered.length !== nodeIds.size) {
+    throw new AppError("VALIDATION_ERROR", "The selected generation workflow contains a cycle", 400);
+  }
+  return ordered;
+}
+
 function textNodeContentChanged(
   previous: CanvasNodeData | null | undefined,
   next: CanvasNodeData | null | undefined,
@@ -1729,7 +2067,7 @@ function validateCanvasEdgeBindings(nodes: Map<string, CanvasNode>, edges: Canva
   }
 }
 
-function plainTextDocument(plainText: string): NonNullable<CanvasNodeData["textDocument"]> {
+export function plainTextDocument(plainText: string): NonNullable<CanvasNodeData["textDocument"]> {
   return {
     schemaVersion: 1,
     format: "tiptap-json",
@@ -1959,7 +2297,7 @@ function defaultNodeName(type: CanvasMediaType) {
   return ({ text: "文本", image: "图片", video: "视频", audio: "音频" } as const)[type];
 }
 
-function defaultSize(type: CanvasMediaType) {
+export function defaultSize(type: CanvasMediaType) {
   return type === "text" ? { width: 320, height: 220 } : type === "audio" ? { width: 360, height: 180 } : { width: 350, height: 350 };
 }
 

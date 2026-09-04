@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
-import type { CanvasEdge, CanvasMutationBatch, CanvasNode, CanvasPromptDocument, PipelineProject } from "@/server/domain/pipeline";
+import type { CanvasEdge, CanvasMutationBatch, CanvasNode, CanvasPromptDocument, CanvasWorkflowRun, PipelineProject } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
 import type { LlmPort } from "@/server/ports/llm-port";
@@ -426,6 +426,52 @@ describe("CanvasStudioService connection policy", () => {
 });
 
 describe("CanvasStudioService image AI", () => {
+  it("reruns a completed generated image in place as text-to-image", async () => {
+    let currentNode = imageNode();
+    currentNode = {
+      ...currentNode,
+      data: {
+        ...currentNode.data!,
+        url: ["https://media.example/previous.png"],
+        artifactIds: ["artifact-previous"],
+        params: { prompt: "A darker blue icon", routeId: "route-image-1" },
+        taskInfo: { runId: "run-previous", status: "completed", progressPercent: 100 },
+      },
+    };
+    const repository = {
+      getCanvasNode: vi.fn().mockImplementation(async () => currentNode),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      getProjectRoot: vi.fn().mockResolvedValue("D:\\projects\\film"),
+      updateCanvasNode: vi.fn().mockImplementation(async (_id: string, patch: Partial<CanvasNode>) => {
+        currentNode = { ...currentNode, ...patch };
+        return currentNode;
+      }),
+    } as unknown as PipelineRepository;
+    const route = {
+      id: "route-image-1", enabled: true, isDefault: true, capability: "text-to-image",
+      inputSchema: { prompt: { required: true }, assets: [], parameters: [] },
+    };
+    const runs = {
+      ensureSession: vi.fn(),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue({ run: { id: "run-rerun" } }),
+    } as unknown as GenerationRunService;
+
+    const result = await createService(repository, {} as LlmPort, runs).generate(
+      currentNode.id,
+      undefined,
+      { reuseNode: true, idempotencyKey: "workflow-rerun" },
+    );
+
+    expect(result.node.id).toBe("image-node-1");
+    expect(runs.createRun).toHaveBeenCalledWith(expect.objectContaining({
+      capability: "text-to-image",
+      prompt: "A darker blue icon",
+      idempotencyKey: "workflow-rerun",
+      assets: [],
+    }));
+  });
+
   it("stores the submitted image prompt without marking its completed result stale when the draft changes", async () => {
     let currentNode = imageNode();
     const repository = {
@@ -1327,6 +1373,169 @@ describe("CanvasStudioService audio generation", () => {
   });
 });
 
+describe("CanvasStudioService durable workflow generation", () => {
+  it("continues independent branches and blocks only downstream nodes after a failure", async () => {
+    const source = { ...imageNode(), id: "source" };
+    let workflowRun: CanvasWorkflowRun = {
+      id: "workflow-partial", projectId: project.id, status: "running",
+      nodeIds: ["source", "independent", "dependent"],
+      edges: [{ sourceNodeId: "source", targetNodeId: "dependent" }],
+      steps: [
+        { nodeId: "source", status: "running", generationRunId: "generation-source" },
+        { nodeId: "independent", status: "pending" },
+        { nodeId: "dependent", status: "pending" },
+      ],
+      createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z",
+    };
+    const repository = {
+      getCanvasNode: vi.fn(async () => source),
+      updateCanvasNode: vi.fn(async (_id: string, patch: Partial<CanvasNode>) => ({ ...source, ...patch })),
+      findCanvasWorkflowRunByGenerationRunId: vi.fn(async () => workflowRun),
+      getCanvasWorkflowRun: vi.fn(async () => workflowRun),
+      updateCanvasWorkflowRun: vi.fn(async (_id: string, patch: Partial<CanvasWorkflowRun>) => {
+        workflowRun = { ...workflowRun, ...patch };
+        return workflowRun;
+      }),
+      updateCanvasWorkflowRunStep: vi.fn(async (_runId: string, nodeId: string, patch: Partial<CanvasWorkflowRun["steps"][number]>) => {
+        workflowRun = { ...workflowRun, steps: workflowRun.steps.map((step) => step.nodeId === nodeId ? { ...step, ...patch } : step) };
+        return workflowRun.steps.find((step) => step.nodeId === nodeId) ?? null;
+      }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+    const generate = vi.spyOn(service, "generate").mockResolvedValue({ node: imageNode(), runId: "generation-independent" });
+
+    await service.failGeneration("source", "generation-source", "provider input failed");
+
+    expect(workflowRun.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "source", status: "failed" }),
+      expect.objectContaining({ nodeId: "dependent", status: "cancelled", errorMessage: "Blocked because an upstream generation failed" }),
+      expect.objectContaining({ nodeId: "independent", status: "running", generationRunId: "generation-independent" }),
+    ]));
+    expect(generate).toHaveBeenCalledWith("independent", undefined, expect.objectContaining({ reuseNode: true }));
+    expect(workflowRun.status).toBe("running");
+  });
+
+  it("persists the workflow step and reuses an existing run without creating another generation", async () => {
+    let workflowRun: CanvasWorkflowRun | null = null;
+    const repository = {
+      getCanvasWorkflowRun: vi.fn(async () => workflowRun),
+      listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]),
+      createCanvasWorkflowRun: vi.fn(async (input: Parameters<PipelineRepository["createCanvasWorkflowRun"]>[0]) => {
+        workflowRun = {
+          id: input.id, projectId: input.projectId, status: "pending", nodeIds: input.nodeIds,
+          edges: input.edges,
+          steps: input.steps.map((step) => ({ ...step })),
+          createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z",
+        };
+        return workflowRun;
+      }),
+      updateCanvasWorkflowRun: vi.fn(async (_id: string, patch: Partial<CanvasWorkflowRun>) => {
+        workflowRun = workflowRun ? { ...workflowRun, ...patch } : null;
+        return workflowRun;
+      }),
+      updateCanvasWorkflowRunStep: vi.fn(async (_runId: string, nodeId: string, patch: Partial<CanvasWorkflowRun["steps"][number]>) => {
+        if (!workflowRun) return null;
+        workflowRun = {
+          ...workflowRun,
+          steps: workflowRun.steps.map((step) => step.nodeId === nodeId ? { ...step, ...patch } : step),
+        };
+        return workflowRun.steps.find((step) => step.nodeId === nodeId) ?? null;
+      }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+    vi.spyOn(service, "prepareWorkflowGeneration").mockResolvedValue({
+      nodeIds: ["image-1"], edges: [], nodes: [{ nodeId: "image-1", name: "Image", type: "image" }],
+    });
+    const generate = vi.spyOn(service, "generate").mockResolvedValue({ node: imageNode(), runId: "generation-1" });
+
+    const first = await service.startWorkflowGeneration({ id: "workflow-1", projectId: project.id, nodeIds: ["image-1"] });
+    const repeated = await service.startWorkflowGeneration({ id: "workflow-1", projectId: project.id, nodeIds: ["image-1"] });
+
+    expect(first.created).toBe(true);
+    expect(repeated.created).toBe(false);
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledWith("image-1", undefined, {
+      reuseNode: true,
+      idempotencyKey: "pipeline:canvas-workflow:workflow-1:image-1",
+    });
+    expect((workflowRun as unknown as CanvasWorkflowRun).steps[0])
+      .toMatchObject({ status: "running", generationRunId: "generation-1" });
+  });
+
+  it("does not reset an in-memory running step when workflow polling overlaps run creation", async () => {
+    let workflowRun: CanvasWorkflowRun | null = null;
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      getCanvasWorkflowRun: vi.fn(async () => workflowRun),
+      listActiveCanvasWorkflowRuns: vi.fn(async () => workflowRun ? [workflowRun] : []),
+      listCanvasWorkflowRuns: vi.fn(async () => workflowRun ? [workflowRun] : []),
+      createCanvasWorkflowRun: vi.fn(async (input: Parameters<PipelineRepository["createCanvasWorkflowRun"]>[0]) => {
+        workflowRun = {
+          id: input.id, projectId: input.projectId, status: "pending", nodeIds: input.nodeIds, edges: input.edges,
+          steps: input.steps.map((step) => ({ ...step })), createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z",
+        };
+        return workflowRun;
+      }),
+      updateCanvasWorkflowRun: vi.fn(async (_id: string, patch: Partial<CanvasWorkflowRun>) => {
+        workflowRun = workflowRun ? { ...workflowRun, ...patch } : null;
+        return workflowRun;
+      }),
+      updateCanvasWorkflowRunStep: vi.fn(async (_runId: string, nodeId: string, patch: Partial<CanvasWorkflowRun["steps"][number]>) => {
+        if (!workflowRun) return null;
+        workflowRun = {
+          ...workflowRun,
+          steps: workflowRun.steps.map((step) => step.nodeId === nodeId ? { ...step, ...patch } : step),
+        };
+        return workflowRun.steps.find((step) => step.nodeId === nodeId) ?? null;
+      }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+    vi.spyOn(service, "prepareWorkflowGeneration").mockResolvedValue({
+      nodeIds: ["image-1"], edges: [], nodes: [{ nodeId: "image-1", name: "Image", type: "image" }],
+    });
+    let generationStarted!: () => void;
+    const started = new Promise<void>((resolve) => { generationStarted = resolve; });
+    let resolveGeneration!: () => void;
+    const pendingGeneration = new Promise<void>((resolve) => { resolveGeneration = resolve; });
+    const generate = vi.spyOn(service, "generate").mockImplementation(async () => {
+      generationStarted();
+      await pendingGeneration;
+      return { node: imageNode(), runId: "generation-1" };
+    });
+
+    const start = service.startWorkflowGeneration({ id: "workflow-race", projectId: project.id, nodeIds: ["image-1"] });
+    await started;
+    await service.listWorkflowRuns(project.id);
+    resolveGeneration();
+    await start;
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect((workflowRun as unknown as CanvasWorkflowRun).steps[0])
+      .toMatchObject({ status: "running", generationRunId: "generation-1" });
+  });
+
+  it("repairs a failed workflow whose every generation step eventually completed", async () => {
+    let workflowRun: CanvasWorkflowRun = {
+      id: "workflow-completed-after-recovery", projectId: project.id, status: "failed", nodeIds: ["image-1"], edges: [],
+      steps: [{ nodeId: "image-1", status: "completed", generationRunId: "generation-1" }],
+      errorMessage: "stale error", createdAt: "2026-09-04T00:00:00.000Z", updatedAt: "2026-09-04T00:00:00.000Z",
+    };
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]),
+      listCanvasWorkflowRuns: vi.fn(async () => [workflowRun]),
+      updateCanvasWorkflowRun: vi.fn(async (_id: string, patch: Partial<CanvasWorkflowRun>) => {
+        workflowRun = { ...workflowRun, ...patch };
+        return workflowRun;
+      }),
+    } as unknown as PipelineRepository;
+
+    const runs = await createService(repository).listWorkflowRuns(project.id);
+
+    expect(runs[0]).toMatchObject({ status: "completed", errorMessage: null });
+  });
+});
+
 describe("CanvasStudioService Kling lip sync", () => {
   it("injects trusted provider face identifiers without accepting them from the client", async () => {
     const target = videoNode();
@@ -1449,6 +1658,9 @@ function createService(
 ) {
   if (!("listActiveCanvasWorkflowRuns" in repository)) {
     Object.assign(repository, { listActiveCanvasWorkflowRuns: vi.fn().mockResolvedValue([]) });
+  }
+  if (!("findCanvasWorkflowRunByGenerationRunId" in repository)) {
+    Object.assign(repository, { findCanvasWorkflowRunByGenerationRunId: vi.fn().mockResolvedValue(null) });
   }
   return new CanvasStudioService(
     repository,

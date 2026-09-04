@@ -501,4 +501,99 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
         ON pipeline_lip_sync_preparations(node_id, video_fingerprint, updated_at DESC);
     `,
   },
+  {
+    version: 18,
+    name: "pipeline_agent_conversations",
+    sql: `
+      CREATE TABLE pipeline_agent_conversations (
+        project_id TEXT PRIMARY KEY REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL UNIQUE,
+        provider TEXT,
+        model_id TEXT,
+        allow_agent_generation INTEGER NOT NULL DEFAULT 0 CHECK (allow_agent_generation IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
+  {
+    version: 19,
+    name: "canvas_agent_plans_and_actions",
+    sql: `
+      CREATE TABLE canvas_agent_plans (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        session_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        base_revision INTEGER NOT NULL CHECK (base_revision >= 0),
+        operations_json TEXT NOT NULL,
+        referenced_node_versions_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft', 'applied', 'superseded')),
+        applied_revision INTEGER,
+        action_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX canvas_agent_plans_project_updated_idx
+        ON canvas_agent_plans(project_id, updated_at DESC);
+
+      CREATE TABLE canvas_agent_actions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        plan_id TEXT NOT NULL UNIQUE REFERENCES canvas_agent_plans(id) ON DELETE CASCADE,
+        forward_mutations_json TEXT NOT NULL,
+        inverse_mutations_json TEXT NOT NULL,
+        applied_revision INTEGER NOT NULL CHECK (applied_revision >= 0),
+        status TEXT NOT NULL CHECK (status IN ('applied', 'undone')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
+  {
+    version: 20,
+    name: "canvas_asset_analysis_and_continuity",
+    sql: `
+      CREATE TABLE canvas_asset_analyses (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        node_id TEXT NOT NULL REFERENCES pipeline_canvas_nodes(id) ON DELETE CASCADE,
+        node_version TEXT NOT NULL,
+        source_fingerprint TEXT NOT NULL,
+        media_type TEXT NOT NULL CHECK (media_type IN ('image', 'video', 'audio')),
+        source_name TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        model_provider TEXT,
+        model_id TEXT,
+        content_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      ) STRICT;
+      CREATE UNIQUE INDEX canvas_asset_analysis_cache_idx
+        ON canvas_asset_analyses(node_id, source_fingerprint, IFNULL(model_provider, ''), IFNULL(model_id, ''));
+      CREATE INDEX canvas_asset_analysis_project_idx
+        ON canvas_asset_analyses(project_id, created_at DESC);
+
+      CREATE TABLE canvas_continuity_bibles (
+        project_id TEXT PRIMARY KEY REFERENCES pipeline_projects(id) ON DELETE CASCADE,
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        entries_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+    `,
+  },
+  {
+    version: 21,
+    name: "generation_failure_recovery",
+    sql: `
+      ALTER TABLE provider_jobs ADD COLUMN pending_outputs_json TEXT;
+      ALTER TABLE provider_jobs ADD COLUMN download_retry_key TEXT;
+      ALTER TABLE provider_jobs ADD COLUMN failure_json TEXT;
+      UPDATE provider_jobs
+      SET failure_json = '{"phase":"provider-input-download","origin":"provider","outputAvailable":false,"recoveryAction":"resubmit","retryMayCharge":true}'
+      WHERE provider_id = 'runninghub' AND last_error_code = '1013';
+      CREATE UNIQUE INDEX provider_jobs_download_retry_key_unique
+        ON provider_jobs(download_retry_key);
+    `,
+  },
 ];

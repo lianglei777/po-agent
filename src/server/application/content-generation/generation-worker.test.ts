@@ -139,6 +139,35 @@ describe("GenerationWorker", () => {
     });
   });
 
+  it("retries a retained output download without submitting another provider task", async () => {
+    const created = await runService.createRun({
+      sessionId: "session-1", capability: "text-to-video", prompt: "recover output",
+      source: "direct-ui", idempotencyKey: "recover-output",
+    });
+    const job = created.jobs[0]!;
+    await repository.updateRun({ ...created.run, status: "failed", errorCode: "GENERATION_DOWNLOAD_FAILED", errorMessage: "timeout", updatedAt: now.toISOString() }, ["queued"]);
+    await repository.updateJob({
+      ...job,
+      status: "failed",
+      remoteStatus: "SUCCESS",
+      pendingOutputs: [{ url: "https://bucket.myqcloud.com/output.mp4", outputType: "mp4" }],
+      failure: { phase: "output-download", origin: "local", outputAvailable: true, recoveryAction: "redownload", retryMayCharge: false },
+      updatedAt: now.toISOString(),
+    }, ["created"]);
+
+    await runService.retryDownload(created.run.id, "download-retry-1");
+    await worker.runOnce();
+
+    await expect(runService.getRun(created.run.id)).resolves.toMatchObject({
+      run: { status: "succeeded" },
+      jobs: [{ status: "succeeded", pendingOutputs: undefined }],
+      artifacts: [{ kind: "video" }],
+    });
+    expect(provider.submit).not.toHaveBeenCalled();
+    expect(provider.poll).not.toHaveBeenCalled();
+    expect(provider.download).toHaveBeenCalledOnce();
+  });
+
   it("rejects a downloaded body whose content type does not match the output", async () => {
     vi.mocked(provider.download).mockResolvedValueOnce({
       data: new TextEncoder().encode("provider error"),
