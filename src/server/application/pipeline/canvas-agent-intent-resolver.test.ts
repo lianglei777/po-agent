@@ -108,6 +108,28 @@ describe("CanvasAgentIntentResolver", () => {
     expect(JSON.stringify(chat.mock.calls[0]?.[0])).toContain("canvas-agent-context");
   });
 
+  it("tells the semantic classifier that storyboard text nodes remain a storyboard deliverable", async () => {
+    const chat = vi.fn(async (messages: Parameters<LlmPort["chat"]>[0]) => {
+      expect(messages[0]?.content).toContain("Saving a script or storyboard as one or more text nodes");
+      return JSON.stringify(decision("storyboard"));
+    });
+    const resolver = new CanvasAgentIntentResolver(
+      { chat } as unknown as LlmPort,
+      { getContext: vi.fn(async () => null) } as unknown as SessionRepository,
+    );
+
+    await expect(resolver.resolve({
+      sessionId: "session-1",
+      message: "拆成四个分镜，只创建分镜文本节点，不要媒体节点",
+      model: null,
+      allowAgentGeneration: false,
+      canvasContext: "context",
+    })).resolves.toMatchObject({
+      requestedStage: "storyboard",
+      allowedStages: ["discuss", "script", "storyboard"],
+    });
+  });
+
   it("retries one malformed classifier response", async () => {
     const chat = vi.fn()
       .mockResolvedValueOnce("not json")

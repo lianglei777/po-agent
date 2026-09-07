@@ -135,7 +135,7 @@ describe("PipelineAgentToolProvider", () => {
     });
   });
 
-  it("returns full Route schemas only for explicitly selected candidates", async () => {
+  it("returns Agent-facing Route schemas only for explicitly selected candidates", async () => {
     const policies = new CanvasAgentTurnPolicyRegistry();
     policies.begin("pipeline-session", "turn-canvas-routes", {
       type: "resolved", objective: "准备视频节点", requestedStage: "canvas", effectiveStage: "canvas",
@@ -145,7 +145,17 @@ describe("PipelineAgentToolProvider", () => {
       id: "video-route", name: "Video", description: "Reference video", tags: ["reference"],
       product: "Video", providerId: "provider", capability: "multimodal-to-video", isDefault: false,
       defaults: { durationSeconds: 5 },
-      inputSchema: { prompt: { required: true }, assets: [{ key: "imageUrls", mediaType: "image", multiple: true }] },
+      inputSchema: {
+        prompt: { required: true },
+        parameters: [{
+          key: "durationSeconds", label: "Duration", type: "select", required: true, defaultValue: 5,
+          options: [{ label: "5 seconds", value: 5 }], presentation: { control: "slider" },
+        }],
+        assets: [{
+          key: "imageUrls", label: "Images", mediaType: "image", multiple: true,
+          acceptedTypes: ["image/png"], maxFileSizeBytes: 10_000,
+        }],
+      },
     };
     const studio = { listAvailableGenerationRoutes: vi.fn(async () => [fullRoute]) } as unknown as CanvasStudioService;
     const provider = new PipelineAgentToolProvider(
@@ -158,7 +168,31 @@ describe("PipelineAgentToolProvider", () => {
 
     const result = await tool.execute({ toolCallId: "routes-detail", input: { routeIds: ["video-route"] } });
 
-    expect(result.details).toEqual({ detail: true, routes: [fullRoute] });
+    expect(result.details).toEqual({
+      detail: true,
+      routes: [{
+        id: "video-route", name: "Video", description: "Reference video", tags: ["reference"],
+        product: "Video", providerId: "provider", capability: "multimodal-to-video", isDefault: false,
+        defaults: { durationSeconds: 5 },
+        assetInputs: [{
+          key: "imageUrls", mediaType: "image", required: false, multiple: true,
+          minFiles: undefined, maxFiles: undefined,
+        }],
+        inputSchema: {
+          prompt: { required: true },
+          parameters: [{
+            key: "durationSeconds", type: "select", required: true, defaultValue: 5,
+            optionValues: [5], min: undefined, max: undefined, minLength: undefined,
+            maxLength: undefined, format: undefined,
+          }],
+          assets: [{
+            key: "imageUrls", mediaType: "image", required: false, multiple: true,
+            minFiles: undefined, maxFiles: undefined,
+          }],
+          constraints: [],
+        },
+      }],
+    });
   });
 
   it("returns created canvas node IDs when applying a plan", async () => {

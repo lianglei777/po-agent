@@ -52,10 +52,10 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     return {
       name: "canvas_get_generation_routes",
       label: "读取可用生成模型",
-      description: "分两步读取当前可用的内容生成 Route。先按 mediaType 获取紧凑候选摘要，再用 routeIds 获取少量候选的完整素材槽位与参数 Schema。创建或修改生成节点前使用；不要根据模型名称猜测能力。",
+      description: "分两步读取当前可用的内容生成 Route。先按 mediaType 获取紧凑候选摘要，再用 routeIds 获取少量候选的 Agent 可执行 Schema。创建或修改生成节点前使用；不要根据模型名称猜测能力。",
       promptGuidelines: [
         "先按目标 mediaType 查询候选摘要；根据 description、capability、defaults 和 assetInputs 选出少量候选。",
-        "再传入最多 8 个 routeIds 查询完整 Schema，确认参数与引用兼容后才能创建计划。",
+        "再传入最多 8 个 routeIds 查询 Agent 可执行 Schema，确认参数与引用兼容后才能创建计划。",
         "同一回合已经取得的 Route 信息应复用，不要重复查询相同媒体类型或 Route。",
       ],
       parameters: {
@@ -75,7 +75,9 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
         const routes = (await this.canvasStudioService.listAvailableGenerationRoutes())
           .filter((route) => mediaType === undefined || routeOutputMediaType(route.capability) === mediaType)
           .filter((route) => !requestedIds || requestedIds.has(route.id));
-        const result = requestedIds ? routes : routes.map(compactGenerationRoute);
+        const result = requestedIds
+          ? routes.map(compactGenerationRouteDetail)
+          : routes.map(compactGenerationRoute);
         return {
           content: [{ type: "text", text: JSON.stringify({ routes: result, detail: Boolean(requestedIds) }) }],
           details: { routes: result, detail: Boolean(requestedIds) },
@@ -837,6 +839,37 @@ function compactGenerationRoute(route: Awaited<ReturnType<CanvasStudioService["l
       minFiles: slot.minFiles,
       maxFiles: slot.maxFiles,
     })),
+  };
+}
+
+// Agent 只需要能通过服务端校验的字段；省略 UI 展示元数据，避免大型枚举和标签挤占对话上下文。
+function compactGenerationRouteDetail(route: Awaited<ReturnType<CanvasStudioService["listAvailableGenerationRoutes"]>>[number]) {
+  return {
+    ...compactGenerationRoute(route),
+    inputSchema: {
+      prompt: route.inputSchema.prompt,
+      parameters: (route.inputSchema.parameters ?? []).map((field) => ({
+        key: field.key,
+        type: field.type,
+        required: field.required ?? false,
+        defaultValue: field.defaultValue,
+        optionValues: field.options?.map((option) => option.value),
+        min: field.min,
+        max: field.max,
+        minLength: field.minLength,
+        maxLength: field.maxLength,
+        format: field.format,
+      })),
+      assets: (route.inputSchema.assets ?? []).map((slot) => ({
+        key: slot.key,
+        mediaType: slot.mediaType,
+        required: slot.required ?? false,
+        multiple: slot.multiple ?? false,
+        minFiles: slot.minFiles,
+        maxFiles: slot.maxFiles,
+      })),
+      constraints: route.inputSchema.constraints ?? [],
+    },
   };
 }
 
