@@ -8,7 +8,7 @@ describe("resolvePolicy", () => {
     ["discuss", ["discuss"]],
     ["script", ["discuss", "script"]],
     ["storyboard", ["discuss", "script", "storyboard"]],
-    ["canvas", ["discuss", "script", "storyboard", "canvas"]],
+    ["canvas", ["discuss", "script", "storyboard", "canvas", "review"]],
     ["review", ["discuss", "review"]],
   ] as const)("stops a %s request at its requested delivery stage", (stage, allowedStages) => {
     expect(resolvePolicy(decision(stage), "当前请求", true)).toMatchObject({
@@ -28,26 +28,32 @@ describe("resolvePolicy", () => {
     });
   });
 
-  it("allows result review before an explicitly requested regeneration", () => {
+  it("turns an explicitly requested regeneration into manual canvas preparation", () => {
     expect(resolvePolicy(decision("generate"), "评审后重新生成这个镜头", true)).toMatchObject({
-      effectiveStage: "generate",
-      allowedStages: ["discuss", "script", "storyboard", "canvas", "review", "generate"],
-      generationPermission: "allowed",
-    });
-  });
-
-  it("stops at a prepared canvas when automatic generation is disabled", () => {
-    expect(resolvePolicy(decision("generate"), "做成完整视频", false)).toMatchObject({
-      requestedStage: "generate",
+      requestedStage: "canvas",
       effectiveStage: "canvas",
-      generationPermission: "project-disabled",
+      allowedStages: ["discuss", "script", "storyboard", "canvas", "review"],
+      generationPermission: "not-requested",
     });
   });
 
-  it("lets the semantic classifier deny a requested generation", () => {
+  it("stops at a prepared canvas regardless of the legacy automatic generation setting", () => {
+    expect(resolvePolicy(decision("generate"), "做成完整视频", false)).toMatchObject({
+      requestedStage: "canvas",
+      effectiveStage: "canvas",
+      generationPermission: "not-requested",
+    });
+    expect(resolvePolicy(decision("generate"), "做成完整视频", true)).toMatchObject({
+      requestedStage: "canvas",
+      effectiveStage: "canvas",
+      generationPermission: "not-requested",
+    });
+  });
+
+  it("keeps an explicit manual-generation request in canvas preparation", () => {
     expect(resolvePolicy({ ...decision("generate"), explicitlyForbidsGeneration: true }, "节点搭好，我自己生成", true)).toMatchObject({
       effectiveStage: "canvas",
-      generationPermission: "denied-by-user",
+      generationPermission: "not-requested",
     });
   });
 
@@ -138,7 +144,7 @@ describe("CanvasAgentIntentResolver", () => {
       sessionId: "session-1", message: "都行", model: null, allowAgentGeneration: false, canvasContext: "context",
     })).resolves.toMatchObject({
       requestedStage: "canvas", effectiveStage: "canvas", confidence: "medium",
-      allowedStages: ["discuss", "script", "storyboard", "canvas"],
+      allowedStages: ["discuss", "script", "storyboard", "canvas", "review"],
     });
     expect(chat).toHaveBeenCalledTimes(2);
   });
@@ -178,5 +184,6 @@ function decision(requestedStage: "discuss" | "script" | "storyboard" | "canvas"
     confidence: "high" as const,
     needsClarification: false,
     explicitlyForbidsGeneration: false,
+    scope: { projectWide: true, nodeIds: [] },
   };
 }

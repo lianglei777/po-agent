@@ -122,6 +122,21 @@ export class GenerationRunService {
     await this.validateInput(input);
   }
 
+  async validateRouteConfiguration(input: {
+    routeId: string;
+    prompt: string;
+    parameters?: Record<string, JsonValue>;
+  }): Promise<void> {
+    await this.ready;
+    const route = await this.repository.getRoute(input.routeId);
+    if (!route || !route.enabled) {
+      throw new AppError("GENERATION_ROUTE_UNAVAILABLE", "The requested generation route is not available", 409);
+    }
+    await this.requireProviderEnabled(route);
+    validatePrompt(input.prompt, route.inputSchema.prompt);
+    validateParameters(route.inputSchema.parameters ?? [], route.defaults, input.parameters);
+  }
+
   async prepareRun(
     input: CreateGenerationRunInput,
   ): Promise<GenerationRunView & { created: boolean }> {

@@ -67,6 +67,11 @@
 | [`QwenApis/`](./QwenApis/) | 千问 AI 平台图像与视频 API 参考快照、资料索引与协议矩阵 |
 | [`pipline-studio/`](./pipline-studio/) | Pipeline Studio 专题设计与重构计划 |
 
+Pipeline Studio 当前的 Agent 开发基线见
+[Canvas Agent 意图驱动的画布准备设计](./pipline-studio/canvas-agent-intent-driven-canvas-preparation-design.md)。
+长期自动生成与生产编排方案保留在
+[Canvas Agent 意图驱动的生成编排设计](./pipline-studio/canvas-agent-intent-driven-production-orchestration-design.md)。
+
 ## 归档规则
 
 - 架构和公共 API 合同保留在根目录。

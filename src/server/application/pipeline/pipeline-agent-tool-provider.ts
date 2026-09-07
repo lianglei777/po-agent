@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { AppError } from "@/server/domain/app-error";
 import type { AgentToolContext, AgentToolDefinition, AgentToolExecutionContext, AgentToolProvider, AgentToolResult } from "@/server/ports/agent-tool";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
@@ -36,6 +35,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     // 第一批只开放只读状态；画布写入与生成工具会随意图和计划边界一起启用。
     return [
       this.getPipelineStateTool(input.sessionId, projectId),
+      this.getGenerationRoutesTool(input.sessionId),
       this.createPlanTool(input.sessionId, projectId),
       this.updatePlanTool(input.sessionId, projectId),
       this.applyPlanTool(input.sessionId, projectId),
@@ -45,9 +45,32 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       this.updateContinuityTool(input.sessionId, projectId),
       this.saveWorkflowTool(input.sessionId, projectId),
       this.prepareGenerationTool(input.sessionId, projectId),
-      this.runGenerationTool(input.sessionId, projectId),
-      this.recoverGenerationTool(input.sessionId, projectId),
     ];
+  }
+
+  private getGenerationRoutesTool(sessionId: string): AgentToolDefinition {
+    return {
+      name: "canvas_get_generation_routes",
+      label: "读取可用生成模型",
+      description: "读取当前已启用 Provider 中可用的内容生成 Route、适用场景、输入素材槽位、参数约束和默认值。创建或修改生成节点前使用；不要根据模型名称猜测能力。",
+      parameters: {
+        type: "object",
+        properties: {
+          mediaType: { type: "string", enum: ["image", "video", "audio"] },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ input }) => {
+        this.turnPolicies.requireStage(sessionId, "canvas");
+        const mediaType = typeof input.mediaType === "string" ? input.mediaType : undefined;
+        const routes = (await this.canvasStudioService.listAvailableGenerationRoutes())
+          .filter((route) => mediaType === undefined || routeOutputMediaType(route.capability) === mediaType);
+        return {
+          content: [{ type: "text", text: JSON.stringify({ routes }) }],
+          details: { routes },
+        };
+      },
+    };
   }
 
   private recoverGenerationTool(sessionId: string, projectId: string): AgentToolDefinition {
@@ -104,7 +127,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       promptGuidelines: [
         "按主体、构图、动作或节奏、镜头、风格与项目连续性分别说明观察结果。",
         "清楚区分客观观察、改进建议和用户尚未确认的最终选择。",
-        "用户要求修改时，先用 canvas_create_plan/canvas_apply_plan 更新受影响节点；只有本轮明确要求重生成时才可继续生成。",
+        "用户要求修改时，用 canvas_create_plan/canvas_apply_plan 更新受影响节点；完成后由用户在画布上手动生成。",
       ],
       parameters: {
         type: "object",
@@ -259,57 +282,12 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
           projectId,
           nodeIds: input.nodeIds as string[],
         });
-        const conversation = await this.repo.getAgentConversation(projectId);
-        const automaticGenerationEnabled = conversation?.allowAgentGeneration === true;
         return {
           content: [{
             type: "text",
-            text: automaticGenerationEnabled
-              ? `生成预检通过，共 ${prepared.nodeIds.length} 个节点。只有当前用户明确要求生成时，才可继续调用 canvas_run_generation。`
-              : `生成预检通过，共 ${prepared.nodeIds.length} 个节点。自动生成已关闭，请用户在节点上手动点击生成。`,
+            text: `配置检查通过，共 ${prepared.nodeIds.length} 个节点。请用户在节点或工作流上手动触发生成。`,
           }],
-          details: { ...prepared, automaticGenerationEnabled },
-        };
-      },
-    };
-  }
-
-  private runGenerationTool(sessionId: string, projectId: string): AgentToolDefinition {
-    return {
-      name: "canvas_run_generation",
-      label: "运行画布生成",
-      description: "仅当当前用户明确要求实际生成内容，且项目已开启自动生成时，按依赖顺序启动已准备的节点。重复调用同一回合和同一节点集合会复用 Workflow Run，不会重复创建付费任务。",
-      promptGuidelines: [
-        "必须先调用 canvas_prepare_generation 并使用相同的 nodeIds。",
-        "写剧本、修改提示词、搭建节点或讨论方案时禁止调用。",
-      ],
-      parameters: generationNodeParameters,
-      execute: async ({ input }) => {
-        await this.requireGenerationPermission(sessionId, projectId);
-        const active = this.turnPolicies.getActive(sessionId);
-        if (!active) {
-          throw new AppError("PIPELINE_AGENT_ACTION_NOT_ALLOWED", "No active Agent turn is available for generation", 403);
-        }
-        const nodeIds = [...new Set((input.nodeIds as string[]).map((id) => id.trim()).filter(Boolean))].sort();
-        const workflowRunId = stableWorkflowRunId(projectId, sessionId, active.turnId, nodeIds);
-        const result = await this.canvasStudioService.startWorkflowGeneration({
-          id: workflowRunId,
-          projectId,
-          nodeIds,
-        });
-        return {
-          content: [{
-            type: "text",
-            text: result.created
-              ? `已启动画布生成，共 ${result.run.steps.length} 个节点。Workflow Run ID: ${result.run.id}`
-              : `已复用本回合已经创建的画布生成任务。Workflow Run ID: ${result.run.id}`,
-          }],
-          details: {
-            workflowRunId: result.run.id,
-            created: result.created,
-            status: result.run.status,
-            steps: result.run.steps,
-          },
+          details: { ...prepared, generationTrigger: "manual" },
         };
       },
     };
@@ -413,6 +391,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       description: "为当前要求创建结构化画布修改计划。先调用此工具，再根据结果调用 canvas_apply_plan。只写剧本时只能创建或更新文本节点；搭建画布时可创建媒体节点、提示词和引用。",
       promptGuidelines: [
         "每个 node.create 必须同时提供 tempId、mediaType、name；tempId 只在当前计划内使用。",
+        "创建生成节点前先调用 canvas_get_generation_routes；媒体节点应同时写入完整 prompt、兼容的 routeId 和按 Route Schema 填好的 settings。",
         "可提供 column 和 row 表示期望顺序；服务端会自动避让重复或缺失的网格位置，不能依赖重叠布局。",
         "first-frame 和 last-frame 仅用于图片节点连接到视频节点；其它任何连线必须使用 reference。last-frame 必须和同一视频节点的 first-frame 一起提供。",
         "当前回合要求澄清时不要调用此工具，直接提出服务器给出的澄清问题。",
@@ -723,14 +702,6 @@ const generationNodeParameters = {
   additionalProperties: false,
 };
 
-function stableWorkflowRunId(projectId: string, sessionId: string, turnId: string, nodeIds: string[]): string {
-  const hex = createHash("sha256")
-    .update(JSON.stringify({ projectId, sessionId, turnId, nodeIds }))
-    .digest("hex")
-    .slice(0, 32);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-}
-
 function planParameters(includePlanId: boolean) {
   return {
     type: "object" as const,
@@ -752,6 +723,18 @@ function planParameters(includePlanId: boolean) {
             text: { type: "string" },
             prompt: { type: "string" },
             routeId: { type: "string", description: "可选的已启用生成 Route ID；修改后必须重新预检" },
+            settings: {
+              type: "object",
+              description: "按所选 Route inputSchema.parameters 填写的生成参数；未指定字段使用 Route 默认值",
+              additionalProperties: {
+                anyOf: [
+                  { type: "string" },
+                  { type: "number" },
+                  { type: "boolean" },
+                  { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }] } },
+                ],
+              },
+            },
             column: { type: "integer", minimum: 0, maximum: 20 },
             row: { type: "integer", minimum: 0, maximum: 20 },
             source: { type: "string" },
@@ -765,6 +748,12 @@ function planParameters(includePlanId: boolean) {
     required: includePlanId ? ["planId", "summary", "operations"] : ["summary", "operations"],
     additionalProperties: false,
   };
+}
+
+function routeOutputMediaType(capability: string): "image" | "video" | "audio" {
+  if (capability.endsWith("-image")) return "image";
+  if (capability === "video-to-audio") return "audio";
+  return "video";
 }
 
 function downstreamNodeIds(sourceNodeId: string, edges: Array<{ sourceNodeId: string; targetNodeId: string }>): string[] {

@@ -13,6 +13,7 @@ describe("CanvasAgentPlanService", () => {
         state.revision += 1;
         return { revision: state.revision, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, batch };
       }),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
     } as unknown as CanvasStudioService;
     const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
     const plan = await service.create({
@@ -21,8 +22,8 @@ describe("CanvasAgentPlanService", () => {
       summary: "创建剧本、首帧和视频节点",
       operations: [
         { type: "node.create", tempId: "script", mediaType: "text", name: "剧本", text: "雨夜相遇", column: 0, row: 0 },
-        { type: "node.create", tempId: "frame", mediaType: "image", name: "首帧", prompt: "雨夜街道", column: 1, row: 0 },
-        { type: "node.create", tempId: "video", mediaType: "video", name: "镜头 1", prompt: "缓慢推进", column: 2, row: 0 },
+        { type: "node.create", tempId: "frame", mediaType: "image", name: "首帧", prompt: "雨夜街道", routeId: "image-route", column: 1, row: 0 },
+        { type: "node.create", tempId: "video", mediaType: "video", name: "镜头 1", prompt: "缓慢推进", routeId: "video-route", column: 2, row: 0 },
         { type: "edge.create", source: "script", target: "frame", role: "reference" },
         { type: "edge.create", source: "frame", target: "video", role: "first-frame" },
       ],
@@ -68,7 +69,10 @@ describe("CanvasAgentPlanService", () => {
 
   it("only undoes when no newer canvas edit would be overwritten", async () => {
     const state = repositoryState();
-    const canvas = { applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })) } as unknown as CanvasStudioService;
+    const canvas = {
+      applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
     const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
     const plan = await service.create({
       projectId: "project-1", sessionId: "session-1", summary: "创建节点",
@@ -101,14 +105,20 @@ describe("CanvasAgentPlanService", () => {
       .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED" });
   });
 
-  it("updates a media prompt and route together for a local rerun", async () => {
+  it("updates a media prompt, Route, and validated settings together", async () => {
     const image = node("image-1", "image", "v1");
     const state = repositoryState([image]);
-    const canvas = { applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })) } as unknown as CanvasStudioService;
+    const canvas = {
+      applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
     const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
     const plan = await service.create({
       projectId: "project-1", sessionId: "session-1", summary: "调整图片并换 Route",
-      operations: [{ type: "node.update", nodeId: image.id, prompt: "更深的蓝色", routeId: "image-route-2" }],
+      operations: [{
+        type: "node.update", nodeId: image.id, prompt: "更深的蓝色", routeId: "image-route-2",
+        settings: { resolution: "2k", seed: -1, transparent: false },
+      }],
     });
 
     await service.apply("project-1", "session-1", plan.id);
@@ -116,20 +126,69 @@ describe("CanvasAgentPlanService", () => {
     const batch = vi.mocked(canvas.applyMutationBatch).mock.calls[0]?.[1];
     expect(batch?.mutations[0]).toMatchObject({
       type: "node.update",
-      patch: { data: { params: { prompt: "更深的蓝色", routeId: "image-route-2" } } },
+      patch: { data: { params: {
+        prompt: "更深的蓝色",
+        promptDocument: { plainText: "更深的蓝色" },
+        routeId: "image-route-2",
+        settings: { resolution: "2k", seed: -1, transparent: false },
+      } } },
     });
+    expect(canvas.validateGenerationNodeConfiguration).toHaveBeenCalledWith({
+      mediaType: "image",
+      routeId: "image-route-2",
+      prompt: "更深的蓝色",
+      settings: { resolution: "2k", seed: -1, transparent: false },
+    });
+  });
+
+  it("rejects an incomplete generation node before saving the plan", async () => {
+    const state = repositoryState();
+    const service = new CanvasAgentPlanService(state.repository, {} as CanvasStudioService, canvasPolicy());
+
+    await expect(service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "创建未配置图片节点",
+      operations: [{ type: "node.create", tempId: "image", mediaType: "image", name: "图片", prompt: "蓝色产品图" }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+  });
+
+  it("rejects updates and references to existing nodes outside the resolved turn scope", async () => {
+    const selected = node("image-selected", "image", "v1");
+    const unrelated = node("image-unrelated", "image", "v1");
+    const state = repositoryState([selected, unrelated]);
+    const policies = policy("canvas", ["discuss", "canvas"], {
+      projectWide: false,
+      nodeIds: [selected.id],
+    });
+    const canvas = { validateGenerationNodeConfiguration: vi.fn(async () => undefined) } as unknown as CanvasStudioService;
+    const service = new CanvasAgentPlanService(state.repository, canvas, policies);
+
+    await expect(service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "只修改选中镜头",
+      operations: [{ type: "node.update", nodeId: unrelated.id, prompt: "越界修改" }],
+    })).rejects.toMatchObject({ code: "PIPELINE_AGENT_TARGET_OUT_OF_SCOPE", status: 403 });
+
+    await expect(service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "从选中镜头创建下游",
+      operations: [
+        { type: "node.create", tempId: "video", mediaType: "video", name: "新视频", prompt: "向前走", routeId: "video-route" },
+        { type: "edge.create", source: selected.id, target: "video", role: "first-frame" },
+      ],
+    })).resolves.toMatchObject({ status: "draft" });
   });
 
   it("assigns distinct grid cells when an Agent omits or duplicates columns", async () => {
     const state = repositoryState();
-    const canvas = { applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })) } as unknown as CanvasStudioService;
+    const canvas = {
+      applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
     const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
     const plan = await service.create({
       projectId: "project-1", sessionId: "session-1", summary: "创建角色设定图",
       operations: [
-        { type: "node.create", tempId: "character-a", mediaType: "image", name: "角色 A", row: 2 },
-        { type: "node.create", tempId: "character-b", mediaType: "image", name: "角色 B", row: 2 },
-        { type: "node.create", tempId: "character-c", mediaType: "image", name: "角色 C", column: 0, row: 2 },
+        { type: "node.create", tempId: "character-a", mediaType: "image", name: "角色 A", prompt: "角色 A", routeId: "image-route", row: 2 },
+        { type: "node.create", tempId: "character-b", mediaType: "image", name: "角色 B", prompt: "角色 B", routeId: "image-route", row: 2 },
+        { type: "node.create", tempId: "character-c", mediaType: "image", name: "角色 C", prompt: "角色 C", routeId: "image-route", column: 0, row: 2 },
       ],
     });
 
@@ -206,11 +265,15 @@ function scriptPolicy() {
   return policy("script", ["discuss", "script"]);
 }
 
-function policy(effectiveStage: "script" | "canvas", allowedStages: Array<"discuss" | "script" | "storyboard" | "canvas">) {
+function policy(
+  effectiveStage: "script" | "canvas",
+  allowedStages: Array<"discuss" | "script" | "storyboard" | "canvas">,
+  scope?: { projectWide: boolean; nodeIds: string[] },
+) {
   const policies = new CanvasAgentTurnPolicyRegistry();
   policies.begin("session-1", "turn-1", {
     type: "resolved", objective: "test", requestedStage: effectiveStage, effectiveStage,
-    allowedStages, generationPermission: "not-requested", confidence: "high",
+    allowedStages, generationPermission: "not-requested", confidence: "high", scope,
   });
   return policies;
 }

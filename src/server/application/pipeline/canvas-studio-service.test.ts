@@ -1373,6 +1373,74 @@ describe("CanvasStudioService audio generation", () => {
   });
 });
 
+describe("CanvasStudioService Agent generation configuration", () => {
+  it("lists only enabled Routes from enabled Providers and hides internal parameters", async () => {
+    const routes = [
+      generationRoute({
+        id: "route-visible",
+        enabled: true,
+        providerId: "provider-enabled",
+      }),
+      generationRoute({
+        id: "route-disabled",
+        enabled: false,
+        providerId: "provider-enabled",
+      }),
+      generationRoute({
+        id: "route-provider-disabled",
+        enabled: true,
+        providerId: "provider-disabled",
+      }),
+    ];
+    const runs = {
+      listRoutes: vi.fn().mockResolvedValue(routes),
+      getProviderSettings: vi.fn().mockImplementation(async (providerId: string) => ({
+        enabled: providerId === "provider-enabled",
+      })),
+    } as unknown as GenerationRunService;
+
+    await expect(createService({} as PipelineRepository, {} as LlmPort, runs)
+      .listAvailableGenerationRoutes()).resolves.toEqual([
+      expect.objectContaining({
+        id: "route-visible",
+        inputSchema: {
+          prompt: { required: true },
+          parameters: [expect.objectContaining({ key: "durationSeconds" })],
+        },
+      }),
+    ]);
+  });
+
+  it("rejects a Route whose output does not match the node and delegates static validation", async () => {
+    const imageRoute = generationRoute({ id: "route-image", capability: "text-to-image" });
+    const runs = {
+      getRoute: vi.fn().mockResolvedValue(imageRoute),
+      validateRouteConfiguration: vi.fn().mockResolvedValue(undefined),
+    } as unknown as GenerationRunService;
+    const service = createService({} as PipelineRepository, {} as LlmPort, runs);
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: imageRoute.id,
+      prompt: "A quiet street",
+      settings: {},
+    })).rejects.toMatchObject({ code: "GENERATION_ROUTE_UNAVAILABLE", status: 409 });
+    expect(runs.validateRouteConfiguration).not.toHaveBeenCalled();
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "image",
+      routeId: imageRoute.id,
+      prompt: "A quiet street",
+      settings: { durationSeconds: 5 },
+    })).resolves.toBeUndefined();
+    expect(runs.validateRouteConfiguration).toHaveBeenCalledWith({
+      routeId: imageRoute.id,
+      prompt: "A quiet street",
+      parameters: { durationSeconds: 5 },
+    });
+  });
+});
+
 describe("CanvasStudioService durable workflow generation", () => {
   it("continues independent branches and blocks only downstream nodes after a failure", async () => {
     const source = { ...imageNode(), id: "source" };
@@ -1646,6 +1714,35 @@ function repositoryStub(result: { applied: boolean; revision: number }) {
     getCanvasViewport: vi.fn().mockResolvedValue({ x: 10, y: 20, zoom: 0.8 }),
     getCanvasRevision: vi.fn().mockResolvedValue(result.revision),
   } as unknown as PipelineRepository;
+}
+
+function generationRoute(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "route-video",
+    name: "Route",
+    description: "A generation route",
+    tags: ["fast"],
+    capability: "text-to-video",
+    product: "Product",
+    providerId: "provider-enabled",
+    providerOperation: "operation",
+    enabled: true,
+    isDefault: true,
+    revision: 1,
+    defaults: { durationSeconds: 5 },
+    inputSchema: {
+      prompt: { required: true },
+      parameters: [
+        { key: "durationSeconds", label: "Duration", type: "number", min: 1, max: 10 },
+        { key: "internalToken", label: "Internal", type: "text", internal: true },
+      ],
+    },
+    adapterConfig: { secretMapping: true },
+    credentialRef: "provider:default",
+    createdAt: "2026-08-19T00:00:00.000Z",
+    updatedAt: "2026-08-19T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 function createService(

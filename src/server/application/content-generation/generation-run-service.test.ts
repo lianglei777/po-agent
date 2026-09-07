@@ -107,6 +107,21 @@ describe("GenerationRunService", () => {
     expect(await repository.listRunsBySession("session-1")).toEqual([]);
   });
 
+  it("validates an Agent node Route and parameters without requiring generated upstream assets", async () => {
+    await expect(service.validateRouteConfiguration({
+      routeId: "runninghub-seedance-2-image-to-video",
+      prompt: "the subject walks toward camera",
+      parameters: { durationSeconds: 10, resolution: "720p" },
+    })).resolves.toBeUndefined();
+
+    await expect(service.validateRouteConfiguration({
+      routeId: "runninghub-seedance-2-image-to-video",
+      prompt: "the subject walks toward camera",
+      parameters: { durationSeconds: 999 },
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+    expect(await repository.listRunsBySession("session-1")).toEqual([]);
+  });
+
   it("validates cross-slot asset requirements before creating paid work", async () => {
     const base = {
       sessionId: "session-1",

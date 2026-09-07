@@ -14,20 +14,19 @@ Choose exactly one requestedStage:
 - discuss: brainstorm, explain, answer, compare, diagnose, or suggest without producing project content.
 - script: write or revise a script, narration, dialogue, creative brief, or other text deliverable, then stop.
 - storyboard: create or revise a shot list or storyboard specification, then stop before building executable canvas nodes.
-- canvas: create or prepare nodes, prompts, references, connections, groups, or layout, then stop before any media generation API.
-- generate: the user explicitly asks to generate, render, run, regenerate, or produce image/video/audio media now.
+- canvas: create or prepare nodes, prompts, references, connections, groups, or layout. Requests to generate, render, run, regenerate, or produce media also map to canvas: prepare everything and stop so the user can trigger generation from the canvas.
 - review: inspect or compare existing results and recommend or select changes without regenerating unless the current request explicitly asks to regenerate.
 
 Rules:
-- Never infer generate merely because the project setting permits automatic generation.
+- This Agent never triggers a media generation API. A request to generate means preparing the requested nodes for manual generation.
 - A suggestion for a possible next step is not permission to perform it.
 - If the user asks for multiple steps, requestedStage is the furthest step explicitly requested now.
-- Set explicitlyForbidsGeneration when the current message says not to generate, to stop before generation, or that the user will run it manually.
 - Ask for clarification only when different interpretations would materially change the deliverable stage. Keep the question short.
+- Set scope.projectWide only when the user requests a whole-project or whole-canvas change. Otherwise return the stable node IDs explicitly selected, mentioned, or semantically targeted in scope.nodeIds. New nodes do not need IDs in scope.
 - Return one JSON object and no markdown.
 
 Schema:
-{"requestedStage":"discuss|script|storyboard|canvas|generate|review","objective":"short description","confidence":"high|medium|low","needsClarification":false,"question":"optional string","explicitlyForbidsGeneration":false}`;
+{"requestedStage":"discuss|script|storyboard|canvas|review","objective":"short description","scope":{"projectWide":false,"nodeIds":[]},"confidence":"high|medium|low","needsClarification":false,"question":"optional string"}`;
 
 const FOLLOW_UP_SYSTEM_PROMPT = `You resolve a short user reply to the IMMEDIATELY PRECEDING assistant message in a visual content creation canvas.
 Decide whether the user clearly selects one concrete stage that the assistant explicitly offered in that preceding message.
@@ -37,11 +36,11 @@ Rules:
 - Return a stage only when the preceding assistant message offered that exact next action and the current reply clearly accepts it.
 - A vague acknowledgement must return null when the preceding message offered multiple incompatible actions without mapping that acknowledgement to one action.
 - Do not infer a stage from older messages, project settings, or a merely mentioned possibility.
-- Return generate only when the preceding assistant explicitly offered to generate media now and the current reply accepts that offer.
+- If the preceding assistant offered to generate media and the user accepts, return canvas so the Agent prepares the nodes for manual generation.
 - Return one JSON object and no markdown.
 
 Schema:
-{"stage":"discuss|script|storyboard|canvas|generate|review|null","confidence":"high|low"}`;
+{"stage":"discuss|script|storyboard|canvas|review|null","confidence":"high|low"}`;
 
 interface ClassifierDecision {
   requestedStage: CanvasAgentStage;
@@ -50,6 +49,7 @@ interface ClassifierDecision {
   needsClarification: boolean;
   question?: string;
   explicitlyForbidsGeneration: boolean;
+  scope: { projectWide: boolean; nodeIds: string[] };
 }
 
 export class CanvasAgentIntentResolver {
@@ -68,7 +68,6 @@ export class CanvasAgentIntentResolver {
     const context = await this.sessions.getContext(input.sessionId);
     const payload = JSON.stringify({
       currentMessage: input.message,
-      automaticGenerationEnabled: input.allowAgentGeneration,
       recentConversation: (context?.messages ?? [])
         .filter((message) => message.role === "user" || message.role === "assistant")
         .slice(-12)
@@ -141,18 +140,12 @@ export function resolvePolicy(
   currentMessage: string,
   allowAgentGeneration: boolean,
 ): CanvasAgentTurnIntent {
-  const userDeniedGeneration = decision.explicitlyForbidsGeneration;
-  const requestedStage = decision.requestedStage;
-  const generationPermission: CanvasAgentGenerationPermission = userDeniedGeneration
-    ? "denied-by-user"
-    : requestedStage !== "generate"
-      ? "not-requested"
-      : allowAgentGeneration
-        ? "allowed"
-        : "project-disabled";
-  const effectiveStage = requestedStage === "generate" && generationPermission !== "allowed"
-    ? "canvas"
-    : requestedStage;
+  // 兼容旧调用签名；该开关不再扩大或收紧 Canvas Agent 的回合权限。
+  void allowAgentGeneration;
+  // 兼容旧模型偶尔返回 generate；Canvas Agent 当前只准备画布，永远不获得付费生成权限。
+  const requestedStage = decision.requestedStage === "generate" ? "canvas" : decision.requestedStage;
+  const generationPermission: CanvasAgentGenerationPermission = "not-requested";
+  const effectiveStage = requestedStage;
   const objective = decision.objective.trim() || currentMessage.trim().slice(0, 240);
 
   if (decision.needsClarification || decision.confidence === "low") {
@@ -163,8 +156,9 @@ export function resolvePolicy(
       effectiveStage: "discuss",
       allowedStages: ["discuss"],
       generationPermission,
+      scope: decision.scope,
       confidence: "low",
-      question: decision.question?.trim() || "请说明你希望本轮停在讨论、剧本、分镜、画布搭建还是内容生成。",
+      question: decision.question?.trim() || "请说明你希望本轮停在讨论、剧本、分镜还是画布准备。",
     };
   }
   return {
@@ -174,6 +168,7 @@ export function resolvePolicy(
     effectiveStage,
     allowedStages: allowedStages(effectiveStage),
     generationPermission,
+    scope: decision.scope,
     confidence: decision.confidence,
   };
 }
@@ -186,7 +181,7 @@ export function canvasAgentTurnPolicyContext(intent: CanvasAgentTurnIntent): str
     "<canvas-agent-turn-policy>",
     "This is the server-enforced scope for the current turn. Complete only the effective stage. A suggested next step is not permission to perform it. If clarification is required, ask only the supplied question and do not advance the work.",
     JSON.stringify(intent),
-    `Execution contract: ${clarificationInstruction} For script or storyboard deliverables, create or update text nodes through canvas_create_plan and then canvas_apply_plan. For canvas deliverables, create the complete node/reference plan and apply it. Do not create executable media nodes during a storyboard-only turn. Asset inspection is read-only and uses canvas_inspect_assets. Save continuity only when the current user explicitly confirms it; never promote an analysis suggestion by yourself. Never call a generation tool unless effectiveStage is generate.`,
+    `Execution contract: ${clarificationInstruction} For script or storyboard deliverables, create or update text nodes through canvas_create_plan and then canvas_apply_plan. For canvas deliverables, query available Routes when needed, create the complete node/reference plan, apply it, and run canvas_prepare_generation as a configuration check. Do not create executable media nodes during a storyboard-only turn. Asset inspection is read-only and uses canvas_inspect_assets. Save continuity only when the current user explicitly confirms it; never promote an analysis suggestion by yourself. This Agent cannot trigger generation; after preparation, tell the user which node or workflow they can run manually.`,
     "</canvas-agent-turn-policy>",
   ].join("\n");
 }
@@ -196,8 +191,8 @@ function allowedStages(stage: CanvasAgentStage): CanvasAgentStage[] {
     case "discuss": return ["discuss"];
     case "script": return ["discuss", "script"];
     case "storyboard": return ["discuss", "script", "storyboard"];
-    case "canvas": return ["discuss", "script", "storyboard", "canvas"];
-    case "generate": return ["discuss", "script", "storyboard", "canvas", "review", "generate"];
+    case "canvas": return ["discuss", "script", "storyboard", "canvas", "review"];
+    case "generate": return ["discuss", "script", "storyboard", "canvas"];
     case "review": return ["discuss", "review"];
   }
 }
@@ -216,8 +211,9 @@ function parseDecision(text: string): ClassifierDecision | null {
     const confidence = value.confidence;
     if (confidence !== "high" && confidence !== "medium" && confidence !== "low") continue;
     const needsClarification = value.needsClarification ?? value.needs_clarification;
-    const explicitlyForbidsGeneration = value.explicitlyForbidsGeneration ?? value.explicitly_forbids_generation;
-    if (typeof needsClarification !== "boolean" || typeof explicitlyForbidsGeneration !== "boolean") continue;
+    const explicitlyForbidsGeneration = value.explicitlyForbidsGeneration ?? value.explicitly_forbids_generation ?? false;
+    const scope = parseScope(value.scope);
+    if (typeof needsClarification !== "boolean" || typeof explicitlyForbidsGeneration !== "boolean" || !scope) continue;
     return {
       requestedStage,
       objective: typeof value.objective === "string" ? value.objective : "",
@@ -225,6 +221,7 @@ function parseDecision(text: string): ClassifierDecision | null {
       needsClarification,
       question: typeof value.question === "string" ? value.question : undefined,
       explicitlyForbidsGeneration,
+      scope,
     };
   }
   return null;
@@ -255,7 +252,14 @@ function fallbackDecision(message: string): ClassifierDecision {
     confidence: "low",
     needsClarification: true,
     explicitlyForbidsGeneration: false,
+    scope: { projectWide: false, nodeIds: [] },
   };
+}
+
+function parseScope(value: unknown): ClassifierDecision["scope"] | null {
+  if (!isRecord(value) || typeof value.projectWide !== "boolean" || !Array.isArray(value.nodeIds)) return null;
+  if (value.nodeIds.some((nodeId) => typeof nodeId !== "string" || !nodeId.trim() || nodeId.length > 128)) return null;
+  return { projectWide: value.projectWide, nodeIds: [...new Set(value.nodeIds.map((nodeId) => nodeId.trim()))] };
 }
 
 function messageText(message: AgentMessage): string {

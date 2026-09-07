@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Mentions, Select, Switch, Tooltip } from "antd";
+import { Button, Mentions, Select, Tooltip } from "antd";
 import type { AgentEvent, AgentMessage, AssistantMessage } from "@/contracts/agent";
 import type { ModelInfo } from "@/contracts/models";
 import type { PipelineAgentConversationResponse } from "@/contracts/pipeline-agent";
@@ -28,8 +28,6 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
     model: t.pipeline.canvasAgentPanelModel,
     vision: t.pipeline.canvasAgentPanelVision,
     noModel: t.pipeline.canvasAgentPanelNoModel,
-    allowGeneration: t.pipeline.canvasAgentPanelAllowGeneration,
-    allowGenerationDescription: t.pipeline.canvasAgentPanelAllowGenerationDescription,
     placeholder: t.pipeline.canvasAgentPanelPlaceholder,
     send: t.pipeline.canvasAgentPanelSend,
     stop: t.pipeline.canvasAgentPanelStop,
@@ -356,19 +354,6 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
             if (model) void updateSettings({ provider: model.provider, modelId: model.id });
           }}
         />
-        <div className="h-4 w-px shrink-0 bg-[var(--pl-border)]" />
-        <div className="flex shrink-0 items-center gap-2 text-caption">
-          <Tooltip title={copy.allowGenerationDescription} placement="left">
-            <span className="cursor-help text-[var(--pl-text-muted)]">{copy.allowGeneration}</span>
-          </Tooltip>
-          <Switch
-            size="small"
-            checked={conversation?.allowAgentGeneration ?? false}
-            disabled={!conversation || saving || running || submitting}
-            aria-label={copy.allowGeneration}
-            onChange={(checked) => void updateSettings({ allowAgentGeneration: checked })}
-          />
-        </div>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4" aria-live="polite">

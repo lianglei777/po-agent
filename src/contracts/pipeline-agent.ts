@@ -42,6 +42,11 @@ interface CanvasAgentTurnIntentBase {
   effectiveStage: CanvasAgentStage;
   allowedStages: CanvasAgentStage[];
   generationPermission: CanvasAgentGenerationPermission;
+  /** 当前语义解析器提供；缺失仅用于兼容旧会话和旧测试快照。 */
+  scope?: {
+    projectWide: boolean;
+    nodeIds: string[];
+  };
 }
 
 export type CanvasAgentTurnIntent =

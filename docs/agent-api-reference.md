@@ -2998,7 +2998,7 @@ interface PipelineAgentConversationResponse {
 }
 ```
 
-`PATCH` 修改模型或自动生成权限。`provider` 和 `modelId` 必须同时提供；权限开关是项目级能力上限，关闭时 Pipeline 生成工具会在调用生成服务前返回 `403 AGENT_GENERATION_DISABLED`。
+`PATCH` 修改模型。`provider` 和 `modelId` 必须同时提供。`allowAgentGeneration` 暂时保留在读写合同和持久化数据中，供旧客户端兼容；Canvas Agent 当前忽略该字段，界面不再展示对应开关，且不会从对话触发 Generation Run 或 Workflow Run。
 
 ```json
 {
@@ -3024,7 +3024,7 @@ interface PipelineAgentTurnRequest {
 
 客户端只提交 revision 和节点指针。服务端重新读取项目当前 revision、节点、连线与阶段状态，校验节点归属，并把选中节点、`@` 引用及其一跳上下游组装为受信任上下文。客户端 revision 落后时使用最新画布并在上下文中标记；超前时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。已删除或跨项目节点返回 `404 PIPELINE_CANVAS_NODE_NOT_FOUND`。
 
-该上下文仅用于理解当前请求，不授予画布修改或内容生成权限。服务端会结合当前消息、最近对话和项目自动生成开关解析本轮范围。`requestedStage` 表示用户要求，`effectiveStage` 表示经过权限收紧后实际可执行到的阶段；自动生成开关关闭或用户明确要求手动生成时，生成请求会停在 `canvas`。
+该上下文仅用于理解当前请求，不直接授予画布修改权限。服务端结合当前消息与最近对话解析本轮目标、阶段和修改范围。`requestedStage` 表示用户要求，`effectiveStage` 表示本轮实际可执行到的阶段；用户要求生成、重新生成或渲染时，Canvas Agent 会把任务解释为把相应节点准备到可手动生成的 `canvas` 阶段。
 
 成功响应：
 
@@ -3038,16 +3038,21 @@ interface PipelineAgentTurnRequest {
     "effectiveStage": "storyboard",
     "allowedStages": ["discuss", "script", "storyboard"],
     "generationPermission": "not-requested",
-    "confidence": "high"
+    "confidence": "high",
+    "scope": {
+      "projectWide": false,
+      "nodeIds": ["node-script"]
+    }
   }
 }
 ```
 
-阶段取值为 `discuss | script | storyboard | canvas | generate | review`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。项目开关只在用户本轮明确请求生成时授予 `generate`，不会自行扩大请求范围。
+当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`，新建节点及新建节点之间的引用仍可在本轮计划内使用。
 
 画布写入通过四个项目作用域工具完成：
 
-- `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时更新 `prompt` 和已启用的 `routeId`，Route 兼容性在生成预检时再次校验。
+- `canvas_get_generation_routes`：读取当前已启用 Route 和 Provider 的安全 Catalog 描述，可按输出媒体类型过滤；返回名称、能力、用途描述、默认值和输入 Schema，不返回供应商 operation、凭据引用、adapter 配置或内部参数。
+- `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时写入 `prompt`、已启用的 `routeId` 和完整 `settings`。服务端会同步生成富文本提示词文档，并在保存和应用计划时校验 Route 输出类型、Prompt 与 Schema 参数。
 - `canvas_update_plan`：用用户修订后的完整计划替换未应用草稿。
 - `canvas_apply_plan`：将临时节点引用解析为稳定 ID，经现有连接规则校验后，以单个 `CanvasMutationBatch` 原子提交。
 - `canvas_undo_action`：在画布没有后续修改时撤销整组 Agent mutations；存在后续修改时返回 `409 PIPELINE_AGENT_ACTION_NOT_UNDOABLE`，避免覆盖用户工作。
@@ -3066,14 +3071,15 @@ interface PipelineAgentTurnRequest {
 
 Pipeline 项目级 Skills 使用 `/api/pipeline/projects/{id}/skills`：`GET` 返回当前项目的有效 Skill 集，`PATCH` 仅允许切换项目级 Skill 的模型调用开关，`POST` 将市场 Skill 安装到当前项目。`/skills/import` 导入本地 `SKILL.md` 或其目录，`/skills/search` 搜索市场。首个内置示例通过 `POST /api/pipeline/projects/{id}/skills/builtin/short-drama` 安装；服务端只会复制随应用交付的短剧 Skill 到该项目，不接收客户端路径或 Skill 内容。服务端从项目 ID 解析根目录，浏览器和模型都不能提交 `cwd`；修改后会尝试重载当前项目的 Agent 资源，运行中的 Agent 则保留已保存状态并等待后续重载。
 
-当用户明确要求“调整并重新生成”时，`generate` 回合同时允许 `review`、`canvas` 和 `generate` 阶段。Agent 可以先评审结果，再通过语义计划只修改受影响节点的提示词或 Route，应用后重新预检并局部运行。局部重跑会复用原画布节点，并把旧产物保留在 Generation Run 历史中；旧图片结果不会被误当作图生图输入。
+当用户明确要求“调整并重新生成”时，本轮允许 `review` 和 `canvas`。Agent 可以先评审结果，再通过语义计划只修改本轮范围内受影响节点的提示词、Route、参数或引用，并完成静态校验。调整后的节点仍由用户在节点或工作流界面手动触发；运行后旧产物继续保留在 Generation Run 历史中。
 
 素材分析和项目连续性保存在项目 SQLite 中。后续 Agent 回合会收到完整的已确认连续性设定，并仅收到当前选中、`@` 引用及其一跳相关节点的最近分析摘要；原始媒体字节不会进入持久化 Prompt 上下文。素材节点在分析后发生变化时，旧摘要会标记为 stale。
 
-自动生成通过两个项目作用域工具完成：
+手动生成前的配置检查通过一个项目作用域工具完成：
 
-- `canvas_prepare_generation`：接受 1 至 30 个节点 ID，补齐没有可用结果或结果已过期的生成型上游，进行 DAG、Route Schema、参数与素材绑定预检。该工具不会创建 Workflow Run 或 Generation Run；`allowAgentGeneration` 关闭时仍可使用，并明确提示用户在节点上手动生成。
-- `canvas_run_generation`：只在当前回合包含 `generate` 权限、Session 属于当前项目且 `allowAgentGeneration` 当前为 `true` 时运行。服务端再次执行相同预检，将回合 ID 与规范化节点集合派生为稳定 Workflow Run ID，并为每个节点使用稳定 Generation Run 幂等键。
+- `canvas_prepare_generation`：接受 1 至 30 个节点 ID，检查需要生成的上游依赖、DAG、Route Schema、参数与素材绑定。该工具只返回准备结果和手动触发提示，不创建 Workflow Run 或 Generation Run。
+
+Canvas Agent 的工具集中不再暴露 `canvas_run_generation` 或下载恢复入口。节点生成和工作流生成继续由现有画布 UI 显式触发；用户可以先检查 Agent 编排的节点，也可以直接运行已经通过配置检查的节点。
 
 Workflow Run 和步骤状态保存在项目 SQLite 中。执行按画布内部依赖顺序推进；同步文本步骤完成后立即推进下游，异步媒体步骤由 Generation Worker 完成回调继续推进。进程在步骤标记为 running、但尚未写入 Generation Run ID 时退出，下一次读取画布或运行列表会把该步骤恢复为 pending，并借助原幂等键安全续跑。同一进程中的状态轮询不会重置正在推进的步骤；若节点回调最终表明全部步骤成功，遗留的聚合失败状态会自愈为 `completed`。上游已有可用且未过期的结果不会被自动加入运行，`generationProvenance.stale` 为 `true` 时才会作为依赖重跑。
 
@@ -3081,7 +3087,7 @@ Workflow Run 和步骤状态保存在项目 SQLite 中。执行按画布内部�
 GET /api/pipeline/projects/{projectId}/canvas/workflow-runs
 ```
 
-返回 `{ "workflowRuns": CanvasWorkflowRun[] }`，按创建时间倒序，默认最多 20 条。Agent 面板用此接口恢复并轮询活跃运行；工具消息和画布节点共享持久化的 Workflow Run / Generation Run ID。已经创建的运行不因随后关闭自动生成开关而中断，取消继续遵循现有节点生成规则。
+返回 `{ "workflowRuns": CanvasWorkflowRun[] }`，按创建时间倒序，默认最多 20 条。画布用此接口恢复并轮询由用户手动触发的活跃运行；画布节点与运行视图共享持久化的 Workflow Run / Generation Run ID，取消继续遵循现有节点生成规则。
 
 用户可以从 Agent 工具结果直接撤销一次画布操作：
 

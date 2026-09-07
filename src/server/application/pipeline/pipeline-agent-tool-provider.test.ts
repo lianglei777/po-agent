@@ -23,6 +23,7 @@ describe("PipelineAgentToolProvider", () => {
     expect(tools.length).toBeGreaterThan(0);
     expect(tools.map((tool) => tool.name)).toEqual([
       "pipeline_get_state",
+      "canvas_get_generation_routes",
       "canvas_create_plan",
       "canvas_update_plan",
       "canvas_apply_plan",
@@ -32,15 +33,13 @@ describe("PipelineAgentToolProvider", () => {
       "canvas_update_continuity",
       "canvas_save_workflow",
       "canvas_prepare_generation",
-      "canvas_run_generation",
-      "canvas_recover_generation",
     ]);
     expect(tools.find((tool) => tool.name === "pipeline_get_state")?.parameters.properties)
       .not.toHaveProperty("projectId");
   });
 
-  it("preflights while automatic generation is disabled without creating a run", async () => {
-    const { provider, studio } = createGenerationProvider(false);
+  it("preflights for manual generation without creating a run", async () => {
+    const { provider, studio } = createGenerationProvider(true);
     const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
       .find((candidate) => candidate.name === "canvas_prepare_generation")!;
 
@@ -48,58 +47,41 @@ describe("PipelineAgentToolProvider", () => {
 
     expect(studio.prepareWorkflowGeneration).toHaveBeenCalledWith({ projectId: "project-1", nodeIds: ["video-1"] });
     expect(studio.startWorkflowGeneration).not.toHaveBeenCalled();
-    expect(result.details).toMatchObject({ automaticGenerationEnabled: false });
+    expect(result.details).toMatchObject({ generationTrigger: "manual" });
   });
 
-  it("blocks every Agent workflow run when automatic generation is disabled", async () => {
-    const { provider, studio } = createGenerationProvider(false);
-    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
-      .find((candidate) => candidate.name === "canvas_run_generation")!;
+  it("never exposes generation or paid recovery tools even for a legacy enabled project", () => {
+    const { provider, studio } = createGenerationProvider(true);
+    const names = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
+      .map((tool) => tool.name);
 
-    await expect(tool.execute({ toolCallId: "run-1", input: { nodeIds: ["video-1"] } }))
-      .rejects.toMatchObject({ code: "AGENT_GENERATION_DISABLED" });
+    expect(names).not.toContain("canvas_run_generation");
+    expect(names).not.toContain("canvas_recover_generation");
     expect(studio.startWorkflowGeneration).not.toHaveBeenCalled();
   });
 
-  it("allows Agent to redownload an existing output without generation permission", async () => {
-    const repository = {
-      getAgentConversation: vi.fn(async () => ({ allowAgentGeneration: false, sessionId: "pipeline-session" })),
-    } as unknown as PipelineRepository;
+  it("returns enabled generation Routes for the requested media type", async () => {
     const policies = new CanvasAgentTurnPolicyRegistry();
-    policies.begin("pipeline-session", "turn-review-1", {
-      type: "resolved", objective: "重新下载结果", requestedStage: "review", effectiveStage: "review",
-      allowedStages: ["discuss", "review"], generationPermission: "not-requested", confidence: "high",
+    policies.begin("pipeline-session", "turn-canvas-1", {
+      type: "resolved", objective: "准备视频节点", requestedStage: "canvas", effectiveStage: "canvas",
+      allowedStages: ["discuss", "canvas"], generationPermission: "not-requested", confidence: "high",
     });
-    const failure = { phase: "output-download", origin: "local", outputAvailable: true, recoveryAction: "redownload", retryMayCharge: false } as const;
     const studio = {
-      listNodeGenerationRuns: vi.fn(async () => [{ run: { id: "run-1" }, jobs: [{ failure }], artifacts: [] }]),
-      recoverNodeGeneration: vi.fn(async () => ({ action: "redownload", node: { id: "image-1" }, view: { run: { id: "run-1" }, jobs: [], artifacts: [] } })),
+      listAvailableGenerationRoutes: vi.fn(async () => [
+        { id: "image-route", capability: "text-to-image" },
+        { id: "video-route", capability: "multimodal-to-video" },
+      ]),
     } as unknown as CanvasStudioService;
     const provider = new PipelineAgentToolProvider(
       {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
-      repository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as PipelineRepository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
       {} as CanvasContinuityService, studio,
     );
     const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
-      .find((candidate) => candidate.name === "canvas_recover_generation")!;
+      .find((candidate) => candidate.name === "canvas_get_generation_routes")!;
 
-    await expect(tool.execute({ toolCallId: "recover-1", input: { nodeId: "image-1", runId: "run-1" } }))
-      .resolves.toMatchObject({ details: { action: "redownload" } });
-    expect(studio.recoverNodeGeneration).toHaveBeenCalledOnce();
-  });
-
-  it("uses one stable workflow run id for repeated calls in the same Agent turn", async () => {
-    const { provider, studio } = createGenerationProvider(true);
-    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
-      .find((candidate) => candidate.name === "canvas_run_generation")!;
-
-    await tool.execute({ toolCallId: "run-1", input: { nodeIds: ["video-1", "image-1"] } });
-    await tool.execute({ toolCallId: "run-2", input: { nodeIds: ["image-1", "video-1"] } });
-
-    const calls = vi.mocked(studio.startWorkflowGeneration).mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls[0]![0].id).toBe(calls[1]![0].id);
-    expect(calls[0]![0].nodeIds).toEqual(["image-1", "video-1"]);
+    const result = await tool.execute({ toolCallId: "routes-1", input: { mediaType: "video" } });
+    expect(result.details).toEqual({ routes: [{ id: "video-route", capability: "multimodal-to-video" }] });
   });
 
   it("returns created canvas node IDs when applying a plan", async () => {

@@ -35,6 +35,7 @@ export type CanvasAgentPlanOperation =
       text?: string;
       prompt?: string;
       routeId?: string;
+      settings?: Record<string, CanvasGenerationSettingValue>;
       column?: number;
       row?: number;
     }
@@ -45,6 +46,7 @@ export type CanvasAgentPlanOperation =
       text?: string;
       prompt?: string;
       routeId?: string;
+      settings?: Record<string, CanvasGenerationSettingValue>;
     }
   | {
       type: "edge.create";

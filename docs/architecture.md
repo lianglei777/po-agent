@@ -236,9 +236,11 @@ Chat Composer 通过 `ChatTurnService` 提交一轮消息，不在浏览器中�
 
 新建 Runtime 返回前必须通过 `SessionLifecycleProjector` 建立持久化 Generation Session 投影。Chat 页面通过统一 Turn Snapshot 同时恢复 Agent Runtime 和 Generation Run；SSE 与轮询只提供增量变化。服务端在接受新 Turn 前同时检查 Agent streaming/compacting 状态和活动 Generation Run，前端禁用状态不能替代该并发守卫。
 
-Pipeline Canvas Agent 每轮先解析结构化意图，并在内存回合注册表中建立短期执行权限。画布修改先持久化为语义 Plan，application 编译器再解析临时节点引用、选择布局并生成现有 `CanvasMutationBatch`；模型不能直接提交底层 mutation。Plan 记录 base revision 与引用节点版本，无关画布变化可以安全 rebase，相关节点变化必须停止。每次应用保存正向和反向 mutations 形成 Action；只有画布此后没有新 revision 时才允许整组撤销。节点和连线仍由 Canvas Studio 的事务、连接校验和服务端字段保护规则统一处理。
+Pipeline Canvas Agent 每轮先解析结构化意图、阶段和已有节点修改范围，并在内存回合注册表中建立短期执行权限。它根据当前已启用的 Generation Route Catalog 选择适合节点目标的 Route，并把提示词、完整 Schema 参数、素材引用和布局一起写入语义 Plan；用户要求“生成”时也只把画布准备到可运行状态。application 编译器解析临时节点引用、校验已有节点是否位于本轮范围内、检查 Route 输出类型与静态配置，再生成现有 `CanvasMutationBatch`，模型不能直接提交底层 mutation。Plan 记录 base revision 与引用节点版本，无关画布变化可以安全 rebase，相关节点变化必须停止。每次应用保存正向和反向 mutations 形成 Action；只有画布此后没有新 revision 时才允许整组撤销。节点和连线仍由 Canvas Studio 的事务、连接校验和服务端字段保护规则统一处理。
 
-结果评审继续复用 Canvas 素材分析和持久化 Generation Run，不建立第二套版本数据。评审工具组装最近 Run 摘要和由画布边计算的下游影响范围；对本地可读取的成功产物，在一次最多八个分析预算中优先当前选择并补充近期历史版本，缓存仍按原节点和媒体指纹复用。建议与最终选择保持分离。局部调整仍通过语义 Plan 修改提示词或 Route，局部重跑仍进入 Workflow Run 与 Generation Run 状态机。成功子图保存为现有 `CanvasWorkflow`，不引入 Agent 专属模板格式。
+Canvas Agent 不持有创建 Generation Run 或 Workflow Run 的工具。节点与工作流生成必须由用户在画布 UI 显式触发，执行时继续复用既有全量预检、幂等键、Worker 和持久化状态机。项目设置中的旧 `allowAgentGeneration` 字段只为合同和数据兼容保留，不再影响 Canvas Agent 行为。
+
+结果评审继续复用 Canvas 素材分析和持久化 Generation Run，不建立第二套版本数据。评审工具组装最近 Run 摘要和由画布边计算的下游影响范围；对本地可读取的成功产物，在一次最多八个分析预算中优先当前选择并补充近期历史版本，缓存仍按原节点和媒体指纹复用。建议与最终选择保持分离。局部调整仍通过语义 Plan 修改提示词、Route、参数或引用，用户确认画布状态后手动触发局部重跑。成功子图保存为现有 `CanvasWorkflow`，不引入 Agent 专属模板格式。
 
 Canvas 素材理解通过 application 自有的 `CanvasAssetAnalyzer` 与 `CanvasMediaPreprocessor` ports 隔离多模态模型和 FFmpeg。图片字节只从 Canvas Studio 的受控媒体读取路径进入 Pi infrastructure adapter，不写入会话上下文或分析表；视频先在临时目录采样最多六帧，再把有界 JPEG 帧送入视觉模型，完整视频不会进入模型；音频解码为临时的 16 kHz 单声道 PCM，只计算节奏、动态和静音比例，处理结束即清理。项目数据库仅保存来源指纹、模型、结构化摘要和引用建议，同一素材指纹与分析配置组合复用结果。用户明确确认的角色、产品、场景、服装、色彩、风格和镜头语言单独保存为带 revision 的连续性设定；工具必须引用当前用户原文，模型分析建议不能自行提升为确认事实。后续 Agent 回合读取连续性设定，并仅为当前选中或引用节点附加最近的素材摘要。FFmpeg 默认从 `PATH` 解析，也可通过 `PO_AGENT_FFMPEG_PATH` 和 `PO_AGENT_FFPROBE_PATH` 指定；不可用时返回可操作的预处理器错误。
 

@@ -89,6 +89,54 @@ export class CanvasStudioService {
     return { nodes, edges, viewport, revision };
   }
 
+  async listAvailableGenerationRoutes() {
+    const routes = await this.runs.listRoutes();
+    const providerIds = [...new Set(routes.map((route) => route.providerId))];
+    const providerEnabled = new Map(await Promise.all(providerIds.map(async (providerId) => [
+      providerId,
+      (await this.runs.getProviderSettings(providerId)).enabled,
+    ] as const)));
+    return routes
+      .filter((route) => route.enabled && providerEnabled.get(route.providerId) === true)
+      .map((route) => ({
+        id: route.id,
+        name: route.name,
+        description: route.description,
+        tags: route.tags,
+        product: route.product,
+        providerId: route.providerId,
+        capability: route.capability,
+        isDefault: route.isDefault,
+        defaults: route.defaults,
+        inputSchema: {
+          ...route.inputSchema,
+          parameters: route.inputSchema.parameters?.filter((field) => !field.internal),
+        },
+      }));
+  }
+
+  async validateGenerationNodeConfiguration(input: {
+    mediaType: CanvasMediaType;
+    routeId: string;
+    prompt: string;
+    settings?: Record<string, string | number | boolean | Array<string | number | boolean>>;
+  }): Promise<void> {
+    const route = await this.runs.getRoute(input.routeId);
+    if (!route || routeOutputMediaType(route.capability) !== input.mediaType) {
+      throw new AppError(
+        "GENERATION_ROUTE_UNAVAILABLE",
+        "The selected generation route does not produce the canvas node media type",
+        409,
+        { routeId: input.routeId, mediaType: input.mediaType },
+      );
+    }
+    await this.runs.validateRouteConfiguration({
+      routeId: input.routeId,
+      prompt: input.prompt,
+      parameters: input.settings,
+    });
+  }
+
   async applyMutationBatch(projectId: string, batch: CanvasMutationBatch) {
     if (!await this.repository.getProject(projectId)) {
       throw new AppError("PIPELINE_PROJECT_NOT_FOUND", "Pipeline project was not found", 404);
@@ -2221,6 +2269,12 @@ function canvasGenerationCapability(
     return "multimodal-to-video";
   }
   return !promptDocument && imageRefs.length >= 1 ? "image-to-video" : "text-to-video";
+}
+
+function routeOutputMediaType(capability: string): CanvasMediaType {
+  if (capability.endsWith("-image")) return "image";
+  if (capability === "video-to-audio") return "audio";
+  return "video";
 }
 
 function validateLipSyncTiming(

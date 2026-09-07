@@ -49,6 +49,7 @@ export class CanvasAgentPlanService {
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
     validatePlanEdgeBindings(operations, nodes, edges);
+    await this.validateGenerationConfigurations(operations, nodes);
     return this.repository.createCanvasAgentPlan({
       id: randomUUID(),
       projectId: input.projectId,
@@ -84,6 +85,7 @@ export class CanvasAgentPlanService {
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
     validatePlanEdgeBindings(operations, nodes, edges);
+    await this.validateGenerationConfigurations(operations, nodes);
     return (await this.repository.updateCanvasAgentPlan(plan.id, {
       summary: bounded(input.summary, "summary", 1_000),
       baseRevision,
@@ -110,6 +112,7 @@ export class CanvasAgentPlanService {
       this.repository.getCanvasViewport(projectId),
     ]);
     assertRebaseSafe(plan, currentRevision, nodes);
+    await this.validateGenerationConfigurations(plan.operations, nodes);
     const compiled = compilePlan(plan, nodes, edges, viewport);
     const snapshot = await this.canvas.applyMutationBatch(projectId, {
       baseRevision: currentRevision,
@@ -168,12 +171,13 @@ export class CanvasAgentPlanService {
   private requireWritableTurn(sessionId: string, operations: CanvasAgentPlanOperation[], nodes: CanvasNode[]) {
     const active = this.policies.getActive(sessionId);
     if (!active) this.policies.requireStage(sessionId, "canvas");
+    validatePlanScope(active?.intent.scope, operations);
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const textOnly = operations.every((operation) =>
       operation.type !== "edge.create" &&
       (operation.type !== "node.create" || operation.mediaType === "text") &&
       (operation.type !== "node.update" || nodeById.get(operation.nodeId)?.data?.type === "text") &&
-      operation.prompt === undefined && operation.routeId === undefined
+      operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined
     );
     this.policies.requireStage(sessionId, textOnly ? "script" : "canvas");
     return active!;
@@ -186,6 +190,33 @@ export class CanvasAgentPlanService {
     }
     return plan;
   }
+
+  private async validateGenerationConfigurations(
+    operations: CanvasAgentPlanOperation[],
+    currentNodes: CanvasNode[],
+  ): Promise<void> {
+    const dataById = new Map(currentNodes.flatMap((node) => node.data ? [[node.id, structuredClone(node.data)] as const] : []));
+    for (const operation of operations) {
+      if (operation.type === "edge.create") continue;
+      const current = operation.type === "node.update" ? dataById.get(operation.nodeId) : undefined;
+      if (operation.type === "node.update" && !current) continue;
+      const data = withOperationContent(
+        operation.type === "node.create" ? createNodeData(operation.mediaType, operation.name) : current!,
+        operation,
+      );
+      const key = operation.type === "node.create" ? operation.tempId : operation.nodeId;
+      dataById.set(key, data);
+      if (data.type === "text" || !data.action.endsWith("_generate")) continue;
+      const routeId = data.params?.routeId;
+      if (!routeId) invalid("Generation nodes require a selected route");
+      await this.canvas.validateGenerationNodeConfiguration({
+        mediaType: data.type,
+        routeId,
+        prompt: data.params?.prompt ?? "",
+        settings: data.params?.settings,
+      });
+    }
+  }
 }
 
 function validateOperationTargets(operations: CanvasAgentPlanOperation[], nodes: CanvasNode[]): void {
@@ -197,6 +228,31 @@ function validateOperationTargets(operations: CanvasAgentPlanOperation[], nodes:
     if (operation.text !== undefined && node.data.type !== "text") invalid("Text content can only be written to a text node");
     if (operation.prompt !== undefined && node.data.type === "text") invalid("Generation prompts belong to image, video, or audio nodes");
     if (operation.routeId !== undefined && node.data.type === "text") invalid("Generation routes belong to image, video, or audio nodes");
+    if (operation.settings !== undefined && node.data.type === "text") invalid("Generation settings belong to image, video, or audio nodes");
+  }
+}
+
+function validatePlanScope(
+  scope: { projectWide: boolean; nodeIds: string[] } | undefined,
+  operations: CanvasAgentPlanOperation[],
+): void {
+  // 旧会话没有 scope；新解析回合必须把对既有节点的修改限制在语义解析出的范围内。
+  if (!scope || scope.projectWide) return;
+  const allowed = new Set(scope.nodeIds);
+  const temporary = new Set(operations.flatMap((operation) => operation.type === "node.create" ? [operation.tempId] : []));
+  const referenced = new Set(operations.flatMap((operation) => {
+    if (operation.type === "node.update") return [operation.nodeId];
+    if (operation.type === "edge.create") return [operation.source, operation.target].filter((id) => !temporary.has(id));
+    return [];
+  }));
+  const outOfScope = [...referenced].filter((nodeId) => !allowed.has(nodeId));
+  if (outOfScope.length) {
+    throw new AppError(
+      "PIPELINE_AGENT_TARGET_OUT_OF_SCOPE",
+      "The Canvas Agent plan references nodes outside the current user request",
+      403,
+      { nodeIds: outOfScope },
+    );
   }
 }
 
@@ -349,13 +405,15 @@ function normalizeOperations(operations: CanvasAgentPlanOperation[]): CanvasAgen
       return { ...operation, tempId, name: bounded(operation.name, "name", 120),
         text: optionalBounded(operation.text, "text", 200_000), prompt: optionalBounded(operation.prompt, "prompt", 20_000),
         routeId: optionalBounded(operation.routeId, "routeId", 160),
+        settings: normalizeSettings(operation.settings),
         column: boundedGrid(operation.column), row: boundedGrid(operation.row) };
     }
     if (operation.type === "node.update") {
-      if (operation.name === undefined && operation.text === undefined && operation.prompt === undefined && operation.routeId === undefined) invalid("A node update must change name, text, prompt, or route");
+      if (operation.name === undefined && operation.text === undefined && operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined) invalid("A node update must change name, text, prompt, route, or settings");
       return { ...operation, nodeId: bounded(operation.nodeId, "nodeId", 128),
         name: optionalBounded(operation.name, "name", 120), text: optionalBounded(operation.text, "text", 200_000),
-        prompt: optionalBounded(operation.prompt, "prompt", 20_000), routeId: optionalBounded(operation.routeId, "routeId", 160) };
+        prompt: optionalBounded(operation.prompt, "prompt", 20_000), routeId: optionalBounded(operation.routeId, "routeId", 160),
+        settings: normalizeSettings(operation.settings) };
     }
     if (operation.type !== "edge.create") invalid("Unsupported Canvas Agent plan operation");
     if (operation.role !== undefined && operation.role !== "reference" && operation.role !== "first-frame" && operation.role !== "last-frame") invalid("Unsupported canvas reference role");
@@ -401,13 +459,47 @@ function withOperationContent(data: CanvasNodeData, operation: Extract<CanvasAge
   }
   if (operation.prompt !== undefined) {
     if (next.type === "text") invalid("Generation prompts belong to image, video, or audio nodes");
-    next.params = { ...(next.params ?? { prompt: "" }), prompt: operation.prompt };
+    next.params = {
+      ...(next.params ?? { prompt: "" }),
+      prompt: operation.prompt,
+      promptDocument: plainTextDocument(operation.prompt),
+    };
   }
   if (operation.routeId !== undefined) {
     if (next.type === "text") invalid("Generation routes belong to image, video, or audio nodes");
     next.params = { ...(next.params ?? { prompt: "" }), routeId: operation.routeId };
   }
+  if (operation.settings !== undefined) {
+    if (next.type === "text") invalid("Generation settings belong to image, video, or audio nodes");
+    next.params = { ...(next.params ?? { prompt: "" }), settings: operation.settings };
+  }
   return next;
+}
+
+function normalizeSettings(
+  value: Record<string, unknown> | undefined,
+): Extract<CanvasAgentPlanOperation, { type: "node.create" }>["settings"] {
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value) || Object.keys(value).length > 40) invalid("Generation settings must be an object with at most 40 fields");
+  const result: NonNullable<Extract<CanvasAgentPlanOperation, { type: "node.create" }>["settings"]> = {};
+  for (const [key, setting] of Object.entries(value)) {
+    if (!key.trim() || key.length > 120) invalid("Generation setting keys must contain 1 to 120 characters");
+    if (!isGenerationSettingValue(setting)) invalid(`Generation setting has an unsupported value: ${key}`);
+    result[key] = setting;
+  }
+  return result;
+}
+
+function isGenerationSettingValue(value: unknown): value is string | number | boolean | Array<string | number | boolean> {
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  return Array.isArray(value) && value.length <= 50 && value.every((item) =>
+    typeof item === "string" || typeof item === "boolean" || (typeof item === "number" && Number.isFinite(item))
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function layoutAnchor(nodes: CanvasNode[], viewport: { x: number; y: number; zoom: number }) {
