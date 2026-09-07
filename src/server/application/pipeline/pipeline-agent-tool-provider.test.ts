@@ -38,6 +38,50 @@ describe("PipelineAgentToolProvider", () => {
       .not.toHaveProperty("projectId");
   });
 
+  it("declares operation-specific required fields in the plan tool schema", () => {
+    const tool = createProvider(false).getTools({
+      sessionId: "pipeline-session",
+      cwd: "D:\\project",
+      pipelineProjectId: "project-1",
+    }).find((candidate) => candidate.name === "canvas_create_plan")!;
+    const operations = tool.parameters.properties.operations as {
+      items: { anyOf: Array<{ required: string[] }> };
+    };
+
+    expect(operations.items.anyOf.map((branch) => branch.required)).toEqual([
+      ["mediaType", "name"],
+      ["nodeId"],
+      ["source", "target"],
+    ]);
+  });
+
+  it("repairs omitted operation discriminators and standalone temporary IDs", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-script", {
+      type: "resolved", objective: "写剧本", requestedStage: "script", effectiveStage: "script",
+      allowedStages: ["discuss", "script"], generationPermission: "not-requested", confidence: "high",
+    });
+    const planService = {
+      create: vi.fn(async () => ({ id: "plan-1", status: "draft", summary: "写剧本", operations: [{}] })),
+    } as unknown as CanvasAgentPlanService;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      {} as PipelineRepository, policies, planService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "canvas_create_plan")!;
+
+    await tool.execute({
+      toolCallId: "plan-1",
+      input: { summary: "写剧本", operations: [{ mediaType: "text", name: "剧本", text: "内容" }] },
+    });
+
+    expect(planService.create).toHaveBeenCalledWith(expect.objectContaining({
+      operations: [{ type: "node.create", tempId: "node-1", mediaType: "text", name: "剧本", text: "内容" }],
+    }));
+  });
+
   it("preflights for manual generation without creating a run", async () => {
     const { provider, studio } = createGenerationProvider(true);
     const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
@@ -81,7 +125,40 @@ describe("PipelineAgentToolProvider", () => {
       .find((candidate) => candidate.name === "canvas_get_generation_routes")!;
 
     const result = await tool.execute({ toolCallId: "routes-1", input: { mediaType: "video" } });
-    expect(result.details).toEqual({ routes: [{ id: "video-route", capability: "multimodal-to-video" }] });
+    expect(result.details).toMatchObject({
+      detail: false,
+      routes: [{
+        id: "video-route",
+        capability: "multimodal-to-video",
+        assetInputs: [],
+      }],
+    });
+  });
+
+  it("returns full Route schemas only for explicitly selected candidates", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-canvas-routes", {
+      type: "resolved", objective: "准备视频节点", requestedStage: "canvas", effectiveStage: "canvas",
+      allowedStages: ["discuss", "canvas"], generationPermission: "not-requested", confidence: "high",
+    });
+    const fullRoute = {
+      id: "video-route", name: "Video", description: "Reference video", tags: ["reference"],
+      product: "Video", providerId: "provider", capability: "multimodal-to-video", isDefault: false,
+      defaults: { durationSeconds: 5 },
+      inputSchema: { prompt: { required: true }, assets: [{ key: "imageUrls", mediaType: "image", multiple: true }] },
+    };
+    const studio = { listAvailableGenerationRoutes: vi.fn(async () => [fullRoute]) } as unknown as CanvasStudioService;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      {} as PipelineRepository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, studio,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "canvas_get_generation_routes")!;
+
+    const result = await tool.execute({ toolCallId: "routes-detail", input: { routeIds: ["video-route"] } });
+
+    expect(result.details).toEqual({ detail: true, routes: [fullRoute] });
   });
 
   it("returns created canvas node IDs when applying a plan", async () => {

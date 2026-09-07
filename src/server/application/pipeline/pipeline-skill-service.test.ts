@@ -33,7 +33,7 @@ describe("PipelineSkillService", () => {
     await expect(service.update("project-a", { skillId: "global", disabled: false })).rejects.toMatchObject({ code: "SKILL_NOT_FOUND" });
   });
 
-  it("installs the bundled short-drama example as a project Skill", async () => {
+  it("installs the bundled short-drama Skill for the project", async () => {
     const skills = {
       importLocal: vi.fn(),
       load: vi.fn(async () => ({ skills: [], diagnostics: [] })),

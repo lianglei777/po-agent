@@ -138,6 +138,39 @@ describe("CanvasAgentPlanService", () => {
       routeId: "image-route-2",
       prompt: "更深的蓝色",
       settings: { resolution: "2k", seed: -1, transparent: false },
+      references: [],
+    });
+  });
+
+  it("validates a generated node with the semantic references from its planned edges", async () => {
+    const character = node("character-1", "image", "v1");
+    const state = repositoryState([character]);
+    const canvas = {
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
+    const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
+
+    await service.create({
+      projectId: "project-1",
+      sessionId: "session-1",
+      summary: "创建多模态镜头",
+      operations: [
+        { type: "node.create", tempId: "shot", mediaType: "video", name: "镜头", prompt: "角色走入雨夜街道", routeId: "multimodal-route" },
+        { type: "edge.create", source: character.id, target: "shot", role: "reference" },
+      ],
+    });
+
+    expect(canvas.validateGenerationNodeConfiguration).toHaveBeenCalledWith({
+      mediaType: "video",
+      routeId: "multimodal-route",
+      prompt: "角色走入雨夜街道",
+      settings: {
+        aspectRatio: "16:9",
+        durationSeconds: 5,
+        generateAudio: false,
+        resolution: "720p",
+      },
+      references: [{ mediaType: "image", role: "reference" }],
     });
   });
 
@@ -335,7 +368,7 @@ function policy(
   return policies;
 }
 
-function node(id: string, type: "text" | "image", updatedAt: string): CanvasNode {
+function node(id: string, type: "text" | "image" | "video", updatedAt: string): CanvasNode {
   return {
     id, projectId: "project-1", type, entityId: `${id}-entity`, positionX: 0, positionY: 0,
     width: 320, height: 220, data: { type, name: id, action: `${type}_generate`, params: { prompt: "" }, taskInfo: { status: "idle" } },

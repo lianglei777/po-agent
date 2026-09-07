@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { GenerationAssetSlot, GenerationInputAsset, GenerationParameterField, JsonValue } from "@/contracts/generation";
+import type { GenerationAssetSlot, GenerationInputAsset, GenerationInputSchema, GenerationParameterField, JsonValue } from "@/contracts/generation";
 import { MAX_CANVAS_AUDIO_UPLOAD_BYTES } from "@/contracts/pipeline";
 import { AppError } from "@/server/domain/app-error";
 import { canvasWorkflowNodeIsRunnable } from "@/contracts/pipeline";
@@ -120,6 +120,7 @@ export class CanvasStudioService {
     routeId: string;
     prompt: string;
     settings?: Record<string, string | number | boolean | Array<string | number | boolean>>;
+    references?: Array<{ mediaType: CanvasMediaType; role?: CanvasEdge["role"] }>;
   }): Promise<void> {
     const route = await this.runs.getRoute(input.routeId);
     if (!route || routeOutputMediaType(route.capability) !== input.mediaType) {
@@ -135,6 +136,7 @@ export class CanvasStudioService {
       prompt: input.prompt,
       parameters: input.settings,
     });
+    validateGenerationRouteReferences(route.inputSchema, input.references ?? [], input.routeId);
   }
 
   async applyMutationBatch(projectId: string, batch: CanvasMutationBatch) {
@@ -1992,6 +1994,62 @@ function canvasNodeHasContent(node: CanvasNode): boolean {
   return reference.mediaType === "text"
     ? Boolean(reference.content?.some((content) => content.trim()))
     : Boolean(reference.artifactId || reference.workspaceFile || reference.url);
+}
+
+/**
+ * 画布计划尚没有真实文件，不能调用付费生成校验。这里把语义连线映射到 Route
+ * 自己声明的素材槽位，并复用同一套数量约束，确保新增模型只需维护 Catalog Schema。
+ */
+function validateGenerationRouteReferences(
+  schema: Pick<GenerationInputSchema, "assets" | "constraints">,
+  references: Array<{ mediaType: CanvasMediaType; role?: CanvasEdge["role"] }>,
+  routeId: string,
+): void {
+  const slots = schema.assets ?? [];
+  const counts = new Map<string, number>();
+  for (const reference of references) {
+    if (reference.mediaType === "text") continue;
+    const slot = generationAssetSlotForReference(slots, reference);
+    if (!slot) {
+      const role = reference.role ?? "reference";
+      throw new AppError(
+        "VALIDATION_ERROR",
+        `Generation Route ${routeId} does not accept a ${role} ${reference.mediaType} reference`,
+        400,
+        { routeId, mediaType: reference.mediaType, role },
+      );
+    }
+    counts.set(slot.key, (counts.get(slot.key) ?? 0) + 1);
+  }
+  for (const slot of slots) {
+    const count = counts.get(slot.key) ?? 0;
+    const minimum = slot.minFiles ?? (slot.required ? 1 : 0);
+    const maximum = slot.maxFiles ?? (slot.multiple ? Number.POSITIVE_INFINITY : 1);
+    if (count < minimum) invalidGenerationReferences(routeId, `requires at least ${minimum} reference(s) in ${slot.key}`);
+    if (count > maximum) invalidGenerationReferences(routeId, `accepts at most ${maximum} reference(s) in ${slot.key}`);
+  }
+  for (const constraint of schema.constraints ?? []) {
+    if (constraint.kind === "at-least-one-asset") {
+      const count = constraint.slots.reduce((total, slot) => total + (counts.get(slot) ?? 0), 0);
+      if (count < (constraint.minFiles ?? 1)) {
+        invalidGenerationReferences(routeId, `requires a reference in one of: ${constraint.slots.join(", ")}`);
+      }
+    } else if (constraint.kind === "max-total-assets") {
+      const count = constraint.slots.reduce((total, slot) => total + (counts.get(slot) ?? 0), 0);
+      if (count > constraint.maxFiles) {
+        invalidGenerationReferences(routeId, `accepts at most ${constraint.maxFiles} total reference(s) in: ${constraint.slots.join(", ")}`);
+      }
+    }
+  }
+}
+
+function invalidGenerationReferences(routeId: string, reason: string): never {
+  throw new AppError(
+    "VALIDATION_ERROR",
+    `Generation Route ${routeId} ${reason}`,
+    400,
+    { routeId },
+  );
 }
 
 function workflowNodeIsGenerative(data: CanvasNodeData): boolean {

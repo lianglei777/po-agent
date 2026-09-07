@@ -52,22 +52,33 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     return {
       name: "canvas_get_generation_routes",
       label: "读取可用生成模型",
-      description: "读取当前已启用 Provider 中可用的内容生成 Route、适用场景、输入素材槽位、参数约束和默认值。创建或修改生成节点前使用；不要根据模型名称猜测能力。",
+      description: "分两步读取当前可用的内容生成 Route。先按 mediaType 获取紧凑候选摘要，再用 routeIds 获取少量候选的完整素材槽位与参数 Schema。创建或修改生成节点前使用；不要根据模型名称猜测能力。",
+      promptGuidelines: [
+        "先按目标 mediaType 查询候选摘要；根据 description、capability、defaults 和 assetInputs 选出少量候选。",
+        "再传入最多 8 个 routeIds 查询完整 Schema，确认参数与引用兼容后才能创建计划。",
+        "同一回合已经取得的 Route 信息应复用，不要重复查询相同媒体类型或 Route。",
+      ],
       parameters: {
         type: "object",
         properties: {
           mediaType: { type: "string", enum: ["image", "video", "audio"] },
+          routeIds: { type: "array", minItems: 1, maxItems: 8, items: { type: "string" } },
         },
         additionalProperties: false,
       },
       execute: async ({ input }) => {
         this.turnPolicies.requireStage(sessionId, "canvas");
         const mediaType = typeof input.mediaType === "string" ? input.mediaType : undefined;
+        const requestedIds = Array.isArray(input.routeIds)
+          ? new Set(input.routeIds.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean))
+          : undefined;
         const routes = (await this.canvasStudioService.listAvailableGenerationRoutes())
-          .filter((route) => mediaType === undefined || routeOutputMediaType(route.capability) === mediaType);
+          .filter((route) => mediaType === undefined || routeOutputMediaType(route.capability) === mediaType)
+          .filter((route) => !requestedIds || requestedIds.has(route.id));
+        const result = requestedIds ? routes : routes.map(compactGenerationRoute);
         return {
-          content: [{ type: "text", text: JSON.stringify({ routes }) }],
-          details: { routes },
+          content: [{ type: "text", text: JSON.stringify({ routes: result, detail: Boolean(requestedIds) }) }],
+          details: { routes: result, detail: Boolean(requestedIds) },
         };
       },
     };
@@ -396,9 +407,11 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       promptGuidelines: [
         "每个 node.create 必须同时提供 tempId、mediaType、name；tempId 只在当前计划内使用。",
         "创建生成节点前先调用 canvas_get_generation_routes；媒体节点应同时写入完整 prompt、兼容的 routeId 和按 Route Schema 填好的 settings。",
+        "不要为了使用图生视频而人为创建一次性首帧。无既有参考且无需精确锁定开场构图时选择文生视频；反复出现的角色、场景或道具应建立共享参考，并选择接收普通 reference 的多模态 Route。",
         "可提供 column 和 row 表示期望顺序；服务端会自动避让重复或缺失的网格位置，不能依赖重叠布局。",
         "first-frame 和 last-frame 仅用于图片节点连接到视频节点；其它任何连线必须使用 reference。last-frame 必须和同一视频节点的 first-frame 一起提供。",
         "当前回合要求澄清时不要调用此工具，直接提出服务器给出的澄清问题。",
+        "如果工具返回当前回合不允许 canvas，说明本轮用户意图范围不包含画布修改；不要归因于视频阶段或项目门禁，也不要要求用户解锁。",
       ],
       parameters: planParameters(false),
       execute: async ({ input }) => {
@@ -406,7 +419,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
           projectId,
           sessionId,
           summary: input.summary as string,
-          operations: input.operations as CanvasAgentPlanOperation[],
+          operations: normalizePlanToolOperations(input.operations),
         });
         return {
           content: [{ type: "text", text: `计划已创建：${plan.summary}（${plan.operations.length} 项操作）。计划 ID: ${plan.id}` }],
@@ -428,7 +441,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
           sessionId,
           planId: input.planId as string,
           summary: input.summary as string,
-          operations: input.operations as CanvasAgentPlanOperation[],
+          operations: normalizePlanToolOperations(input.operations),
         });
         return {
           content: [{ type: "text", text: `计划已更新：${plan.summary}（${plan.operations.length} 项操作）。` }],
@@ -759,7 +772,18 @@ function planParameters(includePlanId: boolean) {
             target: { type: "string" },
             role: { type: "string", enum: ["reference", "first-frame", "last-frame"] },
           },
-          required: ["type"],
+          anyOf: [
+            {
+              required: ["mediaType", "name"],
+            },
+            {
+              required: ["nodeId"],
+            },
+            {
+              required: ["source", "target"],
+            },
+          ],
+          additionalProperties: false,
         },
       },
     },
@@ -768,10 +792,52 @@ function planParameters(includePlanId: boolean) {
   };
 }
 
+function normalizePlanToolOperations(value: unknown): CanvasAgentPlanOperation[] {
+  if (!Array.isArray(value)) return value as CanvasAgentPlanOperation[];
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return item as CanvasAgentPlanOperation;
+    const operation = item as Record<string, unknown>;
+    const inferredType = operation.type ?? (
+      operation.source !== undefined || operation.target !== undefined
+        ? "edge.create"
+        : operation.nodeId !== undefined
+          ? "node.update"
+          : "node.create"
+    );
+    if (inferredType !== "node.create" || operation.tempId !== undefined) {
+      return { ...operation, type: inferredType } as CanvasAgentPlanOperation;
+    }
+    // tempId 只是计划内连线句柄；无显式句柄的独立节点可安全获得稳定的本计划序号。
+    return { ...operation, type: inferredType, tempId: `node-${index + 1}` } as CanvasAgentPlanOperation;
+  });
+}
+
 function routeOutputMediaType(capability: string): "image" | "video" | "audio" {
   if (capability.endsWith("-image")) return "image";
   if (capability === "video-to-audio") return "audio";
   return "video";
+}
+
+function compactGenerationRoute(route: Awaited<ReturnType<CanvasStudioService["listAvailableGenerationRoutes"]>>[number]) {
+  return {
+    id: route.id,
+    name: route.name,
+    description: route.description,
+    tags: route.tags,
+    product: route.product,
+    providerId: route.providerId,
+    capability: route.capability,
+    isDefault: route.isDefault,
+    defaults: route.defaults,
+    assetInputs: (route.inputSchema?.assets ?? []).map((slot) => ({
+      key: slot.key,
+      mediaType: slot.mediaType,
+      required: slot.required ?? false,
+      multiple: slot.multiple ?? false,
+      minFiles: slot.minFiles,
+      maxFiles: slot.maxFiles,
+    })),
+  };
 }
 
 function truncateToolText(value: string | undefined, maxLength: number): string | undefined {

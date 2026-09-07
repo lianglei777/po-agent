@@ -1439,6 +1439,72 @@ describe("CanvasStudioService Agent generation configuration", () => {
       parameters: { durationSeconds: 5 },
     });
   });
+
+  it("validates semantic canvas references against the selected Route asset schema", async () => {
+    const routes = new Map([
+      ["route-text-video", generationRoute({ id: "route-text-video", capability: "text-to-video" })],
+      ["route-frame-video", generationRoute({
+        id: "route-frame-video",
+        capability: "image-to-video",
+        inputSchema: {
+          prompt: { required: true },
+          assets: [{ key: "firstFrameUrl", label: "First frame", mediaType: "image", required: true }],
+        },
+      })],
+      ["route-multimodal", generationRoute({
+        id: "route-multimodal",
+        capability: "multimodal-to-video",
+        inputSchema: {
+          prompt: { required: true },
+          assets: [{ key: "imageUrls", label: "Images", mediaType: "image", multiple: true, maxFiles: 3 }],
+          constraints: [{ kind: "at-least-one-asset", slots: ["imageUrls"] }],
+        },
+      })],
+    ]);
+    const runs = {
+      getRoute: vi.fn(async (routeId: string) => routes.get(routeId)),
+      validateRouteConfiguration: vi.fn().mockResolvedValue(undefined),
+    } as unknown as GenerationRunService;
+    const service = createService({} as PipelineRepository, {} as LlmPort, runs);
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: "route-text-video",
+      prompt: "A character walks",
+      references: [{ mediaType: "image", role: "reference" }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: "route-frame-video",
+      prompt: "A character walks",
+      references: [],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: "route-frame-video",
+      prompt: "A character walks",
+      references: [{ mediaType: "image", role: "first-frame" }],
+    })).resolves.toBeUndefined();
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: "route-multimodal",
+      prompt: "Keep the supplied characters consistent",
+      references: [
+        { mediaType: "image", role: "reference" },
+        { mediaType: "image", role: "reference" },
+      ],
+    })).resolves.toBeUndefined();
+
+    await expect(service.validateGenerationNodeConfiguration({
+      mediaType: "video",
+      routeId: "route-multimodal",
+      prompt: "Keep the supplied characters consistent",
+      references: [{ mediaType: "image", role: "first-frame" }],
+    })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+  });
 });
 
 describe("CanvasStudioService durable workflow generation", () => {

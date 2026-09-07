@@ -51,7 +51,7 @@ export class CanvasAgentPlanService {
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
     validatePlanEdgeBindings(operations, nodes, edges);
-    await this.validateGenerationConfigurations(operations, nodes);
+    await this.validateGenerationConfigurations(operations, nodes, edges);
     return this.repository.createCanvasAgentPlan({
       id: randomUUID(),
       projectId: input.projectId,
@@ -87,7 +87,7 @@ export class CanvasAgentPlanService {
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
     validatePlanEdgeBindings(operations, nodes, edges);
-    await this.validateGenerationConfigurations(operations, nodes);
+    await this.validateGenerationConfigurations(operations, nodes, edges);
     return (await this.repository.updateCanvasAgentPlan(plan.id, {
       summary: bounded(input.summary, "summary", 1_000),
       baseRevision,
@@ -114,7 +114,7 @@ export class CanvasAgentPlanService {
       this.repository.getCanvasViewport(projectId),
     ]);
     assertRebaseSafe(plan, currentRevision, nodes);
-    await this.validateGenerationConfigurations(plan.operations, nodes);
+    await this.validateGenerationConfigurations(plan.operations, nodes, edges);
     const compiled = compilePlan(plan, nodes, edges, viewport);
     const snapshot = await this.canvas.applyMutationBatch(projectId, {
       baseRevision: currentRevision,
@@ -196,8 +196,10 @@ export class CanvasAgentPlanService {
   private async validateGenerationConfigurations(
     operations: CanvasAgentPlanOperation[],
     currentNodes: CanvasNode[],
+    currentEdges: CanvasEdge[],
   ): Promise<void> {
     const dataById = new Map(currentNodes.flatMap((node) => node.data ? [[node.id, structuredClone(node.data)] as const] : []));
+    const touchedNodeIds = new Set<string>();
     for (const operation of operations) {
       if (operation.type === "edge.create") continue;
       const current = operation.type === "node.update" ? dataById.get(operation.nodeId) : undefined;
@@ -208,7 +210,29 @@ export class CanvasAgentPlanService {
       );
       const key = operation.type === "node.create" ? operation.tempId : operation.nodeId;
       dataById.set(key, data);
-      if (data.type === "text" || !data.action.endsWith("_generate")) continue;
+      touchedNodeIds.add(key);
+    }
+    const incomingByTarget = new Map<string, Array<{ mediaType: CanvasMediaType; role: CanvasEdge["role"] }>>();
+    const bindings = [
+      ...currentEdges.map((edge) => ({ source: edge.sourceNodeId, target: edge.targetNodeId, role: edge.role ?? "reference" })),
+      ...operations.flatMap((operation) => operation.type === "edge.create"
+        ? [{ source: operation.source, target: operation.target, role: operation.role ?? "reference" }]
+        : []),
+    ];
+    for (const binding of bindings) {
+      const source = dataById.get(binding.source);
+      if (!source) continue;
+      const incoming = incomingByTarget.get(binding.target) ?? [];
+      incoming.push({ mediaType: source.type, role: binding.role });
+      incomingByTarget.set(binding.target, incoming);
+    }
+    for (const operation of operations) {
+      if (operation.type !== "edge.create") continue;
+      touchedNodeIds.add(operation.target);
+    }
+    for (const nodeId of touchedNodeIds) {
+      const data = dataById.get(nodeId);
+      if (!data || data.type === "text" || !data.action.endsWith("_generate")) continue;
       const routeId = data.params?.routeId;
       if (!routeId) invalid("Generation nodes require a selected route");
       await this.canvas.validateGenerationNodeConfiguration({
@@ -216,6 +240,7 @@ export class CanvasAgentPlanService {
         routeId,
         prompt: data.params?.prompt ?? "",
         settings: data.params?.settings,
+        references: incomingByTarget.get(nodeId) ?? [],
       });
     }
   }

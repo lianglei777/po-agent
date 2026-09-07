@@ -3051,8 +3051,8 @@ interface PipelineAgentTurnRequest {
 
 画布写入通过四个项目作用域工具完成：
 
-- `canvas_get_generation_routes`：读取当前已启用 Route 和 Provider 的安全 Catalog 描述，可按输出媒体类型过滤；返回名称、能力、用途描述、默认值和输入 Schema，不返回供应商 operation、凭据引用、adapter 配置或内部参数。
-- `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时写入 `prompt`、已启用的 `routeId` 和完整 `settings`。服务端会同步生成富文本提示词文档，并在保存和应用计划时校验 Route 输出类型、Prompt 与 Schema 参数。
+- `canvas_get_generation_routes`：读取当前已启用 Route 和 Provider 的安全 Catalog 描述，可按输出媒体类型过滤。未传 `routeIds` 时返回紧凑候选摘要和素材输入概况；Agent 选出少量候选后，传入最多 8 个 `routeIds` 获取完整参数与素材 Schema。响应不返回供应商 operation、凭据引用、adapter 配置或内部参数，避免把全部 Route 的大型枚举一次性塞入模型上下文。
+- `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时写入 `prompt`、已启用的 `routeId` 和完整 `settings`。服务端会同步生成富文本提示词文档，并在保存和应用计划时校验 Route 输出类型、Prompt、Schema 参数，以及引用能否映射到 Route 声明的素材槽位、语义角色和数量约束。
 - `canvas_update_plan`：用用户修订后的完整计划替换未应用草稿。
 - `canvas_apply_plan`：将临时节点引用解析为稳定 ID，经现有连接规则校验后，以单个 `CanvasMutationBatch` 原子提交。
 - `canvas_undo_action`：在画布没有后续修改时撤销整组 Agent mutations；存在后续修改时返回 `409 PIPELINE_AGENT_ACTION_NOT_UNDOABLE`，避免覆盖用户工作。
@@ -3069,7 +3069,7 @@ interface PipelineAgentTurnRequest {
 - `canvas_review_results`：接受 1 至 8 个已有媒体节点，复用素材分析能力，并返回每个节点的当前提示词、Route、最近六个 Generation Run 及其产物状态、当前产物标记，以及该节点变化会影响的最多 40 个下游节点。对于本地仍可读取的成功产物，工具在单次最多 8 个分析预算内优先分析当前选择，再分析近期历史版本；每个已分析版本返回独立的视觉或节奏摘要。视频摘要会保留采样时间，并要求模型将可定位的明显变化或问题写入对应时间点或近似区间。工具只提供观察和建议，不会选择主观最佳版本，也不会创建 Generation Run。
 - `canvas_save_workflow`：仅在用户明确要求时，将文本节点、源素材与状态为 `completed` 的生成节点保存为普通 workflow；未完成或失败的生成节点会被拒绝。
 
-Pipeline 项目级 Skills 使用 `/api/pipeline/projects/{id}/skills`：`GET` 返回当前项目的有效 Skill 集，`PATCH` 仅允许切换项目级 Skill 的模型调用开关，`POST` 将市场 Skill 安装到当前项目。`/skills/import` 导入本地 `SKILL.md` 或其目录，`/skills/search` 搜索市场。首个内置示例通过 `POST /api/pipeline/projects/{id}/skills/builtin/short-drama` 安装；服务端只会复制随应用交付的短剧 Skill 到该项目，不接收客户端路径或 Skill 内容。服务端从项目 ID 解析根目录，浏览器和模型都不能提交 `cwd`；修改后会尝试重载当前项目的 Agent 资源，运行中的 Agent 则保留已保存状态并等待后续重载。
+Pipeline 项目级 Skills 使用 `/api/pipeline/projects/{id}/skills`：`GET` 返回当前项目的有效 Skill 集，`PATCH` 仅允许切换项目级 Skill 的模型调用开关，`POST` 将市场 Skill 安装到当前项目。`/skills/import` 导入本地 `SKILL.md` 或其目录，`/skills/search` 搜索市场。内置短剧 Skill 通过 `POST /api/pipeline/projects/{id}/skills/builtin/short-drama` 安装；服务端只会复制随应用交付的短剧 Skill 到该项目，不接收客户端路径或 Skill 内容。服务端从项目 ID 解析根目录，浏览器和模型都不能提交 `cwd`；修改后会尝试重载当前项目的 Agent 资源，运行中的 Agent 则保留已保存状态并等待后续重载。
 
 当用户明确要求“调整并重新生成”时，本轮允许 `review` 和 `canvas`。Agent 可以先评审结果，再通过语义计划只修改本轮范围内受影响节点的提示词、Route、参数或引用，并完成静态校验。调整后的节点仍由用户在节点或工作流界面手动触发；运行后旧产物继续保留在 Generation Run 历史中。
 
