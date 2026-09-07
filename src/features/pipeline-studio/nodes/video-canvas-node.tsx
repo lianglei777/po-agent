@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { App, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
@@ -98,10 +98,26 @@ export function VideoCanvasNode({
   }, [getViewport, node.height, node.positionX, node.positionY, node.width, setCenter]);
 
   const handlePreviewDoubleClick = useCallback((event: MouseEvent<HTMLElement>) => {
-    // 原生 video 双击会进入浏览器全屏；这里统一为画布内的节点聚焦行为。
+    // 视频以外的节点区域仍使用 React 事件完成画布内聚焦。
     event.preventDefault();
     event.stopPropagation();
     if (hasVideo) focusPreviewNode();
+  }, [focusPreviewNode, hasVideo]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !hasVideo) return;
+
+    const preventNativeFullscreen = (event: globalThis.MouseEvent) => {
+      // 原生 controls 位于浏览器的 Shadow DOM 中，React 冒泡事件无法稳定取消其双击全屏。
+      // 必须在 video 宿主元素的捕获阶段取消默认行为，随后直接聚焦画布节点。
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      focusPreviewNode();
+    };
+
+    video.addEventListener("dblclick", preventNativeFullscreen, true);
+    return () => video.removeEventListener("dblclick", preventNativeFullscreen, true);
   }, [focusPreviewNode, hasVideo]);
 
   const playVideoOnHover = useCallback(() => {
@@ -287,12 +303,12 @@ export function VideoCanvasNode({
                 src={mediaUrl}
                 aria-label={canvas.name}
                 controls
+                controlsList="nofullscreen"
                 draggable={false}
                 muted
                 playsInline
                 preload="metadata"
                 className="h-full min-h-[180px] w-full object-contain"
-                onDoubleClick={handlePreviewDoubleClick}
                 onPointerDown={(event) => {
                   const bounds = event.currentTarget.getBoundingClientRect();
                   // 原生控制条需要优先接收指针；视频其余区域仍交给画布处理节点拖拽。

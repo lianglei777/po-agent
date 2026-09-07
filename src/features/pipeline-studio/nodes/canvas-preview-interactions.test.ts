@@ -7,12 +7,15 @@ const textNodeSource = readFileSync(fileURLToPath(new URL("./text-canvas-node.ts
 const textEditorSource = readFileSync(fileURLToPath(new URL("./text-node-editor.tsx", import.meta.url)), "utf8");
 
 describe("canvas preview interactions", () => {
-  it("keeps native video double click inside the canvas and focuses the node", () => {
+  it("intercepts native video double click before browser controls enter fullscreen", () => {
     expect(videoNodeSource).toContain("calculateImageFocusViewport");
     expect(videoNodeSource).toContain("const handlePreviewDoubleClick");
+    expect(videoNodeSource).toContain("video.addEventListener(\"dblclick\", preventNativeFullscreen, true)");
+    expect(videoNodeSource).toContain("event.stopImmediatePropagation();");
+    expect(videoNodeSource).toContain("controlsList=\"nofullscreen\"");
     expect(videoNodeSource).toContain("event.preventDefault();");
     expect(videoNodeSource).toContain("event.stopPropagation();");
-    expect(videoNodeSource).toMatch(/<video[\s\S]*?onDoubleClick=\{handlePreviewDoubleClick\}/);
+    expect(videoNodeSource).not.toMatch(/<video[\s\S]*?onDoubleClick=\{handlePreviewDoubleClick\}/);
   });
 
   it("offers full-screen text editing without creating a competing inline editor", () => {
