@@ -28,8 +28,8 @@ export function CanvasNodeConnectionHandle({
 }) {
   const isTarget = type === "target";
   const visualPosition = position === Position.Left
-    ? "left-[-14px]"
-    : "right-[-14px]";
+    ? "left-[-36px]"
+    : "right-[-36px]";
 
   if (isTarget) {
     return (

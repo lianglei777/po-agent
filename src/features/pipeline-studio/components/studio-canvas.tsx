@@ -44,6 +44,7 @@ import {
   StudioCanvasEdgeComponent,
   type StudioCanvasEdge,
 } from "./studio-canvas-edge";
+import { StudioCanvasConnectionLine } from "./studio-canvas-connection-line";
 
 const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
 const studioEdgeTypes = { studio: StudioCanvasEdgeComponent } satisfies EdgeTypes;
@@ -423,7 +424,7 @@ export function StudioCanvas({
           panOnScroll
           panOnScrollMode={PanOnScrollMode.Vertical}
           connectionRadius={24}
-          connectionLineStyle={{ stroke: "var(--pl-edge-flow)", strokeWidth: 2.2 }}
+          connectionLineComponent={StudioCanvasConnectionLine}
           onMoveEnd={(event, nextViewport) => {
             if (transientViewportChangeRef.current) {
               setPreviewZoom(nextViewport.zoom);
