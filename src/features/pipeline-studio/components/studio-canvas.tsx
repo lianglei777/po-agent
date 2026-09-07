@@ -422,6 +422,8 @@ export function StudioCanvas({
           zoomActivationKeyCode={null}
           panOnScroll
           panOnScrollMode={PanOnScrollMode.Vertical}
+          connectionRadius={24}
+          connectionLineStyle={{ stroke: "var(--pl-edge-flow)", strokeWidth: 2.2 }}
           onMoveEnd={(event, nextViewport) => {
             if (transientViewportChangeRef.current) {
               setPreviewZoom(nextViewport.zoom);

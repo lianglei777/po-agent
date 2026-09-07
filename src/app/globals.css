@@ -327,8 +327,8 @@ body {
   --pl-idle: var(--text-dim);
   --pl-error: var(--destructive);
   --pl-danger: var(--destructive-text);
-  --pl-edge: #4d5662;
-  --pl-edge-hover: #8d98a5;
+  --pl-edge: #d9dee5;
+  --pl-edge-hover: #fff;
   --pl-edge-flow: #d9dee5;
   --pl-canvas-dot: #343c46;
   --pl-minimap-mask: rgb(13 15 18 / 72%);
@@ -433,6 +433,42 @@ body {
   opacity: 1;
 }
 
+/* React Flow 在连线期间为目标 Handle 提供 connectingto、valid 状态；全节点落点仍沿左侧中点锚定。 */
+.canvas-node-connection-drop-zone {
+  border-radius: inherit;
+}
+
+.canvas-node-connection-target-feedback__frame {
+  fill: none;
+  stroke: var(--pl-edge-flow);
+  stroke-width: 1.5px;
+  stroke-dasharray: 8 6;
+  opacity: 0;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-node-connection-drop-zone.connectingto.valid .canvas-node-connection-target-feedback__frame {
+  opacity: 1;
+}
+
+.canvas-node-connection-drop-zone.connectingto.valid .canvas-node-connection-handle__visual {
+  border-color: var(--pl-edge-flow);
+  color: var(--pl-edge-flow);
+  opacity: 1;
+}
+
+.canvas-node-connection-drop-zone.connectingto:not(.valid) .canvas-node-connection-target-feedback__frame {
+  stroke: var(--pl-error);
+  stroke-dasharray: none;
+  opacity: 0.9;
+}
+
+.canvas-node-connection-drop-zone.connectingto:not(.valid) .canvas-node-connection-handle__visual {
+  border-color: var(--pl-error);
+  color: var(--pl-error);
+  opacity: 1;
+}
+
 .pipeline-studio-edge-toolbar {
   pointer-events: all;
 }
@@ -471,11 +507,21 @@ body {
   .pipeline-studio-edge.is-active .pipeline-studio-edge__flow {
     animation: pipeline-studio-edge-flow 1100ms linear infinite;
   }
+
+  .canvas-node-connection-drop-zone.connectingto.valid .canvas-node-connection-target-feedback__frame {
+    animation: canvas-node-connection-target-flow 780ms linear infinite;
+  }
 }
 
 @keyframes pipeline-studio-edge-flow {
   to {
     stroke-dashoffset: -100;
+  }
+}
+
+@keyframes canvas-node-connection-target-flow {
+  to {
+    stroke-dashoffset: -28;
   }
 }
 
