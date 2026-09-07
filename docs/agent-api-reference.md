@@ -3016,13 +3016,17 @@ interface PipelineAgentConversationResponse {
 interface PipelineAgentTurnRequest {
   turnId: string;
   message: string;
+  document?: CanvasPromptDocument;
   canvasRevision: number;
-  selectedNodeIds: string[];
+  referencedNodeIds?: string[];
+  selectedNodeIds?: string[]; // 旧客户端兼容字段
   mentionedNodeIds?: string[];
 }
 ```
 
-客户端只提交 revision 和节点指针。服务端重新读取项目当前 revision、节点、连线与阶段状态，校验节点归属，并把选中节点、`@` 引用及其一跳上下游组装为受信任上下文。客户端 revision 落后时使用最新画布并在上下文中标记；超前时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。已删除或跨项目节点返回 `404 PIPELINE_CANVAS_NODE_NOT_FOUND`。
+`document` 使用与节点 AI Composer 相同的 Tiptap JSON 文档，保存普通文本和内联 `resourceReference` 的真实顺序。`referencedNodeIds` 是从正式引用派生的有序节点指针；实时画布选择和置灰候选不能进入请求。服务端仍把 `selectedNodeIds` 映射为引用，以兼容旧客户端。服务端重新读取项目当前 revision、节点、连线与阶段状态，校验节点归属，用权威名称和媒体类型规范化文档，并把已确认引用及其一跳上下游组装为受信任上下文。只有节点引用而没有其他文字的回合也有效。客户端 revision 落后时使用最新画布并在上下文中标记；超前时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。已删除或跨项目节点返回 `404 PIPELINE_CANVAS_NODE_NOT_FOUND`。
+
+服务端把引用节点的权威名称与类型序列化进持久化的 user-role 消息，因此消息历史可以恢复引用预览，Agent 也会把引用视为本轮用户输入。节点正文、媒体分析、生成参数和连线等详细数据仍只来自服务端组装的受信任上下文，客户端不能提交这些内容。
 
 该上下文仅用于理解当前请求，不直接授予画布修改权限。除了选中、`@` 引用和一跳关联节点的详细配置，上下文还包含最多 120 个画布节点的轻量索引，供语义分类器把“第 3 镜”或节点名称解析为稳定 ID；超出索引的节点必须由客户端选中或 `@` 引用。服务端结合当前消息与最近对话解析本轮目标、阶段和修改范围。`requestedStage` 表示用户要求，`effectiveStage` 表示本轮实际可执行到的阶段；用户要求生成、重新生成或渲染时，Canvas Agent 会把任务解释为把相应节点准备到可手动生成的 `canvas` 阶段。
 

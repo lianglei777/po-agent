@@ -182,6 +182,8 @@ export interface CanvasResourceReferenceAttrs {
   mediaType: CanvasMediaType;
   label: string;
   role: CanvasResourceRole;
+  /** 仅用于编辑器内尚未确认的外部选择，不进入提交或持久化语义。 */
+  pending?: boolean;
 }
 
 export interface CanvasPromptDocument {

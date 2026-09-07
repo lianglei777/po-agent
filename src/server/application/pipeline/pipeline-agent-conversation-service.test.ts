@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentService } from "@/server/application/agent-service";
-import type { PipelineAgentConversation } from "@/server/domain/pipeline";
+import type { CanvasNode, PipelineAgentConversation } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import { PipelineAgentConversationService } from "./pipeline-agent-conversation-service";
@@ -83,7 +83,7 @@ describe("PipelineAgentConversationService", () => {
     const repository = {
       getProjectRoot: vi.fn(async () => "D:\\project"),
       getAgentConversation: vi.fn(async () => conversation),
-      listCanvasNodes: vi.fn(async () => [{ id: "node-1" }, { id: "node-2" }]),
+      listCanvasNodes: vi.fn(async () => [canvasNode("node-1", "产品图", "image"), canvasNode("node-2", "分镜", "text")]),
     } as unknown as PipelineRepository;
     const promptLifecycle: { onSettled?: () => void } = {};
     const agent = {
@@ -116,19 +116,29 @@ describe("PipelineAgentConversationService", () => {
     await expect(service.submitTurn("project-1", {
       turnId: "turn-123",
       message: "分析这些节点",
+      document: {
+        schemaVersion: 1,
+        format: "tiptap-json",
+        plainText: "分析 @伪造名称",
+        content: { type: "doc", content: [{ type: "paragraph", content: [
+          { type: "text", text: "分析 " },
+          { type: "resourceReference", attrs: { referenceId: "ref-1", sourceType: "canvas-node", sourceId: "node-1", mediaType: "text", label: "伪造名称", role: "reference" } },
+        ] }] },
+      },
       canvasRevision: 4,
-      selectedNodeIds: ["node-1"],
+      referencedNodeIds: ["node-1"],
       mentionedNodeIds: ["node-2"],
     })).resolves.toEqual({ accepted: true, intent });
 
     expect(intentResolver.resolve).toHaveBeenCalledWith(expect.objectContaining({
       availableNodeIds: ["node-1", "node-2"],
       focusNodeIds: ["node-1", "node-2"],
+      message: expect.stringContaining("用户引用了以下画布节点作为本轮输入"),
     }));
 
     expect(agent.execute).toHaveBeenCalledWith(
       "session-1",
-      { type: "prompt", message: "分析这些节点" },
+      { type: "prompt", message: expect.stringContaining("分析 @产品图") },
       {
         trustedPromptContext: expect.stringContaining("<canvas-agent-turn-policy>"),
         onPromptSettled: expect.any(Function),
@@ -190,5 +200,21 @@ function runtimeState() {
     contextUsage: null,
     systemPrompt: "",
     thinkingLevel: "off" as const,
+  };
+}
+
+function canvasNode(id: string, name: string, type: CanvasNode["type"]): CanvasNode {
+  return {
+    id,
+    projectId: "project-1",
+    type,
+    entityId: id,
+    positionX: 0,
+    positionY: 0,
+    width: 320,
+    height: 200,
+    data: { type: type === "image" ? "image" : "text", name, action: "generate" },
+    createdAt: "now",
+    updatedAt: "now",
   };
 }

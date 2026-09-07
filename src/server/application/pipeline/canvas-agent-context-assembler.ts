@@ -11,7 +11,7 @@ const MAX_NODE_INDEX = 120;
 
 export interface CanvasAgentContextInput {
   canvasRevision: number;
-  selectedNodeIds: string[];
+  referencedNodeIds: string[];
   mentionedNodeIds: string[];
 }
 
@@ -38,7 +38,7 @@ export class CanvasAgentContextAssembler {
       );
     }
 
-    const focusIds = unique([...input.selectedNodeIds, ...input.mentionedNodeIds]);
+    const focusIds = unique([...input.referencedNodeIds, ...input.mentionedNodeIds]);
     if (focusIds.length > MAX_FOCUS_NODES) {
       throw new AppError("VALIDATION_ERROR", `At most ${MAX_FOCUS_NODES} canvas nodes can be referenced`, 400);
     }
@@ -85,7 +85,7 @@ export class CanvasAgentContextAssembler {
           totalNodeCount: nodes.length,
           totalEdgeCount: edges.length,
         },
-        selection: input.selectedNodeIds,
+        references: input.referencedNodeIds,
         mentions: input.mentionedNodeIds,
         stages,
         continuity: continuity

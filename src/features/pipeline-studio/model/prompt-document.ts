@@ -29,7 +29,7 @@ export function promptDocumentResourceAttrs(document: CanvasPromptDocument): Can
   visit(document.content, (node) => {
     if (node.type !== "resourceReference" || !node.attrs) return;
     const attrs = node.attrs as Partial<CanvasResourceReferenceAttrs>;
-    if (attrs.referenceId && attrs.sourceType && attrs.sourceId && attrs.mediaType && attrs.label && attrs.role) {
+    if (!attrs.pending && attrs.referenceId && attrs.sourceType && attrs.sourceId && attrs.mediaType && attrs.label && attrs.role) {
       references.push(attrs as CanvasResourceReferenceAttrs);
     }
   });
@@ -50,6 +50,7 @@ function promptNodeText(node: CanvasRichTextNode): string {
   if (node.type === "hardBreak") return "\n";
   if (node.type === "resourceReference") {
     const attrs = node.attrs as Partial<CanvasResourceReferenceAttrs> | undefined;
+    if (attrs?.pending) return "";
     return attrs?.label ? `@${attrs.label}` : "@资源";
   }
   const text = node.content?.map(promptNodeText).join("") ?? "";

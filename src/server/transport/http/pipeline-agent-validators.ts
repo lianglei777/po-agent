@@ -4,6 +4,7 @@ import type {
 } from "@/contracts/pipeline-agent";
 import type { ImportPipelineSkillRequest, InstallPipelineSkillRequest, UpdatePipelineSkillRequest } from "@/contracts/pipeline-agent";
 import { AppError } from "@/server/domain/app-error";
+import { validatePromptDocument } from "./pipeline-canvas-validators";
 
 export function parseUpdatePipelineAgentConversationRequest(
   value: unknown,
@@ -30,22 +31,56 @@ export function parseUpdatePipelineAgentConversationRequest(
 export function parsePipelineAgentTurnRequest(value: unknown): PipelineAgentTurnRequest {
   if (!isRecord(value)) invalid("Request body must be an object");
   const turnId = boundedString(value.turnId, "turnId", 6, 128);
-  const message = boundedString(value.message, "message", 1, 20_480);
+  const message = boundedString(value.message, "message", 0, 20_480);
+  if (value.document !== undefined) validatePromptDocument(value.document, "document");
+  const documentReferencedNodeIds = value.document === undefined
+    ? undefined
+    : canvasNodeIdsFromDocument(value.document);
   const canvasRevision = value.canvasRevision;
   if (!Number.isSafeInteger(canvasRevision) || Number(canvasRevision) < 0) {
     invalid("canvasRevision must be a non-negative integer");
   }
-  const selectedNodeIds = nodeIds(value.selectedNodeIds, "selectedNodeIds");
+  const referencedNodeIds = value.referencedNodeIds === undefined
+    ? []
+    : nodeIds(value.referencedNodeIds, "referencedNodeIds");
+  const selectedNodeIds = value.selectedNodeIds === undefined
+    ? []
+    : nodeIds(value.selectedNodeIds, "selectedNodeIds");
   const mentionedNodeIds = value.mentionedNodeIds === undefined
     ? undefined
     : nodeIds(value.mentionedNodeIds, "mentionedNodeIds");
+  // 新版富文本合同以文档 atom 为事实来源，避免正文位置和独立 ID 数组发生漂移。
+  const normalizedReferenceIds = documentReferencedNodeIds
+    ?? [...new Set([...referencedNodeIds, ...selectedNodeIds])];
+  if (!message && !normalizedReferenceIds.length && !mentionedNodeIds?.length) {
+    invalid("message or at least one referenced node is required");
+  }
   return {
     turnId,
     message,
+    document: value.document as PipelineAgentTurnRequest["document"],
     canvasRevision: Number(canvasRevision),
-    selectedNodeIds,
+    referencedNodeIds: normalizedReferenceIds,
     mentionedNodeIds,
   };
+}
+
+function canvasNodeIdsFromDocument(value: unknown): string[] {
+  if (!isRecord(value) || !isRecord(value.content)) return [];
+  const ids: string[] = [];
+  const visit = (node: Record<string, unknown>) => {
+    if (node.type === "resourceReference" && isRecord(node.attrs)
+      && node.attrs.sourceType === "canvas-node"
+      && node.attrs.pending !== true
+      && typeof node.attrs.sourceId === "string") {
+      ids.push(node.attrs.sourceId);
+    }
+    if (Array.isArray(node.content)) {
+      for (const child of node.content) if (isRecord(child)) visit(child);
+    }
+  };
+  visit(value.content);
+  return [...new Set(ids)];
 }
 
 export function parseUpdatePipelineSkillRequest(value: unknown): UpdatePipelineSkillRequest {

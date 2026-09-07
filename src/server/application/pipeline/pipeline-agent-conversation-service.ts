@@ -9,6 +9,7 @@ import { AppError } from "@/server/domain/app-error";
 import type { PipelineAgentConversation } from "@/server/domain/pipeline";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { SessionRepository } from "@/server/ports/session-repository";
+import { canonicalizeCanvasAgentDocument, formatCanvasAgentMessage } from "@/lib/canvas-agent-message";
 import type { CanvasAgentContextAssembler } from "./canvas-agent-context-assembler";
 import { canvasAgentTurnPolicyContext, type CanvasAgentIntentResolver } from "./canvas-agent-intent-resolver";
 import type { CanvasAgentTurnPolicyRegistry } from "./canvas-agent-turn-policy-registry";
@@ -38,31 +39,47 @@ export class PipelineAgentConversationService {
     input: PipelineAgentTurnRequest,
   ): Promise<PipelineAgentTurnResponse> {
     const conversation = await this.getOrCreate(projectId);
+    const referencedNodeIds = input.referencedNodeIds ?? input.selectedNodeIds ?? [];
     const mentionedNodeIds = input.mentionedNodeIds ?? [];
     const [canvasContext, canvasNodes] = await Promise.all([
       this.contextAssembler.assemble(projectId, {
         canvasRevision: input.canvasRevision,
-        selectedNodeIds: input.selectedNodeIds,
+        referencedNodeIds,
         mentionedNodeIds,
       }),
       this.repository.listCanvasNodes(projectId),
     ]);
+    const focusNodeIds = [...new Set([...referencedNodeIds, ...mentionedNodeIds])];
+    const canvasNodeById = new Map(canvasNodes.map((node) => [node.id, node]));
+    const messageReferences = referencedNodeIds.flatMap((nodeId) => {
+      const node = canvasNodeById.get(nodeId);
+      return node ? [{
+        nodeId: node.id,
+        name: node.data?.name ?? node.entityId,
+        type: node.type,
+      }] : [];
+    });
+    const canonicalDocument = canonicalizeCanvasAgentDocument(input.document, messageReferences);
+    const userMessage = formatCanvasAgentMessage(
+      canonicalDocument?.plainText ?? input.message,
+      messageReferences,
+    );
     const intent = await this.intentResolver.resolve({
       sessionId: conversation.sessionId,
-      message: input.message,
+      message: userMessage,
       model: conversation.provider && conversation.modelId
         ? { provider: conversation.provider, modelId: conversation.modelId }
         : null,
       allowAgentGeneration: conversation.allowAgentGeneration,
       canvasContext,
       availableNodeIds: canvasNodes.map((node) => node.id),
-      focusNodeIds: [...new Set([...input.selectedNodeIds, ...mentionedNodeIds])],
+      focusNodeIds,
     });
     this.turnPolicies.begin(conversation.sessionId, input.turnId, intent, input.message);
     try {
       await this.agentService.execute(
         conversation.sessionId,
-        { type: "prompt", message: input.message },
+        { type: "prompt", message: userMessage },
         {
           trustedPromptContext: `${canvasContext}\n${canvasAgentTurnPolicyContext(intent)}`,
           onPromptSettled: () => this.turnPolicies.end(conversation.sessionId, input.turnId),

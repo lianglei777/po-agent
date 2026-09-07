@@ -1,3 +1,5 @@
+import type { CanvasPromptDocument } from "./pipeline";
+
 export interface PipelineAgentConversationResponse {
   projectId: string;
   sessionId: string;
@@ -17,8 +19,11 @@ export interface UpdatePipelineAgentConversationRequest {
 export interface PipelineAgentTurnRequest {
   turnId: string;
   message: string;
+  document?: CanvasPromptDocument;
   canvasRevision: number;
-  selectedNodeIds: string[];
+  referencedNodeIds?: string[];
+  /** @deprecated 旧客户端兼容字段；新客户端只提交已确认的 referencedNodeIds。 */
+  selectedNodeIds?: string[];
   mentionedNodeIds?: string[];
 }
 

@@ -1,15 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Mentions, Select, Tooltip } from "antd";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Button, Select, Tooltip } from "antd";
 import type { AgentEvent, AgentMessage, AssistantMessage } from "@/contracts/agent";
 import type { ModelInfo } from "@/contracts/models";
 import type { PipelineAgentConversationResponse } from "@/contracts/pipeline-agent";
-import type { CanvasWorkflowRun } from "@/contracts/pipeline";
+import type { CanvasNode, CanvasPromptDocument, CanvasResourceReferenceAttrs, CanvasRichTextNode, CanvasWorkflowRun } from "@/contracts/pipeline";
 import { Bot, Cpu, LoaderCircle, PanelRight, PanelRightClose, Send, Sparkles, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
+import {
+  formatCanvasAgentMessage,
+  parseCanvasAgentMessage,
+  type CanvasAgentMessageReference,
+  type ParsedCanvasAgentMessage,
+} from "@/lib/canvas-agent-message";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { ResourcePreviewPopover, ResourcePreviewThumbnail } from "../components/resource-preview-thumbnail";
+import { resolveCanvasMediaSource } from "../model/canvas-media-source";
+import { canvasNodeReferenceAttrs } from "../model/canvas-node-reference";
+import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
+import { ResourcePromptEditor, type ResourcePromptEditorHandle } from "../prompt-editor/resource-prompt-editor";
 import { useCanvasStore } from "../state/canvas-store";
+import {
+  EMPTY_PIPELINE_AGENT_REFERENCES,
+  clearPipelineAgentReferences,
+  commitPipelineAgentSelection,
+  dismissPipelineAgentSelection,
+  observePipelineAgentSelection,
+} from "./pipeline-agent-references";
 import { pipelineAgentCanvasContextReady, pipelineAgentIsRunning } from "./pipeline-agent-state";
 import { PipelineAgentSkills } from "./pipeline-agent-skills";
 
@@ -38,8 +56,6 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
     sendError: t.pipeline.canvasAgentPanelSendError,
     resize: t.pipeline.canvasAgentPanelResize,
     loading: t.pipeline.canvasAgentPanelLoading,
-    selection: t.pipeline.canvasAgentPanelSelection,
-    removeSelection: t.pipeline.canvasAgentPanelRemoveSelection,
     waitingCanvasSave: t.pipeline.canvasAgentPanelWaitingCanvasSave,
     undoAction: t.pipeline.canvasAgentPanelUndoAction,
     undoingAction: t.pipeline.canvasAgentPanelUndoingAction,
@@ -52,9 +68,8 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [workflowRuns, setWorkflowRuns] = useState<CanvasWorkflowRun[]>([]);
   const [partial, setPartial] = useState<Partial<AssistantMessage> | null>(null);
-  const [input, setInput] = useState("");
-  const [mentionedNodeIds, setMentionedNodeIds] = useState<string[]>([]);
-  const [excludedSelectionIds, setExcludedSelectionIds] = useState<string[]>([]);
+  const [inputDocument, setInputDocument] = useState<CanvasPromptDocument>(() => promptDocumentFromPlainText(""));
+  const [referenceState, setReferenceState] = useState(EMPTY_PIPELINE_AGENT_REFERENCES);
   const [undoingActionId, setUndoingActionId] = useState<string | null>(null);
   const [undoneActionIds, setUndoneActionIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +79,7 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const editorHandleRef = useRef<ResourcePromptEditorHandle | null>(null);
   const resizeCleanupRef = useRef<() => void>(() => undefined);
   const activeSessionIdRef = useRef<string | null>(null);
   const canvasRevision = useCanvasStore((state) => state.revision);
@@ -71,6 +87,16 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
   const selectedNodeIds = useCanvasStore((state) => state.selectedNodeIds);
   const canvasSaveState = useCanvasStore((state) => state.saveState);
   const pendingCanvasMutationCount = useCanvasStore((state) => state.pendingMutations.length);
+  const referencedNodeIds = useMemo(() => promptDocumentResourceAttrs(inputDocument)
+    .filter((reference) => reference.sourceType === "canvas-node")
+    .map((reference) => reference.sourceId), [inputDocument]);
+  const observedReferenceState = useMemo(
+    () => observePipelineAgentSelection(
+      { ...referenceState, referencedNodeIds },
+      selectedNodeIds,
+    ),
+    [referenceState, referencedNodeIds, selectedNodeIds],
+  );
 
   const reloadHistory = useCallback(async (sessionId: string) => {
     const session = await pipelineStudioApi.getAgentSession(sessionId);
@@ -137,6 +163,32 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
   useEffect(() => () => resizeCleanupRef.current(), []);
 
   useEffect(() => {
+    if (!observedReferenceState.pendingNodeIds.length) return;
+    const decide = (event: Event) => {
+      const target = event.target;
+      const entersComposer = target instanceof globalThis.Node && editorHandleRef.current?.contains(target);
+      if (entersComposer) editorHandleRef.current?.commitPendingReferences();
+      else editorHandleRef.current?.dismissPendingReferences();
+      setReferenceState((current) => {
+        const observed = observePipelineAgentSelection(
+          { ...current, referencedNodeIds },
+          selectedNodeIds,
+        );
+        return entersComposer
+          ? commitPipelineAgentSelection(observed)
+          : dismissPipelineAgentSelection(observed);
+      });
+    };
+    // 节点本身未必可聚焦；同时观察指针和键盘焦点，才能可靠表达“下一焦点进入输入框”。
+    document.addEventListener("pointerdown", decide, true);
+    document.addEventListener("focusin", decide, true);
+    return () => {
+      document.removeEventListener("pointerdown", decide, true);
+      document.removeEventListener("focusin", decide, true);
+    };
+  }, [observedReferenceState.pendingNodeIds.length, referencedNodeIds, selectedNodeIds]);
+
+  useEffect(() => {
     if (!conversation) return;
     const source = new EventSource(`/api/agent/${encodeURIComponent(conversation.sessionId)}/events`);
     source.addEventListener("agent", (raw) => {
@@ -184,17 +236,12 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
     model,
   })), [copy.vision, models]);
   const nodeById = useMemo(() => new Map(canvasNodes.map((node) => [node.id, node])), [canvasNodes]);
-  const contextSelectedNodeIds = useMemo(() => selectedNodeIds
-    .filter((nodeId) => !excludedSelectionIds.includes(nodeId)), [excludedSelectionIds, selectedNodeIds]);
-  const selectedNodes = useMemo(() => contextSelectedNodeIds
+  const referencedNodes = useMemo(() => referencedNodeIds
     .map((nodeId) => nodeById.get(nodeId))
-    .filter((node) => node !== undefined), [contextSelectedNodeIds, nodeById]);
-  const mentionOptions = useMemo(() => canvasNodes.map((node) => ({
-    key: node.id,
-    value: mentionToken(node.data?.name ?? node.type, node.id),
-    label: `${node.data?.name ?? node.type} · ${node.type}`,
-  })), [canvasNodes]);
-  const mentionIdByToken = useMemo(() => new Map(mentionOptions.map((option) => [option.value, option.key])), [mentionOptions]);
+    .filter((node): node is CanvasNode => node !== undefined), [nodeById, referencedNodeIds]);
+  const pendingNodes = useMemo(() => observedReferenceState.pendingNodeIds
+    .map((nodeId) => nodeById.get(nodeId))
+    .filter((node): node is CanvasNode => node !== undefined), [nodeById, observedReferenceState.pendingNodeIds]);
   const canvasContextReady = pipelineAgentCanvasContextReady(canvasSaveState, pendingCanvasMutationCount);
 
   const toggleCollapsed = () => {
@@ -244,23 +291,34 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
   };
 
   const submit = async () => {
-    const message = input.trim();
-    if (!conversation || !message || running || submitting || !canvasContextReady) return;
-    const submittedMentions = mentionedNodeIds;
+    const message = inputDocument.plainText.trim();
+    if (!conversation || (!message && !referencedNodes.length) || running || submitting || !canvasContextReady) return;
+    const submittedDocument = inputDocument;
+    const submittedReferences = referencedNodes;
+    const submittedReferenceIds = submittedReferences.map((node) => node.id);
     const submittedAt = Date.now();
-    setInput("");
-    setMentionedNodeIds([]);
-    setExcludedSelectionIds([]);
+    setInputDocument(promptDocumentFromPlainText(""));
+    setReferenceState((current) => clearPipelineAgentReferences(
+      observePipelineAgentSelection({ ...current, referencedNodeIds }, selectedNodeIds),
+    ));
     setError(null);
     setSubmitting(true);
-    setMessages((current) => [...current, { role: "user", content: message, timestamp: submittedAt }]);
+    setMessages((current) => [...current, {
+      role: "user",
+      content: formatCanvasAgentMessage(message, submittedReferences.map((node) => ({
+        nodeId: node.id,
+        name: node.data?.name ?? node.entityId,
+        type: node.type,
+      }))),
+      timestamp: submittedAt,
+    }]);
     try {
       await pipelineStudioApi.submitAgentTurn(projectId, {
         turnId: crypto.randomUUID(),
         message,
+        document: submittedDocument,
         canvasRevision,
-        selectedNodeIds: contextSelectedNodeIds,
-        mentionedNodeIds: submittedMentions,
+        referencedNodeIds: submittedReferenceIds,
       });
       // POST 与 SSE 的到达顺序不固定；提交后重新读取 Runtime，避免极快回合已经结束却被客户端重新标记为运行中。
       await reloadRunningState(conversation.sessionId).catch((cause) => {
@@ -268,8 +326,11 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
       });
     } catch (cause) {
       setRunning(false);
-      setInput(message);
-      setMentionedNodeIds(submittedMentions);
+      setInputDocument(submittedDocument);
+      setReferenceState((current) => ({
+        ...current,
+        referencedNodeIds: [...new Set([...submittedReferenceIds, ...current.referencedNodeIds])],
+      }));
       setMessages((current) => current.filter((candidate) =>
         candidate.role !== "user" || candidate.timestamp !== submittedAt
       ));
@@ -376,51 +437,32 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
             undoingActionId={undoingActionId}
             undoneActionIds={undoneActionIds}
             workflowRuns={workflowRuns}
+            canvasNodes={canvasNodes}
           />)
         )}
-        {partial && <MessageBubble message={{ role: "assistant", provider: "", model: "", content: partial.content ?? [] }} streaming />}
+        {partial && <MessageBubble message={{ role: "assistant", provider: "", model: "", content: partial.content ?? [] }} canvasNodes={canvasNodes} streaming />}
       </div>
 
       <div className="shrink-0 border-t border-[var(--pl-border)] px-3 pb-3 pt-2.5">
         {error && <p className="mb-2 text-xs text-[var(--pl-danger)]" role="alert">{error}</p>}
-        {selectedNodes.length ? (
-          <div className="mb-2 flex flex-wrap gap-1.5" aria-label={copy.selection}>
-            {selectedNodes.map((node) => (
-              <button
-                className="max-w-36 truncate rounded-md border border-[var(--pl-border)] bg-[var(--pl-surface-subtle)] px-2 py-1 text-caption text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]"
-                key={node.id}
-                onClick={() => setExcludedSelectionIds((current) => [...current, node.id])}
-                title={copy.removeSelection.replace("{name}", node.data?.name ?? node.type)}
-                type="button"
-              >
-                {node.data?.name ?? node.type}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="flex items-end gap-1.5 rounded-[var(--radius-composer)] border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--shadow-composer)] focus-within:border-[var(--pl-accent)]">
-          <Mentions
-            variant="borderless"
-            value={input}
-            disabled={loading || !conversation}
-            autoSize={{ minRows: 2, maxRows: 7 }}
-            options={mentionOptions}
-            placement="top"
+        <div className="flex min-h-24 max-h-60 flex-col overflow-hidden rounded-[var(--radius-composer)] border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--shadow-composer)] focus-within:border-[var(--pl-accent)]">
+          <ResourcePromptEditor
+            value={inputDocument}
+            onChange={setInputDocument}
             placeholder={copy.placeholder}
-            aria-label={copy.placeholder}
-            onChange={(value) => {
-              setInput(value);
-              setMentionedNodeIds([...new Set(Mentions.getMentions(value)
-                .map(({ value: token }) => mentionIdByToken.get(token))
-                .filter((nodeId): nodeId is string => Boolean(nodeId)))]);
-            }}
-            onPressEnter={(event) => {
-              if (!event.shiftKey) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
+            ariaLabel={copy.placeholder}
+            disabled={loading || !conversation || running || submitting}
+            allowedMediaTypes={["text", "image", "video", "audio"]}
+            includeAssets={false}
+            canvasReferenceMode="all-nodes"
+            showReferencePreviewStrip={false}
+            pendingReferences={pendingNodes.map((node): CanvasResourceReferenceAttrs => (
+              canvasNodeReferenceAttrs(node, `pending:${node.id}`, true)
+            ))}
+            editorHandleRef={editorHandleRef}
+            onSubmit={() => void submit()}
           />
+          <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-[var(--pl-border)] p-1.5">
           {running ? (
             <Tooltip title={copy.stop}>
               <Button
@@ -438,14 +480,121 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
           ) : (
             <Tooltip title={canvasContextReady ? copy.send : copy.waitingCanvasSave}>
               <span className="inline-flex shrink-0">
-                <Button className="size-8" shape="circle" type="primary" loading={submitting} icon={<Send className="rotate-[-90deg]" />} aria-label={copy.send} disabled={!input.trim() || !conversation || !canvasContextReady || submitting} onClick={() => void submit()} />
+                <Button className="size-8" shape="circle" type="primary" loading={submitting} icon={<Send className="rotate-[-90deg]" />} aria-label={copy.send} disabled={(!inputDocument.plainText.trim() && !referencedNodes.length) || !conversation || !canvasContextReady || submitting} onClick={() => void submit()} />
               </span>
             </Tooltip>
           )}
+          </div>
         </div>
       </div>
       </>}
     </aside>
+  );
+}
+
+function PipelineAgentUserMessage({
+  parsed,
+  canvasNodeById,
+  previewLabel,
+}: {
+  parsed: ParsedCanvasAgentMessage;
+  canvasNodeById: Map<string, CanvasNode>;
+  previewLabel: string;
+}) {
+  if (parsed.document) {
+    return renderCanvasAgentRichNode(parsed.document.content, parsed.references, canvasNodeById, previewLabel, "root");
+  }
+  return (
+    <>
+      {parsed.references.map((reference) => (
+        <Fragment key={reference.nodeId}>
+          <PipelineAgentInlineReference
+            reference={reference}
+            node={canvasNodeById.get(reference.nodeId)}
+            previewLabel={previewLabel}
+          />{" "}
+        </Fragment>
+      ))}
+      {parsed.message}
+    </>
+  );
+}
+
+function renderCanvasAgentRichNode(
+  richNode: CanvasRichTextNode,
+  references: CanvasAgentMessageReference[],
+  canvasNodeById: Map<string, CanvasNode>,
+  previewLabel: string,
+  key: string,
+): ReactNode {
+  if (richNode.type === "text") return richNode.text ?? "";
+  if (richNode.type === "hardBreak") return <br key={key} />;
+  if (richNode.type === "resourceReference" && richNode.attrs) {
+    const attrs = richNode.attrs as Partial<CanvasResourceReferenceAttrs>;
+    const reference = references.find((candidate) => candidate.nodeId === attrs.sourceId);
+    return reference ? (
+      <Fragment key={key}>
+        <PipelineAgentInlineReference
+          reference={reference}
+          node={canvasNodeById.get(reference.nodeId)}
+          previewLabel={previewLabel}
+        />
+      </Fragment>
+    ) : null;
+  }
+  const children = richNode.content?.map((child, index) => renderCanvasAgentRichNode(
+    child,
+    references,
+    canvasNodeById,
+    previewLabel,
+    `${key}:${index}`,
+  ));
+  if (richNode.type === "paragraph") return <span key={key} className="block min-h-[1.6em]">{children}</span>;
+  return <Fragment key={key}>{children}</Fragment>;
+}
+
+function PipelineAgentInlineReference({
+  reference,
+  node,
+  previewLabel,
+}: {
+  reference: CanvasAgentMessageReference;
+  node?: CanvasNode;
+  previewLabel: string;
+}) {
+  const mediaType = node?.data?.type ?? (reference.type === "image" || reference.type === "video" || reference.type === "audio"
+    ? reference.type
+    : "text");
+  const source = resolveCanvasMediaSource(reference.nodeId, node?.data);
+  const textPreview = node?.data?.type === "text"
+    ? node.data.textDocument?.plainText ?? node.data.content?.join("\n")
+    : undefined;
+  const thumbnail = (
+    <ResourcePreviewThumbnail
+      mediaType={mediaType}
+      label={reference.name}
+      url={source?.url ?? null}
+      poster={node?.data?.poster}
+      size="inline"
+    />
+  );
+  const preview = (mediaType === "image" || mediaType === "video") && source?.url ? (
+    <ResourcePreviewPopover
+      mediaType={mediaType}
+      label={reference.name}
+      url={source.url}
+      poster={node?.data?.poster}
+      detail={reference.type}
+      ariaLabel={previewLabel.replace("{name}", reference.name)}
+    >
+      {thumbnail}
+    </ResourcePreviewPopover>
+  ) : <Tooltip title={textPreview || reference.name}>{thumbnail}</Tooltip>;
+  return (
+    <span className="mx-0.5 inline-flex max-w-44 items-center gap-1 rounded-md bg-[var(--pl-accent-soft)] py-0.5 pl-0.5 pr-1.5 align-middle font-medium text-[var(--pl-accent)]">
+      {preview}
+      <span className="truncate">@{reference.name}</span>
+    </span>
   );
 }
 
@@ -456,6 +605,7 @@ function MessageBubble({
   undoingActionId,
   undoneActionIds = [],
   workflowRuns = [],
+  canvasNodes = [],
 }: {
   message: AgentMessage;
   streaming?: boolean;
@@ -463,6 +613,7 @@ function MessageBubble({
   undoingActionId?: string | null;
   undoneActionIds?: string[];
   workflowRuns?: CanvasWorkflowRun[];
+  canvasNodes?: CanvasNode[];
 }) {
   const { t } = useI18n();
   const text = messageText(
@@ -471,6 +622,8 @@ function MessageBubble({
     t.pipeline.canvasAgentPanelImage,
   );
   const user = message.role === "user";
+  const parsedUserMessage = user ? parseCanvasAgentMessage(text) : null;
+  const canvasNodeById = new Map(canvasNodes.map((node) => [node.id, node]));
   const tool = message.role === "toolResult";
   const actionId = canvasAgentActionId(message);
   const undone = Boolean(actionId && undoneActionIds.includes(actionId));
@@ -530,6 +683,12 @@ function MessageBubble({
               </div>
             ) : null}
           </>
+        ) : user && parsedUserMessage ? (
+          <PipelineAgentUserMessage
+            parsed={parsedUserMessage}
+            canvasNodeById={canvasNodeById}
+            previewLabel={t.pipeline.canvasAgentPanelReferencePreview}
+          />
         ) : text || (streaming ? "…" : message.role)}
         {workflowRun ? (
           <div className="mt-2 flex items-center justify-between border-t border-[var(--pl-border)] pt-2 text-xs">
@@ -640,8 +799,4 @@ function clampWidth(width: number): number {
 function readPanelWidth(projectId: string): number {
   const stored = Number(window.localStorage.getItem(`${WIDTH_KEY_PREFIX}${projectId}`));
   return Number.isFinite(stored) && stored > 0 ? clampWidth(stored) : DEFAULT_WIDTH;
-}
-
-function mentionToken(name: string, nodeId: string): string {
-  return `${name.replaceAll(" ", "_")}·${nodeId.slice(0, 6)}`;
 }

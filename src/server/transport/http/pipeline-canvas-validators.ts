@@ -435,7 +435,7 @@ function parseGenerationSettings(value: Record<string, unknown>): NonNullable<Ge
   return settings;
 }
 
-function validatePromptDocument(value: unknown, path: string) {
+export function validatePromptDocument(value: unknown, path: string) {
   validateTextDocument(value, path);
   if (!isRecord(value) || typeof value.plainText !== "string" || value.plainText.length > MAX_AI_INSTRUCTION_LENGTH) {
     throw validationError(`${path}.plainText is invalid`);

@@ -148,6 +148,7 @@ Codex blue (`#1668dc`) is the primary action color; `#4096ff` is reserved for fo
 
 - Text, image, and video generation composers share one compact model picker: a flat list with stable row height, a type icon on each item, provider metadata, and a dedicated keyboard-accessible information button for model descriptions and capability tags. Hovering the selection row itself must not expand or disclose model details.
 - Audio nodes support uploaded audio assets and the `video-to-audio` capability. When connected to a video node, they use the same compact model picker as other generation composers to select a trusted audio-separation Route; without a video input, the generate action remains disabled with a specific reason.
+- Canvas selections appear at the remembered caret inside the Agent rich-text document as muted inline candidate references. They become ordered message atoms only when the next pointer or keyboard focus enters the editor; an intervening interaction elsewhere dismisses them. Agent Chat reuses the node AI Composer's Tiptap editing, `@` picker, IME, Enter/Shift+Enter, cursor, deletion, and preview behavior, but never renders the concentrated reference-preview strip above the text. Confirmed references remain at their original positions in the persisted user message.
 
 ## Settings and detail pages
 

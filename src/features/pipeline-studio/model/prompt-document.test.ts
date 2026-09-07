@@ -21,6 +21,21 @@ describe("prompt document", () => {
     expect(promptDocumentFromPlainText("第一行\n第二行").content.content).toHaveLength(2);
   });
 
+  it("keeps pending canvas selections out of the semantic projection", () => {
+    const document = promptDocumentFromJson({
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [
+          { type: "resourceReference", attrs: { referenceId: "pending:1", sourceType: "canvas-node", sourceId: "node-1", mediaType: "image", label: "候选图", role: "reference", pending: true } },
+          { type: "text", text: "继续输入" },
+        ],
+      }],
+    });
+    expect(document.plainText).toBe("继续输入");
+    expect(promptDocumentResourceAttrs(document)).toEqual([]);
+  });
+
   it("removes every @ occurrence for one resource without touching other resources", () => {
     const document = promptDocumentFromJson({
       type: "doc",

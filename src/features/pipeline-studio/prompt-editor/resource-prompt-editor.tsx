@@ -11,7 +11,7 @@ import {
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { createPortal } from "react-dom";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import type {
   CanvasEdge,
   CanvasMediaType,
@@ -22,9 +22,14 @@ import type {
   PipelineAsset,
 } from "@/contracts/pipeline";
 import { AtSign, MoreHorizontal, X } from "@/components/icons";
-import { Dropdown } from "antd";
+import { Dropdown, Tooltip } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import {
+  canvasNodeReferenceIsAvailable,
+  describeCanvasNodeReference,
+  type CanvasReferenceMode,
+} from "../model/canvas-node-reference";
 import { resourcePickerPosition, type CursorRect } from "../model/floating-panel";
 import { connectedCanvasReferences } from "../model/canvas-connection-policy";
 import { promptDocumentFromJson, promptDocumentResourceAttrs, removePromptResourceReferences } from "../model/prompt-document";
@@ -41,9 +46,17 @@ export interface PromptResourceOption {
   mediaType: CanvasMediaType;
   label: string;
   available: boolean;
+  keywords?: string[];
+}
+
+export interface ResourcePromptEditorHandle {
+  commitPendingReferences: () => void;
+  dismissPendingReferences: () => void;
+  contains: (target: globalThis.Node) => boolean;
 }
 
 const PromptResourceAssetsContext = createContext<PipelineAsset[]>([]);
+const PromptCanvasReferenceModeContext = createContext<CanvasReferenceMode>("content-ready");
 
 const ResourceReference = Node.create({
   name: "resourceReference",
@@ -59,6 +72,8 @@ const ResourceReference = Node.create({
       mediaType: { default: "image" },
       label: { default: "" },
       role: { default: "reference" },
+      // 候选态只参与当前编辑器交互，不渲染进 HTML，也不能进入正式提交上下文。
+      pending: { default: false, rendered: false },
     };
   },
   parseHTML() {
@@ -94,6 +109,11 @@ export function ResourcePromptEditor({
   onResourceInserted,
   onReferenceStateChange,
   onSubmit,
+  showReferencePreviewStrip = true,
+  includeAssets = true,
+  pendingReferences = [],
+  editorHandleRef,
+  canvasReferenceMode = "content-ready",
 }: {
   value: CanvasPromptDocument;
   onChange: (document: CanvasPromptDocument) => void;
@@ -110,6 +130,11 @@ export function ResourcePromptEditor({
   onResourceInserted?: () => void;
   onReferenceStateChange?: (state: { invalidCount: number; unsupportedCount: number }) => void;
   onSubmit: () => void;
+  showReferencePreviewStrip?: boolean;
+  includeAssets?: boolean;
+  pendingReferences?: CanvasResourceReferenceAttrs[];
+  editorHandleRef?: Ref<ResourcePromptEditorHandle>;
+  canvasReferenceMode?: CanvasReferenceMode;
 }) {
   const { t } = useI18n();
   const projectId = useCanvasStore((state) => state.projectId);
@@ -129,34 +154,32 @@ export function ResourcePromptEditor({
   const insertResourceRef = useRef<(option: PromptResourceOption | undefined) => void>(() => undefined);
 
   useEffect(() => {
+    if (!includeAssets) return undefined;
     const controller = new AbortController();
     pipelineStudioApi.getAssets(projectId, controller.signal)
       .then((response) => setAssets(response.assets))
       .catch(() => undefined);
     return () => controller.abort();
-  }, [projectId]);
+  }, [includeAssets, projectId]);
 
   const options = useMemo<PromptResourceOption[]>(() => [
-    ...canvasNodes.flatMap((node) => node.id !== excludedCanvasNodeId && node.data && allowedMediaTypes.includes(node.data.type)
-      ? [{
-          sourceType: "canvas-node" as const,
-          sourceId: node.id,
-          mediaType: node.data.type,
-          label: node.data.name,
-          available: node.data.type === "text"
-            ? Boolean(node.data.textDocument?.plainText.trim() || node.data.content?.some((item) => item.trim()))
-            : Boolean(node.data.artifactIds?.length || node.data.workspaceFile),
-        }]
+    ...canvasNodes.flatMap((node) => {
+      const option = describeCanvasNodeReference(node, canvasReferenceMode);
+      return node.id !== excludedCanvasNodeId && allowedMediaTypes.includes(option.mediaType)
+        ? [{ ...option, keywords: [option.nodeType, option.mediaType] }]
+        : [];
+    }),
+    ...assets.flatMap((asset) => includeAssets && allowedMediaTypes.includes("image")
+      ? [{ sourceType: "asset" as const, sourceId: asset.id, mediaType: "image" as const, label: asset.name, available: Boolean(asset.selectedArtifactId), keywords: ["image"] }]
       : []),
-    ...assets.flatMap((asset) => allowedMediaTypes.includes("image")
-      ? [{ sourceType: "asset" as const, sourceId: asset.id, mediaType: "image" as const, label: asset.name, available: Boolean(asset.selectedArtifactId) }]
-      : []),
-  ], [allowedMediaTypes, assets, canvasNodes, excludedCanvasNodeId]);
+  ], [allowedMediaTypes, assets, canvasNodes, canvasReferenceMode, excludedCanvasNodeId, includeAssets]);
 
   const filteredOptions = useMemo(() => {
     const query = mention?.query.trim().toLocaleLowerCase() ?? "";
     return options
-      .filter((option) => !query || option.label.toLocaleLowerCase().includes(query))
+      .filter((option) => !query
+        || option.label.toLocaleLowerCase().includes(query)
+        || option.keywords?.some((keyword) => keyword.toLocaleLowerCase().includes(query)))
       .sort((left, right) => Number(right.available) - Number(left.available))
       .slice(0, 12);
   }, [mention?.query, options]);
@@ -190,8 +213,10 @@ export function ResourcePromptEditor({
     ...promptReferences,
   ], [connectedReferences, promptReferences]);
   const invalidReferenceCount = useMemo(() => allReferences.filter((reference) => (
-    !resolvePromptResourcePreview(reference, canvasNodes, assets).available
-  )).length, [allReferences, assets, canvasNodes]);
+    reference.sourceType === "canvas-node" && canvasReferenceMode === "all-nodes"
+      ? !canvasNodeReferenceIsAvailable(canvasNodes.find((node) => node.id === reference.sourceId), canvasReferenceMode)
+      : !resolvePromptResourcePreview(reference, canvasNodes, assets).available
+  )).length, [allReferences, assets, canvasNodes, canvasReferenceMode]);
   const unsupportedReferenceCount = useMemo(() => allReferences.filter((reference) => (
     !allowedMediaTypes.includes(reference.mediaType)
   )).length, [allReferences, allowedMediaTypes]);
@@ -288,6 +313,55 @@ export function ResourcePromptEditor({
   }, [autoFocus, editor]);
 
   useEffect(() => {
+    if (!editor) return;
+    let cancelled = false;
+    // Tiptap 为 atom 创建 React NodeView 时会调用 flushSync；脱离 React effect 再派发事务，避免嵌套 flushSync。
+    queueMicrotask(() => {
+      if (cancelled || editor.isDestroyed) return;
+      const existing = pendingResourceRanges(editor);
+      const existingIds = existing.map((item) => item.reference.sourceId);
+      const nextIds = pendingReferences.map((item) => item.sourceId);
+      if (existingIds.length === nextIds.length && existingIds.every((id, index) => id === nextIds[index])) return;
+      if (existing.length) {
+        const transaction = editor.state.tr;
+        for (const range of [...existing].reverse()) transaction.delete(range.from, range.to);
+        editor.view.dispatch(transaction);
+      }
+      if (!pendingReferences.length) return;
+      const position = Math.min(editor.state.selection.from, editor.state.doc.content.size);
+      editor.commands.insertContentAt(position, pendingReferences.map((reference) => ({
+        type: "resourceReference",
+        attrs: { ...reference, pending: true },
+      })));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, pendingReferences]);
+
+  useImperativeHandle(editorHandleRef, () => ({
+    commitPendingReferences: () => {
+      if (!editor) return;
+      const ranges = pendingResourceRanges(editor);
+      if (!ranges.length) return;
+      const transaction = editor.state.tr;
+      for (const range of ranges) {
+        transaction.setNodeMarkup(range.from, undefined, { ...range.reference, pending: false });
+      }
+      editor.view.dispatch(transaction);
+    },
+    dismissPendingReferences: () => {
+      if (!editor) return;
+      const ranges = pendingResourceRanges(editor);
+      if (!ranges.length) return;
+      const transaction = editor.state.tr;
+      for (const range of [...ranges].reverse()) transaction.delete(range.from, range.to);
+      editor.view.dispatch(transaction);
+    },
+    contains: (target) => Boolean(editor?.view.dom.contains(target)),
+  }), [editor]);
+
+  useEffect(() => {
     onReferenceStateChange?.({
       invalidCount: invalidReferenceCount,
       unsupportedCount: unsupportedReferenceCount,
@@ -378,8 +452,9 @@ export function ResourcePromptEditor({
 
   return (
     <PromptResourceAssetsContext.Provider value={assets}>
+    <PromptCanvasReferenceModeContext.Provider value={canvasReferenceMode}>
     <div className="pipeline-prompt-editor relative flex min-h-0 flex-1 flex-col overflow-hidden" onPointerDown={(event) => event.stopPropagation()}>
-      {referencedResources.length ? (
+      {showReferencePreviewStrip && referencedResources.length ? (
         <div
           role="list"
           aria-label={t.pipeline.promptReferencesPreview}
@@ -530,6 +605,7 @@ export function ResourcePromptEditor({
         </div>
       ), portalTarget) : null}
     </div>
+    </PromptCanvasReferenceModeContext.Provider>
     </PromptResourceAssetsContext.Provider>
   );
 }
@@ -538,30 +614,69 @@ function ResourceReferenceView({ node }: ReactNodeViewProps) {
   const { t } = useI18n();
   const canvasNodes = useCanvasStore((state) => state.nodes);
   const assets = useContext(PromptResourceAssetsContext);
+  const canvasReferenceMode = useContext(PromptCanvasReferenceModeContext);
   const reference = node.attrs as CanvasResourceReferenceAttrs;
   const preview = resolvePromptResourcePreview(reference, canvasNodes, assets);
+  const sourceNode = reference.sourceType === "canvas-node"
+    ? canvasNodes.find((candidate) => candidate.id === reference.sourceId)
+    : undefined;
+  const textPreview = sourceNode?.data?.type === "text"
+    ? sourceNode.data.textDocument?.plainText ?? sourceNode.data.content?.join("\n")
+    : undefined;
+  const available = reference.sourceType === "canvas-node" && canvasReferenceMode === "all-nodes"
+    ? canvasNodeReferenceIsAvailable(sourceNode, canvasReferenceMode)
+    : preview.available;
+  const thumbnail = (
+    <ResourcePreviewThumbnail
+      mediaType={reference.mediaType}
+      label={reference.label}
+      url={preview.url}
+      poster={preview.poster}
+      size="inline"
+    />
+  );
 
   return (
     <NodeViewWrapper
       as="span"
       contentEditable={false}
-      title={preview.available ? reference.label : t.pipeline.promptReferenceUnavailable}
-      data-invalid={!preview.available || undefined}
-      className={`mx-0.5 inline-flex items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1.5 align-middle font-medium ${preview.available
-        ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]"
+      title={available ? reference.label : t.pipeline.promptReferenceUnavailable}
+      data-invalid={!reference.pending && !available || undefined}
+      className={`mx-0.5 inline-flex max-w-44 items-center gap-1 rounded-md py-0.5 pl-0.5 pr-1.5 align-middle font-medium ${reference.pending
+        ? "border border-dashed border-[var(--pl-border)] bg-[var(--pl-surface-subtle)] text-[var(--pl-text-muted)] opacity-55"
+        : available
+          ? "bg-[var(--pl-accent-soft)] text-[var(--pl-accent)]"
         : "bg-[color-mix(in_srgb,var(--pl-error)_10%,transparent)] text-[var(--pl-danger)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--pl-error)_30%,transparent)]"}`}
       data-resource-reference=""
     >
-      <ResourcePreviewThumbnail
-        mediaType={reference.mediaType}
-        label={reference.label}
-        url={preview.url}
-        poster={preview.poster}
-        size="inline"
-      />
-      <span>@{reference.label}</span>
+      {(reference.mediaType === "image" || reference.mediaType === "video") && preview.url ? (
+        <ResourcePreviewPopover
+          mediaType={reference.mediaType}
+          label={reference.label}
+          url={preview.url}
+          poster={preview.poster}
+          detail={resourceRoleLabel(reference.role, t.pipeline)}
+          ariaLabel={t.pipeline.promptReferencePreview.replace("{label}", reference.label)}
+        >
+          {thumbnail}
+        </ResourcePreviewPopover>
+      ) : <Tooltip title={textPreview || reference.label}>{thumbnail}</Tooltip>}
+      <span className="truncate">@{reference.label}</span>
     </NodeViewWrapper>
   );
+}
+
+function pendingResourceRanges(editor: NonNullable<ReturnType<typeof useEditor>>) {
+  const ranges: Array<{ from: number; to: number; reference: CanvasResourceReferenceAttrs }> = [];
+  editor.state.doc.descendants((node, position) => {
+    if (node.type.name !== "resourceReference" || !node.attrs.pending) return;
+    ranges.push({
+      from: position,
+      to: position + node.nodeSize,
+      reference: node.attrs as CanvasResourceReferenceAttrs,
+    });
+  });
+  return ranges;
 }
 
 function resourceRoleLabel(

@@ -10,7 +10,7 @@ describe("CanvasAgentContextAssembler", () => {
     const repository = repositoryStub([selected, related]);
     const context = await new CanvasAgentContextAssembler(repository).assemble("project-1", {
       canvasRevision: 3,
-      selectedNodeIds: [selected.id],
+      referencedNodeIds: [selected.id],
       mentionedNodeIds: [],
     });
 
@@ -27,7 +27,7 @@ describe("CanvasAgentContextAssembler", () => {
     const assembler = new CanvasAgentContextAssembler(repositoryStub([]));
     await expect(assembler.assemble("project-1", {
       canvasRevision: 4,
-      selectedNodeIds: ["other-project-node"],
+      referencedNodeIds: ["other-project-node"],
       mentionedNodeIds: [],
     })).rejects.toMatchObject({ code: "PIPELINE_CANVAS_NODE_NOT_FOUND", status: 404 });
   });
@@ -62,7 +62,7 @@ describe("CanvasAgentContextAssembler", () => {
     }]);
 
     const context = await new CanvasAgentContextAssembler(repository).assemble("project-1", {
-      canvasRevision: 4, selectedNodeIds: [selected.id], mentionedNodeIds: [],
+      canvasRevision: 4, referencedNodeIds: [selected.id], mentionedNodeIds: [],
     });
     expect(context).toContain('"value":"保持红色"');
     expect(context).toContain('"stale":true');
