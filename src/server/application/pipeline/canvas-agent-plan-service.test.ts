@@ -201,6 +201,63 @@ describe("CanvasAgentPlanService", () => {
     ]);
   });
 
+  it("wraps large batches and avoids real rectangles near the referenced node", async () => {
+    const selected = { ...node("selected", "image", "v1"), positionX: 0, positionY: 0, width: 320, height: 350 };
+    const blocker = { ...node("blocker", "text", "v1"), positionX: 440, positionY: 0, width: 350, height: 350 };
+    const state = repositoryState([selected, blocker]);
+    const canvas = {
+      applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
+    const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
+    const plan = await service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "创建镜头批次",
+      operations: [
+        ...Array.from({ length: 12 }, (_, index) => ({
+          type: "node.create" as const,
+          tempId: `shot-${index + 1}`,
+          mediaType: "video" as const,
+          name: `镜头 ${index + 1}`,
+          prompt: `镜头 ${index + 1}`,
+          routeId: "video-route",
+        })),
+        { type: "edge.create", source: selected.id, target: "shot-1", role: "first-frame" as const },
+      ],
+    });
+
+    await service.apply("project-1", "session-1", plan.id);
+
+    const created = vi.mocked(canvas.applyMutationBatch).mock.calls[0]![1].mutations
+      .flatMap((mutation) => mutation.type === "node.create" ? [mutation.node] : []);
+    expect(new Set(created.map((candidate) => candidate.positionX)).size).toBeLessThanOrEqual(5);
+    expect(new Set(created.map((candidate) => candidate.positionY)).size).toBeGreaterThanOrEqual(3);
+    expect(created[0]).toMatchObject({ positionX: 910, positionY: 0 });
+  });
+
+  it("does not apply any mutations when saved configuration becomes invalid", async () => {
+    const state = repositoryState();
+    let valid = true;
+    const canvas = {
+      applyMutationBatch: vi.fn(),
+      validateGenerationNodeConfiguration: vi.fn(async () => {
+        if (!valid) throw new Error("Route was disabled");
+      }),
+    } as unknown as CanvasStudioService;
+    const service = new CanvasAgentPlanService(state.repository, canvas, canvasPolicy());
+    const plan = await service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "创建图片",
+      operations: [{
+        type: "node.create", tempId: "image", mediaType: "image", name: "图片",
+        prompt: "蓝色产品图", routeId: "image-route",
+      }],
+    });
+
+    valid = false;
+    await expect(service.apply("project-1", "session-1", plan.id)).rejects.toThrow("Route was disabled");
+    expect(canvas.applyMutationBatch).not.toHaveBeenCalled();
+    expect(state.nodes).toHaveLength(0);
+  });
+
   it("rejects a first-frame role unless it connects an image to a video node", async () => {
     const image = node("image-1", "image", "v1");
     const text = node("text-1", "text", "v1");

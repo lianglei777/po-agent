@@ -83,6 +83,7 @@ describe("PipelineAgentConversationService", () => {
     const repository = {
       getProjectRoot: vi.fn(async () => "D:\\project"),
       getAgentConversation: vi.fn(async () => conversation),
+      listCanvasNodes: vi.fn(async () => [{ id: "node-1" }, { id: "node-2" }]),
     } as unknown as PipelineRepository;
     const promptLifecycle: { onSettled?: () => void } = {};
     const agent = {
@@ -119,6 +120,11 @@ describe("PipelineAgentConversationService", () => {
       selectedNodeIds: ["node-1"],
       mentionedNodeIds: ["node-2"],
     })).resolves.toEqual({ accepted: true, intent });
+
+    expect(intentResolver.resolve).toHaveBeenCalledWith(expect.objectContaining({
+      availableNodeIds: ["node-1", "node-2"],
+      focusNodeIds: ["node-1", "node-2"],
+    }));
 
     expect(agent.execute).toHaveBeenCalledWith(
       "session-1",

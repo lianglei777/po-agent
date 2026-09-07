@@ -127,6 +127,29 @@ describe("CanvasAgentIntentResolver", () => {
     expect(chat).toHaveBeenCalledTimes(2);
   });
 
+  it("limits semantic scope to real project nodes and retains explicit focus", async () => {
+    const chat = vi.fn().mockResolvedValue(JSON.stringify({
+      ...decision("canvas"),
+      scope: { projectWide: false, nodeIds: ["node-by-name", "invented-node"] },
+    }));
+    const resolver = new CanvasAgentIntentResolver(
+      { chat } as unknown as LlmPort,
+      { getContext: vi.fn(async () => null) } as unknown as SessionRepository,
+    );
+
+    await expect(resolver.resolve({
+      sessionId: "session-1",
+      message: "调整第三镜",
+      model: null,
+      allowAgentGeneration: false,
+      canvasContext: "context",
+      availableNodeIds: ["node-selected", "node-by-name", "node-other"],
+      focusNodeIds: ["node-selected"],
+    })).resolves.toMatchObject({
+      scope: { projectWide: false, nodeIds: ["node-selected", "node-by-name"] },
+    });
+  });
+
   it("continues an explicitly offered canvas step when the user replies with a permissive choice", async () => {
     const chat = vi.fn()
       .mockResolvedValueOnce(JSON.stringify({

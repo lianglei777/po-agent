@@ -19,6 +19,8 @@ describe("CanvasAgentContextAssembler", () => {
     expect(context).toContain('"name":"剧本"');
     expect(context).toContain('"name":"分镜 1"');
     expect(context).toContain('"sourceNodeId":"selected"');
+    expect(context).toContain('"nodeIndex"');
+    expect(context).toContain('"id":"related"');
   });
 
   it("rejects deleted or cross-project node identifiers", async () => {
@@ -32,7 +34,17 @@ describe("CanvasAgentContextAssembler", () => {
 
   it("includes confirmed continuity and marks stale asset analysis", async () => {
     const selected = { ...node("image-1", "产品图", ""), type: "image" as const,
-      data: { type: "image" as const, name: "产品图", action: "image_generate" }, updatedAt: "node-v2" };
+      data: {
+        type: "image" as const,
+        name: "产品图",
+        action: "image_generate",
+        params: {
+          prompt: "红色产品商业摄影",
+          routeId: "image-route",
+          settings: { resolution: "2k" },
+          imageList: [{ nodeId: "reference-1", mediaType: "image" as const, role: "reference" as const, order: 0, label: "产品参考" }],
+        },
+      }, updatedAt: "node-v2" };
     const repository = repositoryStub([selected]);
     vi.mocked(repository.getCanvasContinuityBible).mockResolvedValue({
       projectId: "project-1", revision: 2, updatedAt: "now", entries: [{
@@ -55,6 +67,10 @@ describe("CanvasAgentContextAssembler", () => {
     expect(context).toContain('"value":"保持红色"');
     expect(context).toContain('"stale":true');
     expect(context).toContain('"summary":"红色产品图"');
+    expect(context).toContain('"prompt":"红色产品商业摄影"');
+    expect(context).toContain('"routeId":"image-route"');
+    expect(context).toContain('"settings":{"resolution":"2k"}');
+    expect(context).toContain('"nodeId":"reference-1"');
   });
 });
 

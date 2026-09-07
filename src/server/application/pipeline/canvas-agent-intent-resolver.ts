@@ -64,6 +64,8 @@ export class CanvasAgentIntentResolver {
     model: { provider: string; modelId: string } | null;
     allowAgentGeneration: boolean;
     canvasContext: string;
+    availableNodeIds?: string[];
+    focusNodeIds?: string[];
   }): Promise<CanvasAgentTurnIntent> {
     const context = await this.sessions.getContext(input.sessionId);
     const payload = JSON.stringify({
@@ -98,7 +100,11 @@ export class CanvasAgentIntentResolver {
       context?.messages ?? [],
       options,
     );
-    return resolvePolicy(resolvedDecision, input.message, input.allowAgentGeneration);
+    return resolvePolicy(
+      normalizeDecisionScope(resolvedDecision, input.availableNodeIds, input.focusNodeIds),
+      input.message,
+      input.allowAgentGeneration,
+    );
   }
 
   /**
@@ -260,6 +266,20 @@ function parseScope(value: unknown): ClassifierDecision["scope"] | null {
   if (!isRecord(value) || typeof value.projectWide !== "boolean" || !Array.isArray(value.nodeIds)) return null;
   if (value.nodeIds.some((nodeId) => typeof nodeId !== "string" || !nodeId.trim() || nodeId.length > 128)) return null;
   return { projectWide: value.projectWide, nodeIds: [...new Set(value.nodeIds.map((nodeId) => nodeId.trim()))] };
+}
+
+function normalizeDecisionScope(
+  decision: ClassifierDecision,
+  availableNodeIds: string[] | undefined,
+  focusNodeIds: string[] | undefined,
+): ClassifierDecision {
+  if (!availableNodeIds) return decision;
+  if (decision.scope.projectWide) return { ...decision, scope: { projectWide: true, nodeIds: [] } };
+  const available = new Set(availableNodeIds);
+  // 模型负责语义选取，application 只允许当前项目中的真实节点，并保留用户显式选择或 @ 引用的节点。
+  const nodeIds = [...new Set([...(focusNodeIds ?? []), ...decision.scope.nodeIds])]
+    .filter((nodeId) => available.has(nodeId));
+  return { ...decision, scope: { projectWide: false, nodeIds } };
 }
 
 function messageText(message: AgentMessage): string {

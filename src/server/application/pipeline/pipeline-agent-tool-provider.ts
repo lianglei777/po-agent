@@ -275,6 +275,10 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       name: "canvas_prepare_generation",
       label: "预检画布生成",
       description: "解析待生成节点及缺失或过期的上游依赖，并校验 Route、参数和素材绑定。此操作不会创建 Generation Run，也不会产生内容生成费用。完成画布编排后应先调用此工具。",
+      promptGuidelines: [
+        "预检失败时读取当前节点配置和可用 Route，只修复本轮 scope 内缺失或冲突的 prompt、routeId、settings 和引用，然后重新预检。",
+        "不要让用户逐项排查技术参数；只有缺少用户才能提供的源素材时，才说明具体缺失项。",
+      ],
       parameters: generationNodeParameters,
       execute: async ({ input }) => {
         this.turnPolicies.requireStage(sessionId, "canvas");
@@ -629,7 +633,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     return {
       name: "pipeline_get_state",
       label: "获取进度",
-      description: "读取当前 pipeline 的阶段进度、资产数量、分镜数量及画布节点 ID。当用户询问项目状态，或在应用计划后需要对具体节点预检或生成时调用。",
+      description: "读取当前 pipeline 的阶段进度，以及画布节点的 Route、Prompt、参数、引用、运行状态和失败原因。当用户询问项目状态，或需要检查并修复具体节点配置时调用。",
       parameters: {
         type: "object",
         properties: {},
@@ -652,6 +656,20 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
             nodeId: node.id,
             name: node.data?.name ?? node.id,
             type: node.type,
+            routeId: node.data?.params?.routeId,
+            prompt: truncateToolText(node.data?.params?.promptDocument?.plainText ?? node.data?.params?.prompt, 2_000),
+            settings: node.data?.params?.settings,
+            references: node.data?.params ? [
+              ...(node.data.params.textList ?? []),
+              ...(node.data.params.imageList ?? []),
+              ...(node.data.params.videoList ?? []),
+              ...(node.data.params.audioList ?? []),
+            ].map((reference) => ({
+              nodeId: reference.nodeId,
+              mediaType: reference.mediaType,
+              role: reference.role,
+              order: reference.order,
+            })) : [],
             status,
             runId: latest?.run.id ?? node.data?.taskInfo?.runId,
             errorCode: latest?.run.errorCode,
@@ -754,6 +772,11 @@ function routeOutputMediaType(capability: string): "image" | "video" | "audio" {
   if (capability.endsWith("-image")) return "image";
   if (capability === "video-to-audio") return "audio";
   return "video";
+}
+
+function truncateToolText(value: string | undefined, maxLength: number): string | undefined {
+  if (!value) return undefined;
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength)}…`;
 }
 
 function downstreamNodeIds(sourceNodeId: string, edges: Array<{ sourceNodeId: string; targetNodeId: string }>): string[] {

@@ -3024,7 +3024,7 @@ interface PipelineAgentTurnRequest {
 
 客户端只提交 revision 和节点指针。服务端重新读取项目当前 revision、节点、连线与阶段状态，校验节点归属，并把选中节点、`@` 引用及其一跳上下游组装为受信任上下文。客户端 revision 落后时使用最新画布并在上下文中标记；超前时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。已删除或跨项目节点返回 `404 PIPELINE_CANVAS_NODE_NOT_FOUND`。
 
-该上下文仅用于理解当前请求，不直接授予画布修改权限。服务端结合当前消息与最近对话解析本轮目标、阶段和修改范围。`requestedStage` 表示用户要求，`effectiveStage` 表示本轮实际可执行到的阶段；用户要求生成、重新生成或渲染时，Canvas Agent 会把任务解释为把相应节点准备到可手动生成的 `canvas` 阶段。
+该上下文仅用于理解当前请求，不直接授予画布修改权限。除了选中、`@` 引用和一跳关联节点的详细配置，上下文还包含最多 120 个画布节点的轻量索引，供语义分类器把“第 3 镜”或节点名称解析为稳定 ID；超出索引的节点必须由客户端选中或 `@` 引用。服务端结合当前消息与最近对话解析本轮目标、阶段和修改范围。`requestedStage` 表示用户要求，`effectiveStage` 表示本轮实际可执行到的阶段；用户要求生成、重新生成或渲染时，Canvas Agent 会把任务解释为把相应节点准备到可手动生成的 `canvas` 阶段。
 
 成功响应：
 
@@ -3047,7 +3047,7 @@ interface PipelineAgentTurnRequest {
 }
 ```
 
-当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`，新建节点及新建节点之间的引用仍可在本轮计划内使用。
+当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。application 会把模型给出的 ID 与当前项目真实节点求交，并始终保留用户本轮明确选中或 `@` 引用的节点。越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`，新建节点及新建节点之间的引用仍可在本轮计划内使用。
 
 画布写入通过四个项目作用域工具完成：
 
@@ -3057,7 +3057,7 @@ interface PipelineAgentTurnRequest {
 - `canvas_apply_plan`：将临时节点引用解析为稳定 ID，经现有连接规则校验后，以单个 `CanvasMutationBatch` 原子提交。
 - `canvas_undo_action`：在画布没有后续修改时撤销整组 Agent mutations；存在后续修改时返回 `409 PIPELINE_AGENT_ACTION_NOT_UNDOABLE`，避免覆盖用户工作。
 
-计划保存 `baseRevision` 和所引用节点的 `updatedAt`。当前 revision 变化但引用节点未变化时允许 rebase；任一引用节点变化时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。工具中的项目 ID 和 Session ID 均由服务端作用域绑定，模型不能填写。以上工具只修改普通画布节点和连线，不创建 Generation Run。
+计划保存 `baseRevision` 和所引用节点的 `updatedAt`。当前 revision 变化但引用节点未变化时允许 rebase；任一引用节点变化时返回 `409 PIPELINE_CANVAS_REVISION_CONFLICT`。保存和应用前会完成全部范围、目标、连线与生成配置校验；失败时不会提交任何画布 mutation。新节点优先放在本轮引用节点右侧，以真实节点矩形和 48px 安全间距避让当前画布及同批节点；单批最多排 5 列，超出后自动换行。工具中的项目 ID 和 Session ID 均由服务端作用域绑定，模型不能填写。以上工具只修改普通画布节点和连线，不创建 Generation Run。
 
 素材理解和连续性通过两个项目作用域工具完成：
 

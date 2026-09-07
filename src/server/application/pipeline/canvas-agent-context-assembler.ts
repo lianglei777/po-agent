@@ -7,6 +7,7 @@ const MAX_RELATED_NODES = 40;
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_ANALYZED_FOCUS_NODES = 12;
 const MAX_CONTINUITY_ENTRIES = 40;
+const MAX_NODE_INDEX = 120;
 
 export interface CanvasAgentContextInput {
   canvasRevision: number;
@@ -107,6 +108,16 @@ export class CanvasAgentContextAssembler {
           includedNodeIds: analyzedNodeIds,
           omittedFocusNodeCount: Math.max(0, focusIds.length - analyzedNodeIds.length),
         },
+        nodeIndex: {
+          nodes: nodes.slice(0, MAX_NODE_INDEX).map((node) => ({
+            id: node.id,
+            type: node.type,
+            name: truncate(node.data?.name ?? node.entityId, 120),
+            groupId: node.data?.group?.id,
+            groupName: node.data?.group?.name ? truncate(node.data.group.name, 120) : undefined,
+          })),
+          omittedCount: Math.max(0, nodes.length - MAX_NODE_INDEX),
+        },
         nodes: [...includedIds].map((nodeId) => {
           const node = nodeById.get(nodeId)!;
           const analysis = latestAnalysisByNode.get(nodeId);
@@ -140,14 +151,29 @@ export class CanvasAgentContextAssembler {
 function summarizeNode(node: CanvasNode) {
   const data = node.data;
   const plainText = data?.textDocument?.plainText ?? data?.content?.join("\n");
+  const prompt = data?.params?.promptDocument?.plainText ?? data?.params?.prompt;
   return {
     id: node.id,
     type: node.type,
     name: data?.name ?? node.entityId,
     action: data?.action,
     text: plainText ? truncate(plainText, MAX_TEXT_LENGTH) : undefined,
+    prompt: prompt ? truncate(prompt, MAX_TEXT_LENGTH) : undefined,
     routeId: data?.params?.routeId,
     model: data?.params?.model,
+    settings: data?.params?.settings,
+    references: data?.params ? [
+      ...(data.params.textList ?? []),
+      ...(data.params.imageList ?? []),
+      ...(data.params.videoList ?? []),
+      ...(data.params.audioList ?? []),
+    ].map((reference) => ({
+      nodeId: reference.nodeId,
+      mediaType: reference.mediaType,
+      role: reference.role,
+      order: reference.order,
+      label: reference.label ? truncate(reference.label, 120) : undefined,
+    })) : [],
     task: data?.taskInfo,
     group: data?.group,
     media: data?.workspaceFile

@@ -21,7 +21,9 @@ const ROW_GAP = 80;
 // 使用最大节点尺寸作为网格单元，避免不同媒体类型在同一行或列相互遮挡。
 const LAYOUT_CELL_WIDTH = 350 + COLUMN_GAP;
 const LAYOUT_CELL_HEIGHT = 350 + ROW_GAP;
-const MAX_LAYOUT_COLUMN = 20;
+const MAX_BATCH_COLUMNS = 5;
+const MAX_LAYOUT_SCAN_CELLS = 600;
+const LAYOUT_CLEARANCE = 48;
 
 export class CanvasAgentPlanService {
   constructor(
@@ -309,8 +311,8 @@ function compilePlan(
   const tempIds = new Map<string, string>();
   const forward: CanvasMutation[] = [];
   const inverse: CanvasMutation[] = [];
-  const anchor = layoutAnchor(currentNodes, viewport);
-  const positions = allocateNodePositions(plan.operations);
+  const anchor = layoutAnchor(currentNodes, plan.operations, viewport);
+  const positions = allocateNodePositions(plan.operations, currentNodes, anchor);
 
   for (const operation of plan.operations) {
     if (operation.type === "node.create") {
@@ -324,8 +326,8 @@ function compilePlan(
         projectId: plan.projectId,
         type: operation.mediaType,
         entityId: randomUUID(),
-        positionX: anchor.x + position.column * LAYOUT_CELL_WIDTH,
-        positionY: anchor.y + position.row * LAYOUT_CELL_HEIGHT,
+        positionX: position.x,
+        positionY: position.y,
         width: size.width,
         height: size.height,
         data,
@@ -364,28 +366,58 @@ function compilePlan(
  * Agent 提供的行列只是布局意图，不能成为节点重叠的前提。缺少列、重复单元格或不同
  * 节点尺寸混排时，服务端顺序分配空网格；这样计划仍保留语义顺序但不会遮挡既有新节点。
  */
-function allocateNodePositions(operations: CanvasAgentPlanOperation[]) {
-  const occupied = new Set<string>();
-  const positions = new Map<Extract<CanvasAgentPlanOperation, { type: "node.create" }>, { column: number; row: number }>();
+function allocateNodePositions(
+  operations: CanvasAgentPlanOperation[],
+  currentNodes: CanvasNode[],
+  anchor: { x: number; y: number },
+) {
+  const occupied = currentNodes.map((node) => ({
+    x: node.positionX,
+    y: node.positionY,
+    width: node.width ?? layoutNodeSize(node.type).width,
+    height: node.height ?? layoutNodeSize(node.type).height,
+  }));
+  const positions = new Map<Extract<CanvasAgentPlanOperation, { type: "node.create" }>, { x: number; y: number }>();
+  let implicitIndex = 0;
   for (const operation of operations) {
     if (operation.type !== "node.create") continue;
-    let column = operation.column ?? 0;
-    let row = operation.row ?? 0;
-    while (occupied.has(layoutCellKey(column, row))) {
-      column += 1;
-      if (column > MAX_LAYOUT_COLUMN) {
-        column = 0;
-        row += 1;
-      }
+    const requestedColumn = operation.column ?? implicitIndex % MAX_BATCH_COLUMNS;
+    const requestedRow = operation.row ?? Math.floor(implicitIndex / MAX_BATCH_COLUMNS);
+    const normalizedColumn = requestedColumn % MAX_BATCH_COLUMNS;
+    const normalizedRow = requestedRow + Math.floor(requestedColumn / MAX_BATCH_COLUMNS);
+    const startIndex = normalizedRow * MAX_BATCH_COLUMNS + normalizedColumn;
+    const size = defaultSize(operation.mediaType);
+    let allocated = false;
+    for (let offset = 0; offset < MAX_LAYOUT_SCAN_CELLS; offset += 1) {
+      const index = startIndex + offset;
+      const column = index % MAX_BATCH_COLUMNS;
+      const row = Math.floor(index / MAX_BATCH_COLUMNS);
+      const candidate = {
+        x: anchor.x + column * LAYOUT_CELL_WIDTH,
+        y: anchor.y + row * LAYOUT_CELL_HEIGHT,
+        width: size.width,
+        height: size.height,
+      };
+      if (occupied.some((rectangle) => layoutRectanglesOverlap(candidate, rectangle))) continue;
+      occupied.push(candidate);
+      positions.set(operation, { x: candidate.x, y: candidate.y });
+      allocated = true;
+      break;
     }
-    occupied.add(layoutCellKey(column, row));
-    positions.set(operation, { column, row });
+    if (!allocated) invalid("Canvas Agent could not find a non-overlapping position for every new node");
+    implicitIndex += 1;
   }
   return positions;
 }
 
-function layoutCellKey(column: number, row: number) {
-  return `${column}:${row}`;
+function layoutRectanglesOverlap(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number },
+) {
+  return left.x < right.x + right.width + LAYOUT_CLEARANCE
+    && left.x + left.width + LAYOUT_CLEARANCE > right.x
+    && left.y < right.y + right.height + LAYOUT_CLEARANCE
+    && left.y + left.height + LAYOUT_CLEARANCE > right.y;
 }
 
 function normalizeOperations(operations: CanvasAgentPlanOperation[]): CanvasAgentPlanOperation[] {
@@ -502,9 +534,32 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function layoutAnchor(nodes: CanvasNode[], viewport: { x: number; y: number; zoom: number }) {
-  if (!nodes.length) return { x: Math.round(-viewport.x / viewport.zoom + 80), y: Math.round(-viewport.y / viewport.zoom + 80) };
-  return { x: Math.max(...nodes.map((node) => node.positionX + (node.width ?? 320))) + COLUMN_GAP, y: Math.min(...nodes.map((node) => node.positionY)) };
+function layoutAnchor(
+  nodes: CanvasNode[],
+  operations: CanvasAgentPlanOperation[],
+  viewport: { x: number; y: number; zoom: number },
+) {
+  if (!nodes.length) {
+    return { x: Math.round(-viewport.x / viewport.zoom + 80), y: Math.round(-viewport.y / viewport.zoom + 80) };
+  }
+  const temporary = new Set(operations.flatMap((operation) => operation.type === "node.create" ? [operation.tempId] : []));
+  const referencedIds = new Set(operations.flatMap((operation) => {
+    if (operation.type === "node.update") return [operation.nodeId];
+    if (operation.type === "edge.create") {
+      return [operation.source, operation.target].filter((nodeId) => !temporary.has(nodeId));
+    }
+    return [];
+  }));
+  const localNodes = nodes.filter((node) => referencedIds.has(node.id));
+  const basis = localNodes.length ? localNodes : nodes;
+  return {
+    x: Math.max(...basis.map((node) => node.positionX + (node.width ?? layoutNodeSize(node.type).width))) + COLUMN_GAP,
+    y: Math.min(...basis.map((node) => node.positionY)),
+  };
+}
+
+function layoutNodeSize(type: CanvasNode["type"]) {
+  return isMediaType(type) ? defaultSize(type) : { width: 320, height: 220 };
 }
 
 function bounded(value: unknown, field: string, max: number): string {

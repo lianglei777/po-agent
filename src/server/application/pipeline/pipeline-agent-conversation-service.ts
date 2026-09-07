@@ -38,11 +38,15 @@ export class PipelineAgentConversationService {
     input: PipelineAgentTurnRequest,
   ): Promise<PipelineAgentTurnResponse> {
     const conversation = await this.getOrCreate(projectId);
-    const canvasContext = await this.contextAssembler.assemble(projectId, {
-      canvasRevision: input.canvasRevision,
-      selectedNodeIds: input.selectedNodeIds,
-      mentionedNodeIds: input.mentionedNodeIds ?? [],
-    });
+    const mentionedNodeIds = input.mentionedNodeIds ?? [];
+    const [canvasContext, canvasNodes] = await Promise.all([
+      this.contextAssembler.assemble(projectId, {
+        canvasRevision: input.canvasRevision,
+        selectedNodeIds: input.selectedNodeIds,
+        mentionedNodeIds,
+      }),
+      this.repository.listCanvasNodes(projectId),
+    ]);
     const intent = await this.intentResolver.resolve({
       sessionId: conversation.sessionId,
       message: input.message,
@@ -51,6 +55,8 @@ export class PipelineAgentConversationService {
         : null,
       allowAgentGeneration: conversation.allowAgentGeneration,
       canvasContext,
+      availableNodeIds: canvasNodes.map((node) => node.id),
+      focusNodeIds: [...new Set([...input.selectedNodeIds, ...mentionedNodeIds])],
     });
     this.turnPolicies.begin(conversation.sessionId, input.turnId, intent, input.message);
     try {
