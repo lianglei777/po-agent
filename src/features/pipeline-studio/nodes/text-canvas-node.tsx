@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
+import { Modal } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
 import { FileText } from "@/components/icons";
@@ -35,6 +36,7 @@ export function TextCanvasNode({
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerGenerationResult = useCanvasStore((state) => state.insertServerGenerationResult);
   const composerActive = useCanvasStore((state) => state.activeComposerNodeId === id);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const waitingForSave = useCanvasStore((state) => state.pendingMutations.some((mutation) => (
     mutation.type === "node.create" ? mutation.node.id === id :
       mutation.type === "node.update" && mutation.nodeId === id && mutation.patch.data !== undefined
@@ -65,6 +67,11 @@ export function TextCanvasNode({
   const beginEditing = () => {
     startEditingNode(id);
     focusNode();
+  };
+
+  const exitFullscreen = () => {
+    setFullscreenOpen(false);
+    stopEditingNode(id);
   };
 
   return (
@@ -120,7 +127,7 @@ export function TextCanvasNode({
           if (!editing) beginEditing();
         }}
       >
-        {editing && textDocument ? (
+        {editing && textDocument && !fullscreenOpen ? (
           <TextNodeEditor
             document={textDocument}
             placeholder={t.pipeline.nodeTextPlaceholder}
@@ -136,6 +143,8 @@ export function TextCanvasNode({
               orderedList: t.pipeline.richTextOrderedList,
               undo: t.pipeline.richTextUndo,
               redo: t.pipeline.richTextRedo,
+              expand: t.pipeline.nodeTextFullscreen,
+              collapse: t.pipeline.nodeTextExitFullscreen,
             }}
             onChange={(nextDocument) => updateNodeData(id, {
               ...canvas,
@@ -143,6 +152,7 @@ export function TextCanvasNode({
               textDocument: nextDocument,
             })}
             onExit={() => stopEditingNode(id)}
+            onToggleFullscreen={() => setFullscreenOpen(true)}
           />
         ) : textDocument ? (
           <div className="h-full overflow-y-auto p-5 text-sm leading-6 text-[var(--pl-text-secondary)]">
@@ -163,6 +173,52 @@ export function TextCanvasNode({
           }}
         />
       ) : null}
+
+      <Modal
+        open={fullscreenOpen}
+        title={canvas.name}
+        footer={null}
+        width="calc(100vw - 32px)"
+        style={{ top: 16, maxWidth: "none" }}
+        styles={{ body: { height: "calc(100dvh - 132px)", minHeight: 0, padding: "0 24px 24px" } }}
+        mask={{ closable: false }}
+        keyboard={false}
+        closable={{ "aria-label": t.pipeline.nodeTextExitFullscreen }}
+        onCancel={exitFullscreen}
+        destroyOnHidden
+      >
+        {fullscreenOpen && textDocument ? (
+          <TextNodeEditor
+            document={textDocument}
+            placeholder={t.pipeline.nodeTextPlaceholder}
+            ariaLabel={t.pipeline.nodeTextEditorAria}
+            labels={{
+              bold: t.pipeline.richTextBold,
+              italic: t.pipeline.richTextItalic,
+              underline: t.pipeline.richTextUnderline,
+              heading1: t.pipeline.richTextHeading1,
+              heading2: t.pipeline.richTextHeading2,
+              heading3: t.pipeline.richTextHeading3,
+              bulletList: t.pipeline.richTextBulletList,
+              orderedList: t.pipeline.richTextOrderedList,
+              undo: t.pipeline.richTextUndo,
+              redo: t.pipeline.richTextRedo,
+              expand: t.pipeline.nodeTextFullscreen,
+              collapse: t.pipeline.nodeTextExitFullscreen,
+            }}
+            onChange={(nextDocument) => updateNodeData(id, {
+              ...canvas,
+              content: [nextDocument.plainText],
+              textDocument: nextDocument,
+            })}
+            onExit={exitFullscreen}
+            fullscreen
+            exitOnEscape={false}
+            exitOnBlur={false}
+            onToggleFullscreen={exitFullscreen}
+          />
+        ) : null}
+      </Modal>
     </article>
   );
 }

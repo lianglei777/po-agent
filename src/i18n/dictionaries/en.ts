@@ -1231,6 +1231,8 @@ export const en = {
     nodeTextPlaceholder: "Enter text...",
     nodeTextEmptyHint: "Double-click to start editing...",
     nodeTextEditorAria: "Edit text node content",
+    nodeTextFullscreen: "Edit text in full screen",
+    nodeTextExitFullscreen: "Exit full-screen text editing",
     richTextBold: "Bold",
     richTextItalic: "Italic",
     richTextUnderline: "Underline",

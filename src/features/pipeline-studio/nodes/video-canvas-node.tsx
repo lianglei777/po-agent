@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type MouseEvent } from "react";
 import { App, Spin, Tooltip } from "antd";
-import { Position } from "@xyflow/react";
+import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
 import { AlertTriangle, Clock3, Copy, Download, FileVideo, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
+import { calculateImageFocusViewport } from "../model/image-focus-viewport";
 import { videoNodeToolbarPresentation } from "../model/node-interaction";
 import { useCanvasStore } from "../state/canvas-store";
 import { VideoAiComposer } from "./video-ai-composer";
@@ -30,6 +31,7 @@ export function VideoCanvasNode({
 }) {
   const { t } = useI18n();
   const { message } = App.useApp();
+  const { getViewport, setCenter } = useReactFlow();
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const applyServerNodeData = useCanvasStore((state) => state.applyServerNodeData);
   const insertServerNode = useCanvasStore((state) => state.insertServerNode);
@@ -78,6 +80,29 @@ export function VideoCanvasNode({
     hasVideo,
     hasHistory: hasGenerationHistory,
   });
+
+  const focusPreviewNode = useCallback(() => {
+    const width = node.width ?? 360;
+    const height = node.height ?? 300;
+    const zoom = calculateImageFocusViewport({
+      currentZoom: getViewport().zoom,
+      nodeWidth: width,
+      nodeHeight: height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+    void setCenter(node.positionX + width / 2, node.positionY + height / 2, {
+      zoom,
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220,
+    });
+  }, [getViewport, node.height, node.positionX, node.positionY, node.width, setCenter]);
+
+  const handlePreviewDoubleClick = useCallback((event: MouseEvent<HTMLElement>) => {
+    // 原生 video 双击会进入浏览器全屏；这里统一为画布内的节点聚焦行为。
+    event.preventDefault();
+    event.stopPropagation();
+    if (hasVideo) focusPreviewNode();
+  }, [focusPreviewNode, hasVideo]);
 
   const playVideoOnHover = useCallback(() => {
     if (mediaFailed) return;
@@ -239,6 +264,7 @@ export function VideoCanvasNode({
         className={`nowheel relative h-full overflow-hidden rounded-xl border bg-black shadow-[var(--pl-shadow-card)] ${selected || dragging ? "border-[var(--pl-border-strong)] shadow-[var(--pl-shadow-hover)]" : "border-transparent group-hover:border-[var(--pl-border)]"} ${dragActive ? "!border-[var(--pl-accent)]" : ""}`}
         onPointerEnter={playVideoOnHover}
         onPointerLeave={pauseVideoOnLeave}
+        onDoubleClick={handlePreviewDoubleClick}
       >
         {uploading ? (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-[var(--pl-surface-elevated)]/90 text-sm text-[var(--pl-text-secondary)]">
@@ -266,6 +292,7 @@ export function VideoCanvasNode({
                 playsInline
                 preload="metadata"
                 className="h-full min-h-[180px] w-full object-contain"
+                onDoubleClick={handlePreviewDoubleClick}
                 onPointerDown={(event) => {
                   const bounds = event.currentTarget.getBoundingClientRect();
                   // 原生控制条需要优先接收指针；视频其余区域仍交给画布处理节点拖拽。

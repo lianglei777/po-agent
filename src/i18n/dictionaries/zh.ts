@@ -1189,6 +1189,8 @@ export const zh = {
     nodeTextPlaceholder: "输入文本内容…",
     nodeTextEmptyHint: "双击开始编辑…",
     nodeTextEditorAria: "编辑文本节点内容",
+    nodeTextFullscreen: "全屏编辑文本",
+    nodeTextExitFullscreen: "退出全屏编辑",
     richTextBold: "加粗",
     richTextItalic: "斜体",
     richTextUnderline: "下划线",

@@ -10,6 +10,8 @@ import type { CanvasRichTextNode, CanvasTextDocument } from "@/contracts/pipelin
 import {
   Bold,
   Italic,
+  Maximize2,
+  Minimize2,
   OrderedList,
   RotateCcw,
   RotateCw,
@@ -29,6 +31,8 @@ interface ToolbarLabels {
   orderedList: string;
   undo: string;
   redo: string;
+  expand: string;
+  collapse: string;
 }
 
 export function TextNodeEditor({
@@ -38,6 +42,10 @@ export function TextNodeEditor({
   labels,
   onChange,
   onExit,
+  fullscreen = false,
+  exitOnEscape = true,
+  exitOnBlur = true,
+  onToggleFullscreen,
 }: {
   document: CanvasTextDocument;
   placeholder: string;
@@ -45,6 +53,10 @@ export function TextNodeEditor({
   labels: ToolbarLabels;
   onChange: (document: CanvasTextDocument) => void;
   onExit: () => void;
+  fullscreen?: boolean;
+  exitOnEscape?: boolean;
+  exitOnBlur?: boolean;
+  onToggleFullscreen?: () => void;
 }) {
   const editor = useEditor({
     immediatelyRender: false,
@@ -67,24 +79,25 @@ export function TextNodeEditor({
         class: "pipeline-rich-text-content",
       },
       handleKeyDown: (_, event) => {
-        if (event.key !== "Escape") return false;
+        if (!exitOnEscape || event.key !== "Escape") return false;
         event.preventDefault();
         event.stopPropagation();
         onExit();
         return true;
       },
     },
-    onUpdate: ({ editor: currentEditor }) => {
-      onChange(createTextDocument(
-        currentEditor.getJSON() as CanvasRichTextNode,
-        currentEditor.getText({ blockSeparator: "\n" }),
-      ));
-    },
-    onBlur: ({ event }) => {
-      const nextTarget = event.relatedTarget;
-      if (nextTarget instanceof HTMLElement && nextTarget.closest("[data-text-toolbar]")) return;
-      onExit();
-    },
+      onUpdate: ({ editor: currentEditor }) => {
+        onChange(createTextDocument(
+          currentEditor.getJSON() as CanvasRichTextNode,
+          currentEditor.getText({ blockSeparator: "\n" }),
+        ));
+      },
+      onBlur: ({ event }) => {
+        if (!exitOnBlur) return;
+        const nextTarget = event.relatedTarget;
+        if (nextTarget instanceof HTMLElement && nextTarget.closest("[data-text-toolbar]")) return;
+        onExit();
+      },
   });
 
   useEffect(() => {
@@ -97,7 +110,13 @@ export function TextNodeEditor({
 
   return (
     <>
-      <TextEditorToolbar editor={editor} labels={labels} ariaLabel={ariaLabel} />
+      <TextEditorToolbar
+        editor={editor}
+        labels={labels}
+        ariaLabel={ariaLabel}
+        fullscreen={fullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+      />
       <EditorContent editor={editor} className="pipeline-rich-text-editor nodrag nowheel h-full" />
     </>
   );
@@ -107,10 +126,14 @@ function TextEditorToolbar({
   editor,
   labels,
   ariaLabel,
+  fullscreen,
+  onToggleFullscreen,
 }: {
   editor: Editor;
   labels: ToolbarLabels;
   ariaLabel: string;
+  fullscreen: boolean;
+  onToggleFullscreen?: () => void;
 }) {
   const state = useEditorState({
     editor,
@@ -128,17 +151,8 @@ function TextEditorToolbar({
     }),
   });
 
-  return (
-    <NodeToolbar
-      isVisible
-      position={Position.Top}
-      offset={12}
-      className="nodrag nowheel z-20 flex max-w-[calc(100vw-32px)] items-center gap-1 overflow-x-auto rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--pl-shadow-hover)]"
-      role="toolbar"
-      aria-label={ariaLabel}
-      data-text-toolbar
-      onMouseDown={(event) => event.preventDefault()}
-    >
+  const controls = (
+    <>
       <ToolbarButton label={labels.bold} active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} icon={Bold} />
       <ToolbarButton label={labels.italic} active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} icon={Italic} />
       <ToolbarButton label={labels.underline} active={state.underline} onClick={() => editor.chain().focus().toggleUnderline().run()} icon={Underline} />
@@ -152,6 +166,36 @@ function TextEditorToolbar({
       <ToolbarDivider />
       <ToolbarButton label={labels.undo} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()} icon={RotateCcw} />
       <ToolbarButton label={labels.redo} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()} icon={RotateCw} />
+      {onToggleFullscreen ? (
+        <>
+          <ToolbarDivider />
+          <ToolbarButton
+            label={fullscreen ? labels.collapse : labels.expand}
+            onClick={onToggleFullscreen}
+            icon={fullscreen ? Minimize2 : Maximize2}
+          />
+        </>
+      ) : null}
+    </>
+  );
+
+  const className = "nodrag nowheel z-20 flex max-w-[calc(100vw-32px)] items-center gap-1 overflow-x-auto rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] p-1.5 shadow-[var(--pl-shadow-hover)]";
+  if (fullscreen) {
+    return <div className={className} role="toolbar" aria-label={ariaLabel} data-text-toolbar>{controls}</div>;
+  }
+
+  return (
+    <NodeToolbar
+      isVisible
+      position={Position.Top}
+      offset={12}
+      className={className}
+      role="toolbar"
+      aria-label={ariaLabel}
+      data-text-toolbar
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      {controls}
     </NodeToolbar>
   );
 }
@@ -178,6 +222,7 @@ function ToolbarButton({
       aria-pressed={active}
       title={label}
       disabled={disabled}
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       className={
         "flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-30 " +
