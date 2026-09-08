@@ -111,7 +111,7 @@ Use three boundary roles:
 
 - Small icon controls use 6px corners; standard controls use 8px; grouped/floating surfaces use 12px.
 - The chat composer uses a restrained 14px container radius so it remains prominent without reading as a large bubble.
-- Pills and circles are reserved for badges, status dots, switches, and the send icon button.
+- Pills and circles are reserved for badges, status dots, and switches. Send actions use a compact rounded directional control.
 - Resting cards are flat. Shadows appear only where a surface genuinely floats.
 - The primary application rail has no enclosing card, border, or outer radius. Conversation, Chat, Project dock, and the expanded inspector use quiet dark panel surfaces over the darker application background.
 - Vertical resize handles remain invisible until hover, keyboard focus, or active dragging.

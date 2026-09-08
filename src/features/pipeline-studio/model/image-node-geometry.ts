@@ -32,6 +32,14 @@ export function calculateImageNodeSize(input: {
   return { width: roundDimension(width), height: roundDimension(height) };
 }
 
+/**
+ * 已保存的画布尺寸是用户布局的一部分。首次挂载只用于展示资源，不能因为浏览器重新解码图片而写回画布；
+ * 只有同一节点后来换了资源，才根据新资源比例重新持久化尺寸。
+ */
+export function imageNodeSizeNeedsPersistence(initialMediaUrl: string | null, mediaUrl: string | null): boolean {
+  return Boolean(mediaUrl) && mediaUrl !== initialMediaUrl;
+}
+
 function roundDimension(value: number): number {
   return Math.round(value * 10) / 10;
 }

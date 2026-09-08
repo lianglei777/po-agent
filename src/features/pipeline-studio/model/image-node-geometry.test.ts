@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateImageNodeSize } from "./image-node-geometry";
+import { calculateImageNodeSize, imageNodeSizeNeedsPersistence } from "./image-node-geometry";
 
 describe("image node geometry", () => {
   it("adapts a node to landscape and portrait media", () => {
@@ -14,5 +14,14 @@ describe("image node geometry", () => {
       .toEqual({ width: 1200, height: 120 });
     expect(calculateImageNodeSize({ naturalWidth: 400, naturalHeight: 4000, currentWidth: 360 }))
       .toEqual({ width: 120, height: 1200 });
+  });
+
+  it("does not persist a size merely because an existing image node mounts", () => {
+    expect(imageNodeSizeNeedsPersistence("/api/pipeline/canvas-nodes/image-1/media", "/api/pipeline/canvas-nodes/image-1/media"))
+      .toBe(false);
+    expect(imageNodeSizeNeedsPersistence(null, "/api/pipeline/canvas-nodes/image-1/media"))
+      .toBe(true);
+    expect(imageNodeSizeNeedsPersistence("https://example.test/old.png", "https://example.test/new.png"))
+      .toBe(true);
   });
 });

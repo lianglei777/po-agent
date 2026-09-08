@@ -45,6 +45,7 @@ import {
   Grid as GridIcon,
   Hexagon as HexagonIcon,
   ImagePlus as ImagePlusIcon,
+  Image as ImageLucideIcon,
   Images as ImagesIcon,
   Info as InfoIcon,
   Italic as ItalicIcon,
@@ -61,8 +62,10 @@ import {
   Maximize2 as Maximize2Icon,
   MessageSquare as MessageSquareIcon,
   MessageSquarePlus as MessageSquarePlusIcon,
+  MapPinned as MapPinnedIcon,
   Minimize2 as Minimize2Icon,
   MoreHorizontal as MoreHorizontalIcon,
+  Music2 as Music2Icon,
   Package as PackageIcon,
   PackageOpen as PackageOpenIcon,
   PanelLeft as PanelLeftIcon,
@@ -74,6 +77,7 @@ import {
   Pencil as PencilIcon,
   PencilLine as PencilLineIcon,
   PlayCircle as PlayCircleIcon,
+  Play as PlayIcon,
   Plus as PlusIcon,
   Puzzle as PuzzleIcon,
   RefreshCw as RefreshCwIcon,
@@ -83,6 +87,7 @@ import {
   ScrollText as ScrollTextIcon,
   Search as SearchIcon,
   Send as SendIcon,
+  SendHorizontal as SendHorizontalIcon,
   Server as ServerIcon,
   ServerCog as ServerCogIcon,
   Settings as SettingsIcon,
@@ -155,6 +160,7 @@ export const GitFork = createAppIcon(GitForkIcon);
 export const Globe = createAppIcon(GlobeIcon);
 export const Hexagon = createAppIcon(HexagonIcon);
 export const ImagePlus = createAppIcon(ImagePlusIcon);
+export const ImageIcon = createAppIcon(ImageLucideIcon);
 export const Images = createAppIcon(ImagesIcon);
 export const Info = createAppIcon(InfoIcon);
 export const Italic = createAppIcon(ItalicIcon);
@@ -167,9 +173,11 @@ export const LineSquiggle = createAppIcon(LineSquiggleIcon);
 export const LoaderCircle = createAppIcon(LoaderCircleIcon);
 export const MessageSquare = createAppIcon(MessageSquareIcon);
 export const MessageSquarePlus = createAppIcon(MessageSquarePlusIcon);
+export const MapPinned = createAppIcon(MapPinnedIcon);
 export const Minimize2 = createAppIcon(Minimize2Icon);
 export const ModelsJson = createAppIcon(ModelsJsonIcon);
 export const MoreHorizontal = createAppIcon(MoreHorizontalIcon);
+export const Music2 = createAppIcon(Music2Icon);
 export const OrderedList = createAppIcon(OrderedListIcon);
 export const Package = createAppIcon(PackageIcon);
 export const PackageOpen = createAppIcon(PackageOpenIcon);
@@ -183,6 +191,7 @@ export const Pencil = createAppIcon(PencilIcon);
 export const PencilLine = createAppIcon(PencilLineIcon);
 export const Plus = createAppIcon(PlusIcon);
 export const PlayCircle = createAppIcon(PlayCircleIcon);
+export const Play = createAppIcon(PlayIcon);
 export const Project = createAppIcon(ProjectIcon);
 export const Puzzle = createAppIcon(PuzzleIcon);
 export const QuestionCircle = createAppIcon(QuestionCircleIcon);
@@ -194,6 +203,7 @@ export const Scissors = createAppIcon(ScissorsIcon);
 export const Search = createAppIcon(SearchIcon);
 export const Selection = createAppIcon(SelectionIcon);
 export const Send = createAppIcon(SendIcon);
+export const SendHorizontal = createAppIcon(SendHorizontalIcon);
 export const Server = createAppIcon(ServerIcon);
 export const ServerCog = createAppIcon(ServerCogIcon);
 export const Settings = createAppIcon(SettingsIcon);

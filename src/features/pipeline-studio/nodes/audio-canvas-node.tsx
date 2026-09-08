@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { App, Button, Spin, Tooltip } from "antd";
 import { Position } from "@xyflow/react";
 import type { CanvasAudioMetadata, CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Copy, Download, FileMusic, Sparkles, Trash2 } from "@/components/icons";
+import { AlertTriangle, Copy, Download, Music2, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import {
@@ -265,7 +265,7 @@ export function AudioCanvasNode({
 
       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full">
         <CanvasNodeTitle
-          icon={<FileMusic className="size-4" />}
+          icon={<Music2 className="size-4" />}
           name={canvas.name}
           ariaLabel={t.pipeline.nodeNameAria.replace("{type}", t.pipeline.nodeAudio)}
           onRename={(name) => updateNodeData(id, { ...canvas, name })}
@@ -283,7 +283,7 @@ export function AudioCanvasNode({
                       onClick={() => inputRef.current?.click()}
                       className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                     >
-                      <FileMusic className="size-3.5" />
+                      <Music2 className="size-3.5" />
                       {t.pipeline.nodeAudioChoose}
                     </button>
                   </span>
@@ -351,7 +351,7 @@ export function AudioCanvasNode({
           )
         ) : (
           <div className="flex h-full min-h-[150px] flex-col items-center justify-center gap-3 px-5 text-center text-[var(--pl-text-muted)]">
-            <FileMusic className="size-8 opacity-50" />
+            <Music2 className="size-8 opacity-50" />
             <div className="flex flex-col gap-1 text-xs">
               <span className="font-medium text-[var(--pl-text-secondary)]">{t.pipeline.nodeAudioPlaceholder}</span>
               <span>{t.pipeline.nodeAudioDropHint}</span>

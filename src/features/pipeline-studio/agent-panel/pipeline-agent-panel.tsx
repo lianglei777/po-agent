@@ -6,7 +6,7 @@ import type { AgentEvent, AgentMessage, AssistantMessage } from "@/contracts/age
 import type { ModelInfo } from "@/contracts/models";
 import type { PipelineAgentConversationResponse } from "@/contracts/pipeline-agent";
 import type { CanvasNode, CanvasPromptDocument, CanvasResourceReferenceAttrs, CanvasRichTextNode, CanvasWorkflowRun } from "@/contracts/pipeline";
-import { Bot, Cpu, LoaderCircle, PanelRight, PanelRightClose, Send, Sparkles, Square } from "@/components/icons";
+import { Bot, Cpu, LoaderCircle, PanelRightClose, SendHorizontal, Sparkles, Square } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import {
   formatCanvasAgentMessage,
@@ -14,7 +14,7 @@ import {
   type CanvasAgentMessageReference,
   type ParsedCanvasAgentMessage,
 } from "@/lib/canvas-agent-message";
-import { pipelineStudioApi } from "../api/pipeline-studio-api";
+import { pipelineStudioErrorDetail, pipelineStudioApi } from "../api/pipeline-studio-api";
 import { ResourcePreviewPopover, ResourcePreviewThumbnail } from "../components/resource-preview-thumbnail";
 import { resolveCanvasMediaSource } from "../model/canvas-media-source";
 import { canvasNodeReferenceAttrs } from "../model/canvas-node-reference";
@@ -52,6 +52,10 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
     empty: t.pipeline.canvasAgentPanelEmpty,
     running: t.pipeline.canvasAgentPanelRunning,
     loadError: t.pipeline.canvasAgentPanelLoadError,
+    conversationLoadError: t.pipeline.canvasAgentPanelConversationLoadError,
+    modelsLoadError: t.pipeline.canvasAgentPanelModelsLoadError,
+    workflowRunsLoadError: t.pipeline.canvasAgentPanelWorkflowRunsLoadError,
+    historyLoadError: t.pipeline.canvasAgentPanelHistoryLoadError,
     saveError: t.pipeline.canvasAgentPanelSaveError,
     sendError: t.pipeline.canvasAgentPanelSendError,
     resize: t.pipeline.canvasAgentPanelResize,
@@ -126,19 +130,28 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
       setWidth(readPanelWidth(projectId));
       setLoading(true);
       setError(null);
-      Promise.all([
+      Promise.allSettled([
         pipelineStudioApi.getAgentConversation(projectId),
         pipelineStudioApi.getTextModels(),
         pipelineStudioApi.getCanvasWorkflowRuns(projectId),
-      ]).then(async ([nextConversation, modelResponse, workflowResponse]) => {
+      ]).then(async ([conversationResult, modelsResult, workflowRunsResult]) => {
         if (!active) return;
+        if (conversationResult.status === "rejected") {
+          setError(`${copy.conversationLoadError} ${pipelineStudioErrorDetail(conversationResult.reason, copy.loadError)}`);
+          return;
+        }
+        const nextConversation = conversationResult.value;
         activeSessionIdRef.current = nextConversation.sessionId;
         setConversation(nextConversation);
-        setModels(modelResponse.models);
-        setWorkflowRuns(workflowResponse.workflowRuns);
-        await reloadHistory(nextConversation.sessionId);
-      }).catch((cause) => {
-        if (active) setError(cause instanceof Error ? cause.message : copy.loadError);
+        if (modelsResult.status === "fulfilled") setModels(modelsResult.value.models);
+        else setError(`${copy.modelsLoadError} ${pipelineStudioErrorDetail(modelsResult.reason, copy.loadError)}`);
+        if (workflowRunsResult.status === "fulfilled") setWorkflowRuns(workflowRunsResult.value.workflowRuns);
+        else setError(`${copy.workflowRunsLoadError} ${pipelineStudioErrorDetail(workflowRunsResult.reason, copy.loadError)}`);
+        try {
+          await reloadHistory(nextConversation.sessionId);
+        } catch (cause) {
+          if (active) setError(`${copy.historyLoadError} ${pipelineStudioErrorDetail(cause, copy.loadError)}`);
+        }
       }).finally(() => {
         if (active) setLoading(false);
       });
@@ -148,7 +161,15 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
       activeSessionIdRef.current = null;
       window.clearTimeout(timer);
     };
-  }, [copy.loadError, projectId, reloadHistory]);
+  }, [
+    copy.conversationLoadError,
+    copy.historyLoadError,
+    copy.loadError,
+    copy.modelsLoadError,
+    copy.workflowRunsLoadError,
+    projectId,
+    reloadHistory,
+  ]);
 
   useEffect(() => {
     if (!workflowRuns.some((run) => run.status === "pending" || run.status === "running" || run.status === "cancelling")) return;
@@ -356,12 +377,11 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
 
   if (collapsed) {
     return (
-      <aside className="flex h-full w-11 shrink-0 flex-col items-center border-l border-[var(--pl-border)] bg-[var(--pl-surface-glass)] py-2">
+      <div className="absolute right-4 top-4 z-40">
         <Tooltip title={copy.expand} placement="left">
-          <Button type="text" icon={<PanelRight />} aria-label={copy.expand} onClick={toggleCollapsed} />
+          <Button className="h-9 min-w-9 rounded-lg" type="primary" icon={<Bot className="size-4" />} aria-label={copy.expand} onClick={toggleCollapsed} />
         </Tooltip>
-        <Bot className="mt-3 size-4 text-[var(--pl-text-muted)]" />
-      </aside>
+      </div>
     );
   }
 
@@ -385,7 +405,6 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
         }}
       />
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--pl-border)] px-3">
-        <Bot className="size-4 text-[var(--pl-text-secondary)]" />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{copy.title}</span>
         {(running || submitting) && <LoaderCircle className="size-3.5 animate-spin text-[var(--pl-accent-hover)]" aria-label={copy.running} />}
         <Tooltip title={copy.collapse}>
@@ -445,7 +464,7 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
 
       <div className="shrink-0 border-t border-[var(--pl-border)] px-3 pb-3 pt-2.5">
         {error && <p className="mb-2 text-xs text-[var(--pl-danger)]" role="alert">{error}</p>}
-        <div className="flex min-h-24 max-h-60 flex-col overflow-hidden rounded-[var(--radius-composer)] border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--shadow-composer)] focus-within:border-[var(--pl-accent)]">
+        <div className="flex min-h-32 max-h-72 flex-col overflow-hidden rounded-[var(--radius-composer)] border border-[var(--pl-border-strong)] bg-[var(--pl-surface-elevated)] shadow-[var(--shadow-composer)] focus-within:border-[var(--pl-accent)]">
           <ResourcePromptEditor
             value={inputDocument}
             onChange={setInputDocument}
@@ -462,7 +481,7 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
             editorHandleRef={editorHandleRef}
             onSubmit={() => void submit()}
           />
-          <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-[var(--pl-border)] p-1.5">
+          <div className="flex shrink-0 items-center justify-end gap-1.5 px-2 pb-2 pt-1">
           {running ? (
             <Tooltip title={copy.stop}>
               <Button
@@ -480,7 +499,7 @@ export function PipelineAgentPanel({ projectId }: { projectId: string }) {
           ) : (
             <Tooltip title={canvasContextReady ? copy.send : copy.waitingCanvasSave}>
               <span className="inline-flex shrink-0">
-                <Button className="size-8" shape="circle" type="primary" loading={submitting} icon={<Send className="rotate-[-90deg]" />} aria-label={copy.send} disabled={(!inputDocument.plainText.trim() && !referencedNodes.length) || !conversation || !canvasContextReady || submitting} onClick={() => void submit()} />
+                <Button className="h-8 min-w-9 rounded-lg" type="primary" loading={submitting} icon={<SendHorizontal className="-rotate-90" />} aria-label={copy.send} disabled={(!inputDocument.plainText.trim() && !referencedNodes.length) || !conversation || !canvasContextReady || submitting} onClick={() => void submit()} />
               </span>
             </Tooltip>
           )}

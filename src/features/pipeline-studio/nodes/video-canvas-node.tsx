@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { App, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Clock3, Copy, Download, FileVideo, Sparkles, Trash2 } from "@/components/icons";
+import { AlertTriangle, Clock3, Copy, Download, Play, Sparkles, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
@@ -243,7 +243,7 @@ export function VideoCanvasNode({
 
       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full">
         <CanvasNodeTitle
-          icon={<FileVideo className="size-4" />}
+          icon={<Play className="size-4" />}
           name={canvas.name}
           ariaLabel={t.pipeline.nodeNameAria.replace("{type}", t.pipeline.nodeVideo)}
           onRename={(name) => updateNodeData(id, { ...canvas, name })}
@@ -265,7 +265,7 @@ export function VideoCanvasNode({
                       onClick={() => inputRef.current?.click()}
                       className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-[var(--pl-text-secondary)] hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pl-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                     >
-                      <FileVideo className="size-3.5" />
+                      <Play className="size-3.5" />
                       {t.pipeline.canvasUploadMedia}
                     </button>
                   </span>
@@ -368,7 +368,7 @@ export function VideoCanvasNode({
                   {t.pipeline.videoHistoryFailed}
                 </span>
               </Tooltip>
-            ) : <FileVideo className="size-10 opacity-45" />}
+            ) : <Play className="size-10 opacity-45" />}
           </div>
         )}
       </section>

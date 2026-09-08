@@ -1,11 +1,11 @@
 "use client";
 
 import NextImage from "next/image";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { App, Button, Modal, Spin, Tooltip } from "antd";
 import { Position, useReactFlow } from "@xyflow/react";
 import type { CanvasNode } from "@/contracts/pipeline";
-import { AlertTriangle, Copy, Download, Eye, Images, Pencil, Trash2 } from "@/components/icons";
+import { AlertTriangle, Copy, Download, Eye, ImageIcon, Pencil, Trash2 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { calculateImageFocusViewport } from "../model/image-focus-viewport";
@@ -19,7 +19,7 @@ import {
   rotateImagePreview,
   type ImageEditTransform,
 } from "../model/image-edit-transform";
-import { calculateImageNodeSize, IMAGE_NODE_SIZE_LIMITS } from "../model/image-node-geometry";
+import { calculateImageNodeSize, imageNodeSizeNeedsPersistence, IMAGE_NODE_SIZE_LIMITS } from "../model/image-node-geometry";
 import { resolveCanvasMediaSource, shouldDeferCanvasMediaLoad } from "../model/canvas-media-source";
 import { imageNodePresentation } from "../model/node-interaction";
 import { useCanvasStore, useCanvasStoreApi } from "../state/canvas-store";
@@ -83,6 +83,8 @@ export function ImageCanvasNode({
 
   const mediaSource = resolveCanvasMediaSource(id, canvas);
   const mediaUrl = mediaSource?.url ?? null;
+  // 记录本次组件挂载时已保存的资源，避免用户只是重新打开项目就触发布局写入。
+  const initialMediaUrlRef = useRef(mediaUrl);
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
   const hasImage = Boolean(mediaUrl);
   const imageState = imageStatus.url === mediaUrl ? imageStatus.state : "loading";
@@ -99,7 +101,9 @@ export function ImageCanvasNode({
       naturalHeight: height,
       currentWidth,
     });
-    if (targetSize) fitNodeSize(id, targetSize);
+    if (targetSize && imageNodeSizeNeedsPersistence(initialMediaUrlRef.current, mediaUrl)) {
+      fitNodeSize(id, targetSize);
+    }
   }, [fitNodeSize, id, mediaUrl, store]);
   const handleImageError = useCallback(() => {
     if (mediaUrl) setImageStatus({ url: mediaUrl, state: "error" });
@@ -219,7 +223,7 @@ export function ImageCanvasNode({
 
       <div className="absolute bottom-[calc(100%+4px)] left-0 w-full">
         <CanvasNodeTitle
-          icon={<Images className="size-4" />}
+          icon={<ImageIcon className="size-4" />}
           name={canvas.name}
           ariaLabel={t.pipeline.nodeNameAria.replace("{type}", t.pipeline.nodeImage)}
           onRename={(name) => updateNodeData(id, { ...canvas, name })}
@@ -300,7 +304,7 @@ export function ImageCanvasNode({
                 <Spin size="small" />
                 {t.pipeline.imageAiGenerating}
               </span>
-            ) : <Images className="size-10 opacity-45" />}
+            ) : <ImageIcon className="size-10 opacity-45" />}
           </div>
         )}
       </section>
@@ -382,7 +386,7 @@ function ImageErrorState({
   const { t } = useI18n();
   return (
     <div className="nodrag absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-6 text-center">
-      <Images className="size-7 text-[var(--pl-text-muted)]" />
+      <ImageIcon className="size-7 text-[var(--pl-text-muted)]" />
       <span className="text-sm font-medium text-[var(--pl-text)]">{t.pipeline.nodeImageLoadFailed}</span>
       <Button size="small" onClick={onRetry}>{t.pipeline.nodeImageRetry}</Button>
     </div>

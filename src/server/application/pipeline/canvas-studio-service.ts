@@ -22,6 +22,7 @@ import type {
 import type { GenerationArtifact } from "@/server/domain/generation";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
+import type { PipelineValidationLogger } from "@/server/ports/pipeline-validation-logger";
 import type { LlmMessage, LlmPort } from "@/server/ports/llm-port";
 import { generationAssetSlotForReference } from "@/lib/generation-asset-slot";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
@@ -47,6 +48,7 @@ export class CanvasStudioService {
     private readonly llm: LlmPort,
     private readonly sse: PipelineSsePort,
     private readonly lipSyncPreparations?: LipSyncPreparationService,
+    private readonly validationLogger?: PipelineValidationLogger,
   ) {}
 
   async createLipSyncPreparation(nodeId: string) {
@@ -482,7 +484,10 @@ export class CanvasStudioService {
       if (!upstream) throw new AppError("VALIDATION_ERROR", "Canvas reference source was not found", 400);
       assertCanvasConnectionAllowed(source.projectId, upstream, initializedTarget, projectEdges, true);
     }
-    validateCanvasEdgeBindings(validationNodes, [...projectEdges, ...templates]);
+    validateCanvasEdgeBindings(validationNodes, [...projectEdges, ...templates], {
+      entrypoint: "template-initialization",
+      projectId: source.projectId,
+    }, this.validationLogger);
 
     const edges: CanvasEdge[] = [];
     for (const template of templates) {
@@ -1761,7 +1766,7 @@ export class CanvasStudioService {
         affectedTargets.add(mutation.edge.targetNodeId);
       }
     }
-    validateCanvasEdgeBindings(nodes, edges);
+    validateCanvasEdgeBindings(nodes, edges, { entrypoint: "mutation-batch", projectId }, this.validationLogger);
     return affectedTargets;
   }
 
@@ -2146,14 +2151,32 @@ function canvasPathExists(edges: CanvasEdge[], startNodeId: string, targetNodeId
   return false;
 }
 
-function validateCanvasEdgeBindings(nodes: Map<string, CanvasNode>, edges: CanvasEdge[]): void {
+function validateCanvasEdgeBindings(
+  nodes: Map<string, CanvasNode>,
+  edges: CanvasEdge[],
+  context: { entrypoint: "mutation-batch" | "template-initialization"; projectId: string },
+  validationLogger?: PipelineValidationLogger,
+): void {
   const incomingByTarget = new Map<string, CanvasEdge[]>();
   for (const edge of edges) {
     const role = edge.role ?? "reference";
     if (role !== "reference") {
       const source = nodes.get(edge.sourceNodeId);
       const target = nodes.get(edge.targetNodeId);
-      if (source?.data?.type !== "image" || target?.data?.type !== "video") {
+      // 节点顶层 type 是画布实体的权威类型；批量保存期间 data 可能暂未水合，不能据此误拒绝合法首尾帧边。
+      const sourceType = source?.data?.type ?? source?.type;
+      const targetType = target?.data?.type ?? target?.type;
+      if (sourceType !== "image" || targetType !== "video") {
+        // 记录触发写入校验的边与入口，便于定位短暂出现的前端错误提示。
+        void validationLogger?.log({
+          ...context,
+          role,
+          edgeId: edge.id,
+          sourceNodeId: edge.sourceNodeId,
+          sourceType: sourceType ?? null,
+          targetNodeId: edge.targetNodeId,
+          targetType: targetType ?? null,
+        }).catch(() => {});
         throw new AppError("VALIDATION_ERROR", "First and last frame roles require an image connected to a video node", 400);
       }
     }

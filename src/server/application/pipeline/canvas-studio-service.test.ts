@@ -1266,6 +1266,31 @@ describe("CanvasStudioService video AI", () => {
     expect(repository.applyCanvasMutationBatch).not.toHaveBeenCalled();
   });
 
+  it("accepts a valid first-frame edge when batch hydration omits node data", async () => {
+    const source = { ...imageNode(), data: null };
+    const target = { ...videoNode(), data: null };
+    const repository = repositoryStub({ applied: true, revision: 1 });
+    Object.assign(repository, { updateCanvasNode: vi.fn().mockResolvedValue(null) });
+    vi.mocked(repository.listCanvasNodes).mockResolvedValue([source, target]);
+    vi.mocked(repository.listCanvasEdges).mockResolvedValue([{
+      id: "edge-first-frame",
+      projectId: project.id,
+      sourceNodeId: source.id,
+      targetNodeId: target.id,
+      edgeType: "references",
+      role: "first-frame",
+      order: 0,
+    }]);
+
+    const runs = { getRun: vi.fn().mockResolvedValue(null) } as unknown as GenerationRunService;
+    await expect(createService(repository, {} as LlmPort, runs).applyMutationBatch(project.id, {
+      baseRevision: 0,
+      requestId: "hydrated-frame-role",
+      mutations: [{ type: "viewport.update", viewport: { x: 1, y: 2, zoom: 1 } }],
+    })).resolves.toMatchObject({ revision: 1 });
+    expect(repository.applyCanvasMutationBatch).toHaveBeenCalled();
+  });
+
   it("preflights a workflow media node without creating a generation run", async () => {
     const node = imageNode();
     node.data = { ...node.data!, params: { prompt: "A quiet product image", routeId: "image-route" } };

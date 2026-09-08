@@ -15,21 +15,22 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { App, Drawer, Dropdown, Input, Modal, Slider, Tooltip } from "antd";
+import { App, Button, Drawer, Dropdown, Input, Modal, Slider, Tooltip } from "antd";
 import { type CanvasMediaType, type CanvasNode } from "@/contracts/pipeline";
 import {
   ArrowLeft,
   ChevronDown,
-  FileMusic,
+  ImageIcon,
   FileText,
-  Images,
+  MapPinned,
   Minimize2,
+  Music2,
   PanelLeft,
   Paperclip,
   Plus,
   Project,
   LineSquiggle,
-  FileVideo,
+  Play,
 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
@@ -66,11 +67,15 @@ export function StudioCanvas({
   projectTitle,
   onBack,
   onRenameProject,
+  initialLoadError,
+  onRetryInitialLoad,
 }: {
   projectId: string;
   projectTitle: string;
   onBack: () => void;
   onRenameProject: (title: string) => Promise<void>;
+  initialLoadError: string | null;
+  onRetryInitialLoad: () => Promise<void>;
 }) {
   const { t } = useI18n();
   const { message } = App.useApp();
@@ -387,7 +392,17 @@ export function StudioCanvas({
   }, []);
 
   if (!loaded) {
-    return <div className="flex h-full flex-1 items-center justify-center bg-[var(--pl-surface)] text-sm text-[var(--pl-text-muted)]">{t.pipeline.canvasLoading}</div>;
+    return (
+      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 bg-[var(--pl-surface)] text-sm text-[var(--pl-text-muted)]" role={initialLoadError ? "status" : undefined}>
+        <span>{initialLoadError ? t.pipeline.canvasInitialLoadFailed : t.pipeline.canvasLoading}</span>
+        {initialLoadError ? (
+          <>
+            <span className="max-w-md text-center text-caption text-[var(--pl-text-dim)]">{initialLoadError}</span>
+            <Button size="small" onClick={() => void onRetryInitialLoad()}>{t.pipeline.canvasRetryLoad}</Button>
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -397,7 +412,6 @@ export function StudioCanvas({
         saveState={saveState}
         onBack={onBack}
         onRename={() => { setRenameValue(projectTitle); setRenameOpen(true); }}
-        onFit={() => instanceRef.current?.fitView({ padding: 0.2, duration: 220 })}
       />
 
       <div
@@ -514,6 +528,7 @@ export function StudioCanvas({
         onOpenAssets={() => setAssetsOpen(true)}
         onToggleMinimap={toggleMinimap}
         onToggleConnections={toggleConnections}
+        onFit={() => instanceRef.current?.fitView({ padding: 0.2, duration: 220 })}
         onZoomOut={zoomOutCanvas}
         onZoomIn={zoomInCanvas}
         onZoomChange={previewCanvasZoom}
@@ -618,13 +633,11 @@ function TopCanvasBar({
   saveState,
   onBack,
   onRename,
-  onFit,
 }: {
   projectTitle: string;
   saveState: string;
   onBack: () => void;
   onRename: () => void;
-  onFit: () => void;
 }) {
   const { t } = useI18n();
   const menuItems = [
@@ -646,11 +659,6 @@ function TopCanvasBar({
             <ChevronDown className="size-3 text-[var(--pl-text-muted)]" />
           </button>
         </Dropdown>
-        <Tooltip title={t.pipeline.canvasFit}>
-          <button type="button" onClick={onFit} className="flex size-8 items-center justify-center rounded-lg text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]">
-            <Minimize2 className="size-4" />
-          </button>
-        </Tooltip>
         <span className="px-1.5 text-caption text-[var(--pl-text-muted)]">{saveLabel(saveState, t.pipeline)}</span>
       </div>
     </header>
@@ -678,7 +686,7 @@ function EmptyCanvasActions({ onCreate }: { onCreate: (type: CanvasMediaType, po
     </div>
   );
 }
-function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
+function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onFit, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
   zoom: number;
   assetsOpen: boolean;
   minimapVisible: boolean;
@@ -686,6 +694,7 @@ function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisib
   onOpenAssets: () => void;
   onToggleMinimap: () => void;
   onToggleConnections: () => void;
+  onFit: () => void;
   onZoomOut: () => void;
   onZoomIn: () => void;
   onZoomChange: (percentage: number) => void;
@@ -696,8 +705,9 @@ function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisib
   return (
     <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${assetsOpen ? "translate-x-[284px]" : "translate-x-0"}`}>
       {!assetsOpen ? <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} /> : null}
-      <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<Project className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
+      <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<MapPinned className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
       <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<LineSquiggle className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
+      <ToolButton title={t.pipeline.canvasFit} icon={<Minimize2 className="size-4" />} onClick={onFit} />
       <div className="mx-0.5 h-5 w-px bg-[var(--pl-border)]" />
       <ToolButton title={t.pipeline.canvasZoomOut} icon={<span className="text-base leading-none">−</span>} onClick={onZoomOut} />
       <Slider
@@ -754,9 +764,9 @@ function CreateMenu({ screenX, screenY, onCreate, onUpload }: { screenX: number;
     <div className="fixed z-50 w-52 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)] p-2 shadow-[var(--pl-shadow-hover)]" style={{ left: Math.min(screenX, window.innerWidth - 224), top: Math.min(screenY, window.innerHeight - 280) }} onClick={(event) => event.stopPropagation()}>
       <div className="px-2 pb-1 pt-1 text-caption font-medium text-[var(--pl-text-muted)]">{t.pipeline.canvasAddMenu}</div>
       <CreateMenuButton label={t.pipeline.canvasTextNode} icon={<FileText />} onClick={() => onCreate("text")} />
-      <CreateMenuButton label={t.pipeline.canvasImageNode} icon={<Images />} onClick={() => onCreate("image")} />
-      <CreateMenuButton label={t.pipeline.canvasVideoNode} icon={<FileVideo />} onClick={() => onCreate("video")} />
-      <CreateMenuButton label={t.pipeline.canvasAudioNode} icon={<FileMusic />} onClick={() => onCreate("audio")} />
+      <CreateMenuButton label={t.pipeline.canvasImageNode} icon={<ImageIcon />} onClick={() => onCreate("image")} />
+      <CreateMenuButton label={t.pipeline.canvasVideoNode} icon={<Play />} onClick={() => onCreate("video")} />
+      <CreateMenuButton label={t.pipeline.canvasAudioNode} icon={<Music2 />} onClick={() => onCreate("audio")} />
       <div className="my-1 h-px bg-[var(--pl-border)]" />
       <CreateMenuButton label={t.pipeline.canvasUploadMedia} icon={<Paperclip />} onClick={onUpload} />
     </div>

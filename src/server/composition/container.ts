@@ -82,6 +82,7 @@ import { FfmpegCanvasMediaPreprocessor } from "@/server/infrastructure/media/ffm
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import { NodeAccessControlPasswordHasher } from "@/server/infrastructure/security/node-access-control-password-hasher";
 import { FileHttpUnexpectedErrorLogger } from "@/server/infrastructure/observability/file-http-unexpected-error-logger";
+import { FilePipelineValidationLogger } from "@/server/infrastructure/observability/file-pipeline-validation-logger";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -92,6 +93,9 @@ function createContainer() {
   );
   const httpUnexpectedErrorLogger = new FileHttpUnexpectedErrorLogger(
     path.join(agentDir, "logs", "http-errors.jsonl"),
+  );
+  const pipelineValidationLogger = new FilePipelineValidationLogger(
+    path.join(agentDir, "logs", "pipeline-validation.jsonl"),
   );
   // 模型、凭证与所有 Agent Session 必须共享同一 Runtime，避免配置和认证快照分叉。
   const modelRuntime = ModelRuntime.create({
@@ -293,11 +297,13 @@ function createContainer() {
       pipelineLlm,
       pipelineSse,
       lipSyncPreparations,
+      pipelineValidationLogger,
     );
     pipelineAgentPlanService = new CanvasAgentPlanService(
       pipelineRepository,
       canvasStudioService,
       canvasAgentTurnPolicies,
+      pipelineValidationLogger,
     );
     const canvasAssetAnalysisService = new CanvasAssetAnalysisService(
       pipelineRepository,

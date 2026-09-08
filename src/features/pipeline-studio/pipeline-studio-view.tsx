@@ -32,12 +32,14 @@ function PipelineStudioController({
 }) {
   const controller = useCanvasController(projectId, projectTitle);
   return (
-    <div className="flex h-full min-w-0 flex-1">
+    <div className="relative flex h-full min-w-0 flex-1">
       <StudioCanvas
         projectId={projectId}
         projectTitle={controller.projectTitle}
         onBack={onBack}
         onRenameProject={controller.renameProject}
+        initialLoadError={controller.initialLoadError}
+        onRetryInitialLoad={controller.retryInitialSnapshot}
       />
       <PipelineAgentPanel key={projectId} projectId={projectId} />
     </div>

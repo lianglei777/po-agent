@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canvasSaveErrorIsRetryable,
   canvasSaveRetryDelay,
+  pipelineStudioErrorDetail,
   PipelineStudioApiError,
 } from "./pipeline-studio-api";
 
@@ -16,5 +17,14 @@ describe("pipeline studio autosave retry policy", () => {
   it("backs off retries and caps the delay", () => {
     expect([0, 1, 2, 3].map(canvasSaveRetryDelay)).toEqual([1_000, 2_000, 4_000, 8_000]);
     expect(canvasSaveRetryDelay(20)).toBe(30_000);
+  });
+
+  it("keeps HTTP status and service code in user-visible diagnostics", () => {
+    expect(pipelineStudioErrorDetail(
+      new PipelineStudioApiError("Session is unavailable", 503, "SESSION_UNAVAILABLE"),
+      "Unable to load",
+    )).toBe("Session is unavailable (HTTP 503 · SESSION_UNAVAILABLE)");
+    expect(pipelineStudioErrorDetail(new TypeError("Network failed"), "Unable to load"))
+      .toBe("Network failed");
   });
 });

@@ -21,4 +21,12 @@ describe("pipeline agent composer contract", () => {
     expect(source).toContain("document: submittedDocument");
     expect(source).toContain("parsed.document.content");
   });
+
+  it("uses the directional send action and a floating collapsed Agent entry", () => {
+    expect(source).toContain("SendHorizontal");
+    expect(source).toContain('className="-rotate-90"');
+    expect(source).not.toContain('shape="circle"');
+    expect(source).toContain('className="absolute right-4 top-4 z-40"');
+    expect(source).not.toContain('<Bot className="size-4 text-[var(--pl-text-secondary)]"');
+  });
 });

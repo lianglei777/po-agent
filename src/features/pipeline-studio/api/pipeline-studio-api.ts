@@ -36,6 +36,17 @@ export class PipelineStudioApiError extends Error {
   }
 }
 
+/**
+ * 将接口的可诊断信息保留在调用方展示的错误里，避免首次加载失败只能看到没有来源的通用文案。
+ */
+export function pipelineStudioErrorDetail(error: unknown, fallback: string): string {
+  if (error instanceof PipelineStudioApiError) {
+    const code = error.code ? ` · ${error.code}` : "";
+    return `${error.message} (HTTP ${error.status}${code})`;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,

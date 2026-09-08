@@ -11,6 +11,7 @@ import type {
 } from "@/server/domain/pipeline";
 import { AppError } from "@/server/domain/app-error";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
+import type { PipelineValidationLogger } from "@/server/ports/pipeline-validation-logger";
 import { CanvasStudioService, createNodeData, defaultSize, plainTextDocument } from "./canvas-studio-service";
 import type { CanvasAgentTurnPolicyRegistry } from "./canvas-agent-turn-policy-registry";
 
@@ -30,6 +31,7 @@ export class CanvasAgentPlanService {
     private readonly repository: PipelineRepository,
     private readonly canvas: CanvasStudioService,
     private readonly policies: CanvasAgentTurnPolicyRegistry,
+    private readonly validationLogger?: PipelineValidationLogger,
   ) {}
 
   async create(input: {
@@ -50,7 +52,11 @@ export class CanvasAgentPlanService {
     ]);
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
-    validatePlanEdgeBindings(operations, nodes, edges);
+    validatePlanEdgeBindings(operations, nodes, edges, {
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      action: "create",
+    }, this.validationLogger);
     await this.validateGenerationConfigurations(operations, nodes, edges);
     return this.repository.createCanvasAgentPlan({
       id: randomUUID(),
@@ -86,7 +92,12 @@ export class CanvasAgentPlanService {
     ]);
     this.requireWritableTurn(input.sessionId, operations, nodes);
     validateOperationTargets(operations, nodes);
-    validatePlanEdgeBindings(operations, nodes, edges);
+    validatePlanEdgeBindings(operations, nodes, edges, {
+      projectId: input.projectId,
+      sessionId: input.sessionId,
+      action: "update",
+      planId: input.planId,
+    }, this.validationLogger);
     await this.validateGenerationConfigurations(operations, nodes, edges);
     return (await this.repository.updateCanvasAgentPlan(plan.id, {
       summary: bounded(input.summary, "summary", 1_000),
@@ -291,6 +302,8 @@ function validatePlanEdgeBindings(
   operations: CanvasAgentPlanOperation[],
   nodes: CanvasNode[],
   edges: CanvasEdge[],
+  context: { projectId: string; sessionId: string; action: "create" | "update"; planId?: string },
+  validationLogger?: PipelineValidationLogger,
 ): void {
   const mediaTypes = new Map(nodes.map((node) => [node.id, node.data?.type ?? node.type]));
   for (const operation of operations) {
@@ -303,11 +316,22 @@ function validatePlanEdgeBindings(
   }))];
   for (const operation of operations) {
     if (operation.type !== "edge.create") continue;
-    if (operation.role !== "reference"
+    const role = operation.role ?? "reference";
+    if (role !== "reference"
       && (mediaTypes.get(operation.source) !== "image" || mediaTypes.get(operation.target) !== "video")) {
+      // 该错误发生在模型计划尚未落库时，异步持久化最小定位信息，避免只留下泛化的校验文案。
+      void validationLogger?.log({
+        entrypoint: "agent-plan",
+        ...context,
+        role,
+        sourceNodeId: operation.source,
+        sourceType: mediaTypes.get(operation.source) ?? null,
+        targetNodeId: operation.target,
+        targetType: mediaTypes.get(operation.target) ?? null,
+      }).catch(() => {});
       invalid("First and last frame roles require an image connected to a video node");
     }
-    bindings.push({ source: operation.source, target: operation.target, role: operation.role ?? "reference" });
+    bindings.push({ source: operation.source, target: operation.target, role });
   }
   const byTarget = new Map<string, Array<{ role: CanvasEdge["role"] }>>();
   for (const binding of bindings) {

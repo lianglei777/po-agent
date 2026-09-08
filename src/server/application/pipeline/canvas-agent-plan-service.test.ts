@@ -295,12 +295,27 @@ describe("CanvasAgentPlanService", () => {
     const image = node("image-1", "image", "v1");
     const text = node("text-1", "text", "v1");
     const state = repositoryState([image, text]);
-    const service = new CanvasAgentPlanService(state.repository, {} as CanvasStudioService, canvasPolicy());
+    const validationLogger = { log: vi.fn().mockResolvedValue(undefined) };
+    const service = new CanvasAgentPlanService(
+      state.repository,
+      {} as CanvasStudioService,
+      canvasPolicy(),
+      validationLogger,
+    );
 
     await expect(service.create({
       projectId: "project-1", sessionId: "session-1", summary: "错误的首帧引用",
       operations: [{ type: "edge.create", source: image.id, target: text.id, role: "first-frame" }],
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR", status: 400 });
+    expect(validationLogger.log).toHaveBeenCalledWith(expect.objectContaining({
+      entrypoint: "agent-plan",
+      projectId: "project-1",
+      sourceNodeId: image.id,
+      sourceType: "image",
+      targetNodeId: text.id,
+      targetType: "text",
+      role: "first-frame",
+    }));
   });
 });
 
