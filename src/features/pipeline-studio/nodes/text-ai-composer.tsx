@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "antd";
 import type { ModelInfo } from "@/contracts/models";
 import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
-import { Brain } from "@/components/icons";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
@@ -255,7 +255,7 @@ function ComposerSurface({
               ...(model.thinkingLevels.length ? [t.pipeline.generationReasoning] : []),
               ...(model.contextWindow ? [t.pipeline.generationContextWindow.replace("{count}", formatCompactNumber(model.contextWindow))] : []),
             ],
-            icon: <Brain className="size-3.5" />,
+            icon: <ModelBrandIcon className="size-3.5" name={model.name} provider={model.provider} />,
           }))}
         />
         {referenceCount ? (

@@ -218,6 +218,26 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // 品牌图标必须经 model-brand-icon 单点引用：深路径 import 依赖包内部目录
+    // 布局与精确版本，扩散引用会让升级与替换失去控制。
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/components/generation/model-brand-icon.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "^@lobehub/icons(/|$)",
+              message:
+                "Import brand icons from @/components/generation/model-brand-icon instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/features/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

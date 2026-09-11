@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Popover, Select } from "antd";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { QuestionCircle } from "@/components/icons";
 import type { GenerationRouteDto } from "@/contracts/generation";
 
@@ -125,9 +126,12 @@ export function GenerationRouteSelect({
       optionRender={(option) => {
         const route = routes.find((candidate) => candidate.id === option.value);
         return route ? (
-          <div className="min-w-0 py-1">
-            <p className="truncate text-xs font-medium text-primary">{route.name}</p>
-            <GenerationRouteTags className="mt-1" limit={2} tags={route.tags} />
+          <div className="flex min-w-0 items-center gap-2 py-1">
+            <ModelBrandIcon className="size-3.5 shrink-0" product={route.product} name={route.name} provider={route.providerId} />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-primary">{route.name}</p>
+              <GenerationRouteTags className="mt-1" limit={2} tags={route.tags} />
+            </div>
           </div>
         ) : option.label;
       }}

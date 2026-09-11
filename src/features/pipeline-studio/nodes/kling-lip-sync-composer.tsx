@@ -5,6 +5,7 @@ import { InputNumber, Switch } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type { CanvasResourceReferenceAttrs, LipSyncPreparationDto } from "@/contracts/pipeline";
 import { Check, FileMusic, FileVideo } from "@/components/icons";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { useI18n } from "@/i18n/use-i18n";
 import { CanvasComposerSubmitAction } from "./shared/canvas-composer-submit-action";
 import { CanvasModelPicker } from "./shared/canvas-model-picker";
@@ -139,7 +140,7 @@ export function KlingLipSyncComposer({
               meta: route.providerId,
               description: route.description,
               tags: route.tags,
-              icon: <FileVideo className="size-3.5" />,
+              icon: <ModelBrandIcon className="size-3.5" product={route.product} name={route.name} provider={route.providerId} />,
             }))}
             onChange={onRouteChange}
             value={selectedRouteId}

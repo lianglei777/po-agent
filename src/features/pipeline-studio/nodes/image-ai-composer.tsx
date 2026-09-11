@@ -5,6 +5,7 @@ import { Modal } from "antd";
 import type { GenerationRouteDto, JsonValue } from "@/contracts/generation";
 import type { CanvasEdge, CanvasGenerationSettingValue, CanvasNode, CanvasNodeData, CanvasPromptDocument } from "@/contracts/pipeline";
 import { ImagePlus } from "@/components/icons";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText, promptDocumentResourceAttrs } from "../model/prompt-document";
@@ -348,7 +349,7 @@ function ComposerSurface({
               meta: route.providerId,
               description: route.description,
               tags: route.tags,
-              icon: <ImagePlus className="size-3.5" />,
+              icon: <ModelBrandIcon className="size-3.5" product={route.product} name={route.name} provider={route.providerId} />,
             }))}
           />
           <CanvasGenerationConfig

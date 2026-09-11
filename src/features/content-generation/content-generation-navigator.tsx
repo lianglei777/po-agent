@@ -1,7 +1,8 @@
 "use client";
 
 import { SettingsResourceTree, type SettingsResourceTreeNode } from "@/components/ui/settings-resource-tree";
-import { AlertTriangle, CheckCircle2, FileImage, FileVideo, Layers, Server } from "@/components/icons";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
+import { AlertTriangle, CheckCircle2, FileImage, FileVideo } from "@/components/icons";
 import type { GenerationProviderDescriptorDto, GenerationRouteDto } from "@/contracts/generation";
 import { useI18n } from "@/i18n/use-i18n";
 import {
@@ -37,7 +38,7 @@ export function ContentGenerationNavigator({
     return {
       key: `provider:${provider.providerId}`,
       label: provider.displayName,
-      icon: <Server className="size-3.5" />,
+      icon: <ModelBrandIcon className="size-3.5" name={provider.displayName} provider={provider.providerId} />,
       meta: `${enabledCount}/${providerRoutes.length}`,
       status: hasDraft ? (
         <span aria-label={labels.unsavedCredential} className="size-2 rounded-full bg-[var(--pl-accent)]" role="img" title={labels.unsavedCredential} />
@@ -54,7 +55,7 @@ export function ContentGenerationNavigator({
       children: groups.map((group) => ({
         key: `product:${provider.providerId}:${group.product}`,
         label: group.product,
-        icon: <Layers className="size-3.5" />,
+        icon: <ModelBrandIcon className="size-3.5" product={group.product} provider={provider.providerId} />,
         meta: `${group.routes.filter((route) => route.enabled).length}/${group.routes.length}`,
         selectable: false,
         children: group.routes.map((route) => ({

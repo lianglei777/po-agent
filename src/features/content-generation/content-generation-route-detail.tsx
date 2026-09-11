@@ -2,6 +2,7 @@
 
 import { Button, Switch, Tooltip } from "antd";
 import { GenerationRouteTags } from "@/components/generation/generation-route-presentation";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { CheckCircle2 } from "@/components/icons";
 import { SettingsRow, SettingsSection } from "@/components/ui/settings-form";
 import type {
@@ -44,10 +45,13 @@ export function ContentGenerationRouteDetail({
     <div className="mx-auto w-full max-w-4xl space-y-6 px-6 py-6">
       <header className="border-b border-line-subtle pb-5">
         <div className="flex items-start justify-between gap-8">
-          <div className="min-w-0">
-            <p className="text-caption font-medium text-dim">{provider.displayName} / {route.product}</p>
-            <h2 className="mt-1 text-lg font-semibold text-primary">{route.name}</h2>
-            <p className="mt-2 max-w-[70ch] text-body-sm text-muted">{route.description}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <ModelBrandIcon className="size-5 shrink-0" product={route.product} name={route.name} provider={route.providerId} />
+            <div className="min-w-0">
+              <p className="text-caption font-medium text-dim">{provider.displayName} / {route.product}</p>
+              <h2 className="mt-1 text-lg font-semibold text-primary">{route.name}</h2>
+              <p className="mt-2 max-w-[70ch] text-body-sm text-muted">{route.description}</p>
+            </div>
           </div>
           <span className={`shrink-0 text-caption ${route.enabled ? "text-success-text" : "text-muted"}`}>
             {route.enabled ? labels.routeEnabled : labels.routeDisabled}

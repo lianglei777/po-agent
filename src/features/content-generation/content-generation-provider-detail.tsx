@@ -1,6 +1,7 @@
 "use client";
 
 import { Alert, Button, Input, Switch } from "antd";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { Copy, Eye, EyeOff, KeyRound, Trash2 } from "@/components/icons";
 import { SettingsRow, SettingsSection } from "@/components/ui/settings-form";
 import type { GenerationProviderDescriptorDto, GenerationRouteDto } from "@/contracts/generation";
@@ -42,10 +43,13 @@ export function ContentGenerationProviderDetail({
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-6 py-6">
       <header className="flex items-start justify-between gap-8 border-b border-line-subtle pb-5">
-        <div className="min-w-0">
-          <p className="text-caption font-medium text-dim">{labels.providerSettings}</p>
-          <h2 className="mt-1 truncate text-lg font-semibold text-primary">{provider.displayName}</h2>
-          <p className="mt-1 font-ui-mono text-caption text-muted">{provider.providerId}</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <ModelBrandIcon className="size-5 shrink-0" name={provider.displayName} provider={provider.providerId} />
+          <div className="min-w-0">
+            <p className="text-caption font-medium text-dim">{labels.providerSettings}</p>
+            <h2 className="mt-1 truncate text-lg font-semibold text-primary">{provider.displayName}</h2>
+            <p className="mt-1 font-ui-mono text-caption text-muted">{provider.providerId}</p>
+          </div>
         </div>
         <span className={`shrink-0 text-caption ${provider.enabled ? "text-success-text" : "text-muted"}`}>
           {provider.enabled ? labels.providerEnabledStatus : labels.providerDisabledStatus}

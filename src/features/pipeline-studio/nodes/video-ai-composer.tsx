@@ -15,6 +15,7 @@ import type {
   LipSyncPreparationDto,
 } from "@/contracts/pipeline";
 import { FileVideo } from "@/components/icons";
+import { ModelBrandIcon } from "@/components/generation/model-brand-icon";
 import { useI18n } from "@/i18n/use-i18n";
 import { pipelineStudioApi } from "../api/pipeline-studio-api";
 import { promptDocumentFromPlainText } from "../model/prompt-document";
@@ -479,7 +480,7 @@ function VideoComposerSurface({
               meta: route.providerId,
               description: route.description,
               tags: route.tags,
-              icon: <FileVideo className="size-3.5" />,
+              icon: <ModelBrandIcon className="size-3.5" product={route.product} name={route.name} provider={route.providerId} />,
             }))}
           />
           <ComposerSelect

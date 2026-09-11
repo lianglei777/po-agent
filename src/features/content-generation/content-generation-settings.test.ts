@@ -33,6 +33,16 @@ describe("content generation settings", () => {
     expect(navigatorSource).not.toContain("Search");
   });
 
+  it("shows brand icons on provider and product nodes while routes stay capability-scoped", () => {
+    expect(navigatorSource).toContain('<ModelBrandIcon className="size-3.5" name={provider.displayName} provider={provider.providerId} />');
+    expect(navigatorSource).toContain('<ModelBrandIcon className="size-3.5" product={group.product} provider={provider.providerId} />');
+    expect(navigatorSource).not.toContain("<Layers");
+    expect(navigatorSource).not.toContain("<Server");
+    expect(navigatorSource).toContain('route.capability.endsWith("-to-image")');
+    expect(providerSource).toContain('<ModelBrandIcon className="size-5 shrink-0" name={provider.displayName} provider={provider.providerId} />');
+    expect(routeSource).toContain('<ModelBrandIcon className="size-5 shrink-0" product={route.product} name={route.name} provider={route.providerId} />');
+  });
+
   it("preserves trusted provider credentials and explicit destructive confirmation", () => {
     expect(settingsSource).toContain("loadGenerationProviders");
     expect(settingsSource).toContain("saveGenerationProviderCredential");
