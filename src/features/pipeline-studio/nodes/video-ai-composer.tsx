@@ -441,10 +441,12 @@ function VideoComposerSurface({
       onExpand={onExpand}
       body={(
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex h-12 shrink-0 items-center gap-2 px-4">
-            <FileVideo className="size-4 text-[var(--pl-accent)]" />
-            <span className="text-xs font-medium text-[var(--pl-text-secondary)]">{t.pipeline.videoAiReferenceHint}</span>
-          </div>
+          {large ? (
+            <div className="flex h-12 shrink-0 items-center gap-2 px-4">
+              <FileVideo className="size-4 text-[var(--pl-accent)]" />
+              <span className="text-xs font-medium text-[var(--pl-text-secondary)]">{t.pipeline.videoAiReferenceHint}</span>
+            </div>
+          ) : null}
           <ResourcePromptEditor
             autoFocus={large}
             value={promptDocument}

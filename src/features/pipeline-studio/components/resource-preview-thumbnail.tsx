@@ -11,13 +11,13 @@ type ThumbnailSize = "inline" | "browser" | "strip";
 const SIZE_CLASS: Record<ThumbnailSize, string> = {
   inline: "size-5 rounded-[4px]",
   browser: "size-9 rounded-md",
-  strip: "size-14 rounded-lg",
+  strip: "size-10 rounded-md",
 };
 
 const IMAGE_SIZE: Record<ThumbnailSize, string> = {
   inline: "20px",
   browser: "36px",
-  strip: "56px",
+  strip: "40px",
 };
 
 export function ResourcePreviewThumbnail({

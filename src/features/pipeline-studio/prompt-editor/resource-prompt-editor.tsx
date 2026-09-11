@@ -458,7 +458,7 @@ export function ResourcePromptEditor({
         <div
           role="list"
           aria-label={t.pipeline.promptReferencesPreview}
-          className="flex min-h-16 shrink-0 items-center gap-2 overflow-x-auto px-5 py-2"
+          className="flex min-h-13 shrink-0 items-center gap-2 overflow-x-auto px-5 py-1.5"
         >
           {referencedResources.map(({ binding, preview }, index) => {
             const removeLabel = hasDraftConnections
