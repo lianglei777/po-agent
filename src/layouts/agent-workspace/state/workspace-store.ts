@@ -16,15 +16,12 @@ export type DraftSession = {
   created: string;
 };
 
-export type SessionSurface = "chat" | "generation";
-
 export type WorkspaceState = {
   activeView: WorkspaceView;
   activeCwd: string | null;
   selectedSession: SessionInfo | null;
   newSessionCwd: string | null;
   draftSession: DraftSession | null;
-  sessionSurface: SessionSurface;
   chatInstanceKey: number;
   projectPanelOpen: boolean;
   projectPanelTab: ProjectPanelTab;
@@ -48,7 +45,6 @@ export type WorkspaceState = {
 
 export type WorkspaceActions = {
   setActiveView: (view: WorkspaceView) => void;
-  setSessionSurface: (surface: SessionSurface) => void;
   setProjectPanelOpen: (open: boolean) => void;
   setProjectPanelTab: (tab: ProjectPanelTab) => void;
   setOpenFile: (file: OpenFile | null) => void;
@@ -97,7 +93,6 @@ export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
   selectedSession: null,
   newSessionCwd: null,
   draftSession: null,
-  sessionSurface: "chat",
   chatInstanceKey: 0,
   projectPanelOpen: false,
   projectPanelTab: "files",
@@ -129,7 +124,6 @@ export function createWorkspaceStore(
     ...DEFAULT_WORKSPACE_STATE,
     ...initialState,
     setActiveView: (activeView) => set({ activeView }),
-    setSessionSurface: (sessionSurface) => set({ sessionSurface }),
     setProjectPanelOpen: (projectPanelOpen) => set({ projectPanelOpen }),
     setProjectPanelTab: (projectPanelTab) => set({ projectPanelTab }),
     setOpenFile: (openFile) => set({ openFile }),
@@ -172,7 +166,6 @@ export function createWorkspaceStore(
         newSessionCwd: cwd,
         draftSession: null,
         activeView: "chat",
-        sessionSurface: "chat",
         openFile: null,
         chatInstanceKey: state.chatInstanceKey + 1,
         currentSystemPrompt: null,
@@ -190,7 +183,6 @@ export function createWorkspaceStore(
           newSessionCwd: null,
           draftSession: null,
           activeView: "chat",
-          sessionSurface: "chat",
           // 重复点击当前会话时保留 Chat 实例，避免消息区卸载重建产生闪烁。
           chatInstanceKey: keepsCurrentChatMounted
             ? state.chatInstanceKey
@@ -204,7 +196,6 @@ export function createWorkspaceStore(
         newSessionCwd: draftSession.cwd,
         draftSession,
         activeView: "chat",
-        sessionSurface: "chat",
         chatInstanceKey: state.chatInstanceKey + 1,
         currentSystemPrompt: null,
         instructionsNeedApply: false,
@@ -216,7 +207,6 @@ export function createWorkspaceStore(
         newSessionCwd: null,
         draftSession: null,
         activeView: "chat",
-        sessionSurface: "chat",
       }),
     replaceDeletedSession: (deletedSession, replacement) => {
       if (get().selectedSession?.id !== deletedSession.id) return false;
@@ -224,7 +214,6 @@ export function createWorkspaceStore(
         selectedSession: null,
         newSessionCwd: deletedSession.cwd,
         draftSession: replacement,
-        sessionSurface: "chat",
         chatInstanceKey: state.chatInstanceKey + 1,
         currentSystemPrompt: null,
         instructionsNeedApply: false,

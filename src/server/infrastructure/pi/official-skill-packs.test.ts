@@ -20,6 +20,20 @@ describe("official Skill Pack catalog", () => {
         expectedSkills: ["prepare-release", "write-release-notes"],
         containsExtensions: false,
       },
+      {
+        id: "content-generation",
+        version: "1.0.0",
+        source: path.join(
+          appRoot,
+          "resources",
+          "official-packs",
+          "content-generation",
+        ),
+        name: "Content Generation",
+        description: "Generate images and videos from external Chat through optional Agent Skills.",
+        expectedSkills: ["image-generation", "video-generation"],
+        containsExtensions: false,
+      },
     ]);
   });
 

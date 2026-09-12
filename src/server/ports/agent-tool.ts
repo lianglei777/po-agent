@@ -43,6 +43,7 @@ export interface AgentToolContext {
   sessionId: string;
   cwd: string;
   pipelineProjectId?: string;
+  enabledSkillNames?: ReadonlySet<string>;
 }
 
 export interface AgentSessionScopeProvider {

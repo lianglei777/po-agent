@@ -17,7 +17,6 @@ describe("agent workspace store", () => {
     const store = createWorkspaceStore({
       activeView: "model-provider",
       newSessionCwd: "D:\\code\\draft",
-      sessionSurface: "generation",
       chatInstanceKey: 3,
     });
 
@@ -29,7 +28,6 @@ describe("agent workspace store", () => {
       selectedSession: session,
       newSessionCwd: null,
       draftSession: null,
-      sessionSurface: "chat",
       chatInstanceKey: 4,
     });
   });
@@ -40,7 +38,6 @@ describe("agent workspace store", () => {
       activeView: "model-provider",
       selectedSession: session,
       activeCwd: session.cwd,
-      sessionSurface: "generation",
       chatInstanceKey: 3,
     });
 
@@ -49,7 +46,6 @@ describe("agent workspace store", () => {
     expect(store.getState()).toMatchObject({
       activeView: "chat",
       selectedSession: refreshedSession,
-      sessionSurface: "chat",
       chatInstanceKey: 3,
     });
   });
@@ -73,7 +69,6 @@ describe("agent workspace store", () => {
       selectedSession: session,
       newSessionCwd: null,
       draftSession: null,
-      sessionSurface: "chat",
       chatInstanceKey: 3,
     });
   });
@@ -124,7 +119,6 @@ describe("agent workspace store", () => {
       selectedSession: null,
       newSessionCwd: session.cwd,
       draftSession: replacement,
-      sessionSurface: "chat",
     });
   });
 

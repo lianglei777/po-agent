@@ -122,6 +122,22 @@ describe("PiAgentRuntimeFactory", () => {
     })).toEqual({ prompt: "lake" });
   });
 
+  it("forwards product-specific Skill exclusions to the resource loader", async () => {
+    sdk.createSessionManager.mockReturnValue({ appendMessage: vi.fn() });
+    sdk.createAgentSession.mockResolvedValue({ session: {} });
+    resources.createPiResourceLoader.mockResolvedValue({});
+
+    await new PiAgentRuntimeFactory(Promise.resolve(sdk.modelRuntime as never)).create({
+      cwd: "C:\\workspace",
+      excludedSkillNames: ["image-generation", "video-generation"],
+    });
+
+    expect(resources.createPiResourceLoader).toHaveBeenCalledWith({
+      cwd: "C:\\workspace",
+      excludedSkillNames: ["image-generation", "video-generation"],
+    });
+  });
+
   it("persists a requested session before the first prompt so history can restore it", async () => {
     const manager = {
       appendMessage: vi.fn(),

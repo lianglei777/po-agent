@@ -56,6 +56,8 @@ export interface CreateRuntimeInput {
   toolNames?: string[];
   /** 项目自有工具，由 infrastructure 适配为底层 SDK 工具。 */
   customTools?: AgentToolDefinition[];
+  /** 当前产品入口不允许模型调用的 Skill 名称。 */
+  excludedSkillNames?: string[];
 }
 
 /** Agent 运行时工厂端口，负责创建新的运行时实例。 */

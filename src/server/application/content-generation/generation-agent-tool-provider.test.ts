@@ -10,6 +10,10 @@ import { GenerationAgentToolProvider } from "./generation-agent-tool-provider";
 import { GenerationReviewRegistry } from "./generation-review-registry";
 
 const NOW = "2026-08-06T00:00:00.000Z";
+const ENABLED_GENERATION_SKILLS = new Set([
+  "image-generation",
+  "video-generation",
+]);
 
 describe("GenerationAgentToolProvider", () => {
   it("does not expose generic generation tools to Pipeline Agent sessions", () => {
@@ -22,6 +26,25 @@ describe("GenerationAgentToolProvider", () => {
       cwd: "D:\\project",
       pipelineProjectId: "project-1",
     })).toEqual([]);
+  });
+
+  it("exposes external Chat generation tools only for enabled generation skills", () => {
+    const provider = new GenerationAgentToolProvider(() => ({}) as never);
+
+    expect(provider.getTools({
+      sessionId: "chat",
+      cwd: "D:\\project",
+      enabledSkillNames: new Set(),
+    })).toEqual([]);
+    expect(provider.getTools({
+      sessionId: "chat",
+      cwd: "D:\\project",
+      enabledSkillNames: new Set(["image-generation"]),
+    }).map((tool) => tool.name)).toEqual([
+      "generate_image",
+      "get_generation",
+      "cancel_generation",
+    ]);
   });
   let database: SqliteDatabase;
   let repository: SqliteGenerationRepository;
@@ -53,7 +76,7 @@ describe("GenerationAgentToolProvider", () => {
 
   it("rejects paid generation without explicit user authorization", async () => {
     reviews.end("session-1");
-    const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
+    const generate = provider.getTools(generationToolContext())[0]!;
     await expect(generate.execute({
       toolCallId: "call-without-approval",
       input: { prompt: "A quiet lake", userAuthorized: false },
@@ -64,8 +87,28 @@ describe("GenerationAgentToolProvider", () => {
     await expect(service.listRuns("session-1")).resolves.toHaveLength(0);
   });
 
+  it("rejects a generation capability outside the active Skill authorization", async () => {
+    reviews.begin("session-1", {
+      ...generationTurn(false),
+      allowedToolNames: new Set(["generate_image"]),
+    });
+    const video = provider.getTools({
+      sessionId: "session-1",
+      cwd: "D:\\project",
+      enabledSkillNames: ENABLED_GENERATION_SKILLS,
+    }).find((tool) => tool.name === "generate_video")!;
+
+    await expect(video.execute({
+      toolCallId: "video-with-image-skill",
+      input: { prompt: "A quiet lake" },
+    })).rejects.toMatchObject({
+      code: "GENERATION_USER_AUTHORIZATION_REQUIRED",
+      status: 403,
+    });
+  });
+
   it("exposes stable semantic tools and creates an idempotent durable run", async () => {
-    const tools = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" });
+    const tools = provider.getTools(generationToolContext());
     expect(tools.map((tool) => tool.name)).toEqual([
       "generate_image",
       "generate_video",
@@ -111,7 +154,7 @@ describe("GenerationAgentToolProvider", () => {
         parameters: { resolution: "1k" },
       },
     });
-    const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
+    const generate = provider.getTools(generationToolContext())[0]!;
 
     const result = await generate.execute({
       toolCallId: "planned-call",
@@ -128,7 +171,7 @@ describe("GenerationAgentToolProvider", () => {
   });
 
   it("returns the provider task ID after the provider accepts the job", async () => {
-    const tools = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" });
+    const tools = provider.getTools(generationToolContext());
     const created = await service.createRun({
       sessionId: "session-1",
       capability: "text-to-image",
@@ -172,6 +215,7 @@ describe("GenerationAgentToolProvider", () => {
     const result = await provider.getTools({
       sessionId: "session-1",
       cwd: "D:\\project",
+      enabledSkillNames: ENABLED_GENERATION_SKILLS,
     })[0]!.execute({
       toolCallId: "call-review",
       input: { prompt: "A quiet lake", userAuthorized: true },
@@ -203,7 +247,7 @@ describe("GenerationAgentToolProvider", () => {
 
   it("maps assets to a multimodal video run without exposing provider fields", async () => {
     const generate = provider
-      .getTools({ sessionId: "session-1", cwd: "D:\\project" })
+      .getTools(generationToolContext())
       .find((tool) => tool.name === "generate_video")!;
 
     const result = await generate.execute({
@@ -252,6 +296,7 @@ describe("GenerationAgentToolProvider", () => {
     const generate = provider.getTools({
       sessionId: "session-1",
       cwd: "D:\\project",
+      enabledSkillNames: ENABLED_GENERATION_SKILLS,
     })[0]!;
 
     const result = await generate.execute({
@@ -286,7 +331,7 @@ describe("GenerationAgentToolProvider", () => {
       waitTimeoutMs: 10_000,
       pollIntervalMs: 10_000,
     }, reviews);
-    const generate = provider.getTools({ sessionId: "session-1", cwd: "D:\\project" })[0]!;
+    const generate = provider.getTools(generationToolContext())[0]!;
     const controller = new AbortController();
     const updates = vi.fn();
     const pending = generate.execute({
@@ -312,7 +357,7 @@ describe("GenerationAgentToolProvider", () => {
       source: "api",
       idempotencyKey: "private-run",
     });
-    const tools = provider.getTools({ sessionId: "other-session", cwd: "D:\\other" });
+    const tools = provider.getTools(generationToolContext("other-session", "D:\\other"));
 
     await expect(tools[2]!.execute({
       toolCallId: "get-1",
@@ -332,6 +377,13 @@ function generationTurn(reviewFirst: boolean) {
     assets: [],
     originalPrompt: "Generate an image",
   };
+}
+
+function generationToolContext(
+  sessionId = "session-1",
+  cwd = "D:\\project",
+) {
+  return { sessionId, cwd, enabledSkillNames: ENABLED_GENERATION_SKILLS };
 }
 
 function session(): GenerationSession {

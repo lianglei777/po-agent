@@ -190,6 +190,45 @@ describe("createPiResourceLoader", () => {
     }
   });
 
+  it("excludes product-specific Skills from the runtime prompt", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "po-excluded-skills-"));
+    const cwd = path.join(root, "workspace");
+    const agentDir = path.join(root, "agent");
+    const builtinSkillsDir = path.join(root, "builtins");
+    await fs.mkdir(path.join(builtinSkillsDir, "image-generation"), {
+      recursive: true,
+    });
+    await fs.mkdir(path.join(builtinSkillsDir, "canvas-helper"), {
+      recursive: true,
+    });
+    await fs.mkdir(cwd, { recursive: true });
+    await fs.writeFile(
+      path.join(builtinSkillsDir, "image-generation", "SKILL.md"),
+      "---\nname: image-generation\ndescription: Generate images\n---\n",
+    );
+    await fs.writeFile(
+      path.join(builtinSkillsDir, "canvas-helper", "SKILL.md"),
+      "---\nname: canvas-helper\ndescription: Help with canvas work\n---\n",
+    );
+    const webAccessDir = await createWebAccessExtension(root);
+
+    try {
+      const loader = await createPiResourceLoader({
+        cwd,
+        agentDir,
+        builtinSkillsDir,
+        webAccessDir,
+        excludedSkillNames: ["image-generation"],
+      });
+
+      expect(loader.getSkills().skills.map((skill) => skill.name)).toEqual([
+        "canvas-helper",
+      ]);
+    } finally {
+      await fs.rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("preserves Package metadata when built-in skills are extended", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "po-packages-"));
     const cwd = path.join(root, "workspace");

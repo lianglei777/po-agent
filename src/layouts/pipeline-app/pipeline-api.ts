@@ -191,18 +191,4 @@ export const pipelineApi = {
 
   updateFrame: (frameId: string, body: { visualDescription?: string; imagePrompt?: string; videoPrompt?: string }) =>
     request<unknown>("/api/pipeline/frames/" + frameId, { method: "PATCH", body: JSON.stringify(body) }),
-
-  // Agent 驱动 — 创建 Agent 会话
-  createAgentSession: (cwd: string) =>
-    request<{ sessionId: string }>(`/api/agent/new`, {
-      method: "POST",
-      body: JSON.stringify({ cwd }),
-    }),
-
-  // Agent 驱动 — 发送消息
-  sendAgentTurn: (sessionId: string, turnId: string, message: string) =>
-    request<unknown>(`/api/agent/${sessionId}/turns`, {
-      method: "POST",
-      body: JSON.stringify({ turnId, message }),
-    }),
 };

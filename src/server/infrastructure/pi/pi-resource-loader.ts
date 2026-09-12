@@ -166,11 +166,13 @@ export async function createPiResourceLoader({
   agentDir = getAgentDir(),
   builtinSkillsDir = resolveBuiltinSkillsDir(),
   webAccessDir = resolveBuiltinWebAccessDir(),
+  excludedSkillNames = [],
 }: {
   cwd: string;
   agentDir?: string;
   builtinSkillsDir?: string;
   webAccessDir?: string;
+  excludedSkillNames?: string[];
 }): Promise<DefaultResourceLoader> {
   if (
     !process.env.PI_CODING_AGENT_DIR &&
@@ -189,6 +191,7 @@ export async function createPiResourceLoader({
   const webAccessEnabled = await readWebAccessEnabled(
     path.join(normalizedAgentDir, "web-search.json"),
   );
+  const excludedSkills = new Set(excludedSkillNames);
   const loader = new DefaultResourceLoader({
     cwd,
     agentDir,
@@ -197,6 +200,12 @@ export async function createPiResourceLoader({
     // 每次 reload 都重新读取文件，确保运行中的会话能发现新增或修改后的提示词。
     appendSystemPrompt: [],
     appendSystemPromptOverride: () => resolveAppendSources(agentDir, cwd),
+    skillsOverride: excludedSkills.size
+      ? (result) => ({
+          ...result,
+          skills: result.skills.filter((skill) => !excludedSkills.has(skill.name)),
+        })
+      : undefined,
     extensionsOverride: (extensions) => {
       const webAccessExtension = extensions.extensions.find((extension) =>
         path

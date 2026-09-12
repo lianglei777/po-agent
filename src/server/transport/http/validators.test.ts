@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   parseAgentCommand,
-  parseAgentTurnRequest,
   parseCreateAgent,
   parseUpdateAgentSettings,
   parseUpdateWebAccessSettings,
@@ -50,116 +49,17 @@ describe("agent HTTP validation", () => {
     ).toThrow("message or images must be provided");
   });
 
-  it("parses generation review only for a prompt command", () => {
-    expect(
-      parseAgentCommand({
-        type: "prompt",
-        message: "Generate a video",
-        generationReview: true,
-      }),
-    ).toMatchObject({ generationReview: true });
-    expect(
-      parseAgentCommand({
-        type: "steer",
-        message: "Continue",
-        generationReview: true,
-      }),
-    ).not.toHaveProperty("generationReview");
-  });
-
-  it("validates the per-turn generation policy and uploaded asset references", () => {
+  it("does not accept legacy generation controls on prompt commands", () => {
     expect(parseAgentCommand({
       type: "prompt",
-      message: "Create a new poster",
-      generation: {
-        mode: { type: "generation-route", routeId: "route-1" },
-        reviewFirst: true,
-        plan: {
-          toolName: "generate_image",
-          routeId: "route-1",
-          prompt: "Create a planned poster",
-          parameters: { aspectRatio: "3:4" },
-        },
-        assets: [{
-          slot: "imageUrls",
-          name: "reference.png",
-          mediaType: "image",
-          mimeType: "image/png",
-          ref: { type: "workspace-file", relativePath: ".po-agent/generation-inputs/reference.png" },
-        }],
-      },
-    })).toMatchObject({
-      generation: {
-        mode: { type: "generation-route", routeId: "route-1" },
-        reviewFirst: true,
-        plan: {
-          toolName: "generate_image",
-          routeId: "route-1",
-          prompt: "Create a planned poster",
-        },
-        assets: [{ mediaType: "image" }],
-      },
-    });
-    expect(() => parseAgentCommand({
-      type: "prompt",
-      message: "Create",
-      generation: {
-        mode: { type: "generation-auto" },
-        reviewFirst: false,
-        assets: [],
-        plan: {
-          toolName: "read",
-          routeId: "route-1",
-          prompt: "Create",
-          parameters: {},
-        },
-      },
-    })).toThrow("generation.plan.toolName is unsupported");
-    expect(() => parseAgentCommand({
-      type: "prompt",
-      message: "Create",
-      generation: {
-        mode: { type: "generation-auto" },
-        reviewFirst: false,
-        assets: [{
-          slot: "imageUrls",
-          name: "bad.exe",
-          mediaType: "binary",
-          mimeType: "application/octet-stream",
-          ref: { type: "workspace-file", relativePath: "bad.exe" },
-        }],
-      },
-    })).toThrow("generation asset mediaType is unsupported");
-  });
-
-  it("rejects client-owned plans on the orchestrated turn endpoint", () => {
-    expect(parseAgentTurnRequest({
-      turnId: "turn-123",
-      message: "Create a poster",
-      generation: {
-        mode: { type: "generation-auto" },
-        reviewFirst: false,
-        assets: [],
-      },
-    })).toMatchObject({
-      message: "Create a poster",
+      message: "Generate a video",
+      generationReview: true,
       generation: { mode: { type: "generation-auto" } },
+    })).toEqual({
+      type: "prompt",
+      message: "Generate a video",
+      images: undefined,
     });
-    expect(() => parseAgentTurnRequest({
-      turnId: "turn-123",
-      message: "Create a poster",
-      generation: {
-        mode: { type: "generation-auto" },
-        reviewFirst: false,
-        assets: [],
-        plan: {
-          toolName: "generate_image",
-          routeId: "route-1",
-          prompt: "forged",
-          parameters: {},
-        },
-      },
-    })).toThrow("generation.plan is server-owned");
   });
 
   it("parses the auto-retry command", () => {

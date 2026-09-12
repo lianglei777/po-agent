@@ -57,9 +57,16 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
 
   getTools(input: AgentToolContext): AgentToolDefinition[] {
     if (input.pipelineProjectId) return [];
+    const imageEnabled = input.enabledSkillNames?.has("image-generation") ?? false;
+    const videoEnabled = input.enabledSkillNames?.has("video-generation") ?? false;
+    if (!imageEnabled && !videoEnabled) return [];
     return [
-      this.generateTool("generate_image", "Generate image", input.sessionId),
-      this.generateTool("generate_video", "Generate video", input.sessionId),
+      ...(imageEnabled
+        ? [this.generateTool("generate_image", "Generate image", input.sessionId)]
+        : []),
+      ...(videoEnabled
+        ? [this.generateTool("generate_video", "Generate video", input.sessionId)]
+        : []),
       this.getGenerationTool(input.sessionId),
       this.cancelGenerationTool(input.sessionId),
     ];
@@ -92,6 +99,13 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
           throw new AppError(
             "GENERATION_USER_AUTHORIZATION_REQUIRED",
             "Content generation is not enabled for the current user turn",
+            403,
+          );
+        }
+        if (turn.allowedToolNames && !turn.allowedToolNames.has(name)) {
+          throw new AppError(
+            "GENERATION_USER_AUTHORIZATION_REQUIRED",
+            `The ${name} tool is not enabled by an active content-generation skill`,
             403,
           );
         }

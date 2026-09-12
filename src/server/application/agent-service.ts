@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AgentGenerationAsset,
   AgentCommandResponse,
   CreateAgentRequest,
   CreateAgentResponse,
   ForkAgentResponse,
 } from "@/contracts/agent";
-import type { JsonValue } from "@/contracts/generation";
-import type { AgentCommand } from "@/server/domain/agent-command";
+import type {
+  ActiveGenerationTurn,
+  AgentCommand,
+} from "@/server/domain/agent-command";
 import { AppError } from "@/server/domain/app-error";
 import type { AgentEvent } from "@/server/domain/agent-event";
 import type {
@@ -21,6 +22,12 @@ import type { GenerationReviewRegistry } from "@/server/application/content-gene
 import type { WorkspaceRootProvider } from "@/server/ports/file-system";
 import type { SessionRepository } from "@/server/ports/session-repository";
 import type { SessionLifecycleProjector } from "@/server/ports/session-lifecycle-projector";
+import type { SkillProvider } from "@/server/ports/skill-provider";
+
+const EXTERNAL_CHAT_GENERATION_SKILL_NAMES = [
+  "image-generation",
+  "video-generation",
+];
 
 /**
  * Agent 会话应用服务。
@@ -47,6 +54,7 @@ export class AgentService {
     private readonly promptContextProvider?: AgentPromptContextProvider,
     private readonly sessionLifecycleProjector?: SessionLifecycleProjector,
     private readonly sessionScopeProvider?: AgentSessionScopeProvider,
+    private readonly skillProvider?: Pick<SkillProvider, "load">,
   ) {}
 
   /**
@@ -64,8 +72,12 @@ export class AgentService {
     this.roots.addRoot(input.cwd);
     const requestedSessionId = randomUUID();
     const startKey = `new:${requestedSessionId}`;
-    const runtime = await this.runtimes.getOrStart(startKey, () =>
-      this.runtimeFactory.create({
+    const runtime = await this.runtimes.getOrStart(startKey, async () => {
+      const pipelineSession = Boolean(scope.pipelineProjectId);
+      const enabledSkillNames = pipelineSession
+        ? undefined
+        : await this.loadEnabledSkillNames(input.cwd);
+      return this.runtimeFactory.create({
         requestedSessionId,
         cwd: input.cwd,
         toolNames: input.toolNames,
@@ -73,9 +85,13 @@ export class AgentService {
           sessionId: requestedSessionId,
           cwd: input.cwd,
           pipelineProjectId: scope.pipelineProjectId,
+          enabledSkillNames,
         }),
-      }),
-    );
+        ...(pipelineSession
+          ? { excludedSkillNames: EXTERNAL_CHAT_GENERATION_SKILL_NAMES }
+          : {}),
+      });
+    });
     try {
       if (input.provider && input.modelId) {
         await runtime.execute({
@@ -136,23 +152,14 @@ export class AgentService {
       }
       // Runtime 的 isStreaming 要到异步 Prompt 真正启动后才更新；先占位以封闭并发提交窗口。
       this.activePrompts.add(sessionId);
-      const generation = command.generation
-        ? { ...command.generation, originalPrompt: command.message }
-        : command.generationReview
-          ? {
-              mode: { type: "generation-auto" } as const,
-              reviewFirst: true,
-              assets: [],
-              originalPrompt: command.message,
-            }
-          : undefined;
-      this.generationReviews?.begin(sessionId, generation);
+      let generation: ActiveGenerationTurn | undefined;
       let generationContext: string | undefined;
       try {
+        generation = await this.skillGenerationPolicy(sessionId, command.message);
+        this.generationReviews?.begin(sessionId, generation);
         generationContext = await this.promptContextProvider?.getPromptContext(
           sessionId,
           generation,
-          command.generationContextAssets,
         );
         generationContext = mergePromptContexts(generationContext, options.trustedPromptContext);
       } catch (error) {
@@ -195,64 +202,6 @@ export class AgentService {
           ),
         }
       : { loaded: false as const };
-  }
-
-  async recordGenerationTurn(
-    sessionId: string,
-    input: {
-      turnId: string;
-      message: string;
-      assets: AgentGenerationAsset[];
-      plan: {
-        toolName: "generate_image" | "generate_video";
-        routeId: string;
-        prompt: string;
-        parameters: Record<string, JsonValue>;
-      };
-    },
-  ): Promise<void> {
-    const runtime = await this.getOrRestore(sessionId);
-    this.runtimes.touch(sessionId);
-    if (this.activePrompts.has(sessionId) || (await runtime.getState()).isStreaming) {
-      throw new AppError(
-        "AGENT_BUSY",
-        "The Agent is already processing a turn",
-        409,
-      );
-    }
-    const generationContext = await this.promptContextProvider?.getPromptContext(
-      sessionId,
-      undefined,
-      input.assets,
-    );
-    await runtime.execute({
-      type: "record_user_turn",
-      turnId: input.turnId,
-      message: input.message,
-      assets: input.assets,
-      plan: input.plan,
-      generationContext,
-    });
-  }
-
-  async recordGenerationTurnResult(
-    sessionId: string,
-    input: {
-      turnId: string;
-      toolName: "generate_image" | "generate_video";
-      result: {
-        content: Array<{ type: "text"; text: string }>;
-        details?: unknown;
-        isError: boolean;
-      };
-    },
-  ): Promise<void> {
-    const runtime = await this.getOrRestore(sessionId);
-    this.runtimes.touch(sessionId);
-    await runtime.execute({
-      type: "record_generation_turn_result",
-      ...input,
-    });
   }
 
   async getState(sessionId: string) {
@@ -310,19 +259,61 @@ export class AgentService {
       }
       this.roots.addRoot(detail.info?.cwd ?? process.cwd());
       const pipelineProjectId = await this.sessionScopeProvider?.getPipelineProjectId(sessionId);
+      const cwd = detail.info?.cwd ?? process.cwd();
+      const enabledSkillNames = pipelineProjectId
+        ? undefined
+        : await this.loadEnabledSkillNames(cwd);
       return this.runtimeFactory.create({
         requestedSessionId: sessionId,
         sessionFile: detail.filePath,
-        cwd: detail.info?.cwd ?? process.cwd(),
+        cwd,
         // 第一批 Pipeline Agent 恢复后仍保持只读工具边界，避免默认内置工具绕过画布用例。
         toolNames: pipelineProjectId ? [] : undefined,
         customTools: this.tools?.getTools({
           sessionId,
-          cwd: detail.info?.cwd ?? process.cwd(),
+          cwd,
           pipelineProjectId: pipelineProjectId ?? undefined,
+          enabledSkillNames,
         }),
+        ...(pipelineProjectId
+          ? { excludedSkillNames: EXTERNAL_CHAT_GENERATION_SKILL_NAMES }
+          : {}),
       });
     });
+  }
+
+  private async loadEnabledSkillNames(cwd: string): Promise<ReadonlySet<string> | undefined> {
+    if (!this.skillProvider) return undefined;
+    const result = await this.skillProvider.load(cwd);
+    return new Set(
+      result.skills
+        .filter((skill) => !skill.disableModelInvocation)
+        .map((skill) => skill.name),
+    );
+  }
+
+  private async skillGenerationPolicy(
+    sessionId: string,
+    originalPrompt: string,
+  ) {
+    if (!this.skillProvider) return undefined;
+    // Pipeline Agent 的工具和提示词边界必须与外部 Chat 生成 Skill 完全隔离。
+    if (await this.sessionScopeProvider?.getPipelineProjectId(sessionId)) {
+      return undefined;
+    }
+    const detail = await this.sessions.findById(sessionId);
+    const enabled = await this.loadEnabledSkillNames(detail?.info?.cwd ?? process.cwd());
+    const allowedToolNames = new Set<"generate_image" | "generate_video">();
+    if (enabled?.has("image-generation")) allowedToolNames.add("generate_image");
+    if (enabled?.has("video-generation")) allowedToolNames.add("generate_video");
+    if (!allowedToolNames.size) return undefined;
+    return {
+      mode: { type: "generation-auto" } as const,
+      reviewFirst: false,
+      assets: [],
+      originalPrompt,
+      allowedToolNames,
+    };
   }
 
   /**

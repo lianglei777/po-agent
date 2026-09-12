@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { ChatCenter } from "@/features/chat/chat-center";
-import { ContentGenerationCenter } from "@/features/content-generation/content-generation-center";
 import { ContentGenerationStoreProvider } from "@/features/content-generation/state/content-generation-store-provider";
 import { ProjectInstructionsEditor } from "@/features/instructions/project-instructions-editor";
 import { ConversationSidebar } from "@/features/sessions/conversation-sidebar";
@@ -103,14 +102,12 @@ function AgentWorkspaceContent() {
     selectedSession,
     newSessionCwd,
     draftSession,
-    sessionSurface,
     chatInstanceKey,
     currentSystemPrompt,
     instructionsNeedApply,
     sessionRefreshKey,
     explorerRefreshKey,
     modelsRevision,
-    setSessionSurface,
     setCurrentSystemPrompt,
     setInstructionsNeedApply,
     changeCwd,
@@ -601,21 +598,10 @@ function AgentWorkspaceContent() {
               onToggleConversation={() => toggleConversation()}
               primaryNavigationHidden={primaryNavHidden}
               showBranchHistory={Boolean(selectedSession)}
-              sessionSurface={selectedSession ? sessionSurface : undefined}
-              onSessionSurfaceChange={
-                selectedSession ? setSessionSurface : undefined
-              }
             />
 
             <div className="flex min-h-0 flex-1">
-              {selectedSession && sessionSurface === "generation" ? (
-                <ContentGenerationCenter
-                  key={selectedSession.id}
-                  onChanged={handleAgentEnd}
-                  session={selectedSession}
-                />
-              ) : (
-                <ChatCenter
+              <ChatCenter
                   key={chatInstanceKey}
                   modelsRevision={modelsRevision}
                   newSessionCwd={newSessionCwd}
@@ -628,8 +614,7 @@ function AgentWorkspaceContent() {
                   onSystemPromptChange={setCurrentSystemPrompt}
                   projectName={activeCwd ? getProjectName(activeCwd) : null}
                   session={selectedSession}
-                />
-              )}
+              />
             </div>
           </section>
         </div>

@@ -9,45 +9,6 @@ import { AgentService } from "./agent-service";
 import { GenerationReviewRegistry } from "./content-generation/generation-review-registry";
 
 describe("AgentService", () => {
-  it("forwards workflow tool results to the owning runtime", async () => {
-    const commands: unknown[] = [];
-    const runtime = runtimeStub({
-      execute: async <T,>(command: unknown) => {
-        commands.push(command);
-        return undefined as T;
-      },
-    });
-    const registry = new InMemoryAgentRegistry();
-    registry.register("session-1", runtime);
-    const service = new AgentService(
-      {} as SessionRepository,
-      registry,
-      { create: vi.fn() },
-      { listRoots: async () => [], addRoot: vi.fn() },
-    );
-
-    await service.recordGenerationTurnResult("session-1", {
-      turnId: "turn-1",
-      toolName: "generate_image",
-      result: {
-        content: [{ type: "text", text: "run queued" }],
-        details: { runId: "run-1" },
-        isError: false,
-      },
-    });
-
-    expect(commands).toEqual([{
-      type: "record_generation_turn_result",
-      turnId: "turn-1",
-      toolName: "generate_image",
-      result: {
-        content: [{ type: "text", text: "run queued" }],
-        details: { runId: "run-1" },
-        isError: false,
-      },
-    }]);
-  });
-
   it("creates and configures a runtime without starting a prompt", async () => {
     const commands: unknown[] = [];
     const execute = async <T,>(command: unknown) => {
@@ -116,6 +77,7 @@ describe("AgentService", () => {
       .fn<(input: CreateRuntimeInput) => Promise<AgentRuntime>>()
       .mockResolvedValue(runtime);
     const getTools = vi.fn().mockReturnValue([]);
+    const loadSkills = vi.fn(async () => ({ skills: [], diagnostics: [] }));
     const sessions = {
       findById: vi.fn(async () => ({
         filePath: "C:\\work\\session.jsonl",
@@ -132,6 +94,7 @@ describe("AgentService", () => {
       undefined,
       undefined,
       { getPipelineProjectId: vi.fn(async () => "project-1") },
+      { load: loadSkills },
     );
 
     await service.getState("session-1");
@@ -145,6 +108,36 @@ describe("AgentService", () => {
       requestedSessionId: "session-1",
       toolNames: [],
       customTools: [],
+      excludedSkillNames: ["image-generation", "video-generation"],
+    }));
+    expect(loadSkills).not.toHaveBeenCalled();
+  });
+
+  it("creates Pipeline sessions without loading external Chat generation Skills", async () => {
+    const runtime = runtimeStub();
+    const create = vi.fn(async () => runtime);
+    const loadSkills = vi.fn(async () => ({ skills: [], diagnostics: [] }));
+    const service = new AgentService(
+      {} as SessionRepository,
+      new InMemoryAgentRegistry(),
+      { create },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      { getTools: vi.fn(() => []) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { load: loadSkills },
+    );
+
+    await service.create(
+      { cwd: "C:\\work", toolNames: [] },
+      { pipelineProjectId: "project-1" },
+    );
+
+    expect(loadSkills).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      excludedSkillNames: ["image-generation", "video-generation"],
     }));
   });
 
@@ -198,7 +191,7 @@ describe("AgentService", () => {
     expect(registry.get("original")).toBeUndefined();
   });
 
-  it("scopes generation review to the active prompt execution", async () => {
+  it("scopes Skill generation authorization to the active prompt execution", async () => {
     let finishPrompt: (() => void) | undefined;
     const runtime = runtimeStub({
       execute: async <T,>() =>
@@ -210,25 +203,138 @@ describe("AgentService", () => {
     runtimes.register("session-1", runtime);
     const reviews = new GenerationReviewRegistry();
     const service = new AgentService(
+      { findById: vi.fn(async () => ({ info: { cwd: "C:\\work" } })) } as unknown as SessionRepository,
+      runtimes,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      reviews,
+      undefined,
+      undefined,
+      undefined,
+      { load: vi.fn(async () => ({
+        skills: [{
+          skillId: "image-generation",
+          name: "image-generation",
+          description: "Generate images",
+          filePath: "C:\\work\\.pi\\skills\\image-generation\\SKILL.md",
+          displayPath: ".pi/skills/image-generation/SKILL.md",
+          baseDir: "C:\\work\\.pi\\skills\\image-generation",
+          sourceInfo: {
+            path: "C:\\work\\.pi\\skills\\image-generation\\SKILL.md",
+            source: "project",
+            scope: "project" as const,
+            origin: "top-level" as const,
+          },
+          canModify: true,
+          disableModelInvocation: false,
+          version: "1",
+        }],
+        diagnostics: [],
+      })) },
+    );
+
+    await service.execute("session-1", {
+      type: "prompt",
+      message: "Generate with review",
+    });
+    expect(reviews.current("session-1")?.allowedToolNames).toEqual(
+      new Set(["generate_image"]),
+    );
+
+    finishPrompt?.();
+    await vi.waitFor(() =>
+      expect(reviews.requiresReview("session-1")).toBe(false),
+    );
+  });
+
+  it("releases the prompt reservation when Skill policy loading fails", async () => {
+    const runtime = runtimeStub();
+    const runtimes = new InMemoryAgentRegistry();
+    runtimes.register("session-1", runtime);
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error("skill load failed"))
+      .mockResolvedValue({ skills: [], diagnostics: [] });
+    const service = new AgentService(
+      { findById: vi.fn(async () => ({ info: { cwd: "C:\\work" } })) } as unknown as SessionRepository,
+      runtimes,
+      { create: vi.fn() },
+      { listRoots: async () => [], addRoot: vi.fn() },
+      undefined,
+      new GenerationReviewRegistry(),
+      undefined,
+      undefined,
+      undefined,
+      { load },
+    );
+
+    await expect(service.execute("session-1", {
+      type: "prompt",
+      message: "first",
+    })).rejects.toThrow("skill load failed");
+    await expect(service.execute("session-1", {
+      type: "prompt",
+      message: "second",
+    })).resolves.toEqual({ accepted: true });
+  });
+
+  it("does not apply external Chat generation Skills to Pipeline prompts", async () => {
+    let finishPrompt: (() => void) | undefined;
+    const runtime = runtimeStub({
+      execute: async <T,>() =>
+        new Promise<T>((resolve) => {
+          finishPrompt = () => resolve(undefined as T);
+        }),
+    });
+    const runtimes = new InMemoryAgentRegistry();
+    runtimes.register("pipeline-session", runtime);
+    const reviews = new GenerationReviewRegistry();
+    const getPromptContext = vi.fn(async () => undefined);
+    const load = vi.fn(async () => ({
+      skills: [{
+        skillId: "image-generation",
+        name: "image-generation",
+        description: "Generate images",
+        filePath: "C:\\work\\.pi\\skills\\image-generation\\SKILL.md",
+        displayPath: ".pi/skills/image-generation/SKILL.md",
+        baseDir: "C:\\work\\.pi\\skills\\image-generation",
+        sourceInfo: {
+          path: "C:\\work\\.pi\\skills\\image-generation\\SKILL.md",
+          source: "project",
+          scope: "project" as const,
+          origin: "top-level" as const,
+        },
+        canModify: true,
+        disableModelInvocation: false,
+        version: "1",
+      }],
+      diagnostics: [],
+    }));
+    const service = new AgentService(
       {} as SessionRepository,
       runtimes,
       { create: vi.fn() },
       { listRoots: async () => [], addRoot: vi.fn() },
       undefined,
       reviews,
+      { getPromptContext },
+      undefined,
+      { getPipelineProjectId: vi.fn(async () => "project-1") },
+      { load },
     );
 
-    await service.execute("session-1", {
+    await service.execute("pipeline-session", {
       type: "prompt",
-      message: "Generate with review",
-      generationReview: true,
+      message: "Prepare the canvas",
     });
-    expect(reviews.requiresReview("session-1")).toBe(true);
 
-    finishPrompt?.();
-    await vi.waitFor(() =>
-      expect(reviews.requiresReview("session-1")).toBe(false),
+    expect(load).not.toHaveBeenCalled();
+    expect(reviews.current("pipeline-session")).toBeUndefined();
+    expect(getPromptContext).toHaveBeenCalledWith(
+      "pipeline-session",
+      undefined,
     );
+    finishPrompt?.();
   });
 
   it("reserves a session before the runtime reports streaming", async () => {

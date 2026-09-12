@@ -6,11 +6,6 @@ const source = readFileSync(
   fileURLToPath(new URL("./chat-input.tsx", import.meta.url)),
   "utf8",
 );
-const generationControlSource = readFileSync(
-  fileURLToPath(new URL("./chat-generation-control.tsx", import.meta.url)),
-  "utf8",
-);
-
 describe("chat input visual contract", () => {
   it("keeps the composer structural and gives focus a semantic accent", () => {
     expect(source).toContain("has-[textarea:focus-visible]:border-ring");
@@ -35,38 +30,12 @@ describe("chat input visual contract", () => {
     expect(source).not.toContain("t.chat.input.shortcutIdle");
     expect(source).not.toContain("t.chat.input.shortcutRunning");
     expect(source).toContain("t.chat.input.thinking");
-    expect(source).toContain("<ChatGenerationControl");
+    expect(source).not.toContain("ChatGenerationControl");
     expect(source).not.toContain("t.chat.input.tools");
     expect(source).not.toContain("changeTools");
     expect(source).toContain("t.chat.input.queue");
     expect(source).toContain("t.chat.input.steer");
     expect(source).toContain("t.chat.input.stopAgent");
-  });
-
-  it("keeps all generation configuration behind one composer button", () => {
-    expect(generationControlSource).toContain("<Popover");
-    expect(generationControlSource).toContain("<Radio.Group");
-    expect(generationControlSource).toContain("t.chat.input.generationAutoRoute");
-    expect(generationControlSource).toContain("t.chat.input.generationReview");
-    expect(generationControlSource).toContain("onReviewChange");
-    expect(generationControlSource.match(/<HelpHint/g)).toHaveLength(3);
-    expect(generationControlSource).toContain(
-      'checked={mode.type === "generation-auto"}',
-    );
-    expect(generationControlSource).toContain(
-      'mode.type === "generation-route" ? (',
-    );
-    expect(generationControlSource).toContain("t.chat.input.generationApi");
-    expect(generationControlSource).not.toContain("generationManageApis");
-    expect(generationControlSource).not.toContain("onOpenSettings");
-    expect(
-      generationControlSource.indexOf("t.chat.input.generationReview"),
-    ).toBeLessThan(
-      generationControlSource.indexOf("t.chat.input.generationApi"),
-    );
-    expect(source.match(/<ChatGenerationControl/g)).toHaveLength(1);
-    expect(source).not.toContain("generationModeOptions");
-    expect(source).not.toContain("generationExecution");
   });
 
   it("keeps each attached image removable from its top-right corner", () => {

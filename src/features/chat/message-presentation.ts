@@ -1,5 +1,4 @@
 import type {
-  AgentGenerationAsset,
   AgentMessage,
   AssistantMessage,
   ImageContent,
@@ -61,29 +60,17 @@ export function buildMessagePresentation(
 ): MessagePresentationItem[] {
   const items: MessagePresentationItem[] = [];
   let activeTurn: AssistantTurnPresentationItem | null = null;
-  let pendingGenerationAssets: AgentGenerationAsset[] | undefined;
 
   messages.forEach((message, index) => {
     const entryId = entryIds[index];
-    if (
-      message.role === "custom" &&
-      (message.customType === "po-agent-generation-context" ||
-        message.customType === "po-agent-generation-turn")
-    ) {
-      pendingGenerationAssets = generationAssetsFromDetails(message.details);
-      return;
-    }
     if (message.role === "user") {
       activeTurn = null;
       items.push({
         kind: "user",
         entryId,
-        message: pendingGenerationAssets?.length
-          ? { ...message, generationAssets: pendingGenerationAssets }
-          : message,
+        message,
         originalIndex: index,
       });
-      pendingGenerationAssets = undefined;
       return;
     }
     if (message.role === "compactionSummary") {
@@ -91,15 +78,6 @@ export function buildMessagePresentation(
       return;
     }
     if (message.role !== "assistant") return;
-    // 该内部确认消息只用于触发 Pi 会话落盘，生成 Run 卡片才是用户可见结果。
-    if (
-      message.provider === "po-agent" &&
-      message.model === "content-generation-workflow" &&
-      message.content.length === 1 &&
-      message.content[0]?.type === "text" &&
-      message.content[0].text === "Content generation workflow accepted this request."
-    ) return;
-
     if (!activeTurn) {
       activeTurn = {
         kind: "assistantTurn",
@@ -137,30 +115,6 @@ export function buildMessagePresentation(
   return items;
 }
 
-function generationAssetsFromDetails(
-  details: unknown,
-): AgentGenerationAsset[] | undefined {
-  if (!details || typeof details !== "object" || !("assets" in details)) {
-    return undefined;
-  }
-  const { assets } = details as { assets?: unknown };
-  if (!Array.isArray(assets)) return undefined;
-  return assets.filter((asset): asset is AgentGenerationAsset => {
-    if (!asset || typeof asset !== "object") return false;
-    const value = asset as Partial<AgentGenerationAsset>;
-    return (
-      typeof value.slot === "string" &&
-      typeof value.name === "string" &&
-      typeof value.mimeType === "string" &&
-      (value.mediaType === "image" ||
-        value.mediaType === "video" ||
-        value.mediaType === "audio") &&
-      typeof value.ref === "object" &&
-      value.ref !== null
-    );
-  });
-}
-
 export function partitionAssistantTurn(turn: AssistantTurnPresentationItem) {
   const process: AssistantTurnBlock[] = [];
   const final: FinalAssistantTurnBlock[] = [];
@@ -183,32 +137,6 @@ export function partitionAssistantTurn(turn: AssistantTurnPresentationItem) {
   return { final, process };
 }
 
-export function collapseGenerationQueries(process: AssistantTurnBlock[]) {
-  const groups = new Map<string, { count: number; lastIndex: number }>();
-  process.forEach((step, index) => {
-    const key = generationQueryKey(step);
-    if (!key) return;
-    const previous = groups.get(key);
-    groups.set(key, { count: (previous?.count ?? 0) + 1, lastIndex: index });
-  });
-  return process.flatMap((step, index) => {
-    const key = generationQueryKey(step);
-    if (!key) return [step];
-    const group = groups.get(key)!;
-    return group.lastIndex === index
-      ? [{ ...step, repeatCount: group.count }]
-      : [];
-  });
-}
-
-function generationQueryKey(step: AssistantTurnBlock) {
-  if (step.block.type !== "toolCall" || step.block.toolName !== "get_generation") {
-    return null;
-  }
-  const runId = step.block.input.runId;
-  return typeof runId === "string" && runId ? `get_generation:${runId}` : null;
-}
-
 export function executionProcessStatus(
   process: AssistantTurnBlock[],
   results: Map<string, ToolResultMessage>,
@@ -221,7 +149,7 @@ export function executionProcessStatus(
     if (step.block.type !== "toolCall") continue;
     const result = results.get(step.block.toolCallId);
     if (result?.isError) errorCount += 1;
-    else if (!result || isRunningGenerationResult(result.details)) runningCount += 1;
+    else if (!result) runningCount += 1;
   }
 
   if (streaming && runningCount === 0 && process.length > 0) {
@@ -239,14 +167,6 @@ export function executionProcessStatus(
     state: runningCount > 0 ? "running" : "completed",
     stepCount: process.length,
   };
-}
-
-function isRunningGenerationResult(details: unknown) {
-  if (!details || typeof details !== "object") return false;
-  const status = (details as { status?: unknown }).status;
-  const runId = (details as { runId?: unknown }).runId;
-  return typeof runId === "string" &&
-    (status === "queued" || status === "running" || status === "cancel_requested");
 }
 
 function completeAssistantMessage(

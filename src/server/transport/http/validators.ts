@@ -1,14 +1,11 @@
 import {
   THINKING_LEVELS,
-  type AgentGenerationAsset,
   type AgentCommand,
-  type AgentTurnRequest,
   type CreateAgentRequest,
   type ImageInput,
   type ThinkingLevel,
 } from "@/contracts/agent";
 import type { UpdateAgentSettingsRequest } from "@/contracts/agent-settings";
-import type { JsonValue } from "@/contracts/generation";
 import {
   WEB_SEARCH_FALLBACK_KINDS,
   WEB_SEARCH_PROVIDER_IDS,
@@ -149,46 +146,6 @@ export function parseUpdateWebAccessSettings(
   };
 }
 
-export function parseAgentTurnRequest(value: unknown): AgentTurnRequest {
-  const object = asObject(value);
-  const images = parseImages(object.images);
-  const generation = object.generation === undefined
-    ? undefined
-    : parseAgentTurnGenerationInput(object.generation);
-  return {
-    turnId: boundedRequiredString(object, "turnId", 6, 128),
-    message: messageOrImages(object, images),
-    images,
-    generation,
-  };
-}
-
-function boundedRequiredString(
-  object: Record<string, unknown>,
-  key: string,
-  minLength: number,
-  maxLength: number,
-): string {
-  const value = requiredString(object, key).trim();
-  if (value.length < minLength || value.length > maxLength) {
-    invalid(`${key} must contain between ${minLength} and ${maxLength} characters`);
-  }
-  return value;
-}
-
-function parseAgentTurnGenerationInput(value: unknown) {
-  const object = asObject(value);
-  if (object.plan !== undefined) {
-    invalid("generation.plan is server-owned and cannot be submitted by a client");
-  }
-  const parsed = parseAgentGenerationPolicy({ ...object, plan: undefined });
-  return {
-    mode: parsed.mode,
-    reviewFirst: parsed.reviewFirst,
-    assets: parsed.assets,
-  };
-}
-
 export function parseAgentCommand(value: unknown): AgentCommand {
   const object = asObject(value);
   const type = requiredString(object, "type");
@@ -199,12 +156,6 @@ export function parseAgentCommand(value: unknown): AgentCommand {
         type,
         message: messageOrImages(object, images),
         images,
-        ...(object.generationReview !== undefined
-          ? { generationReview: requiredBoolean(object, "generationReview") }
-          : {}),
-        ...(object.generation !== undefined
-          ? { generation: parseAgentGenerationPolicy(object.generation) }
-          : {}),
       };
     }
     case "steer":
@@ -248,72 +199,6 @@ export function parseAgentCommand(value: unknown): AgentCommand {
         400,
       );
   }
-}
-
-function parseAgentGenerationPolicy(value: unknown) {
-  const object = asObject(value);
-  const modeValue = asObject(object.mode);
-  const modeType = requiredString(modeValue, "type");
-  const mode = modeType === "generation-auto"
-    ? { type: modeType } as const
-    : modeType === "generation-route"
-      ? { type: modeType, routeId: requiredString(modeValue, "routeId") } as const
-      : invalid("generation.mode contains an unsupported type");
-  const assetsValue = object.assets;
-  if (!Array.isArray(assetsValue) || assetsValue.length > 30) {
-    invalid("generation.assets must be an array with at most 30 items");
-  }
-  const assets = assetsValue.map((item) => {
-    const asset = asObject(item);
-    const mediaTypeValue = requiredString(asset, "mediaType");
-    if (mediaTypeValue !== "image" && mediaTypeValue !== "video" && mediaTypeValue !== "audio") {
-      invalid("generation asset mediaType is unsupported");
-    }
-    const mediaType = mediaTypeValue as AgentGenerationAsset["mediaType"];
-    const refValue = asObject(asset.ref);
-    const refType = requiredString(refValue, "type");
-    const ref = refType === "workspace-file"
-      ? { type: refType, relativePath: requiredString(refValue, "relativePath") } as const
-      : refType === "artifact"
-        ? { type: refType, artifactId: requiredString(refValue, "artifactId") } as const
-        : invalid("generation asset ref type is unsupported");
-    return {
-      slot: requiredString(asset, "slot"),
-      name: requiredString(asset, "name"),
-      mediaType,
-      mimeType: requiredString(asset, "mimeType"),
-      ref,
-    };
-  });
-  const planValue = object.plan;
-  const plan = planValue === undefined
-    ? undefined
-    : parseAgentGenerationPlan(planValue);
-  return {
-    mode,
-    reviewFirst: requiredBoolean(object, "reviewFirst"),
-    assets,
-    plan,
-  };
-}
-
-function parseAgentGenerationPlan(value: unknown) {
-  const object = asObject(value);
-  const toolNameValue = requiredString(object, "toolName");
-  if (toolNameValue !== "generate_image" && toolNameValue !== "generate_video") {
-    invalid("generation.plan.toolName is unsupported");
-  }
-  const toolName = toolNameValue as "generate_image" | "generate_video";
-  const parameters = object.parameters;
-  if (!parameters || Array.isArray(parameters) || typeof parameters !== "object") {
-    invalid("generation.plan.parameters must be an object");
-  }
-  return {
-    toolName,
-    routeId: requiredString(object, "routeId"),
-    prompt: requiredString(object, "prompt"),
-    parameters: parameters as Record<string, JsonValue>,
-  };
 }
 
 export function parseModelTest(value: unknown): ModelTestRequest {

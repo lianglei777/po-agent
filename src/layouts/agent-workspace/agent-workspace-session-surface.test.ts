@@ -15,7 +15,7 @@ const storeSource = readFileSync(
   "utf8",
 );
 
-describe("unified session surfaces", () => {
+describe("chat session surface", () => {
   it("creates a normal session without a fixed mode selection dialog", () => {
     expect(workspaceSource).toContain(
       'requestNavigation("chat", () => handleNewSession(temporaryId, cwd))',
@@ -24,20 +24,15 @@ describe("unified session surfaces", () => {
     expect(workspaceSource).not.toContain("createContentGenerationSession");
   });
 
-  it("lets persisted chat sessions switch between chat and generation", () => {
-    expect(storeSource).toContain('sessionSurface: "chat"');
-    expect(storeSource).toContain("setSessionSurface");
-    expect(workspaceSource).toContain('sessionSurface === "generation"');
-    expect(workspaceSource).toContain("onSessionSurfaceChange");
-    expect(topBarSource).toContain("<Segmented");
-    expect(topBarSource).toContain("t.workspace.sessionView");
-    expect(topBarSource).toContain('value: "chat" as const');
-    expect(topBarSource).toContain('value: "generation" as const');
+  it("keeps external sessions on the chat surface", () => {
+    expect(storeSource).not.toContain("sessionSurface");
+    expect(workspaceSource).not.toContain("ContentGenerationCenter");
+    expect(workspaceSource).not.toContain("onSessionSurfaceChange");
+    expect(topBarSource).not.toContain("<Segmented");
   });
 
   it("does not special-case legacy generation-only sessions", () => {
-    expect(storeSource).toContain('sessionSurface: "chat"');
-    expect(workspaceSource).toContain("sessionSurface={selectedSession ? sessionSurface : undefined}");
+    expect(storeSource).not.toContain("sessionSurface");
     expect(workspaceSource).not.toContain('mode === "content-generation"');
   });
 });

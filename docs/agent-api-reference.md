@@ -217,8 +217,7 @@ Session 状态为 `development-bypass`、`disabled`、`login-required`、`passwo
 | `PATCH` | `/api/agent-settings`   | 更新全局 Agent 设置并刷新存活 Runtime |
 | `GET`   | `/api/agent/:id`        | 获取 Runtime Snapshot                 |
 | `POST`  | `/api/agent/:id`        | 执行统一 Agent Command                |
-| `GET`   | `/api/agent/:id/turns`  | 获取 Chat Turn 与生成 Run 统一快照    |
-| `POST`  | `/api/agent/:id/turns`  | 服务端规划并提交一轮 Chat 消息        |
+| `GET`   | `/api/agent/:id/turns`  | 按需恢复并获取 Chat Runtime 状态       |
 | `GET`   | `/api/agent/:id/events` | 订阅 Agent SSE 事件                   |
 
 ### 2.5 Models
@@ -734,9 +733,9 @@ Query：
 
 1. 调用 `POST /api/agent/new` 创建并配置 Runtime。
 2. 使用返回的 `sessionId` 订阅 `/api/agent/:id/events`。
-3. 收到 `connected` 事件后，通过 `POST /api/agent/:id/turns` 提交 Chat 消息。
+3. 收到 `connected` 事件后，通过 `POST /api/agent/:id` 的 `prompt` 命令提交 Chat 消息。
 4. `abort`、模型切换、分支导航等控制命令继续使用 `POST /api/agent/:id`。
-5. Chat 页面恢复时查询 `GET /api/agent/:id/turns`，一次恢复 Agent 与 Generation Run 状态。
+5. Chat 页面恢复时查询 `GET /api/agent/:id/turns`，按需恢复并读取 Agent 状态。
 
 ### 6.1 创建并配置 Agent Runtime
 
@@ -774,9 +773,8 @@ interface CreateAgentRequest {
 - `cwd` 必需且不能为空。
 - 只有同时提供 `provider` 和 `modelId` 才会设置模型。
 - 未提供 `toolNames` 时启用全部内置工具：`bash`、`read`、`edit`、`write`、`grep`、`find`、`ls`。
-- `toolNames: []` 表示禁用所有内置工具。项目自有的持久化生成工具始终可用，不属于这份内置工具 allowlist。
+- `toolNames: []` 表示禁用所有内置工具。项目自有工具不属于这份内置工具 allowlist；外部 Chat 的生成工具还要求对应生成 Skill 已启用。
 - 此接口不会启动 Prompt。客户端必须先建立 SSE，再通过统一 command endpoint 发送首条 `prompt`。
-- 返回成功前会把同一个 `sessionId`、`cwd` 和 `sessionFile` 投影到持久化生成 Session；因此客户端可立即上传生成素材，不需要先发送一条 Prompt。
 
 成功响应：
 
@@ -828,40 +826,23 @@ Runtime 未加载：
 
 注意：该接口不会从磁盘恢复 Runtime。订阅 SSE 或发送 Command 时才会按需恢复。
 
-### 6.3 提交和恢复 Chat Turn
+### 6.3 恢复 Chat Runtime
 
 ```http
 GET  /api/agent/:id/turns
-POST /api/agent/:id/turns
-Content-Type: application/json
 ```
 
-`GET` 会按需恢复 Runtime，并同时返回 `agent` 和 `generationRuns`。Chat UI 以该快照为刷新后的状态真相，SSE 和 Run 轮询只负责增量更新。
-
-每个请求必须包含客户端生成的稳定 `turnId`。普通聊天还包含 `message` 和可选 `images`；启用内容生成时可额外提交 `generation.mode`、`reviewFirst` 和已上传素材，但不能提交 Planner 结果：
+`GET` 会按需恢复 Runtime，并返回 `agent`。Chat UI 以该快照为刷新后的状态真相，SSE 负责增量更新。该路径不再接受 `POST`，也不返回 Generation Run。
 
 ```json
 {
-  "turnId": "594fb5cb-d3d2-4abc-a5f1-c8e79f11c43e",
-  "message": "根据这张图生成相似风格的女性角色",
-  "generation": {
-    "mode": { "type": "generation-auto" },
-    "reviewFirst": true,
-    "assets": [{
-      "slot": "auto-image",
-      "name": "reference.png",
-      "mediaType": "image",
-      "mimeType": "image/png",
-      "ref": {
-        "type": "workspace-file",
-        "relativePath": ".po-agent/generation-inputs/reference.png"
-      }
-    }]
+  "agent": {
+    "sessionId": "019e...",
+    "isStreaming": false,
+    "isCompacting": false
   }
 }
 ```
-
-服务端读取 Runtime 当前模型和 Session 上下文，完成语义规划与确定性校验。语义结果区分普通 `chat`、`attachment-understanding`、`generation` 和 `clarification`。附件理解只有在请求提供了当前视觉模型可用的原生图片输入时才启动 Agent；否则返回 `MODEL_ATTACHMENT_UNSUPPORTED` 澄清并保留草稿。`accepted/generation` 由应用层直接创建持久化 Run，并在响应的 `run` 字段返回初始视图；聊天模型不再负责输出生成 Tool Call。服务端同时在 Agent Session 中持久化对应的用户消息、Assistant Tool Call 和 Tool Result，执行失败也会以错误 Tool Result 闭合。客户端提供 `generation.plan` 会返回 `400 VALIDATION_ERROR`。同一 `turnId` 生成相同的幂等键，网络重试返回原 Run 且不会重复写入同一工具结果。Agent 正忙或存在活动 Generation Run 时返回 `409`，避免多标签页绕过 Composer 锁定。
 
 ### 6.4 执行 Agent Command
 
@@ -2558,7 +2539,7 @@ Pi ResourceLoader 在创建 Agent Runtime 时显式组合追加提示词来源�
 
 ## 12. Generation API
 
-内容生成与聊天共用同一种持久化 Pi Session。生成请求创建 SQLite 中的 Generation Run，进程内 Worker 负责供应商提交、轮询、下载与恢复。旧的 `/api/content-generation/*`、JSON Session/Job 和可编辑 HTTP 模板接口已删除。
+内容生成基础设施由 Pipeline Studio 和外部 Chat 的可选生成 Skill 复用。生成工具创建 SQLite 中的 Generation Run，进程内 Worker 负责供应商提交、轮询、下载与恢复。外部 Chat 不再提供 Generate 视图、客户端 Planner 或面向 Session 的 Run HTTP 接口。
 
 ### 12.1 查询生成路由
 
@@ -2568,7 +2549,7 @@ GET /api/generation/routes
 
 返回当前 Catalog 中由应用管理的 Route，包括仍在 Catalog 内但被用户停用的 Route，不返回已经从 Catalog 下线的 Route。每项包含 `id`、`name`、用于设置导航的短 `navigationLabel`、面向用户决策的 `description` 与 `tags`、`capability`、`providerId`、`enabled`、`isDefault`、`revision`、`defaults` 与供应商无关的 `inputSchema`。`navigationLabel` 表示 API 形态（如 `text-to-image` 或 `reference-to-video`），不改变运行时 capability；`tags` 是可独立展示的短标签数组，不是使用分隔符拼接的文本。供应商 operation、credential reference 和 adapter 配置不会返回。
 
-Chat、直接生成与 Pipeline Studio 使用同一组 Route 描述。自动选择模式会把名称、产品、描述和标签作为模型候选上下文，但服务端仍会校验建议的 `routeId` 是否启用且 capability 匹配；无效建议回退到该 capability 的稳定默认 Route。Chat 工具当前只执行普通生图和生视频，因此不会向 Chat 规划器暴露 `video-to-audio` 或需要画布人脸准备态的 `audio-to-video`；这些能力分别从 Pipeline Studio 音频节点和视频节点执行。
+Pipeline Studio 与生成 Skill 使用同一组 Route 描述。服务端始终校验 `routeId` 是否启用且 capability 匹配；外部 Chat 的 Skill 工具只执行普通生图和生视频，不暴露 `video-to-audio` 或需要画布人脸准备态的 `audio-to-video`，这些能力分别从 Pipeline Studio 音频节点和视频节点执行。
 
 当前 RunningHub 内置 Route 按产品分为 Seedream v5 Pro、Seedance 2.0、Seedance 2.0 Mini、Seedance 2.0 Fast、Seedance 2.5、MiniMax Hailuo H3、MiniMax H3 OSS、PixVerse V6、Wan 2.7、Wan 3.0、可灵对口型与 RunningHub 音频分离。参考生视频接口统一映射为供应商无关的 `multimodal-to-video` capability；人声与背景音提取接口映射为 `video-to-audio`；可灵对口型映射为 `audio-to-video`，并由 Pipeline Studio 在最终生成前完成服务端人脸识别准备。
 
@@ -2581,32 +2562,6 @@ Wan 2.0、2.1、2.2、2.5、2.6 文生图 Route 已从可选 Catalog 下线。�
 千问视频目录还包括 Wan 2.7、HappyHorse 1.1 和 MiniMax-H3 的文生视频、图生视频与参考/多模态生视频 Route。Wan 2.7 固定到文档对应的模型快照；HappyHorse 与 MiniMax-H3 使用各自有限参数 Profile。All-in-One 供应商接口按 capability 拆成独立 Route，前端不需要理解模型内部模式。Wan 2.7 参考生视频的图片与视频素材合计最多 5 个，服务端会跨素材槽统一校验。
 
 各供应商 Route 分别由仓库内受信 Catalog 编译产生。Catalog 同时生成供应商无关的 `inputSchema` 和内部 execution config；创建 Provider Job 时会冻结该配置，恢复与重试不会使用后来更新的 Endpoint、模型名或请求字段映射。execution config 与准备后的供应商资产引用均不会通过 Route DTO 暴露给浏览器。
-
-Chat Composer 只读取当前可用的 Route。`POST /api/generation/plan` 保留给 Generate 视图和兼容客户端；Chat 主对话使用 `/api/agent/:id/turns`，由服务端在同一个应用用例中规划并提交 Agent Prompt：
-
-```http
-GET  /api/generation/composer-options
-POST /api/generation/plan
-Content-Type: application/json
-```
-
-兼容 `plan` 接口必须携带当前 Chat 模型，并可携带已存在的 Session。主 Chat Turn 不接受客户端指定模型或回传 Plan，而是读取 Runtime 当前模型。服务端结合最近对话和 Generation Run 做语义规划；不使用关键词或正则表达式判断用户意图。模型输出只作为候选，Route 可用性、Capability、参数字段和素材槽位仍由服务端确定性校验。
-
-```json
-{
-  "message": "让她的衣摆轻微飘动，生成 8 秒视频",
-  "sessionId": "session-id",
-  "model": { "provider": "anthropic", "modelId": "claude-sonnet" },
-  "mode": { "type": "generation-auto" },
-  "assets": [{ "mediaType": "image", "mimeType": "image/png" }]
-}
-```
-
-`generation` 结果额外返回 `effectivePrompt`。它是 AI 结合上下文整理后真正发送给生成 API 的自包含提示词；Chat UI 必须同时保留并展示用户原文，以便审计实际输入是否准确。服务端会拒绝省略号、Schema 示例值等占位 Prompt，并要求模型纠正一次；纠正后仍不合格时返回 `clarification`，不得创建付费 Run。
-
-Session 存在 Generation Run 后，普通 Agent Prompt 会由服务端附加一份隐藏的最近 Run 审计快照，包括 Route、Capability、用户原文、有效 Prompt、参数、输入素材、Provider Job、产物与错误。该快照参与模型上下文但不作为用户消息展示，使“为什么上一张图没有变化”等追问可以基于真实执行数据回答；相同快照不会重复持久化。
-
-`composer-options` 只返回 Route、Provider 和凭证均已启用的 API。`plan` 接收文字、生成模式以及附件媒体类型，返回 `chat`、`attachment-understanding`、`generation`、`clarification` 或 `invalid`；它只规划 Route 和结构化参数，不上传素材或创建 Run。
 
 ```http
 PATCH /api/generation/routes/:id
@@ -2651,93 +2606,7 @@ Content-Type: application/json
 
 Wan 3.0 参考生视频的 `fileUrl` 与 `linkUrl` 互斥，只接受不含凭证的公网 HTTPS URL。RunningHub 文档允许部分参考视频达到 100 MB，但 Po Agent 当前文件读取和上传链路统一限制为 50 MiB；Route Schema 返回的是应用实际可接受的上限。
 
-### 12.2 注册素材并创建或列出 Run
-
-浏览器文件先登记为 workspace 文件：
-
-```http
-POST /api/sessions/:id/generation-assets
-Content-Type: multipart/form-data
-
-file=<binary>
-```
-
-单文件上限 50 MiB，写入 `<workspace>/.po-agent/generation-inputs/`。绝对路径和 workspace 外路径会被拒绝。
-
-```http
-GET  /api/sessions/:id/generation-runs
-POST /api/sessions/:id/generation-runs
-Content-Type: application/json
-```
-
-`POST` 示例：
-
-```json
-{
-  "capability": "image-to-video",
-  "routeId": "runninghub-seedance-2-image-to-video",
-  "originalPrompt": "让她动起来，8 秒",
-  "prompt": "镜头缓慢推进人物",
-  "idempotencyKey": "client-request-019f...",
-  "source": "direct-ui",
-  "reviewFirst": false,
-  "parameters": {
-    "durationSeconds": 5,
-    "aspectRatio": "16:9"
-  },
-  "assets": [
-    {
-      "slot": "firstFrameUrl",
-      "ref": {
-        "type": "workspace-file",
-        "relativePath": ".po-agent/generation-inputs/first-frame.png"
-      }
-    }
-  ]
-}
-```
-
-- `routeId` 可省略；此时选择 capability 的默认 Route。
-- `idempotencyKey` 必填且最长 200 字符；相同 key 与相同请求返回原 Run，不会重复创建供应商任务；内容冲突返回 `409 GENERATION_IDEMPOTENCY_CONFLICT`。
-- `assets[].slot` 使用 `firstFrameUrl`、`imageUrls` 等语义槽位。
-- `assets[].ref` 支持同 Session Artifact 或 workspace-relative 文件。
-- HTTP 来源只允许 `direct-ui` 或 `api`。
-- `reviewFirst: true` 时 Run 以 `awaiting_confirmation` 创建，不创建 Provider Job；确认后才进入队列。省略或为 `false` 时直接排队。
-
-只有已经持久化的 Pi Session 可以创建 Run。首次创建时，服务端把 Session 元数据投影到 SQLite；Pi 消息树仍由 Pi Session 文件保存。响应为 `{ created, run, jobs, artifacts }`，不包含凭证或 lease；`jobs` 可包含 adapter 在凭据脱敏后的 `requestSnapshot` 与 `responseSnapshot`，用于执行审计。
-
-### 12.3 查询、取消和重试 Run
-
-```http
-GET  /api/generation-runs/:id
-POST /api/generation-runs/:id/confirm
-POST /api/generation-runs/:id/cancel
-POST /api/generation-runs/:id/retry
-POST /api/generation-runs/:id/sync
-Content-Type: application/json
-```
-
-Run 状态：
-
-```text
-awaiting_confirmation | queued | running | succeeded | failed |
-cancel_requested | cancelled
-```
-
-Provider Job 状态：
-
-```text
-created | uploading | submitting | submitted | polling | downloading |
-succeeded | failed | submission_unknown | cancelled
-```
-
-`submission_unknown` 表示提交可能已到达供应商但本地未收到确认，Worker 不会自动重提，以避免重复计费。已收到的 HTTP 拒绝或供应商业务错误属于确定性失败，不会进入该状态，并尽可能保留供应商错误码和消息。
-
-`awaiting_confirmation` 表示 Agent 已解析生成意图并持久化 Run，但尚未创建 Provider Job，也不会被 Worker 领取。确认接口只接受该状态，Body 为 `{ "prompt": "...", "parameters": { ... } }`；服务端按 Run 绑定 Route 的当前 `inputSchema` 重新校验参数，并原子切换为 `queued`、创建首个 Provider Job。重复确认返回当前 Run，不会创建第二个 Job；Run 已取消时返回 `409 GENERATION_RUN_NOT_CONFIRMABLE`。
-
-RunningHub 与当前千问实现均不支持远端取消。取消接口停止本地推进；已提交的远端任务仍可能运行和计费。重试请求体为 `{ "idempotencyKey": "retry-request-..." }`，保留 Run ID 并创建 `attempt + 1` 的 Job。
-
-### 12.4 Provider 凭证
+### 12.2 Provider 凭证
 
 ```http
 GET    /api/generation/credentials/:providerId
@@ -2747,7 +2616,7 @@ DELETE /api/generation/credentials/:providerId
 
 响应返回凭据是否存在、当前来源和位置，例如 `{ "hasCredential": true, "source": "stored-file", "location": "C:\\...\\generation-credentials.json" }`。`PUT` 接受 `{ "apiKey": "..." }`。服务端根据受信 Provider descriptor 把 `providerId` 映射到 credential ref，客户端不能指定 ref 或环境变量名。API Key 保存于服务端凭证文件，不进入 SQLite、Run、Job、Artifact、日志或 HTTP 响应；只有不含 Key 的来源与位置元数据会返回。未保存文件凭证时可回退到该 Provider descriptor 声明的环境变量。RunningHub 使用 `RUNNINGHUB_API_KEY`，千问AI平台使用 `DASHSCOPE_API_KEY`。设置页展示该位置并允许复制，便于用户自行检查本地文件或环境变量。
 
-### 12.5 持久化执行行为
+### 12.3 持久化执行行为
 
 - Session 元数据、Run、Provider Job、Route 和 Artifact 使用 `<agent-data-dir>/po-agent.sqlite`。
 - Worker 使用 lease claim 推进到期 Job，页面断开不会取消 Run。
@@ -2759,57 +2628,31 @@ DELETE /api/generation/credentials/:providerId
 - `submitting` 阶段中断后，lease 过期时转为 `submission_unknown`，不会自动重提。
 - 成功产物下载到 `<workspace>/.po-agent/generated/<runId>/`。
 
-### 12.6 Agent 内容生成工具
+### 12.4 Agent 内容生成 Skill 与工具
 
-每个持久化 Pi Session 注册：
+外部 Chat 默认不注册生成工具。安装官方 `Content Generation` Skill Pack 后，工作区可启用：
 
 ```text
-generate_image
-generate_video
-get_generation
-cancel_generation
+image-generation -> generate_image
+video-generation -> generate_video
 ```
 
-生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收供应商 workflow、HTTP 字段、上传 URL、模型 Endpoint 或 API Key。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键；恢复或重放时返回同一个 Run。
+只有对应 Skill 存在且 `disableModelInvocation` 为 `false` 时，Runtime 才注册对应工具。至少一个生成 Skill 启用时，还会注册只读状态工具 `get_generation` 和取消工具 `cancel_generation`。Pipeline Agent 始终排除这组通用工具，继续只使用 Canvas 工具集。
 
-`generate_image` 与 `generate_video` 不接受模型声明的 `userAuthorized`。Chat 只有在当前 Prompt 携带服务端校验过的 `generation` turn policy 时才允许执行生成工具；普通 Chat 回合即使模型构造了工具调用，也会被 application 层拒绝。模型不主动向用户复述价格、计费或付费 API，除非用户询问；服务端授权校验和 Generate UI 的费用确认不受此展示话术影响。
-
-Chat Prompt 可带可选的 `generation`：
+生成请求仍通过标准 Prompt 提交，不接受 `generation`、`generationReview` 或客户端 Plan：
 
 ```json
 {
   "type": "prompt",
-  "message": "结合上下文和参考图生成一张全新人物海报",
-  "generation": {
-    "mode": { "type": "generation-auto" },
-    "reviewFirst": false,
-    "assets": [{
-      "slot": "imageUrls",
-      "name": "reference.png",
-      "mediaType": "image",
-      "mimeType": "image/png",
-      "ref": {
-        "type": "workspace-file",
-        "relativePath": ".po-agent/generation-inputs/reference.png"
-      }
-    }],
-    "plan": {
-      "toolName": "generate_image",
-      "routeId": "runninghub-seedream-v5-pro-image-to-image",
-      "prompt": "生成一张与参考图风格一致的全新女性角色海报",
-      "parameters": {}
-    }
-  }
+  "message": "生成一张安静湖面的电影感海报"
 }
 ```
 
-旧 Agent Command 的 `generation.plan` 仅为兼容已有调用保留。统一 Chat Turn endpoint 不接受客户端 Plan；服务端 Planner 的结果会由 application 直接执行，客户端不能通过 Plan 绕过 Provider、Route、素材槽位或本轮用户授权校验。
+生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收供应商 workflow、HTTP 字段、模型 Endpoint 或 API Key。application 在当前 Prompt 生命周期内建立 Skill 授权，并再次校验所调用工具是否由已启用 Skill 允许；模型不能通过伪造入参扩大到另一种生成能力。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键。
 
-`generation.mode` 支持 `generation-auto` 或带 `routeId` 的 `generation-route`。无明确生成意图时模型照常回答；意图不明确时返回澄清；明确生成时应用层按最终 Route Schema 绑定 Composer 素材并创建 Run。`reviewFirst: true` 时创建 `awaiting_confirmation` Run，确认后由持久化状态机创建 Provider Job；直接执行则立即进入 `queued`。生成模式不会成为 Session 类型或永久 Route 绑定。`generationReview` 仅作为旧客户端兼容字段保留。
+`generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；Skill 规定不得自动轮询或自动重试付费任务。`get_generation` 仅用于用户明确查询当前 Session 的历史 Run，`cancel_generation` 仅用于用户明确要求取消。
 
-`generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Pi `onUpdate` 与现有 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。前端按同一 `toolCallId` 原地更新工具步骤，不创建新的查询步骤。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；模型不得在正常生成期间自动轮询 `get_generation`。`get_generation` 仅用于用户明确查询历史 Run 或中断恢复，并与 `cancel_generation` 一样只能访问当前 Session 的 Run。
-
-生成结果的 `ToolResultMessage.details` 保留本地 `runId`、`routeId`、`providerId`、`providerOperation`、供应商返回的 `providerTaskId`、`status`、标准化 `phase`、时间戳、`waitTimedOut`、最终 `input`、脱敏且有大小上限的 `requestSnapshot`、`responseSnapshot`、`artifacts` 和可选错误。超限快照返回 `truncated`、`originalSizeBytes` 和 `preview`。待确认结果还包含 `review.route` 与 `review.input`，供客户端按服务端 Route Schema 渲染参数卡。`providerTaskId` 在供应商接受任务后出现；当前 RunningHub 实现兼容顶层 `taskId` 与 `data.taskId`。HTTP 200 中携带的供应商业务错误仍按失败处理并保留其错误码和消息，不会误报为缺少任务 ID。Chat UI 在同一执行步骤中展示模型工具入参、服务端最终输入与 Provider 审计快照；API Key、token、secret、authorization、credential、password、Cookie 和签名类字段会在 adapter 边界脱敏。
+外部 Chat 只以通用 Tool Call/Tool Result 展示执行，不读取 Generation Run DTO，也不渲染专用审核卡、状态卡或产物画廊。生成产物作为普通 workspace 文件由 Agent 报告路径。API Key、token、secret、authorization、credential、password、Cookie 和签名类字段仍在 adapter 边界脱敏。
 
 ## 13. SSE 通用行为
 

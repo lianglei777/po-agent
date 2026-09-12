@@ -2,9 +2,7 @@ import type { SseErrorEvent, SuccessResponse } from "./common";
 import type {
   ComposerGenerationMode,
   GenerationAssetRef,
-  GenerationRouteDto,
   JsonValue,
-  GenerationRunViewDto,
 } from "./generation";
 
 export const THINKING_LEVELS = [
@@ -47,45 +45,8 @@ export interface AgentGenerationPolicy {
   };
 }
 
-export interface AgentTurnGenerationInput {
-  mode: Exclude<ComposerGenerationMode, { type: "chat" }>;
-  reviewFirst: boolean;
-  assets: AgentGenerationAsset[];
-}
-
-export interface AgentTurnRequest {
-  /** 客户端为本轮生成的稳定标识，用于请求重试时复用同一 Generation Run。 */
-  turnId: string;
-  message: string;
-  images?: ImageInput[];
-  generation?: AgentTurnGenerationInput;
-}
-
-export type AgentTurnResponse =
-  | { type: "accepted"; intent: "chat" }
-  | { type: "accepted"; intent: "attachment-understanding" }
-  | {
-      type: "accepted";
-      intent: "generation";
-      run: GenerationRunViewDto;
-      route: GenerationRouteDto;
-      effectivePrompt: string;
-      parameters: Record<string, JsonValue>;
-    }
-  | {
-      type: "clarification";
-      reason:
-        | "AMBIGUOUS_INTENT"
-        | "GENERATION_ROUTE_MISMATCH"
-        | "MODEL_ATTACHMENT_UNSUPPORTED";
-      question?: string;
-      suggestedRoute?: GenerationRouteDto;
-    }
-  | { type: "invalid"; message: string };
-
 export interface AgentTurnSnapshotResponse {
   agent: AgentRuntimeState;
-  generationRuns: GenerationRunViewDto[];
 }
 
 export type AgentCommand =
@@ -93,12 +54,8 @@ export type AgentCommand =
       type: "prompt";
       message: string;
       images?: ImageInput[];
-      generation?: AgentGenerationPolicy;
-      generationReview?: boolean;
       /** 服务端注入的生成审计上下文；传输层不会接受客户端提供该字段。 */
       generationContext?: string;
-      /** 服务端用于持久化 Composer 附件呈现元数据；不授予生成工具权限。 */
-      generationContextAssets?: AgentGenerationAsset[];
     }
   | { type: "abort" }
   | { type: "get_state" }

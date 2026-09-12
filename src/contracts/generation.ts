@@ -341,39 +341,6 @@ export type ComposerGenerationMode =
 
 export type GenerationExecutionPolicy = "direct" | "review-first";
 
-export interface PlanGenerationTurnRequest {
-  message: string;
-  sessionId?: string;
-  model: {
-    provider: string;
-    modelId: string;
-  };
-  mode:
-    | { type: "generation-auto" }
-    | { type: "generation-route"; routeId: string };
-  assets: Array<{ mediaType: "image" | "video" | "audio"; mimeType: string }>;
-}
-
-export type PlanGenerationTurnResponse =
-  | { type: "chat" }
-  | { type: "attachment-understanding" }
-  | {
-      type: "generation";
-      route: GenerationRouteDto;
-      effectivePrompt: string;
-      parameters: Record<string, JsonValue>;
-    }
-  | {
-      type: "clarification";
-      reason:
-        | "AMBIGUOUS_INTENT"
-        | "GENERATION_ROUTE_MISMATCH"
-        | "MODEL_ATTACHMENT_UNSUPPORTED";
-      question?: string;
-      suggestedRoute?: GenerationRouteDto;
-    }
-  | { type: "invalid"; message: string };
-
 export interface GenerationAssetUploadResponse {
   name: string;
   contentType: string;

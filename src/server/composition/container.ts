@@ -13,8 +13,6 @@ import { GenerationAssetService } from "@/server/application/content-generation/
 import { GenerationWorker } from "@/server/application/content-generation/generation-worker";
 import { GenerationAgentToolProvider } from "@/server/application/content-generation/generation-agent-tool-provider";
 import { GenerationReviewRegistry } from "@/server/application/content-generation/generation-review-registry";
-import { GenerationTurnPlanningService } from "@/server/application/content-generation/generation-turn-planning-service";
-import { GenerationTurnExecutor } from "@/server/application/content-generation/generation-turn-executor";
 import type { ActiveGenerationTurn } from "@/server/domain/agent-command";
 import { seedGenerationRoutes } from "@/server/application/content-generation/seed-generation-routes";
 import {
@@ -43,7 +41,6 @@ import { JsonPipelineProjectRegistry } from "@/server/infrastructure/filesystem/
 import { LocalPipelineRepository } from "@/server/infrastructure/filesystem/local-pipeline-repository";
 import { InMemoryWorkspaceRoots } from "@/server/infrastructure/filesystem/workspace-roots";
 import { PiAgentRuntimeFactory } from "@/server/infrastructure/pi/pi-agent-runtime";
-import { PiGenerationIntentClassifier } from "@/server/infrastructure/pi/pi-generation-intent-classifier";
 import { PiAgentSettingsStore } from "@/server/infrastructure/pi/pi-agent-settings-store";
 import { PiCredentialProvider } from "@/server/infrastructure/pi/pi-credential-provider";
 import { PiModelProvider } from "@/server/infrastructure/pi/pi-model-provider";
@@ -103,7 +100,6 @@ function createContainer() {
     modelsPath: path.join(agentDir, "models.json"),
   });
   const sessions = new PiSessionRepository();
-  const generationIntentClassifier = new PiGenerationIntentClassifier(modelRuntime);
   const runtimes = new InMemoryAgentRegistry();
   const runtimeFactory = new PiAgentRuntimeFactory(modelRuntime);
   const agentSettings = new PiAgentSettingsStore();
@@ -366,15 +362,6 @@ function createContainer() {
     return generationAssetService;
   }
 
-  const generationTurnPlanningService = new GenerationTurnPlanningService(
-    getGenerationRunService(),
-    sessions,
-    generationIntentClassifier,
-    {
-      getCredential: (reference) =>
-        getGenerationCredentialStore().getCredential(reference),
-    },
-  );
   // 工具提供者按服务端会话作用域筛选，普通 Chat 与 Pipeline Agent 不共享写能力。
   const compositeAgentTools = new CompositeAgentToolProvider([
     generationAgentTools,
@@ -415,6 +402,7 @@ function createContainer() {
         return (await getPipelineRepository().findAgentConversationBySessionId(sessionId))?.projectId ?? null;
       },
     },
+    skills,
   );
   const pipelineAgentConversationService = new PipelineAgentConversationService(
     getPipelineRepository(),
@@ -424,23 +412,12 @@ function createContainer() {
     new CanvasAgentIntentResolver(getPipelineServices().pipelineLlm!, sessions),
     canvasAgentTurnPolicies,
   );
-  const chatTurnService = new ChatTurnService(
-    agentService,
-    generationTurnPlanningService,
-    getGenerationRunService(),
-    new GenerationTurnExecutor(getGenerationRunService(), {
-      getCredential: (reference) =>
-        getGenerationCredentialStore().getCredential(reference),
-    }),
-  );
+  const chatTurnService = new ChatTurnService(agentService);
 
   return {
     accessControlService,
     httpUnexpectedErrorLogger,
     roots,
-    planComposerGenerationTurn: generationTurnPlanningService.plan.bind(
-      generationTurnPlanningService,
-    ),
     chatTurnService,
     get generationRunService() {
       return getGenerationRunService();

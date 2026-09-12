@@ -1,5 +1,5 @@
-import { Images, MessageSquare, PanelLeft, PanelLeftOpen } from "@/components/icons";
-import { Button, Segmented, Tooltip } from "antd";
+import { PanelLeft, PanelLeftOpen } from "@/components/icons";
+import { Button, Tooltip } from "antd";
 import { useI18n } from "@/i18n/use-i18n";
 import type { SessionTreeNode } from "@/features/chat/agent-types";
 import { BranchHistory } from "@/features/chat/branch-history";
@@ -16,8 +16,6 @@ type WorkspaceTopBarProps = {
   branchActiveLeafId?: string | null;
   branchRunning?: boolean;
   onBranchChangeLeaf?: (leafId: string) => void;
-  sessionSurface?: "chat" | "generation";
-  onSessionSurfaceChange?: (surface: "chat" | "generation") => void;
 };
 
 export function WorkspaceTopBar({
@@ -31,8 +29,6 @@ export function WorkspaceTopBar({
   branchActiveLeafId,
   branchRunning,
   onBranchChangeLeaf,
-  sessionSurface,
-  onSessionSurfaceChange,
 }: WorkspaceTopBarProps) {
   const { t } = useI18n();
 
@@ -67,28 +63,6 @@ export function WorkspaceTopBar({
       ) : null}
 
       <div className="flex-1" />
-
-      {sessionSurface && onSessionSurfaceChange ? (
-        <Segmented
-          aria-label={t.workspace.sessionView}
-          className="mr-2"
-          onChange={(value) => onSessionSurfaceChange(value)}
-          options={[
-            {
-              icon: <MessageSquare />,
-              label: t.workspace.sessionChatView,
-              value: "chat" as const,
-            },
-            {
-              icon: <Images />,
-              label: t.workspace.sessionGenerationView,
-              value: "generation" as const,
-            },
-          ]}
-          size="small"
-          value={sessionSurface}
-        />
-      ) : null}
 
       {/* 分支历史按钮 */}
       {showBranchHistory &&

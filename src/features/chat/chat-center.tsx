@@ -18,18 +18,11 @@ import {
 } from "@/components/icons";
 import { useI18n } from "@/i18n/use-i18n";
 import { ChatInput } from "./chat-input";
-import { ChatGenerationRunCard } from "./chat-generation-run-card";
-import { projectChatWorkflowRuns } from "./chat-workflow-presentation";
 import { createConversationNavigatorEntries } from "./conversation-navigator/conversation-navigator-adapter";
 import { ConversationNavigator } from "./conversation-navigator/conversation-navigator";
 import { MessageList } from "./message-view";
 import styles from "./welcome.module.css";
-import type {
-  AgentMessage,
-  ContextUsage,
-  SessionStats,
-} from "./agent-types";
-import type { GenerationRunViewDto } from "@/contracts/generation";
+import type { ContextUsage, SessionStats } from "./agent-types";
 import type { BranchState } from "./branch-state";
 import { ChatStoreProvider } from "./state/chat-store-provider";
 import { type ChatSession, useChatController } from "./use-chat-controller";
@@ -98,37 +91,16 @@ function ChatCenterContent({
   const [chatInputHeight, setChatInputHeight] = useState(0);
   const { activeLeafId, changeLeaf, isCompacting, running, tree } = controller;
 
-  const presentedConversation = useMemo(
-    () => projectChatWorkflowRuns({
-      messages: controller.messages,
-      entryIds: controller.entryIds,
-      runs: controller.generationRuns,
-      routes: controller.generationRoutes,
-      model: controller.currentModel
-        ? {
-            provider: controller.currentModel.provider,
-            id: controller.currentModel.id,
-          }
-        : undefined,
-    }),
-    [
-      controller.currentModel,
-      controller.entryIds,
-      controller.generationRoutes,
-      controller.generationRuns,
-      controller.messages,
-    ],
-  );
   const conversationNavigatorEntries = useMemo(
     () =>
       createConversationNavigatorEntries({
-        entryIds: presentedConversation.entryIds,
-        messages: presentedConversation.messages,
+        entryIds: controller.entryIds,
+        messages: controller.messages,
         streamingMessage: controller.stream.streamingMessage,
       }),
     [
-      presentedConversation.entryIds,
-      presentedConversation.messages,
+      controller.entryIds,
+      controller.messages,
       controller.stream.streamingMessage,
     ],
   );
@@ -166,11 +138,7 @@ function ChatCenterContent({
 
   function hasSupportedFiles(event: DragEvent<HTMLElement>) {
     return Array.from(event.dataTransfer.items).some(
-      (item) => item.kind === "file" && (
-        item.type.startsWith("image/") ||
-        item.type.startsWith("video/") ||
-        item.type.startsWith("audio/")
-      ),
+      (item) => item.kind === "file" && item.type.startsWith("image/"),
     );
   }
 
@@ -183,21 +151,8 @@ function ChatCenterContent({
 
   const hasConversation =
     controller.messages.length > 0 ||
-    controller.generationRuns.length > 0 ||
     controller.stream.streamingMessage ||
     controller.running;
-  const timeline = useMemo(
-    () => buildChatTimeline(
-      presentedConversation.messages,
-      presentedConversation.entryIds,
-      controller.generationRuns,
-    ),
-    [
-      controller.generationRuns,
-      presentedConversation.entryIds,
-      presentedConversation.messages,
-    ],
-  );
 
   return (
     <main
@@ -264,39 +219,21 @@ function ChatCenterContent({
                   />
                 ) : null}
 
-                {timeline.map((item, index) => item.type === "messages" ? (
-                  <MessageList
-                    cwd={session?.cwd ?? newSessionCwd ?? undefined}
-                    entryIds={item.entryIds}
-                    forkingEntryId={controller.forkingEntryId}
-                    key={item.key}
-                    lastUserRef={controller.lastUserRef}
-                    messages={item.messages}
-                    partialToolResults={controller.partialToolResults}
-                    onEdit={(targetId, text) =>
-                      void controller.editFromHere(targetId, text)
-                    }
-                    onFork={(entryId) => void controller.fork(entryId)}
-                    highlightedMessageId={highlightedMessageId}
-                    onMessageElement={handleMessageElement}
-                    running={controller.running && index === timeline.length - 1}
-                    streamingMessage={index === timeline.length - 1
-                      ? controller.stream.streamingMessage
-                      : null}
-                  />
-                ) : (
-                  <ChatGenerationRunCard
-                    busy={controller.generationBusy}
-                    cwd={session?.cwd ?? newSessionCwd ?? undefined}
-                    key={item.view.run.id}
-                    onCancel={() => controller.cancelGeneration(item.view.run.id)}
-                    onConfirm={(prompt, parameters) =>
-                      controller.confirmGeneration(item.view.run.id, prompt, parameters)
-                    }
-                    routes={controller.generationRoutes}
-                    view={item.view}
-                  />
-                ))}
+                <MessageList
+                  entryIds={controller.entryIds}
+                  forkingEntryId={controller.forkingEntryId}
+                  lastUserRef={controller.lastUserRef}
+                  messages={controller.messages}
+                  partialToolResults={controller.partialToolResults}
+                  onEdit={(targetId, text) =>
+                    void controller.editFromHere(targetId, text)
+                  }
+                  onFork={(entryId) => void controller.fork(entryId)}
+                  highlightedMessageId={highlightedMessageId}
+                  onMessageElement={handleMessageElement}
+                  running={controller.running}
+                  streamingMessage={controller.stream.streamingMessage}
+                />
 
                 {controller.running ? <div className="h-[80vh]" /> : null}
               </div>
@@ -315,56 +252,6 @@ function ChatCenterContent({
       )}
     </main>
   );
-}
-
-type ChatTimelineItem =
-  | {
-      type: "messages";
-      key: string;
-      messages: AgentMessage[];
-      entryIds: string[];
-    }
-  | { type: "generation"; view: GenerationRunViewDto };
-
-function buildChatTimeline(
-  messages: AgentMessage[],
-  entryIds: string[],
-  generationRuns: GenerationRunViewDto[],
-): ChatTimelineItem[] {
-  // Chat 工作流 Run 已投影为普通 Assistant Tool Call；只有 Generate 视图创建的 Run 使用独立卡片。
-  const runs = generationRuns.filter(({ run }) =>
-    run.source === "direct-ui"
-  ).sort((left, right) =>
-    left.run.createdAt.localeCompare(right.run.createdAt),
-  );
-  const result: ChatTimelineItem[] = [];
-  let messageIndex = 0;
-  for (const view of runs) {
-    const runTime = Date.parse(view.run.createdAt);
-    const start = messageIndex;
-    while (messageIndex < messages.length) {
-      const timestamp = messages[messageIndex]?.timestamp;
-      if (typeof timestamp === "number" && timestamp > runTime) break;
-      messageIndex += 1;
-    }
-    if (messageIndex > start) {
-      result.push({
-        type: "messages",
-        key: `messages-${start}-${messageIndex}`,
-        messages: messages.slice(start, messageIndex),
-        entryIds: entryIds.slice(start, messageIndex),
-      });
-    }
-    result.push({ type: "generation", view });
-  }
-  // 即使最后没有持久化消息，也保留尾段来承载当前流式 Assistant 输出。
-  result.push({
-    type: "messages",
-    key: `messages-${messageIndex}-end`,
-    messages: messages.slice(messageIndex),
-    entryIds: entryIds.slice(messageIndex),
-  });
-  return result;
 }
 
 function Welcome({
