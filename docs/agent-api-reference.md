@@ -2650,9 +2650,15 @@ video-generation -> generate_video
 
 生成工具只接收供应商无关的 `prompt`、可选 `routeId`、`parameters` 与 `assets`，不会接收供应商 workflow、HTTP 字段、模型 Endpoint 或 API Key。application 在当前 Prompt 生命周期内建立 Skill 授权，并再次校验所调用工具是否由已启用 Skill 允许；模型不能通过伪造入参扩大到另一种生成能力。工具调用用 Session ID 与 Pi tool-call ID 构造持久化幂等键。
 
-`generate_image` 最多等待 5 分钟，`generate_video` 最多等待 20 分钟，并通过 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。超时或 Agent 中止只结束等待，不取消 Worker 中的 Run；Skill 规定不得自动轮询或自动重试付费任务。`get_generation` 仅用于用户明确查询当前 Session 的历史 Run，`cancel_generation` 仅用于用户明确要求取消。
+`generate_image` 和 `generate_video` 不设置 Agent 人为等待上限，会等待持久化 Run 明确进入成功、失败或取消终态，并通过 Agent SSE 的 `tool_execution_update` 增量报告标准化阶段。Agent 中止只结束当前等待，不取消 Worker 中的 Run；Skill 规定不得自动轮询或自动重试付费任务。自动模式下 Agent 必须省略 `routeId` 和 Route 专用 `parameters`，由服务端选择兼容的默认 Route；视觉要求写入 Prompt，视频可使用顶层时长与画幅字段。Agent 不得为发现 Route、参数或供应商字段探查配置、凭据、源码或 Session 历史。`get_generation` 仅用于用户明确查询当前 Session 的历史 Run，`cancel_generation` 仅用于用户明确要求取消。
 
-外部 Chat 只以通用 Tool Call/Tool Result 展示执行，不读取 Generation Run DTO，也不渲染专用审核卡、状态卡或产物画廊。生成产物作为普通 workspace 文件由 Agent 报告路径。API Key、token、secret、authorization、credential、password、Cookie 和签名类字段仍在 adapter 边界脱敏。
+外部 Chat 只以通用 Tool Call/Tool Result 展示执行，不读取 Generation Run DTO，也不渲染专用审核卡或状态卡。生成工具会在模型可见的 Tool Result 文本中返回本地产物的 workspace-relative 路径；服务端消息映射同时将本地产物投影为通用 Tool Artifact，最终对话区域通过受保护的 Artifact 媒体接口展示图片缩略图。Agent 不应为了定位成功产物再调用 `get_generation` 或搜索文件系统。API Key、token、secret、authorization、credential、password、Cookie 和签名类字段仍在 adapter 边界脱敏。
+
+```http
+GET /api/generation/artifacts/{artifactId}/media
+```
+
+该接口只读取 Artifact 持久化的本地相对路径，并根据其 Run 和 Session 解析已注册 workspace；请求不能提供或覆盖文件路径。Artifact 不存在、没有本地产物、Run 或 Session 不存在时返回对应的 `404`，越界路径由 filesystem adapter 拒绝。响应使用真实 `Content-Type`、`X-Content-Type-Options: nosniff` 和私有缓存。
 
 ## 13. SSE 通用行为
 

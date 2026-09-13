@@ -48,4 +48,22 @@ export class GenerationAssetService {
       slot: "preview",
     });
   }
+
+  async readArtifact(artifactId: string) {
+    const artifact = await this.runs.getArtifact(artifactId);
+    if (!artifact?.localPath) {
+      throw new AppError("FILE_NOT_FOUND", "Generation artifact was not found", 404);
+    }
+    const run = await this.runs.getRun(artifact.runId);
+    if (!run) {
+      throw new AppError("GENERATION_RUN_NOT_FOUND", "Generation run was not found", 404);
+    }
+    const session = await this.runs.requireSession(run.run.sessionId);
+    // 只使用持久化的 workspace-relative 路径读取，不能信任浏览器提供文件路径。
+    return this.files.readInput({
+      cwd: session.cwd,
+      relativePath: artifact.localPath,
+      slot: "preview",
+    });
+  }
 }

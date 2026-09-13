@@ -3,6 +3,7 @@ import type {
   AssistantContent,
   ImageContent,
   TextContent,
+  ToolResultArtifact,
 } from "@/server/domain/message";
 import { mapAgentFailure } from "./agent-failure-mapper";
 
@@ -134,6 +135,7 @@ export function mapPiMessage(value: unknown): AgentMessage {
         typeof value.toolCallId === "string" ? value.toolCallId : "",
       toolName: typeof value.toolName === "string" ? value.toolName : undefined,
       content: mapBasicContent(value.content),
+      artifacts: mapToolResultArtifacts(value.details),
       details: value.details,
       isError: value.isError === true,
       timestamp,
@@ -193,6 +195,40 @@ export function mapPiMessage(value: unknown): AgentMessage {
       ? value.content
       : mapBasicContent(value.content);
   return { role: "user", content, timestamp };
+}
+
+/** 从工具私有 details 中提取稳定展示合同，避免 UI 直接依赖 Generation DTO。 */
+export function mapToolResultArtifacts(details: unknown): ToolResultArtifact[] | undefined {
+  if (!isRecord(details) || !Array.isArray(details.artifacts)) return undefined;
+  const artifacts = details.artifacts.flatMap((value): ToolResultArtifact[] => {
+    if (!isRecord(value) || typeof value.id !== "string" || !value.id) return [];
+    const kind = toolArtifactKind(value.kind);
+    const localPath = typeof value.localPath === "string" ? value.localPath : "";
+    if (!kind || !localPath) return [];
+    const name = localPath.split(/[\\/]/).at(-1) || value.id;
+    return [{
+      id: value.id,
+      kind,
+      name,
+      contentType: typeof value.contentType === "string" && value.contentType
+        ? value.contentType
+        : defaultArtifactContentType(kind),
+    }];
+  });
+  return artifacts.length ? artifacts : undefined;
+}
+
+function toolArtifactKind(value: unknown): ToolResultArtifact["kind"] | null {
+  if (value === "image" || value === "video" || value === "audio") return value;
+  if (value === "text") return "file";
+  return null;
+}
+
+function defaultArtifactContentType(kind: ToolResultArtifact["kind"]): string {
+  if (kind === "image") return "image/*";
+  if (kind === "video") return "video/*";
+  if (kind === "audio") return "audio/*";
+  return "application/octet-stream";
 }
 
 function numberValue(value: unknown): number {

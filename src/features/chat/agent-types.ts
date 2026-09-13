@@ -20,6 +20,7 @@ export type {
   ThinkingLevel,
   TokenUsage,
   ToolCallContent,
+  ToolResultArtifact,
   ToolResultMessage,
 } from "@/contracts/agent";
 export type { SessionTreeNode } from "@/contracts/sessions";

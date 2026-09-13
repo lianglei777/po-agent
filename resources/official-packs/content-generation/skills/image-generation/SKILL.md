@@ -11,7 +11,14 @@ logic in shell scripts.
 
 - Treat the latest user request as the source of truth for the prompt.
 - Use a workspace-relative path when an existing project image is an input.
-- Choose a compatible enabled Route; do not invent provider fields or Route IDs.
+- In automatic mode, omit `routeId`; the server selects the compatible enabled
+  default. Only pass a Route ID explicitly supplied by the trusted UI or user.
+- In automatic mode, also omit `parameters`. Put size, aspect, style, and other
+  visual requirements in the prompt; Route-specific settings belong to a
+  trusted plan or explicit API selection.
+- Never inspect configuration, credentials, source code, or session history to
+  discover a Route ID or provider field. After reading this Skill, call the
+  generation tool directly once the request is clear.
 - If the request or required source image is ambiguous, ask one short question
   before creating a run.
 - A completed artifact is a normal workspace file. Report its path concisely.

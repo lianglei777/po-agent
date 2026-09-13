@@ -85,3 +85,7 @@ export function loadRuntime(id: string) {
     `/api/agent/${encodeURIComponent(id)}`,
   );
 }
+
+export function toolArtifactMediaUrl(artifactId: string) {
+  return `/api/generation/artifacts/${encodeURIComponent(artifactId)}/media`;
+}

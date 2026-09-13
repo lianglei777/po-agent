@@ -136,6 +136,22 @@ describe("GenerationAgentToolProvider", () => {
     expect(generate.promptGuidelines?.join(" ")).toContain(
       "Do not mention pricing, billing, or paid APIs unless the user asks about them.",
     );
+    expect(generate.promptGuidelines?.join(" ")).toContain(
+      "For generation-auto, omit routeId and parameters, and let the server select the compatible default.",
+    );
+    expect(generate.description).toContain(
+      "Omit routeId to use the server-selected compatible default.",
+    );
+    expect(generate.parameters).toMatchObject({
+      properties: {
+        routeId: {
+          description: expect.stringContaining("never search files or credentials"),
+        },
+        parameters: {
+          description: expect.stringContaining("Omit in generation-auto"),
+        },
+      },
+    });
     expect(repeated.details).toEqual(first.details);
     await expect(service.listRuns("session-1")).resolves.toHaveLength(1);
   });
@@ -347,6 +363,50 @@ describe("GenerationAgentToolProvider", () => {
     await expect(service.getRun("id-1")).resolves.toMatchObject({
       run: { status: "queued" },
     });
+  });
+
+  it("waits for a terminal run by default instead of returning a timed snapshot", async () => {
+    const route = {
+      ...createRunningHubRoutes(NOW).find((candidate) =>
+        candidate.id === "runninghub-seedream-v5-pro-text-to-image"
+      )!,
+      enabled: true,
+    };
+    const queued = {
+      run: {
+        id: "run-no-timeout",
+        routeId: route.id,
+        status: "running",
+        input: { prompt: "Keep waiting" },
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      jobs: [],
+      artifacts: [],
+    };
+    const succeeded = {
+      ...queued,
+      run: { ...queued.run, status: "succeeded" },
+    };
+    const runService = {
+      listRoutes: vi.fn().mockResolvedValue([route]),
+      getRoute: vi.fn().mockResolvedValue(route),
+      createRun: vi.fn().mockResolvedValue(queued),
+      getRun: vi.fn().mockResolvedValue(succeeded),
+    };
+    const noTimeoutProvider = new GenerationAgentToolProvider(
+      () => runService as never,
+      { pollIntervalMs: 0 },
+      reviews,
+    );
+
+    await expect(noTimeoutProvider.getTools(generationToolContext())[0]!.execute({
+      toolCallId: "call-no-timeout",
+      input: { prompt: "Keep waiting" },
+    })).resolves.toMatchObject({
+      details: { status: "succeeded", waitTimedOut: undefined },
+    });
+    expect(runService.getRun).toHaveBeenCalledWith("run-no-timeout");
   });
 
   it("prevents querying or cancelling a run from another session", async () => {

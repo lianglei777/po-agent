@@ -244,7 +244,7 @@ Canvas Agent 不持有创建 Generation Run 或 Workflow Run 的工具。节点�
 
 Canvas 素材理解通过 application 自有的 `CanvasAssetAnalyzer` 与 `CanvasMediaPreprocessor` ports 隔离多模态模型和 FFmpeg。图片字节只从 Canvas Studio 的受控媒体读取路径进入 Pi infrastructure adapter，不写入会话上下文或分析表；视频先在临时目录采样最多六帧，再把有界 JPEG 帧送入视觉模型，完整视频不会进入模型；音频解码为临时的 16 kHz 单声道 PCM，只计算节奏、动态和静音比例，处理结束即清理。项目数据库仅保存来源指纹、模型、结构化摘要和引用建议，同一素材指纹与分析配置组合复用结果。用户明确确认的角色、产品、场景、服装、色彩、风格和镜头语言单独保存为带 revision 的连续性设定；工具必须引用当前用户原文，模型分析建议不能自行提升为确认事实。后续 Agent 回合读取连续性设定，并仅为当前选中或引用节点附加最近的素材摘要。FFmpeg 默认从 `PATH` 解析，也可通过 `PO_AGENT_FFMPEG_PATH` 和 `PO_AGENT_FFPROBE_PATH` 指定；不可用时返回可操作的预处理器错误。
 
-Skill 触发的生成由 Worker 独立推进；断开页面或 Agent SSE 不会取消持久化 Run。`generate_image`、`generate_video`、`get_generation` 和 `cancel_generation` 继续复用既有 application 能力，但外部 Chat 不再单独读取或渲染 Run 状态，工具执行只使用通用 Tool Call/Tool Result 消息呈现。下载产物由 application 根据最终 Prompt 生成简短名称提示，filesystem adapter 负责过滤非法字符和 Windows 保留名，文件仍隔离在对应 Run 目录。
+Skill 触发的生成由 Worker 独立推进；断开页面或 Agent SSE 不会取消持久化 Run。`generate_image` 和 `generate_video` 不设置 Agent 人为等待上限，持续等待 Worker 把 Run 推进到成功、失败或取消终态；显式中止只结束当前 Agent 等待。`get_generation` 和 `cancel_generation` 继续复用既有 application 能力。外部 Chat 不单独读取或渲染 Run 状态，工具执行只使用通用 Tool Call/Tool Result 消息呈现；本地产物在服务端映射为通用 Tool Artifact，并通过受保护的媒体接口在最终对话区域展示。下载产物由 application 根据最终 Prompt 生成简短名称提示，filesystem adapter 负责过滤非法字符和 Windows 保留名，文件仍隔离在对应 Run 目录。
 
 Provider Job 在创建时冻结 Route 的 execution config 与已解析参数；资产准备、提交和轮询都使用该快照，不能在恢复时重新读取当前 Catalog 的协议语义。准备后的供应商资产引用随 Job 持久化但对 application 保持不透明，新重试 Job 会重新准备资产。Provider Job 还持久化脱敏且有大小上限的 `requestSnapshot` 与 `responseSnapshot`。凭据、密码、Cookie 字段以及 URL 查询参数中的 token、secret、authorization、签名等值在 adapter 边界替换为 `[REDACTED]`；超过上限的协议内容保留截断标记、原始字节数和受限预览。
 

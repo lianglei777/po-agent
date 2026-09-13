@@ -25,6 +25,7 @@ export type UserPresentationItem = {
 export type AssistantTurnPresentationItem = {
   kind: "assistantTurn";
   entryIds: string[];
+  toolResultIds: string[];
   messages: AssistantMessage[];
   originalIndexes: number[];
   streaming: boolean;
@@ -77,11 +78,16 @@ export function buildMessagePresentation(
       activeTurn = null;
       return;
     }
+    if (message.role === "toolResult") {
+      if (activeTurn) activeTurn.toolResultIds.push(message.toolCallId);
+      return;
+    }
     if (message.role !== "assistant") return;
     if (!activeTurn) {
       activeTurn = {
         kind: "assistantTurn",
         entryIds: [],
+        toolResultIds: [],
         messages: [],
         originalIndexes: [],
         streaming: false,
@@ -102,6 +108,7 @@ export function buildMessagePresentation(
         : {
             kind: "assistantTurn" as const,
             entryIds: [],
+            toolResultIds: [],
             messages: [],
             originalIndexes: [],
             streaming: false,

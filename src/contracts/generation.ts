@@ -260,6 +260,7 @@ export interface GenerationToolDetails {
     code: string;
     message: string;
   };
+  failure?: GenerationFailureDto;
 }
 
 export interface GenerationRunViewDto {

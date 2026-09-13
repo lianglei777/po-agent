@@ -64,6 +64,7 @@ describe("chat message presentation", () => {
     expect(items[1]).toMatchObject({
       kind: "assistantTurn",
       entryIds: ["assistant-1", "assistant-2"],
+      toolResultIds: ["tool-1"],
       streaming: false,
     });
     if (items[1]?.kind === "assistantTurn") {
@@ -75,6 +76,7 @@ describe("chat message presentation", () => {
     const partition = partitionAssistantTurn({
       kind: "assistantTurn",
       entryIds: ["assistant-1", "assistant-2"],
+      toolResultIds: ["tool-1"],
       messages: [intermediate, finalAnswer],
       originalIndexes: [1, 3],
       streaming: false,
@@ -125,6 +127,7 @@ describe("chat message presentation", () => {
     const turn = {
       kind: "assistantTurn" as const,
       entryIds: ["assistant-1", "assistant-2"],
+      toolResultIds: ["tool-1"],
       messages: [intermediate, finalAnswer],
       originalIndexes: [1, 3],
       streaming: false,

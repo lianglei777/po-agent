@@ -554,7 +554,7 @@ function generationAuditContext(
     ...(turn
       ? [
           "<generation-turn-policy>",
-          "Content generation is enabled only for this user turn. First understand the current request using the full conversation. Ordinary questions must receive an ordinary answer without a generation tool call. An attachment alone is not generation intent. Ask a concise clarification when intent is uncertain. When plan is present, intent and arguments have already been resolved by the trusted server planner: call plan.toolName exactly once using plan.prompt and plan.parameters, without inspecting attachment files. Otherwise, for an explicit generation request, call exactly one matching generation tool and provide a complete self-contained prompt grounded in the conversation; never use placeholders. Composer attachments are securely bound by the server, so do not repeat or invent their paths. The server enforces the selected API and review policy.",
+          "Content generation is enabled only for this user turn. First understand the current request using the full conversation. Ordinary questions must receive an ordinary answer without a generation tool call. An attachment alone is not generation intent. Ask a concise clarification when intent is uncertain. When plan is present, intent and arguments have already been resolved by the trusted server planner: call plan.toolName exactly once using plan.prompt and plan.parameters, without inspecting attachment files. Otherwise, for an explicit generation request, call exactly one matching generation tool and provide a complete self-contained prompt grounded in the conversation; never use placeholders. When selection.type is generation-auto, omit routeId and parameters and let the server choose the compatible default; put visual requirements in prompt, while generate_video may additionally use its top-level durationSeconds and aspectRatio fields. Reading the matched generation Skill is the only preparatory file read: do not use bash, read, grep, find, or ls to inspect configuration, credentials, source code, or session history before generating. Composer attachments are securely bound by the server, so do not repeat or invent their paths. The server enforces the selected API and review policy.",
           JSON.stringify({
             selection: turn.mode,
             reviewFirst: turn.reviewFirst,
@@ -590,7 +590,7 @@ const globalContainer = globalThis as typeof globalThis & {
 };
 
 // 开发热更新会保留全局容器，而 Provider descriptor 在容器创建时已冻结；注册表变化必须使旧容器失效。
-const CONTAINER_VERSION = "generation-qianwen-production-v12";
+const CONTAINER_VERSION = "generation-qianwen-production-v13";
 
 export const container =
   globalContainer.__piAgentContainerVersion === CONTAINER_VERSION

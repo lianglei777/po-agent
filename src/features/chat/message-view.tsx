@@ -24,10 +24,12 @@ import type {
   AssistantMessage,
   ImageContent,
   TextContent,
+  ToolResultArtifact,
   ToolResultMessage,
   UserMessage,
 } from "./agent-types";
 import { toolResults } from "./chat-logic";
+import { toolArtifactMediaUrl } from "./agent-api";
 import {
   buildMessagePresentation,
   executionProcessStatus,
@@ -385,6 +387,10 @@ function AssistantTurnView({
     )
     .map((item) => item.block.text)
     .join("\n\n");
+  const artifacts = useMemo(
+    () => turnArtifacts(turn.toolResultIds, results),
+    [results, turn.toolResultIds],
+  );
 
   return (
     <div>
@@ -466,6 +472,8 @@ function AssistantTurnView({
         </div>
       ) : null}
 
+      {artifacts.length ? <ToolArtifactGallery artifacts={artifacts} /> : null}
+
       {!turn.streaming ? (
         <div className="mt-2 flex min-h-7 items-center gap-2 text-caption text-dim opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {/*  copy button */}
@@ -490,6 +498,38 @@ function AssistantTurnView({
       ) : null}
     </div>
   );
+}
+
+function ToolArtifactGallery({ artifacts }: { artifacts: ToolResultArtifact[] }) {
+  const images = artifacts.filter((artifact) => artifact.kind === "image");
+  if (!images.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2" data-tool-artifact-gallery>
+      {images.map((artifact) => (
+        <Image
+          alt={artifact.name}
+          className="size-full rounded-lg border border-line-subtle bg-subtle object-cover"
+          height={112}
+          key={artifact.id}
+          src={toolArtifactMediaUrl(artifact.id)}
+          width={160}
+        />
+      ))}
+    </div>
+  );
+}
+
+function turnArtifacts(
+  toolResultIds: string[],
+  results: Map<string, ToolResultMessage>,
+): ToolResultArtifact[] {
+  const unique = new Map<string, ToolResultArtifact>();
+  for (const toolResultId of toolResultIds) {
+    for (const artifact of results.get(toolResultId)?.artifacts ?? []) {
+      unique.set(artifact.id, artifact);
+    }
+  }
+  return [...unique.values()];
 }
 
 function ExecutionProcess({

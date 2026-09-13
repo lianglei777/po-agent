@@ -381,6 +381,7 @@ export function useChatController(options: ChatControllerOptions) {
             toolCallId: event.toolCallId,
             toolName: event.toolName,
             content: event.content,
+            artifacts: event.artifacts,
             details: event.details,
           }));
           break;

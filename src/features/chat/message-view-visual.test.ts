@@ -36,6 +36,13 @@ describe("chat execution process visual contract", () => {
     expect(source).toContain("result ? resultText(result, t)");
   });
 
+  it("promotes generic image artifacts into the final conversation flow", () => {
+    expect(source).toContain("function ToolArtifactGallery");
+    expect(source).toContain("data-tool-artifact-gallery");
+    expect(source).toContain("toolArtifactMediaUrl(artifact.id)");
+    expect(source).toContain("turnArtifacts(turn.toolResultIds, results)");
+  });
+
   it("keeps tool status and disclosure controls in stable columns", () => {
     expect(source).toContain("styles.stepSummary");
     expect(source).toContain("styles.stepStatus");

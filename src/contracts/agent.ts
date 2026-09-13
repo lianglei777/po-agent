@@ -159,9 +159,18 @@ export interface ToolResultMessage {
   toolCallId: string;
   toolName?: string;
   content: Array<TextContent | ImageContent>;
+  artifacts?: ToolResultArtifact[];
   details?: unknown;
   isError?: boolean;
   timestamp?: number;
+}
+
+/** 工具生成的通用可展示产物；Chat 不需要理解具体工具的业务 DTO。 */
+export interface ToolResultArtifact {
+  id: string;
+  kind: "image" | "video" | "audio" | "file";
+  name: string;
+  contentType: string;
 }
 
 export interface CompactionSummaryMessage {
@@ -223,6 +232,7 @@ export type AgentEvent =
       toolCallId: string;
       toolName: string;
       content: Array<TextContent | ImageContent>;
+      artifacts?: ToolResultArtifact[];
       details?: unknown;
     }
   | { type: "tool_execution_end"; toolCallId: string; isError?: boolean }

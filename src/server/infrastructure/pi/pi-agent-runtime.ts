@@ -18,7 +18,7 @@ import type {
   ModelConfigInvalidation,
 } from "@/server/ports/agent-runtime";
 import type { AgentToolDefinition } from "@/server/ports/agent-tool";
-import { mapPiMessage } from "./message-mapper";
+import { mapPiMessage, mapToolResultArtifacts } from "./message-mapper";
 import {
   createPiResourceLoader,
   getAvailableBuiltinWebToolNames,
@@ -453,6 +453,7 @@ function mapEvent(event: AgentSessionEvent): AgentEvent | null {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
         content: event.partialResult.content ?? [],
+        artifacts: mapToolResultArtifacts(event.partialResult.details),
         details: event.partialResult.details,
       };
     case "tool_execution_end":

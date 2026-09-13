@@ -11,6 +11,7 @@ export type {
   ThinkingContent,
   TokenUsage,
   ToolCallContent,
+  ToolResultArtifact,
   ToolResultMessage,
   UserMessage,
 } from "@/contracts/agent";

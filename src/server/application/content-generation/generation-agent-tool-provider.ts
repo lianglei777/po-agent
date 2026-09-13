@@ -33,25 +33,19 @@ type GenerateInput = {
 };
 
 export class GenerationAgentToolProvider implements AgentToolProvider {
-  private readonly imageWaitTimeoutMs: number;
-  private readonly videoWaitTimeoutMs: number;
-  private readonly reviewWaitTimeoutMs: number;
+  private readonly waitTimeoutMs: number | undefined;
   private readonly pollIntervalMs: number;
 
   constructor(
     private readonly getRunService: () => GenerationRunService,
     options: {
       waitTimeoutMs?: number;
-      imageWaitTimeoutMs?: number;
-      videoWaitTimeoutMs?: number;
-      reviewWaitTimeoutMs?: number;
       pollIntervalMs?: number;
     } = {},
     private readonly reviews?: GenerationReviewRegistry,
   ) {
-    this.imageWaitTimeoutMs = options.imageWaitTimeoutMs ?? options.waitTimeoutMs ?? 5 * 60_000;
-    this.videoWaitTimeoutMs = options.videoWaitTimeoutMs ?? options.waitTimeoutMs ?? 20 * 60_000;
-    this.reviewWaitTimeoutMs = options.reviewWaitTimeoutMs ?? options.waitTimeoutMs ?? 30 * 60_000;
+    // 生产环境不设置 Agent 等待上限；可选值仅用于确定性的单元测试。
+    this.waitTimeoutMs = options.waitTimeoutMs;
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
   }
 
@@ -82,12 +76,13 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
       name,
       label,
       description: video
-        ? "Create a durable video generation run. The run continues if this tool call is interrupted."
-        : "Create a durable image generation run. The run continues if this tool call is interrupted.",
+        ? "Create a durable video generation run. Omit routeId to use the server-selected compatible default. The run continues if this tool call is interrupted."
+        : "Create a durable image generation run. Omit routeId to use the server-selected compatible default. The run continues if this tool call is interrupted.",
       promptSnippet: `${name}: create durable ${video ? "video" : "image"} generation work`,
       promptGuidelines: [
         "Call this tool only when the trusted generation-turn policy says content generation is enabled and the latest user turn clearly requests this exact generation. If intent is unclear, ask a brief clarification instead. Do not mention pricing, billing, or paid APIs unless the user asks about them.",
         "The generation tool waits for completion. Do not poll get_generation automatically. Use it only when the user explicitly asks about an existing run.",
+        "For generation-auto, omit routeId and parameters, and let the server select the compatible default. Put visual requirements in prompt; generate_video may additionally use its top-level durationSeconds and aspectRatio fields. Never inspect configuration, credentials, source code, or session history to discover a Route ID or provider field.",
         "When referring to identifiers, distinguish the Po Agent local run ID from the provider task ID.",
         "Use workspace-relative paths or artifact IDs for generation assets.",
         "When execution pauses for parameter review, wait for the user to confirm in the existing tool step. Do not query or resubmit the run.",
@@ -177,7 +172,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
           const route = await service.getRoute(view.run.routeId);
           return this.waitForRun(
             view,
-            video ? this.videoWaitTimeoutMs : this.imageWaitTimeoutMs,
+            this.waitTimeoutMs,
             signal,
             onUpdate,
             route ? generationRouteDetails(route) : undefined,
@@ -185,7 +180,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
         }
         return this.waitForRun(
           view,
-          video ? this.videoWaitTimeoutMs : this.imageWaitTimeoutMs,
+          this.waitTimeoutMs,
           signal,
           onUpdate,
         );
@@ -239,7 +234,7 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
 
   private async waitForRun(
     initial: GenerationRunView,
-    waitTimeoutMs: number,
+    waitTimeoutMs: number | undefined,
     signal?: AbortSignal,
     onUpdate?: (result: AgentToolResult<GenerationToolDetails>) => void,
     reviewRoute?: GenerationRouteDto,
@@ -247,24 +242,21 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
     let current = initial;
     let lastStatus = current.run.status;
     let lastPhase = generationPhase(current);
-    let awaitingReview = current.run.status === "awaiting_confirmation";
     onUpdate?.(generationToolResult(current, { route: reviewRoute }));
-    let deadline = Date.now() + (awaitingReview
-      ? this.reviewWaitTimeoutMs
-      : waitTimeoutMs);
+    const deadline = waitTimeoutMs === undefined
+      ? undefined
+      : Date.now() + waitTimeoutMs;
     while (
       !TERMINAL_STATUSES.has(current.run.status) &&
       !signal?.aborted &&
-      Date.now() < deadline
+      (deadline === undefined || Date.now() < deadline)
     ) {
-      await delay(Math.min(this.pollIntervalMs, Math.max(0, deadline - Date.now())), signal);
+      const delayMs = deadline === undefined
+        ? this.pollIntervalMs
+        : Math.min(this.pollIntervalMs, Math.max(0, deadline - Date.now()));
+      await delay(delayMs, signal);
       if (signal?.aborted) break;
       current = (await this.getRunService().getRun(current.run.id)) ?? current;
-      if (awaitingReview && current.run.status !== "awaiting_confirmation") {
-        // 用户确认后重新计算供应商执行窗口，避免审阅耗时挤占实际生成超时。
-        awaitingReview = false;
-        deadline = Date.now() + waitTimeoutMs;
-      }
       const currentPhase = generationPhase(current);
       if (current.run.status !== lastStatus || currentPhase !== lastPhase) {
         lastStatus = current.run.status;
@@ -278,7 +270,9 @@ export class GenerationAgentToolProvider implements AgentToolProvider {
     }
     return generationToolResult(current, {
       waitTimedOut:
-        !TERMINAL_STATUSES.has(current.run.status) && !signal?.aborted,
+        deadline !== undefined &&
+        !TERMINAL_STATUSES.has(current.run.status) &&
+        !signal?.aborted,
       route: current.run.status === "awaiting_confirmation"
         ? reviewRoute
         : undefined,
@@ -291,7 +285,12 @@ function generateSchema(video: boolean) {
     type: "object" as const,
     properties: {
       prompt: { type: "string", minLength: 1, maxLength: 20_480 },
-      routeId: { type: "string", minLength: 1 },
+      routeId: {
+        type: "string",
+        minLength: 1,
+        description:
+          "Optional explicit Route ID supplied by the trusted UI or user. Omit it for automatic server-side Route selection; never search files or credentials to discover one.",
+      },
       assets: {
         type: "array",
         items: {
@@ -305,7 +304,12 @@ function generateSchema(video: boolean) {
           additionalProperties: false,
         },
       },
-      parameters: { type: "object", additionalProperties: true },
+      parameters: {
+        type: "object",
+        description:
+          "Route-specific settings supplied by a trusted plan or explicit API selection. Omit in generation-auto; put visual requirements in prompt instead.",
+        additionalProperties: true,
+      },
       ...(video
         ? {
             durationSeconds: { type: "number", minimum: 1 },
