@@ -1,8 +1,8 @@
 "use client";
 
-import { Popover } from "antd";
+import { Popover, Tooltip } from "antd";
 import type { GenerationInputConstraint, GenerationParameterField, JsonValue } from "@/contracts/generation";
-import { Settings2 } from "@/components/icons";
+import { Settings2, Volume2, VolumeX } from "@/components/icons";
 import { generationParameterConflict } from "@/components/generation/generation-input-constraints";
 import { GenerationParameterEditor } from "@/components/generation/generation-parameter-editor";
 import { useI18n } from "@/i18n/use-i18n";
@@ -35,6 +35,18 @@ export function CanvasGenerationConfig({
     enabled: t.pipeline.generationEnabled,
     fieldLabels: inputLabels,
   });
+  const generateAudioField = fields.find((field) => (
+    field.key === "generateAudio" && field.presentation?.summary
+  ));
+  const generateAudio = generateAudioField && typeof values.generateAudio === "boolean"
+    ? values.generateAudio
+    : undefined;
+  const textSummary = generateAudio === undefined
+    ? summary
+    : summary.filter((item) => !item.startsWith(inputLabels.generateAudio ?? generateAudioField?.label ?? "generateAudio"));
+  const audioStatusLabel = generateAudio === undefined
+    ? undefined
+    : `${inputLabels.generateAudio ?? generateAudioField?.label ?? "generateAudio"}${generateAudio ? t.pipeline.generationEnabled : t.pipeline.generationDisabled}`;
 
   if (!fields.length) return null;
   return (
@@ -66,7 +78,23 @@ export function CanvasGenerationConfig({
         type="button"
       >
         <Settings2 className="size-3.5 shrink-0" />
-        <span className="max-w-80 truncate">{summary.length ? summary.slice(0, 4).join(" · ") : ariaLabel}</span>
+        {generateAudio === undefined ? null : (
+          <Tooltip getPopupContainer={getPopupContainer} title={audioStatusLabel}>
+            <span
+              aria-label={audioStatusLabel}
+              className={generateAudio ? "text-[var(--pl-accent)]" : "text-[var(--pl-text-muted)]"}
+            >
+              {generateAudio
+                ? <Volume2 aria-hidden="true" className="size-3.5" />
+                : <VolumeX aria-hidden="true" className="size-3.5" />}
+            </span>
+          </Tooltip>
+        )}
+        {textSummary.length || generateAudio === undefined ? (
+          <span className="max-w-80 truncate">
+            {textSummary.length ? textSummary.slice(0, 4).join(" · ") : ariaLabel}
+          </span>
+        ) : null}
       </button>
     </Popover>
   );

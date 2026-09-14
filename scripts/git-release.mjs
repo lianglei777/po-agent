@@ -2,6 +2,7 @@
 // GitHub Actions 发布脚本：同步版本引用 -> 提交当前工作区 -> 创建 vX.Y.Z Tag -> 推送分支和 Tag。
 // 镜像与桌面安装包完全由 Tag 触发的 GitHub Actions 构建，避免本机重复构建 Docker 镜像。
 
+// npm run release              （默认 patch）
 // npm run release -- patch
 // npm run release -- minor
 // npm run release -- major
@@ -31,6 +32,14 @@ export function createGitReleaseCommands(branch, version) {
     ["git", ["tag", "-a", tag, "-m", `Release ${tag}`]],
     ["git", ["push", "origin", `HEAD:refs/heads/${branch}`, `refs/tags/${tag}`]],
   ];
+}
+
+export function resolveBump(arg) {
+  // 未传升级级别时默认 patch：日常发布以补丁版本为主；
+  // 空串或以 - 开头的参数视为误传，返回 null 交回 usage 提示。
+  if (arg === undefined) return "patch";
+  if (!arg || arg.startsWith("-")) return null;
+  return arg;
 }
 
 function run(root, command, args, options = {}) {
@@ -67,17 +76,18 @@ function ensureTagDoesNotExist(root, tag) {
 }
 
 function printUsage() {
-  console.log(`用法：npm run release -- <patch | minor | major | x.y.z>
+  console.log(`用法：npm run release -- [patch | minor | major | x.y.z]
 示例：
-  npm run release -- patch
+  npm run release                （默认 patch）
   npm run release -- minor
 
 脚本会提交当前工作区的全部未提交改动，并推送当前分支与 vX.Y.Z Tag。`);
 }
 
 function main() {
-  const [bump] = process.argv.slice(2);
-  if (!bump || bump.startsWith("-")) {
+  const [bumpArg] = process.argv.slice(2);
+  const bump = resolveBump(bumpArg);
+  if (!bump) {
     printUsage();
     process.exit(1);
   }

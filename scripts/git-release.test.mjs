@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createGitReleaseCommands, tagForVersion } from "./git-release.mjs";
+import { createGitReleaseCommands, resolveBump, tagForVersion } from "./git-release.mjs";
+
+test("resolveBump：未传参时默认 patch，拒绝空串和选项参数", () => {
+  assert.equal(resolveBump(undefined), "patch");
+  assert.equal(resolveBump("minor"), "minor");
+  assert.equal(resolveBump("1.2.3"), "1.2.3");
+  assert.equal(resolveBump(""), null);
+  assert.equal(resolveBump("--push"), null);
+});
 
 test("tagForVersion：生成稳定发布 Tag 并拒绝预发布版本", () => {
   assert.equal(tagForVersion("0.2.3"), "v0.2.3");

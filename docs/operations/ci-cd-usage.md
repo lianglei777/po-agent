@@ -103,10 +103,10 @@ Actions -> CI -> Run workflow
 使用统一发布脚本。它会同步 `package.json`、Compose 和部署文档中的版本号，将当前工作区的全部未提交改动创建为发布提交，创建注释 Tag，并一次推送当前分支和 Tag：
 
 ```powershell
-npm run release -- patch
+npm run release
 ```
 
-也可以升级 minor、major 或指定目标版本：
+不带参数时默认升级 patch。也可以升级 minor、major 或指定目标版本：
 
 ```powershell
 npm run release -- minor

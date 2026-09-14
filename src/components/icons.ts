@@ -99,6 +99,8 @@ import {
   Terminal as TerminalIcon,
   Trash2 as Trash2Icon,
   Underline as UnderlineIcon,
+  Volume2 as Volume2Icon,
+  VolumeX as VolumeXIcon,
   X as XIcon,
   Zap as ZapIcon,
   type LucideIcon,
@@ -215,6 +217,8 @@ export const Terminal = createAppIcon(TerminalIcon);
 export const Trash2 = createAppIcon(Trash2Icon);
 export const Underline = createAppIcon(UnderlineIcon);
 export const UnorderedList = createAppIcon(ListIcon);
+export const Volume2 = createAppIcon(Volume2Icon);
+export const VolumeX = createAppIcon(VolumeXIcon);
 export const X = createAppIcon(XIcon);
 export const Zap = createAppIcon(ZapIcon);
 
