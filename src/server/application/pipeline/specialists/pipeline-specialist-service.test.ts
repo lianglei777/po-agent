@@ -37,7 +37,7 @@ describe("PipelineSpecialistService", () => {
       projectId: "project-1", sessionId: "session-1",
       operations: [expect.objectContaining({ type: "node.create", creativeSpec: expect.objectContaining({ kind: "script" }) })],
     }));
-    expect(result).toMatchObject({ kind: "script", planId: "plan-1", status: "draft", operationCount: 1 });
+    expect(result).toMatchObject({ kind: "script", executionMode: "repaired", planId: "plan-1", status: "draft", operationCount: 1 });
   });
 
   it("limits a local storyboard revision to the requested target node", async () => {
@@ -307,7 +307,7 @@ describe("PipelineSpecialistService", () => {
     const result = await service.run("prompt", { ...request(), objective: "创建主角参考图", sourceNodeIds: [asset.id] });
 
     expect(runtime.run).toHaveBeenCalledTimes(2);
-    expect(result).toMatchObject({ planId: "plan-prompt", status: "draft" });
+    expect(result).toMatchObject({ executionMode: "fallback", planId: "plan-prompt", status: "draft" });
     expect(result.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "PROMPT_OUTPUT_FALLBACK", blocking: false }),
       expect.objectContaining({ code: "PROMPT_CONFIGURATION_SYNTHESIZED", blocking: false }),

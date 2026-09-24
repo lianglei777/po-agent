@@ -14,7 +14,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run && node --test desktop/desktop-runtime.test.mjs desktop/prepare-standalone.test.mjs scripts/docker-release.test.mjs scripts/git-release.test.mjs scripts/login-test.test.mjs",
+    "test": "vitest run && node --test desktop/desktop-runtime.test.mjs desktop/prepare-standalone.test.mjs scripts/docker-release.test.mjs scripts/git-release.test.mjs scripts/login-test.test.mjs scripts/pipeline-specialist-evaluation-helpers.test.mjs",
     "test:qianwen-smoke": "vitest run src/server/infrastructure/content-generation/qianwen/qianwen-paid-smoke.integration.test.ts",
     "eval:pipeline-specialists": "node scripts/pipeline-specialist-evaluation.mjs",
     "check": "npm run lint && npm run typecheck && npm test",

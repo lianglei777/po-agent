@@ -7,8 +7,8 @@
 | 指标 | 计算方式 | V1 门槛 |
 | --- | --- | ---: |
 | 路由正确率 | 实际 Specialist 序列满足 `expectedSpecialists` 的样例数 / 总数 | 90% |
-| 结构有效率 | 首次输出或一次修复后通过 Schema 的调用数 / 总调用数 | 98% |
-| Plan 通过率 | 编译结果首次通过 Plan 校验的调用数 / 有变更调用数 | 95% |
+| 结构有效率 | 每个预期 Specialist 都返回结构化结果，且最终画布达到样例最低结构要求 | 98% |
+| Plan 通过率 | 每个 Specialist 草案返回的 `planId` 都被成功应用 | 95% |
 | 资产重复率 | 已有稳定身份仍创建新节点的次数 / 资产复用机会 | 5% 以下 |
 | Preflight 通过率 | 有可用 Route 且一次通过的样例数 / 可运行样例数 | 90% |
 | 范围越权率 | 修改请求 scope 外节点的次数 / 修改次数 | 0% |
@@ -31,8 +31,10 @@ $env:PIPELINE_EVAL_TIMEOUT_MS='1200000'
 npm run eval:pipeline-specialists
 ```
 
-开发过程可用 `PIPELINE_EVAL_FIXTURES='video-03,route-01'` 只运行指定样例。正式验收不得设置该变量，必须得到 20 个样例的 `summary.json`、逐例 JSON 与 `scorecard.csv`。运行期文件位于被 Git 忽略的 `.pipeline-eval/runs/<run-id>/`；正式发布时仅把去除项目数据库和会话内容后的汇总、评分表与验收说明复制到 `evaluation/results/<run-id>/`。
+开发过程可用 `PIPELINE_EVAL_FIXTURES='video-03,route-01'` 只运行指定样例。局部运行写入 `partial-summary.json` 和 `partial-scorecard.csv`，不会覆盖同一 Run 下的正式验收产物。正式验收不得设置该变量，必须得到 20 个样例的 `summary.json`、逐例 JSON 与 `scorecard.csv`。运行期文件位于被 Git 忽略的 `.pipeline-eval/runs/<run-id>/`；正式发布时仅把去除项目数据库和会话内容后的汇总、评分表与验收说明复制到 `evaluation/results/<run-id>/`。
 
 续跑时设置 `PIPELINE_EVAL_RESUME=1`，评估器只复用状态为 `passed` 的结果。若 Agent 在评估等待上限后完成，可在只选中该单个 fixture 时设置 `PIPELINE_EVAL_RECOVER_SESSION_ID=<session-id>`，从已结束的落盘会话和对应画布只读恢复证据；仍在 streaming 的会话会被拒绝。
 
-自动结果不替代人工评审。评审者要查看每类至少一个完整证据，确认内容质量、可编辑性和禁止行为，再填写人工分数与备注。
+逐例证据会记录 Specialist 的 Profile 版本、执行模式（模型首次成功、格式修复或保守回退）、计划与应用关系、初始节点的范围外变化以及实际 Generation Run ID。恢复旧会话时没有初始画布快照，范围外变化记为不可判定，仍需人工核对。
+
+自动结果不替代人工评审。评审者要查看每类至少一个完整证据，确认内容质量、可编辑性和不能自动判定的禁止行为，再填写人工分数与备注。

@@ -42,6 +42,7 @@ export interface PipelineSpecialistWarning {
 export interface PipelineSpecialistPlanResult {
   kind: PipelineSpecialistKind;
   profileVersion: string;
+  executionMode: "model" | "repaired" | "fallback";
   planId: string | null;
   status: "draft" | "no-change";
   summary: string;

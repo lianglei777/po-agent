@@ -61,6 +61,7 @@ export class PipelineSpecialistService {
       : undefined;
     let draft: PipelineSpecialistDraft;
     let repairUsed = false;
+    let fallbackUsed = false;
     try {
       const raw = await this.runtime.run({
         profile, context, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model, signal,
@@ -78,6 +79,7 @@ export class PipelineSpecialistService {
       }
     } catch (cause) {
       if (signal?.aborted) throw cause;
+      fallbackUsed = true;
       if (kind === "prompt") draft = promptFallbackDraft(input.sourceNodeIds);
       else if (kind === "script") draft = scriptFallbackDraft(input);
       else if (kind === "asset") draft = assetFallbackDraft(input);
@@ -131,7 +133,8 @@ export class PipelineSpecialistService {
     }
     if (warnings.some((warning) => warning.blocking) || !compilation.operations.length) {
       return { result: {
-        kind, profileVersion: profile.version, planId: null, status: "no-change", summary: normalizedDraft.summary,
+        kind, profileVersion: profile.version, executionMode: fallbackUsed ? "fallback" : repairUsed ? "repaired" : "model",
+        planId: null, status: "no-change", summary: normalizedDraft.summary,
         operationCount: 0, affectedNodeIds: compilation.affectedNodeIds, warnings,
       }, repairUsed };
     }
@@ -142,7 +145,8 @@ export class PipelineSpecialistService {
       operations: compilation.operations,
     });
     return { result: {
-      kind, profileVersion: profile.version, planId: plan.id, status: "draft", summary: plan.summary,
+      kind, profileVersion: profile.version, executionMode: fallbackUsed ? "fallback" : repairUsed ? "repaired" : "model",
+      planId: plan.id, status: "draft", summary: plan.summary,
       operationCount: plan.operations.length, affectedNodeIds: compilation.affectedNodeIds, warnings,
     }, repairUsed };
   }

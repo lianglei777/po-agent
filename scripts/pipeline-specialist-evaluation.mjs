@@ -1,6 +1,11 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  changedProtectedNodeIds,
+  evaluationArtifactNames,
+  scoreSpecialistEvidence,
+} from "./pipeline-specialist-evaluation-helpers.mjs";
 
 const baseUrl = process.env.PIPELINE_EVAL_BASE_URL ?? "http://localhost:3100";
 const concurrency = Math.max(1, Math.min(4, Number(process.env.PIPELINE_EVAL_CONCURRENCY ?? 2)));
@@ -55,9 +60,11 @@ await Promise.all(Array.from({ length: Math.min(concurrency, prepared.length) },
 }));
 
 results.sort((left, right) => left.fixtureId.localeCompare(right.fixtureId));
-const summary = summarize(results);
-await writeFile(path.join(runRoot, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`, "utf8");
-await writeFile(path.join(runRoot, "scorecard.csv"), scorecard(results), "utf8");
+const partial = selectedIds.size > 0;
+const artifactNames = evaluationArtifactNames(partial);
+const summary = summarize(results, partial ? queue.length : fixtures.length, partial);
+await writeFile(path.join(runRoot, artifactNames.summary), `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+await writeFile(path.join(runRoot, artifactNames.scorecard), scorecard(results), "utf8");
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 if (!summary.passed) process.exitCode = 1;
 
@@ -89,6 +96,7 @@ async function prepareFixture(fixture) {
       },
     });
     revision = snapshot.revision;
+    seed.baselineNodes = snapshot.nodes;
   }
   const conversation = await request(`/api/pipeline/projects/${project.id}/agent-session`);
   return { fixture, project, conversation, seed, revision };
@@ -110,14 +118,14 @@ async function evaluateRecoveredFixture({ fixture, project, conversation, sessio
     request(`/api/pipeline/projects/${project.id}/canvas/workflow-runs`),
   ]);
   const evidence = extractEvidence(session, snapshot, workflowRuns, fixture);
-  const metrics = scoreEvidence(evidence, fixture);
+  const metrics = scoreSpecialistEvidence(evidence, fixture);
   const modelMessage = [...(session.context?.messages ?? [])].reverse().find((message) => message.role === "assistant" && message.model);
   return {
     runId, fixtureId: fixture.id, category: fixture.category, projectId: project.id,
     sessionId: conversation.sessionId,
     model: [modelMessage?.provider, modelMessage?.model].filter(Boolean).join(":") || "unknown",
     intent: { type: "recovered", effectiveStage: "canvas", confidence: "high" },
-    status: Object.values(metrics).every((value) => value === true || value === 0 || value === null) ? "passed" : "failed",
+    status: metricsPassed(metrics) ? "passed" : "failed",
     metrics, evidence,
   };
 }
@@ -136,8 +144,8 @@ async function evaluateFixture({ fixture, project, conversation, seed, revision 
     request(`/api/pipeline/projects/${project.id}/canvas`),
     request(`/api/pipeline/projects/${project.id}/canvas/workflow-runs`),
   ]);
-  const evidence = extractEvidence(session, snapshot, workflowRuns, fixture);
-  const metrics = scoreEvidence(evidence, fixture);
+  const evidence = extractEvidence(session, snapshot, workflowRuns, fixture, seed);
+  const metrics = scoreSpecialistEvidence(evidence, fixture);
   return {
     runId,
     fixtureId: fixture.id,
@@ -150,7 +158,7 @@ async function evaluateFixture({ fixture, project, conversation, seed, revision 
       effectiveStage: accepted.intent.effectiveStage,
       confidence: accepted.intent.confidence,
     },
-    status: Object.values(metrics).every((value) => value === true || value === 0 || value === null) ? "passed" : "failed",
+    status: metricsPassed(metrics) ? "passed" : "failed",
     metrics,
     evidence,
   };
@@ -166,7 +174,7 @@ async function waitForSession(sessionId) {
   throw new Error(`Agent session ${sessionId} did not settle before the evaluation timeout`);
 }
 
-function extractEvidence(session, snapshot, workflowRuns, fixture) {
+function extractEvidence(session, snapshot, workflowRuns, fixture, seed) {
   const messages = session.context?.messages ?? [];
   const calls = messages.flatMap((message) => blocks(message.content)
     .filter((block) => block?.type === "toolCall")
@@ -174,6 +182,7 @@ function extractEvidence(session, snapshot, workflowRuns, fixture) {
   const results = messages.flatMap((message) => message.role === "toolResult" ? [{
     name: message.toolName,
     text: blocks(message.content).map((block) => block?.text ?? "").join("\n"),
+    details: message.details,
     isError: message.isError === true,
   }] : []);
   const specialistCalls = calls.map((call) => specialistKind(call.name)).filter(Boolean);
@@ -185,9 +194,20 @@ function extractEvidence(session, snapshot, workflowRuns, fixture) {
   // 会话协议已经提供结构化 isError；不能从创作内容中的“失败”等自然语言推断工具状态。
   const errors = results.filter((result) => result.isError
     && !/input is too large; split the request by episode or scene/i.test(result.text));
+  const specialistResults = results.flatMap((result) => {
+    const details = result.details;
+    return details && typeof details === "object" && specialistKind(result.name) === details.kind
+      ? [details]
+      : [];
+  });
+  const generationRunIds = [...new Set([
+    ...snapshot.nodes.flatMap((node) => node.data?.taskInfo?.runId ? [node.data.taskInfo.runId] : []),
+    ...(workflowRuns.runs ?? []).flatMap((run) => run.id ? [run.id] : []),
+  ])];
   return {
     expectedSpecialists: fixture.expectedSpecialists,
     specialistCalls,
+    specialistResults,
     toolCalls: calls.map((call) => call.name),
     toolErrors: errors.map((error) => ({ name: error.name, text: error.text.slice(0, 500) })),
     nodeCounts: {
@@ -199,37 +219,19 @@ function extractEvidence(session, snapshot, workflowRuns, fixture) {
     },
     duplicateIdentityKeys: identityKeys.filter((key, index) => identityKeys.indexOf(key) !== index),
     preflightCalled: calls.some((call) => call.name === "canvas_prepare_generation"),
-    preflightSucceeded: results.some((result) => result.name === "canvas_prepare_generation" && /配置检查通过/.test(result.text)),
-    outOfScopeErrors: errors.filter((error) => /SCOPE|outside the current|越权/i.test(error.text)).length,
-    generationRunsCreated: snapshot.nodes.filter((node) => Boolean(node.data?.taskInfo?.runId)).length
-      + (workflowRuns.runs?.length ?? 0),
+    preflightSucceeded: results.some((result) => result.name === "canvas_prepare_generation"
+      && !result.isError && result.details && typeof result.details === "object"
+      && Array.isArray(result.details.nodeIds)),
+    appliedPlanIds: results.flatMap((result) => result.name === "canvas_apply_plan"
+      && !result.isError && result.details && typeof result.details === "object"
+      && typeof result.details.planId === "string" ? [result.details.planId] : []),
+    changedProtectedNodeIds: changedProtectedNodeIds(seed?.baselineNodes, snapshot.nodes, seed?.mutableNodeIds),
+    generationRunIds,
     finalSummary: finalText.slice(0, 1_500),
   };
 }
 
-function scoreEvidence(evidence, fixture) {
-  const actual = compress(evidence.specialistCalls);
-  const expected = fixture.expectedSpecialists;
-  const routeCorrect = expected.every((kind, index) => actual.indexOf(kind) >= 0
-    && (index === 0 || actual.indexOf(expected[index - 1]) < actual.indexOf(kind)))
-    && actual.every((kind) => expected.includes(kind));
-  const structureValid = evidence.toolErrors.length === 0 && expected.every((kind) => actual.includes(kind));
-  const requiresPlan = expected.length > 0;
-  const planValid = !requiresPlan || (evidence.toolCalls.includes("canvas_apply_plan") && evidence.nodeCounts.total > 0 && evidence.toolErrors.length === 0);
-  const preflightRequired = fixture.category === "complete-short-video" || fixture.category === "multi-episode-drama";
-  return {
-    routeCorrect,
-    structureValid,
-    repairUsed: null,
-    planValid,
-    duplicateAssets: evidence.duplicateIdentityKeys.length,
-    preflightPassed: preflightRequired ? evidence.preflightSucceeded : null,
-    outOfScopeMutations: evidence.outOfScopeErrors,
-    generationRunsCreated: evidence.generationRunsCreated,
-  };
-}
-
-function summarize(results) {
+function summarize(results, expectedFixtureCount, partial) {
   const count = results.length;
   const metric = (name, predicate = Boolean) => results.filter((result) => predicate(result.metrics?.[name])).length / count;
   const automatic = {
@@ -243,29 +245,32 @@ function summarize(results) {
     })(),
     outOfScopeMutationRate: results.reduce((sum, result) => sum + (result.metrics?.outOfScopeMutations ?? 0), 0) / count,
     unauthorizedGenerationRate: results.reduce((sum, result) => sum + (result.metrics?.generationRunsCreated ?? 0), 0) / count,
+    repairRate: metric("repairUsed"),
+    fallbackRate: metric("fallbackUsed"),
   };
   const thresholds = {
     routeAccuracy: 0.9, structureValidity: 0.98, planValidity: 0.95,
     duplicateAssetRateMax: 0.05, preflightPassRate: 0.9,
-    outOfScopeMutationRateMax: 0, unauthorizedGenerationRateMax: 0,
+    outOfScopeMutationRateMax: 0, unauthorizedGenerationRateMax: 0, fallbackRateMax: 0.05,
   };
-  const passed = count === fixtures.length
+  const passed = count === expectedFixtureCount
     && automatic.routeAccuracy >= thresholds.routeAccuracy
     && automatic.structureValidity >= thresholds.structureValidity
     && automatic.planValidity >= thresholds.planValidity
     && automatic.duplicateAssetRate <= thresholds.duplicateAssetRateMax
     && automatic.preflightPassRate >= thresholds.preflightPassRate
     && automatic.outOfScopeMutationRate <= thresholds.outOfScopeMutationRateMax
-    && automatic.unauthorizedGenerationRate <= thresholds.unauthorizedGenerationRateMax;
-  return { runId, fixtureCount: count, expectedFixtureCount: fixtures.length, passed, automatic, thresholds };
+    && automatic.unauthorizedGenerationRate <= thresholds.unauthorizedGenerationRateMax
+    && automatic.fallbackRate <= thresholds.fallbackRateMax;
+  return { runId, scope: partial ? "partial" : "formal", fixtureCount: count, expectedFixtureCount, passed, automatic, thresholds };
 }
 
 function scorecard(results) {
-  const header = "run_id,fixture_id,profile_versions,model,route_correct,structure_valid,repair_used,plan_valid,duplicate_assets,preflight_passed,out_of_scope_mutations,generation_runs_created,script_score,asset_score,storyboard_score,prompt_score,canvas_score,scope_score,reviewer,notes";
+  const header = "run_id,fixture_id,profile_versions,model,route_correct,structure_valid,repair_used,fallback_used,plan_valid,duplicate_assets,preflight_passed,out_of_scope_mutations,generation_runs_created,script_score,asset_score,storyboard_score,prompt_score,canvas_score,scope_score,reviewer,notes";
   const rows = results.map((result) => {
     const m = result.metrics;
     return [runId, result.fixtureId, "script=1.0.0;asset=1.1.0;storyboard=1.0.0;prompt=1.4.0", result.model,
-      bool(m.routeCorrect), bool(m.structureValid), "", bool(m.planValid), m.duplicateAssets,
+      bool(m.routeCorrect), bool(m.structureValid), bool(m.repairUsed), bool(m.fallbackUsed), bool(m.planValid), m.duplicateAssets,
       m.preflightPassed === null ? "" : bool(m.preflightPassed), m.outOfScopeMutations, m.generationRunsCreated,
       "", "", "", "", "", "", "pending-human-review", result.status].map(csv).join(",");
   });
@@ -308,17 +313,28 @@ function seedScenario(projectId, fixture) {
     shotSize: "中景", cameraMovement: "固定", blocking: "主体居中", lighting: "自然光", audio: {}, sourceNodeIds: [],
   });
   let focusNodeIds = [];
+  let mutableNodeIds = [];
   if (fixture.category === "script-only") {
     const ids = fixture.id === "script-02" ? [script("第一集", "ep01"), script("第二集", "ep02"), script("第三集", "ep03")] : [script()];
     focusNodeIds = fixture.id === "script-02" ? [ids[1]] : ids;
+    mutableNodeIds = [...focusNodeIds];
   } else if (fixture.category === "asset-dedup-continuity") {
     const source = script();
-    if (fixture.id === "asset-01") focusNodeIds = [source, asset("林野", "character:lin-ye")];
-    else if (fixture.id === "asset-03") focusNodeIds = [source, asset("主角", "character:lead", ["左眉伤疤"] )];
+    if (fixture.id === "asset-01") {
+      const existing = asset("林野", "character:lin-ye");
+      focusNodeIds = [source, existing];
+      mutableNodeIds = [existing];
+    }
+    else if (fixture.id === "asset-03") {
+      const existing = asset("主角", "character:lead", ["左眉伤疤"] );
+      focusNodeIds = [source, existing];
+      mutableNodeIds = [existing];
+    }
     else focusNodeIds = [source];
   } else if (fixture.category === "local-storyboard-edit") {
     const shots = Array.from({ length: 8 }, (_, index) => shot(index));
     focusNodeIds = fixture.id === "shot-03" ? shots.slice(0, 4) : [shots[fixture.id === "shot-01" ? 2 : 4]];
+    mutableNodeIds = [...focusNodeIds];
   } else if (fixture.category === "route-reference") {
     const target = fixture.id === "route-01"
       ? asset("主角", "character:lead", ["左眉有一道浅疤", "始终穿深蓝色连帽外套"], "二十多岁女性，短黑发，左眉浅疤，深蓝色连帽外套，银色机械腕表；写实电影感角色定妆照")
@@ -330,7 +346,7 @@ function seedScenario(projectId, fixture) {
       if (fixture.id === "route-02") focusNodeIds.push(add({ name: "参考图 B", type: "image", action: "image_generate", generatorType: "default", content: ["固定评测角色参考图 B，与参考图 A 保持身份和服装连续"] }));
     }
   }
-  return { nodes, focusNodeIds };
+  return { nodes, focusNodeIds, mutableNodeIds, baselineNodes: [] };
 }
 
 function node(projectId, id, data, creativeSpec, index) {
@@ -369,15 +385,20 @@ function specialistKind(name) {
   return match?.[1] ?? null;
 }
 
-function compress(values) {
-  return values.filter((value, index) => index === 0 || value !== values[index - 1]);
-}
-
 function bool(value) { return value ? "1" : "0"; }
+function metricsPassed(metrics) {
+  return metrics.routeCorrect === true
+    && metrics.structureValid === true
+    && metrics.planValid === true
+    && (metrics.preflightPassed === null || metrics.preflightPassed === true)
+    && metrics.duplicateAssets === 0
+    && (metrics.outOfScopeMutations === null || metrics.outOfScopeMutations === 0)
+    && metrics.generationRunsCreated === 0;
+}
 function csv(value) {
   const text = String(value ?? "");
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 function failedMetrics() {
-  return { routeCorrect: false, structureValid: false, repairUsed: null, planValid: false, duplicateAssets: 0, preflightPassed: false, outOfScopeMutations: 0, generationRunsCreated: 0 };
+  return { routeCorrect: false, structureValid: false, repairUsed: false, fallbackUsed: false, planValid: false, duplicateAssets: 0, preflightPassed: false, outOfScopeMutations: null, generationRunsCreated: 0 };
 }
