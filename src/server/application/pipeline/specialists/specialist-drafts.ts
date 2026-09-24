@@ -221,6 +221,18 @@ function parseStoryboard(value: Record<string, unknown>, summary: string, warnin
   });
   const shotKeys = new Set(shots.map((shot) => shot.shotKey));
   if (shotKeys.size !== shots.length) invalid("Storyboard shot keys must be unique");
+  const shotOrders = new Set(shots.map((shot) => shot.order));
+  if (shotOrders.size !== shots.length) invalid("Storyboard shot orders must be unique");
+  shots.sort((left, right) => left.order - right.order);
+  const orderGaps = shots.slice(1).filter((shot, index) => shot.order !== shots[index]!.order + 1);
+  if (orderGaps.length) {
+    warnings.push({
+      code: "STORYBOARD_ORDER_GAP",
+      message: "Storyboard contains non-consecutive shot orders; preserved because the requested range may be partial",
+      nodeIds: orderGaps.flatMap((shot) => shot.targetNodeId ? [shot.targetNodeId] : []),
+      blocking: false,
+    });
+  }
   const totalDurationSeconds = positiveNumber(value.totalDurationSeconds, "totalDurationSeconds", 100_000);
   const summedDurationSeconds = shots.reduce((sum, shot) => sum + shot.durationSeconds, 0);
   const durationTolerance = Math.max(1, totalDurationSeconds * 0.05);

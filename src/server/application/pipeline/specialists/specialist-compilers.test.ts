@@ -179,6 +179,36 @@ describe("Pipeline Specialist draft compilation", () => {
     });
   });
 
+  it("sorts unique storyboard orders and reports partial-range gaps", () => {
+    const draft = parseSpecialistDraft("storyboard", JSON.stringify({
+      kind: "storyboard", summary: "局部分镜", warnings: [], sourceNodeIds: [], totalDurationSeconds: 8,
+      shots: [
+        { shotKey: "s3", order: 3, durationSeconds: 4, purpose: "收尾", visual: "门关闭",
+          subjects: [], shotSize: "特写", cameraMovement: "固定", blocking: "居中", lighting: "暗光" },
+        { shotKey: "s1", order: 1, durationSeconds: 4, purpose: "开场", visual: "门打开",
+          subjects: [], shotSize: "全景", cameraMovement: "固定", blocking: "居中", lighting: "日光" },
+      ],
+    }));
+
+    expect(draft).toMatchObject({
+      kind: "storyboard",
+      shots: [{ order: 1 }, { order: 3 }],
+      warnings: [expect.objectContaining({ code: "STORYBOARD_ORDER_GAP", blocking: false })],
+    });
+  });
+
+  it("rejects duplicate storyboard orders", () => {
+    expect(() => parseSpecialistDraft("storyboard", JSON.stringify({
+      kind: "storyboard", summary: "重复顺序", warnings: [], sourceNodeIds: [], totalDurationSeconds: 8,
+      shots: [
+        { shotKey: "s1", order: 1, durationSeconds: 4, purpose: "开场", visual: "门打开",
+          subjects: [], shotSize: "全景", cameraMovement: "固定", blocking: "居中", lighting: "日光" },
+        { shotKey: "s2", order: 1, durationSeconds: 4, purpose: "收尾", visual: "门关闭",
+          subjects: [], shotSize: "特写", cameraMovement: "固定", blocking: "居中", lighting: "暗光" },
+      ],
+    }))).toThrow(expect.objectContaining({ code: "PIPELINE_SPECIALIST_OUTPUT_INVALID" }));
+  });
+
   it("distributes a small negative duration correction without creating a zero-length closing shot", () => {
     const draft = parseSpecialistDraft("storyboard", JSON.stringify({
       kind: "storyboard", summary: "四十五秒分镜", warnings: [], sourceNodeIds: [], totalDurationSeconds: 45,

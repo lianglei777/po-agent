@@ -269,7 +269,7 @@ function scorecard(results) {
   const header = "run_id,fixture_id,profile_versions,model,route_correct,structure_valid,repair_used,fallback_used,plan_valid,duplicate_assets,preflight_passed,out_of_scope_mutations,generation_runs_created,script_score,asset_score,storyboard_score,prompt_score,canvas_score,scope_score,reviewer,notes";
   const rows = results.map((result) => {
     const m = result.metrics;
-    return [runId, result.fixtureId, "script=1.0.0;asset=1.1.0;storyboard=1.0.0;prompt=1.4.0", result.model,
+    return [runId, result.fixtureId, profileVersions(result.evidence?.specialistResults), result.model,
       bool(m.routeCorrect), bool(m.structureValid), bool(m.repairUsed), bool(m.fallbackUsed), bool(m.planValid), m.duplicateAssets,
       m.preflightPassed === null ? "" : bool(m.preflightPassed), m.outOfScopeMutations, m.generationRunsCreated,
       "", "", "", "", "", "", "pending-human-review", result.status].map(csv).join(",");
@@ -386,6 +386,13 @@ function specialistKind(name) {
 }
 
 function bool(value) { return value ? "1" : "0"; }
+function profileVersions(results = []) {
+  return [...new Map(results
+    .filter((result) => typeof result.kind === "string" && typeof result.profileVersion === "string")
+    .map((result) => [result.kind, result.profileVersion])).entries()]
+    .map(([kind, version]) => `${kind}=${version}`)
+    .join(";");
+}
 function metricsPassed(metrics) {
   return metrics.routeCorrect === true
     && metrics.structureValid === true

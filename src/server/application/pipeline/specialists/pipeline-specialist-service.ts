@@ -91,11 +91,14 @@ export class PipelineSpecialistService {
       this.repository.listCanvasEdges(input.projectId),
     ]);
     const scopedDraft = constrainDraftToRequestedTargets(draft, input.targetNodeIds);
-    const normalizedDraft = scopedDraft.kind === "prompt"
+    const routeNormalizedDraft = scopedDraft.kind === "prompt"
       ? normalizePromptRoutes(ensurePromptConfigurations(scopedDraft, input, routes, nodes), routes, nodes)
       : scopedDraft.kind === "asset" && !scopedDraft.assets.length
         ? { ...assetFallbackDraft(input), warnings: [...scopedDraft.warnings, ...assetFallbackDraft(input).warnings], unresolvedMentions: scopedDraft.unresolvedMentions }
         : scopedDraft;
+    const normalizedDraft = routeNormalizedDraft.kind === "prompt"
+      ? preservePromptSourceFacts(routeNormalizedDraft, nodes)
+      : routeNormalizedDraft;
     const compilation = compileSpecialistDraft(normalizedDraft, nodes, edges);
     const warnings = [...normalizedDraft.warnings];
     if (normalizedDraft.kind === "asset") {
@@ -122,10 +125,11 @@ export class PipelineSpecialistService {
         });
       }
       for (const shot of normalizedDraft.shots) {
-        if (shot.dialogue && [...shot.dialogue.line].length / shot.durationSeconds > 8) {
+        if (shot.dialogue && estimatedSpeechSeconds(shot.dialogue.line) > shot.durationSeconds * 1.1) {
+          const estimatedSeconds = Math.ceil(estimatedSpeechSeconds(shot.dialogue.line) * 10) / 10;
           warnings.push({
             code: "STORYBOARD_DIALOGUE_TOO_DENSE",
-            message: `${shot.shotKey} contains more dialogue than its duration can comfortably express`,
+            message: `${shot.shotKey} has about ${estimatedSeconds}s of dialogue for a ${shot.durationSeconds}s shot`,
             nodeIds: shot.targetNodeId ? [shot.targetNodeId] : [],
             blocking: false,
           });
@@ -501,14 +505,67 @@ function renderFallbackPrompt(spec: Extract<CanvasCreativeSpec, { kind: "asset" 
     return [spec.canonicalName, spec.visualDescription, ...spec.continuityFacts].filter(Boolean).join(". ");
   }
   return [
+    `Purpose: ${spec.purpose}`,
     spec.visual,
     `Shot size: ${spec.shotSize}`,
     `Camera: ${spec.cameraMovement}`,
     `Blocking: ${spec.blocking}`,
     `Lighting: ${spec.lighting}`,
     ...spec.subjects.map((subject) => `${subject.identityKey}: ${subject.action}${subject.expression ? `, ${subject.expression}` : ""}`),
+    spec.dialogue ? `Dialogue: ${spec.dialogue.speaker}: ${spec.dialogue.line}${spec.dialogue.emotion ? `, ${spec.dialogue.emotion}` : ""}${spec.dialogue.delivery ? `, ${spec.dialogue.delivery}` : ""}` : "",
+    spec.audio.ambience ? `Ambience: ${spec.audio.ambience}` : "",
+    spec.audio.sfx ? `Sound effects: ${spec.audio.sfx}` : "",
+    spec.audio.music ? `Music: ${spec.audio.music}` : "",
+    spec.transition ? `Transition: ${spec.transition}` : "",
     `Target duration: ${spec.durationSeconds} seconds`,
   ].filter(Boolean).join(". ");
+}
+
+function preservePromptSourceFacts(draft: PromptSpecialistDraft, nodes: CanvasNode[]): PromptSpecialistDraft {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const warnings = [...draft.warnings];
+  const configurations = draft.configurations.map((configuration) => {
+    const spec = nodeById.get(configuration.sourceSpecNodeId)?.data?.creativeSpec;
+    if (!spec || (spec.kind !== "asset" && spec.kind !== "shot")) return configuration;
+    const facts = promptFacts(spec).filter((fact) => !includesNormalized(configuration.prompt, fact));
+    if (!facts.length) return configuration;
+    const appendix = `Source facts to preserve: ${facts.join(". ")}`.slice(0, 8_000);
+    const separator = "\n\n";
+    const available = Math.max(0, 20_000 - appendix.length - separator.length);
+    warnings.push({
+      code: "PROMPT_SOURCE_FACTS_APPENDED",
+      message: `Appended ${facts.length} omitted source fact(s) to the Route prompt`,
+      nodeIds: [configuration.sourceSpecNodeId],
+      blocking: false,
+    });
+    return { ...configuration, prompt: `${configuration.prompt.slice(0, available)}${separator}${appendix}` };
+  });
+  return { ...draft, configurations, warnings };
+}
+
+function promptFacts(spec: Extract<CanvasCreativeSpec, { kind: "asset" | "shot" }>): string[] {
+  if (spec.kind === "asset") {
+    return [spec.canonicalName, spec.visualDescription, ...spec.continuityFacts].filter(Boolean);
+  }
+  return [
+    spec.purpose, spec.visual, spec.shotSize, spec.cameraMovement, spec.blocking, spec.lighting,
+    ...spec.subjects.flatMap((subject) => [subject.identityKey, subject.action, subject.expression ?? ""]),
+    spec.dialogue?.line ?? "", spec.dialogue?.emotion ?? "", spec.dialogue?.delivery ?? "",
+    spec.audio.ambience ?? "", spec.audio.sfx ?? "", spec.audio.music ?? "", spec.transition ?? "",
+    `${spec.durationSeconds} seconds`,
+  ].filter(Boolean);
+}
+
+function includesNormalized(prompt: string, fact: string): boolean {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[\s.,，。:：;；、'"“”‘’()[\]{}]/g, "");
+  return normalize(prompt).includes(normalize(fact));
+}
+
+function estimatedSpeechSeconds(line: string): number {
+  const cjkCharacters = [...line].filter((character) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(character)).length;
+  const latinWords = line.replace(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu, " ")
+    .trim().split(/\s+/).filter(Boolean).length;
+  return cjkCharacters / 4 + latinWords / 2.5;
 }
 
 function requiredAssetCount(assets: Array<{ required?: boolean; minFiles?: number }>): number {

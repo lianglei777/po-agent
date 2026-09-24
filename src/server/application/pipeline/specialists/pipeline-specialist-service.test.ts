@@ -461,6 +461,56 @@ describe("PipelineSpecialistService", () => {
     expect(result.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "PROMPT_INVALID_REFERENCE_REMOVED", blocking: false }),
       expect.objectContaining({ code: "PIPELINE_ROUTE_AUTO_CORRECTED", blocking: false }),
+      expect.objectContaining({ code: "PROMPT_SOURCE_FACTS_APPENDED", blocking: false }),
+    ]));
+  });
+
+  it("appends omitted asset continuity facts to a generated prompt", async () => {
+    const asset = assetNode("asset-lead", "主角");
+    if (asset.data?.creativeSpec?.kind === "asset") asset.data.creativeSpec.continuityFacts = ["左眉有一道浅疤"];
+    const runtime = { run: vi.fn().mockResolvedValue(JSON.stringify({
+      kind: "prompt", summary: "配置定妆图", warnings: [], configurations: [{
+        sourceSpecNodeId: asset.id, name: "主角定妆图", mediaType: "image",
+        routeId: "text-to-image", prompt: "电影感人物定妆照", settings: {}, references: [],
+      }],
+    })) } as unknown as PipelineSpecialistRuntime;
+    const plans = { create: vi.fn(async (input) => ({ id: "plan-image", status: "draft", summary: input.summary, operations: input.operations })) } as unknown as CanvasAgentPlanService;
+    const canvas = { listAvailableGenerationRoutes: vi.fn().mockResolvedValue([{
+      id: "text-to-image", name: "Text image", description: "Text image", capability: "text-to-image",
+      defaults: {}, inputSchema: { parameters: [], assets: [] },
+    }]) } as unknown as CanvasStudioService;
+    const service = new PipelineSpecialistService(repositoryStub([asset]), profileSource(), runtime,
+      { assemble: vi.fn().mockResolvedValue("trusted-context") } as unknown as PipelineSpecialistContextAssembler,
+      plans, canvas);
+
+    const result = await service.run("prompt", { ...request(), objective: "创建主角定妆图", sourceNodeIds: [asset.id] });
+
+    expect(plans.create).toHaveBeenCalledWith(expect.objectContaining({
+      operations: expect.arrayContaining([expect.objectContaining({ prompt: expect.stringContaining("左眉有一道浅疤") })]),
+    }));
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "PROMPT_SOURCE_FACTS_APPENDED", nodeIds: [asset.id] }),
+    ]));
+  });
+
+  it("reports dialogue whose estimated speech time exceeds the shot duration", async () => {
+    const runtime = { run: vi.fn().mockResolvedValue(JSON.stringify({
+      kind: "storyboard", summary: "快节奏对白", warnings: [], sourceNodeIds: [], totalDurationSeconds: 2,
+      shots: [{
+        shotKey: "s1", order: 0, durationSeconds: 2, purpose: "交代线索", visual: "主角快速说明线索",
+        subjects: [], dialogue: { speaker: "主角", line: "这份文件说明明天之前我们必须找到真正的钥匙" },
+        shotSize: "中景", cameraMovement: "固定", blocking: "主体居中", lighting: "冷光",
+      }],
+    })) } as unknown as PipelineSpecialistRuntime;
+    const plans = { create: vi.fn(async (input) => ({ id: "plan-shot", status: "draft", summary: input.summary, operations: input.operations })) } as unknown as CanvasAgentPlanService;
+    const service = new PipelineSpecialistService(repositoryStub(), profileSource(), runtime,
+      { assemble: vi.fn().mockResolvedValue("trusted-context") } as unknown as PipelineSpecialistContextAssembler,
+      plans, {} as CanvasStudioService);
+
+    const result = await service.run("storyboard", request());
+
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "STORYBOARD_DIALOGUE_TOO_DENSE", blocking: false }),
     ]));
   });
 });
