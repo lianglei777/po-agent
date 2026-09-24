@@ -13,6 +13,8 @@ export interface AgentToolTextContent {
 export interface AgentToolResult<TDetails = unknown> {
   content: AgentToolTextContent[];
   details: TDetails;
+  /** 当前工具结果已经完整回答本轮目标时，结束工具循环，避免额外一次模型收尾请求。 */
+  terminate?: boolean;
 }
 
 export interface AgentToolExecutionContext<TDetails = unknown> {

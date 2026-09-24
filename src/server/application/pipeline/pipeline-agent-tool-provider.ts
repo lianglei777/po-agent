@@ -93,9 +93,13 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
         required: ["objective"],
       additionalProperties: false,
       },
-      execute: async ({ input, signal }) => {
+      execute: async ({ input, signal, onUpdate }) => {
         this.turnPolicies.requireStage(sessionId, definition.stage);
         const request = specialistRequest(projectId, sessionId, input);
+        onUpdate?.({
+          content: [{ type: "text", text: `${definition.label}正在处理当前范围…` }],
+          details: { kind, status: "running" },
+        });
         if (request.sourceNodeIds.length) {
           const existingNodeIds = (await this.repo.listCanvasNodes(projectId)).map((node) => node.id);
           // 长 UUID 在多阶段工具链中偶尔会被模型抄错一个字符；只修复唯一近邻的只读 source，写入 target 仍要求精确 ID。
@@ -396,6 +400,8 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
             text: `配置检查通过：待执行 ${prepared.nodeIds.length} 个节点，复用 ${reused} 个可靠结果，补齐 ${missing} 个缺失结果，重做 ${stale} 个过期结果，跳过 ${skipped} 个非生成来源。请用户在节点或工作流上手动触发生成。`,
           }],
           details: { ...prepared, generationTrigger: "manual" },
+          // 预检结果已经包含完整交付摘要；直接结束可避免长上下文再发起一次无价值的模型请求。
+          terminate: true,
         };
       },
     };

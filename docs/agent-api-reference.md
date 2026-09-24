@@ -2904,6 +2904,8 @@ interface PipelineAgentTurnRequest {
 
 Specialist 模型请求按 Profile 设置独立超时。用户停止、请求超时、没有可用模型和供应商执行失败分别返回 `PIPELINE_SPECIALIST_CANCELLED`、`PIPELINE_SPECIALIST_TIMEOUT`、`PIPELINE_SPECIALIST_MODEL_UNAVAILABLE` 和 `PIPELINE_SPECIALIST_RUNTIME_FAILED`。这些运行时错误不会创建回退 Plan；已经应用的上游 Plan 保留，后续回合从当前画布继续。
 
+完整准备流程在 `canvas_prepare_generation` 返回后确定性结束。该 Tool Result 本身包含待执行、复用、缺失、过期和跳过数量，并指明由用户手动触发生成；服务端不会再等待 Manager 生成第二份收尾文本。
+
 内部专业处理通过四个项目作用域工具完成。它们由同一个 Pipeline Agent 自动选择，用户不需要选择或切换 Agent：
 
 - `pipeline_run_script_specialist`：把创作目标转换为短视频段落或短剧分集剧本规格。

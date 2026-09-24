@@ -102,7 +102,11 @@ describe("PipelineAgentToolProvider", () => {
       .find((candidate) => candidate.name === "pipeline_run_storyboard_specialist")!;
     const first = { objective: "第一集分镜", sourceNodeIds: ["script-1"], episodeKey: "ep-1" };
 
-    await expect(tool.execute({ toolCallId: "tool-1", input: first })).resolves.toBeDefined();
+    const onUpdate = vi.fn();
+    await expect(tool.execute({ toolCallId: "tool-1", input: first, onUpdate })).resolves.toBeDefined();
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      details: { kind: "storyboard", status: "running" },
+    }));
     await expect(tool.execute({ toolCallId: "tool-2", input: { ...first, objective: "重试第一集" } }))
       .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-range-already-attempted" } });
     await expect(tool.execute({ toolCallId: "tool-3", input: { ...first, episodeKey: "ep-2" } })).resolves.toBeDefined();
@@ -220,6 +224,7 @@ describe("PipelineAgentToolProvider", () => {
     expect(studio.prepareWorkflowGeneration).toHaveBeenCalledWith({ projectId: "project-1", nodeIds: ["video-1"] });
     expect(studio.startWorkflowGeneration).not.toHaveBeenCalled();
     expect(result.details).toMatchObject({ generationTrigger: "manual" });
+    expect(result.terminate).toBe(true);
   });
 
   it("never exposes generation or paid recovery tools even for a legacy enabled project", () => {
