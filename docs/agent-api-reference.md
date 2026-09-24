@@ -2902,6 +2902,8 @@ interface PipelineAgentTurnRequest {
 
 当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可读取、修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。application 会把模型给出的 ID 与当前项目真实节点求交，并始终保留用户本轮明确选中或 `@` 引用的节点。普通 Plan 越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`；Specialist 输入包含 scope 外节点时返回 `403 PIPELINE_SPECIALIST_SCOPE_EXCEEDED`。新建节点及新建节点之间的引用仍可在本轮计划内使用。
 
+Specialist 模型请求按 Profile 设置独立超时。用户停止、请求超时、没有可用模型和供应商执行失败分别返回 `PIPELINE_SPECIALIST_CANCELLED`、`PIPELINE_SPECIALIST_TIMEOUT`、`PIPELINE_SPECIALIST_MODEL_UNAVAILABLE` 和 `PIPELINE_SPECIALIST_RUNTIME_FAILED`。这些运行时错误不会创建回退 Plan；已经应用的上游 Plan 保留，后续回合从当前画布继续。
+
 内部专业处理通过四个项目作用域工具完成。它们由同一个 Pipeline Agent 自动选择，用户不需要选择或切换 Agent：
 
 - `pipeline_run_script_specialist`：把创作目标转换为短视频段落或短剧分集剧本规格。

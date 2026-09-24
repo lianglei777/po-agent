@@ -314,7 +314,7 @@ describe("PipelineSpecialistService", () => {
     ]));
   });
 
-  it("uses the bounded prompt fallback when the repair request itself fails", async () => {
+  it("does not hide a failed repair request behind a fallback plan", async () => {
     const asset = assetNode("asset-lead", "主角");
     const runtime = { run: vi.fn().mockResolvedValueOnce("not-json").mockRejectedValueOnce(new Error("provider repair failed")) } as unknown as PipelineSpecialistRuntime;
     const plans = {
@@ -330,15 +330,12 @@ describe("PipelineSpecialistService", () => {
       plans, canvas,
     );
 
-    const result = await service.run("prompt", { ...request(), objective: "创建主角参考图", sourceNodeIds: [asset.id] });
-
-    expect(result).toMatchObject({ planId: "plan-prompt", status: "draft" });
-    expect(result.warnings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "PROMPT_OUTPUT_FALLBACK", blocking: false }),
-    ]));
+    await expect(service.run("prompt", { ...request(), objective: "创建主角参考图", sourceNodeIds: [asset.id] }))
+      .rejects.toThrow("provider repair failed");
+    expect(plans.create).not.toHaveBeenCalled();
   });
 
-  it("uses the bounded prompt fallback when the initial model request fails", async () => {
+  it("does not hide an initial model request failure behind a fallback plan", async () => {
     const asset = assetNode("asset-lead", "主角");
     const runtime = { run: vi.fn().mockRejectedValue(new Error("provider returned invalid JSON")) } as unknown as PipelineSpecialistRuntime;
     const plans = {
@@ -354,10 +351,10 @@ describe("PipelineSpecialistService", () => {
       plans, canvas,
     );
 
-    const result = await service.run("prompt", { ...request(), objective: "创建主角参考图", sourceNodeIds: [asset.id] });
-
+    await expect(service.run("prompt", { ...request(), objective: "创建主角参考图", sourceNodeIds: [asset.id] }))
+      .rejects.toThrow("provider returned invalid JSON");
     expect(runtime.run).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ planId: "plan-prompt", status: "draft" });
+    expect(plans.create).not.toHaveBeenCalled();
   });
 
   it("creates an editable script draft when structured output and repair both fail", async () => {
@@ -530,6 +527,6 @@ function mediaNode(id: string, mediaType: "image" | "video" | "audio"): CanvasNo
 function profileSource(): PipelineSpecialistProfileSource {
   return {
     get: vi.fn(async (kind) => ({ kind, version: "1.0.0", systemPrompt: "system", skillInstructions: "skill",
-      maxInputCharacters: 10_000, maxOutputTokens: 2_000, temperature: 0.2 })),
+      maxInputCharacters: 10_000, maxOutputTokens: 2_000, temperature: 0.2, requestTimeoutMs: 120_000 })),
   };
 }

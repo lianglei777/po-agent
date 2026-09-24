@@ -30,6 +30,7 @@ export interface PipelineSpecialistProfile {
   maxInputCharacters: number;
   maxOutputTokens: number;
   temperature: number;
+  requestTimeoutMs: number;
 }
 
 export interface PipelineSpecialistWarning {

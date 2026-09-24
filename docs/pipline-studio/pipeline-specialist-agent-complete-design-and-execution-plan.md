@@ -1062,8 +1062,8 @@ PromptSpecialistCompiler
 
 ### 12.3 原子性与失败边界
 
-- 模型失败：画布无变化。
-- Schema 修复仍失败：画布无变化，返回可操作错误。
+- 模型失败：画布无变化，返回稳定运行时错误，不生成替代 Plan。
+- Schema 修复仍失败：使用带明确警告的保守可编辑草案，并在评测中记录 `fallback`。
 - 专业校验失败：画布无变化，返回具体字段或节点。
 - Plan 创建失败：画布无变化。
 - Plan 应用失败：现有 Canvas mutation 事务保证不留部分结果。
@@ -1084,7 +1084,7 @@ PromptSpecialistCompiler
 ### 13.2 重试
 
 - JSON 格式错误最多进行一次结构修复调用。
-- 超时、限流和临时模型错误可由 Manager 重试一次。
+- 超时、限流和临时模型错误由 Manager 在新回合重试；同一回合保留原错误，避免自动重试拖长等待。
 - 专业不变量失败不自动重复生成，返回具体问题。
 - 任何重试都不创建付费内容生成任务。
 - 供应商生成失败继续使用现有 generation recovery 规则，不由 Specialist 接管。
@@ -1584,6 +1584,9 @@ Profile 文件位于 infrastructure 资源目录，是因为读取和打包文�
 | `PIPELINE_SPECIALIST_CONTINUITY_CONFLICT` | 新要求与确认连续性冲突 | 用户决定覆盖或保留 |
 | `PIPELINE_SPECIALIST_ROUTE_UNAVAILABLE` | 没有满足目标的已启用 Route | 配置或启用模型 |
 | `PIPELINE_SPECIALIST_CANCELLED` | 用户停止当前回合 | 保留已应用步骤 |
+| `PIPELINE_SPECIALIST_TIMEOUT` | 当前 Specialist 超过自身请求上限 | 保留已应用步骤，在新回合重试当前阶段 |
+| `PIPELINE_SPECIALIST_MODEL_UNAVAILABLE` | 没有可用模型或模型运行时未就绪 | 配置并启用模型 |
+| `PIPELINE_SPECIALIST_RUNTIME_FAILED` | 模型供应商调用失败 | 检查当前模型和供应商后重试 |
 
 错误信息必须包含 Specialist、目标范围和下一步，不显示 API Key、供应商凭据、完整模型原始响应或无界上下文。
 

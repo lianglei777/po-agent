@@ -30,6 +30,7 @@ describe("PipelineSpecialistContextAssembler", () => {
       maxInputCharacters: 56_000,
       maxOutputTokens: 6_000,
       temperature: 0.1,
+      requestTimeoutMs: 180_000,
     };
 
     const context = await assembler.assemble(request, profile, []);

@@ -28,7 +28,10 @@ describe("PiPipelineSpecialistRuntime", () => {
       completeSimple,
     } as unknown as ModelRuntime));
 
-    await expect(runtime.run(request())).rejects.toThrow("401 invalid credential");
+    await expect(runtime.run(request())).rejects.toMatchObject({
+      code: "PIPELINE_SPECIALIST_RUNTIME_FAILED",
+      message: "The script Specialist model request failed",
+    });
     expect(completeSimple).toHaveBeenCalledTimes(1);
   });
 
@@ -42,8 +45,41 @@ describe("PiPipelineSpecialistRuntime", () => {
       completeSimple,
     } as unknown as ModelRuntime), 5);
 
-    await expect(runtime.run({ ...request(), signal: new AbortController().signal }))
-      .rejects.toThrow("timed out after 5ms");
+    await expect(runtime.run({
+      ...request(),
+      profile: { ...request().profile, requestTimeoutMs: 5 },
+      signal: new AbortController().signal,
+    })).rejects.toMatchObject({ code: "PIPELINE_SPECIALIST_TIMEOUT", details: { timeoutMs: 5 } });
+  });
+
+  it("reports user cancellation separately from timeout", async () => {
+    const completeSimple = vi.fn(async (_model, _context, options: { signal: AbortSignal }) => new Promise<AssistantMessage>((resolve) => {
+      options.signal.addEventListener("abort", () => resolve(message("aborted", [])), { once: true });
+    }));
+    const runtime = new PiPipelineSpecialistRuntime(Promise.resolve({
+      getModel: vi.fn().mockReturnValue({ provider: "provider", id: "model" }),
+      getAvailableSnapshot: vi.fn().mockReturnValue([]),
+      completeSimple,
+    } as unknown as ModelRuntime));
+    const controller = new AbortController();
+    const result = runtime.run({ ...request(), signal: controller.signal });
+    await vi.waitFor(() => expect(completeSimple).toHaveBeenCalledOnce());
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ code: "PIPELINE_SPECIALIST_CANCELLED" });
+  });
+
+  it("reports a missing enabled model as a configuration error", async () => {
+    const runtime = new PiPipelineSpecialistRuntime(Promise.resolve({
+      getModel: vi.fn().mockReturnValue(undefined),
+      getAvailableSnapshot: vi.fn().mockReturnValue([]),
+      completeSimple: vi.fn(),
+    } as unknown as ModelRuntime));
+
+    await expect(runtime.run(request())).rejects.toMatchObject({
+      code: "PIPELINE_SPECIALIST_MODEL_UNAVAILABLE",
+      details: { specialist: "script" },
+    });
   });
 });
 
@@ -57,6 +93,7 @@ function request() {
       maxInputCharacters: 1_000,
       maxOutputTokens: 1_000,
       temperature: 0.2,
+      requestTimeoutMs: 180_000,
     },
     context: "context",
     outputContract: "contract",

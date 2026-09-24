@@ -59,31 +59,32 @@ export class PipelineSpecialistService {
     const model = conversation.provider && conversation.modelId
       ? `${conversation.provider}:${conversation.modelId}`
       : undefined;
+    const raw = await this.runtime.run({
+      profile, context, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model, signal,
+    });
     let draft: PipelineSpecialistDraft;
     let repairUsed = false;
     let fallbackUsed = false;
     try {
-      const raw = await this.runtime.run({
-        profile, context, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model, signal,
+      draft = parseSpecialistDraft(kind, raw);
+    } catch (cause) {
+      if (!(cause instanceof AppError) || cause.code !== "PIPELINE_SPECIALIST_OUTPUT_INVALID") throw cause;
+      repairUsed = true;
+      const repaired = await this.runtime.run({
+        profile, context, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model,
+        repairResponse: raw, signal,
       });
       try {
-        draft = parseSpecialistDraft(kind, raw);
-      } catch (cause) {
-        if (!(cause instanceof AppError) || cause.code !== "PIPELINE_SPECIALIST_OUTPUT_INVALID") throw cause;
-        repairUsed = true;
-        const repaired = await this.runtime.run({
-          profile, context, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model,
-          repairResponse: raw, signal,
-        });
         draft = parseSpecialistDraft(kind, repaired);
+      } catch (repairCause) {
+        if (!(repairCause instanceof AppError) || repairCause.code !== "PIPELINE_SPECIALIST_OUTPUT_INVALID") throw repairCause;
+        // 只有模型两次都返回不可解析结构时才降级；超时、取消和供应商错误必须显式暴露，避免伪造成功结果。
+        fallbackUsed = true;
+        if (kind === "prompt") draft = promptFallbackDraft(input.sourceNodeIds);
+        else if (kind === "script") draft = scriptFallbackDraft(input);
+        else if (kind === "asset") draft = assetFallbackDraft(input);
+        else draft = storyboardFallbackDraft(input);
       }
-    } catch (cause) {
-      if (signal?.aborted) throw cause;
-      fallbackUsed = true;
-      if (kind === "prompt") draft = promptFallbackDraft(input.sourceNodeIds);
-      else if (kind === "script") draft = scriptFallbackDraft(input);
-      else if (kind === "asset") draft = assetFallbackDraft(input);
-      else draft = storyboardFallbackDraft(input);
     }
     const [nodes, edges] = await Promise.all([
       this.repository.listCanvasNodes(input.projectId),
