@@ -191,30 +191,47 @@ function constrainDraftToRequestedTargets(
   targetNodeIds: string[],
 ): PipelineSpecialistDraft {
   if (!targetNodeIds.length || draft.kind === "prompt") return draft;
-  const allowed = new Set(targetNodeIds);
   if (draft.kind === "script") {
-    const matching = draft.episodes.filter((item) => item.targetNodeId && allowed.has(item.targetNodeId));
-    const episodes = matching.length
-      ? matching
-      : draft.episodes.slice(0, targetNodeIds.length).map((item, index) => ({ ...item, targetNodeId: targetNodeIds[index] }));
+    const episodes = completeTargetCoverage(draft.episodes, targetNodeIds, "script episode");
     return { ...draft, episodes };
   }
   if (draft.kind === "storyboard") {
-    const matching = draft.shots.filter((item) => item.targetNodeId && allowed.has(item.targetNodeId));
-    const shots = matching.length
-      ? matching
-      : draft.shots.slice(0, targetNodeIds.length).map((item, index) => ({ ...item, targetNodeId: targetNodeIds[index] }));
+    const shots = completeTargetCoverage(draft.shots, targetNodeIds, "storyboard shot");
     return { ...draft, shots };
   }
-  const matching = draft.assets.filter((item) => item.targetNodeId && allowed.has(item.targetNodeId));
-  const assets = matching.length
-    ? matching
-    : draft.assets.slice(0, targetNodeIds.length).map((item, index) => ({
-      ...item,
-      action: "update" as const,
-      targetNodeId: targetNodeIds[index],
-    }));
+  const assets = completeTargetCoverage(draft.assets, targetNodeIds, "asset").map((item) => ({
+    ...item,
+    action: "update" as const,
+  }));
   return { ...draft, assets };
+}
+
+function completeTargetCoverage<T extends { targetNodeId?: string }>(
+  items: T[],
+  targetNodeIds: string[],
+  label: string,
+): Array<T & { targetNodeId: string }> {
+  const requested = [...new Set(targetNodeIds)];
+  const allowed = new Set(requested);
+  const matching = items.filter((item): item is T & { targetNodeId: string } => (
+    Boolean(item.targetNodeId && allowed.has(item.targetNodeId))
+  ));
+  if (requested.length === 1 && matching.length === 0 && items.length === 1) {
+    return [{ ...items[0]!, targetNodeId: requested[0]! }];
+  }
+  const counts = new Map(requested.map((nodeId) => [nodeId, 0]));
+  for (const item of matching) counts.set(item.targetNodeId, (counts.get(item.targetNodeId) ?? 0) + 1);
+  const missing = requested.filter((nodeId) => counts.get(nodeId) !== 1);
+  if (missing.length) {
+    throw new AppError(
+      "PIPELINE_SPECIALIST_OUTPUT_INVALID",
+      `The Specialist ${label} output does not cover every requested target exactly once`,
+      422,
+      { targetNodeIds: requested, invalidTargetNodeIds: missing },
+    );
+  }
+  const byTarget = new Map(matching.map((item) => [item.targetNodeId, item]));
+  return requested.map((nodeId) => byTarget.get(nodeId)!);
 }
 
 function assetFallbackDraft(input: PipelineSpecialistRequest): AssetSpecialistDraft {

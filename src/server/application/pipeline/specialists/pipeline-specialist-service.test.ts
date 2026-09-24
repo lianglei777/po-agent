@@ -43,14 +43,14 @@ describe("PipelineSpecialistService", () => {
   it("limits a local storyboard revision to the requested target node", async () => {
     const target = scriptNode("shot-3", "镜头 3");
     const repository = repositoryStub([target]);
-    const shot = (targetNodeId?: string) => ({
-      targetNodeId, shotKey: "ep01-s03", order: 2, durationSeconds: 3,
+    const shot = (targetNodeId: string | undefined, shotKey: string, order: number) => ({
+      targetNodeId, shotKey, order, durationSeconds: 3,
       purpose: "加快节奏", visual: "动作快速完成", subjects: [], shotSize: "中景",
       cameraMovement: "快速推进", blocking: "主体居中", lighting: "自然光", audio: {},
     });
     const runtime = { run: vi.fn().mockResolvedValue(JSON.stringify({
       kind: "storyboard", episodeKey: "ep01", sourceNodeIds: [target.id], totalDurationSeconds: 6,
-      summary: "局部调整", warnings: [], shots: [shot(target.id), shot("outside-scope")],
+      summary: "局部调整", warnings: [], shots: [shot(target.id, "ep01-s03", 2), shot("outside-scope", "ep01-s04", 3)],
     })) } as unknown as PipelineSpecialistRuntime;
     const plans = { create: vi.fn(async (input) => ({ id: "plan-shot", status: "draft", summary: input.summary, operations: input.operations })) } as unknown as CanvasAgentPlanService;
     const service = new PipelineSpecialistService(
@@ -64,6 +64,33 @@ describe("PipelineSpecialistService", () => {
     expect(plans.create).toHaveBeenCalledWith(expect.objectContaining({
       operations: [expect.objectContaining({ type: "node.update", nodeId: target.id })],
     }));
+  });
+
+  it("rejects a multi-target revision when the model omits one requested node", async () => {
+    const first = scriptNode("shot-2", "镜头 2");
+    const second = scriptNode("shot-3", "镜头 3");
+    const repository = repositoryStub([first, second]);
+    const runtime = { run: vi.fn().mockResolvedValue(JSON.stringify({
+      kind: "storyboard", episodeKey: "ep01", sourceNodeIds: [first.id, second.id], totalDurationSeconds: 3,
+      summary: "局部调整", warnings: [], shots: [{
+        targetNodeId: first.id, shotKey: "ep01-s02", order: 1, durationSeconds: 3,
+        purpose: "加快节奏", visual: "动作快速完成", subjects: [], shotSize: "中景",
+        cameraMovement: "快速推进", blocking: "主体居中", lighting: "自然光", audio: {},
+      }],
+    })) } as unknown as PipelineSpecialistRuntime;
+    const service = new PipelineSpecialistService(
+      repository, profileSource(), runtime,
+      { assemble: vi.fn().mockResolvedValue("trusted-context") } as unknown as PipelineSpecialistContextAssembler,
+      { create: vi.fn() } as unknown as CanvasAgentPlanService,
+      {} as CanvasStudioService,
+    );
+
+    await expect(service.run("storyboard", {
+      ...request(), sourceNodeIds: [first.id, second.id], targetNodeIds: [first.id, second.id],
+    })).rejects.toMatchObject({
+      code: "PIPELINE_SPECIALIST_OUTPUT_INVALID",
+      details: { invalidTargetNodeIds: [second.id] },
+    });
   });
 
   it("keeps ambiguous mentions non-blocking while creating a shared asset baseline", async () => {

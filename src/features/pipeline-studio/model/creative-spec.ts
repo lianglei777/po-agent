@@ -45,7 +45,15 @@ export function nodeDataWithCreativeSpec(data: CanvasNodeData, spec: CanvasCreat
     : spec.kind === "asset"
       ? spec.canonicalName
       : `镜头 ${String(spec.order + 1).padStart(2, "0")} · ${spec.purpose}`;
+  if (spec.kind === "script" && existingText(data).trim()) {
+    // Script Spec 仅保存索引元数据，不能用摘要反向覆盖用户已编辑的场景、动作和对白正文。
+    return { ...data, name, creativeSpec: spec };
+  }
   return { ...data, name, creativeSpec: spec, content: [text], textDocument: textDocumentFromPlainText(text) };
+}
+
+function existingText(data: CanvasNodeData): string {
+  return data.textDocument?.plainText ?? data.content?.join("\n") ?? "";
 }
 
 export function downstreamImpact(sourceNodeId: string, nodes: CanvasNode[], edges: Array<{ sourceNodeId: string; targetNodeId: string }>): CanvasNode[] {

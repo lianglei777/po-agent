@@ -91,7 +91,9 @@ function AssetFields({ value, onChange }: { value: Extract<CanvasCreativeSpec, {
       { value: "character", label: t.pipeline.creativeSpecAssetCharacter }, { value: "scene", label: t.pipeline.creativeSpecAssetScene }, { value: "prop", label: t.pipeline.creativeSpecAssetProp },
     ]} onChange={(assetType) => onChange({ ...value, assetType })} /></Field>
     <Field label={t.pipeline.creativeSpecCanonicalName}><Input value={value.canonicalName} onChange={(event) => onChange({ ...value, canonicalName: event.target.value })} /></Field>
-    <Field label={t.pipeline.creativeSpecIdentityKey}><Input value={value.identityKey} onChange={(event) => onChange({ ...value, identityKey: event.target.value })} /></Field>
+    <Field label={t.pipeline.creativeSpecIdentityKey}>
+      <Input value={value.identityKey} readOnly title={t.pipeline.creativeSpecIdentityKeyReadOnly} />
+    </Field>
     <Field label={t.pipeline.creativeSpecAliases}><Input value={value.aliases.join("、")} onChange={(event) => onChange({ ...value, aliases: splitList(event.target.value) })} /></Field>
     <Field label={t.pipeline.creativeSpecVisual}><Input.TextArea autoSize={{ minRows: 3, maxRows: 7 }} value={value.visualDescription} onChange={(event) => onChange({ ...value, visualDescription: event.target.value })} /></Field>
     <Field label={t.pipeline.creativeSpecContinuity}><Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} value={value.continuityFacts.join("\n")} onChange={(event) => onChange({ ...value, continuityFacts: splitLines(event.target.value) })} /></Field>
