@@ -26,6 +26,66 @@ export interface PipelineAgentConversation {
   updatedAt: string;
 }
 
+export type CanvasCreativeSpec = CanvasScriptSpec | CanvasAssetSpec | CanvasShotSpec;
+
+export interface CanvasScriptSpec {
+  schemaVersion: 1;
+  kind: "script";
+  level: "concept" | "episode" | "scene" | "segment";
+  key: string;
+  title: string;
+  objective: string;
+  estimatedDurationSeconds?: number;
+  characters: string[];
+  sourceNodeIds: string[];
+}
+
+export interface CanvasAssetSpec {
+  schemaVersion: 1;
+  kind: "asset";
+  assetType: "character" | "scene" | "prop";
+  identityKey: string;
+  canonicalName: string;
+  aliases: string[];
+  visualDescription: string;
+  continuityFacts: string[];
+  sourceNodeIds: string[];
+}
+
+export interface CanvasShotSpec {
+  schemaVersion: 1;
+  kind: "shot";
+  shotKey: string;
+  episodeKey?: string;
+  sceneKey?: string;
+  order: number;
+  durationSeconds: number;
+  purpose: string;
+  visual: string;
+  subjects: Array<{
+    identityKey: string;
+    action: string;
+    expression?: string;
+  }>;
+  dialogue?: {
+    speaker: string;
+    line: string;
+    emotion?: string;
+    delivery?: string;
+  };
+  shotSize: string;
+  cameraMovement: string;
+  blocking: string;
+  lighting: string;
+  audio: {
+    ambience?: string;
+    sfx?: string;
+    music?: string;
+  };
+  transition?: string;
+  sourceNodeIds: string[];
+}
+
 export type CanvasAgentPlanOperation =
   | {
       type: "node.create";
@@ -36,6 +96,8 @@ export type CanvasAgentPlanOperation =
       prompt?: string;
       routeId?: string;
       settings?: Record<string, CanvasGenerationSettingValue>;
+      creativeSpec?: CanvasCreativeSpec;
+      group?: { id: string; name: string };
       column?: number;
       row?: number;
     }
@@ -47,11 +109,14 @@ export type CanvasAgentPlanOperation =
       prompt?: string;
       routeId?: string;
       settings?: Record<string, CanvasGenerationSettingValue>;
+      creativeSpec?: CanvasCreativeSpec;
+      group?: { id: string; name: string };
     }
   | {
       type: "edge.create";
       source: string;
       target: string;
+      edgeType?: CanvasEdgeType;
       role?: CanvasResourceRole;
     };
 
@@ -502,6 +567,7 @@ export interface CanvasNodeData {
   videoMetadata?: CanvasVideoMetadata;
   videoSelection?: CanvasVideoSelection;
   generationProvenance?: CanvasGenerationProvenance;
+  creativeSpec?: CanvasCreativeSpec;
   group?: {
     id: string;
     name: string;

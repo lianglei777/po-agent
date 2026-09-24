@@ -10,6 +10,7 @@ import type { CanvasAgentPlanService } from "./canvas-agent-plan-service";
 import type { CanvasAssetAnalysisService } from "./canvas-asset-analysis-service";
 import type { CanvasContinuityService } from "./canvas-continuity-service";
 import type { CanvasStudioService } from "./canvas-studio-service";
+import type { PipelineSpecialistService } from "./specialists/pipeline-specialist-service";
 
 describe("PipelineAgentToolProvider", () => {
   it("only exposes tools inside a server-bound Pipeline project scope", () => {
@@ -36,6 +37,133 @@ describe("PipelineAgentToolProvider", () => {
     ]);
     expect(tools.find((tool) => tool.name === "pipeline_get_state")?.parameters.properties)
       .not.toHaveProperty("projectId");
+  });
+
+  it("exposes the four internal specialists through one Pipeline chat", () => {
+    const repository = { getAgentConversation: vi.fn() } as unknown as PipelineRepository;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      repository, new CanvasAgentTurnPolicyRegistry(), {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService, {} as PipelineSpecialistService,
+    );
+
+    expect(provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
+      .map((tool) => tool.name)).toEqual(expect.arrayContaining([
+        "pipeline_run_script_specialist",
+        "pipeline_run_asset_specialist",
+        "pipeline_run_storyboard_specialist",
+        "pipeline_run_prompt_specialist",
+      ]));
+  });
+
+  it("rejects Specialist reads outside the current turn node scope", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-1", {
+      type: "resolved", objective: "只整理选中角色", requestedStage: "canvas", effectiveStage: "canvas",
+      allowedStages: ["discuss", "script", "storyboard", "canvas"], generationPermission: "not-requested", confidence: "high",
+      scope: { projectWide: false, nodeIds: ["allowed-node"] },
+    });
+    const specialist = { run: vi.fn() } as unknown as PipelineSpecialistService;
+    const repository = { listCanvasNodes: vi.fn().mockResolvedValue([{ id: "allowed-node" }]) } as unknown as PipelineRepository;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      repository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService, specialist,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "pipeline_run_asset_specialist")!;
+
+    await expect(tool.execute({ toolCallId: "tool-1", input: { objective: "提取角色", sourceNodeIds: ["outside-node"] } }))
+      .rejects.toMatchObject({ code: "PIPELINE_SPECIALIST_SCOPE_EXCEEDED" });
+    expect(specialist.run).not.toHaveBeenCalled();
+  });
+
+  it("allows one successful attempt per Specialist range and canvas revision while keeping episode batches independent", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-1", {
+      type: "resolved", objective: "制作两集分镜", requestedStage: "storyboard", effectiveStage: "storyboard",
+      allowedStages: ["discuss", "script", "storyboard"], generationPermission: "not-requested", confidence: "high",
+      scope: { projectWide: true, nodeIds: [] },
+    });
+    const specialist = { run: vi.fn().mockResolvedValue({
+      kind: "storyboard", profileVersion: "1.0.0", planId: "plan-1", status: "draft", summary: "完成",
+      operationCount: 1, affectedNodeIds: [], warnings: [],
+    }) } as unknown as PipelineSpecialistService;
+    const repository = {
+      getCanvasRevision: vi.fn().mockResolvedValue(4),
+      listCanvasNodes: vi.fn().mockResolvedValue([{ id: "script-1" }]),
+    } as unknown as PipelineRepository;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      repository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService, specialist,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "pipeline_run_storyboard_specialist")!;
+    const first = { objective: "第一集分镜", sourceNodeIds: ["script-1"], episodeKey: "ep-1" };
+
+    await expect(tool.execute({ toolCallId: "tool-1", input: first })).resolves.toBeDefined();
+    await expect(tool.execute({ toolCallId: "tool-2", input: { ...first, objective: "重试第一集" } }))
+      .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-range-already-attempted" } });
+    await expect(tool.execute({ toolCallId: "tool-3", input: { ...first, episodeKey: "ep-2" } })).resolves.toBeDefined();
+    repository.getCanvasRevision = vi.fn().mockResolvedValue(5);
+    await expect(tool.execute({ toolCallId: "tool-4", input: { ...first, objective: "应用上游修订后重跑第一集" } })).resolves.toBeDefined();
+    expect(specialist.run).toHaveBeenCalledTimes(3);
+  });
+
+  it("blocks a Specialist after its first non-batch failure in the same turn", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-1", {
+      type: "resolved", objective: "提取资产", requestedStage: "canvas", effectiveStage: "canvas",
+      allowedStages: ["discuss", "script", "storyboard", "canvas"], generationPermission: "not-requested", confidence: "high",
+      scope: { projectWide: true, nodeIds: [] },
+    });
+    const specialist = { run: vi.fn().mockRejectedValue(new Error("malformed output")) } as unknown as PipelineSpecialistService;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      { getCanvasRevision: vi.fn().mockResolvedValue(1), listCanvasNodes: vi.fn().mockResolvedValue([]) } as unknown as PipelineRepository,
+      policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService, specialist,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "pipeline_run_asset_specialist")!;
+
+    await expect(tool.execute({ toolCallId: "tool-1", input: { objective: "提取资产" } })).rejects.toThrow("malformed output");
+    await expect(tool.execute({ toolCallId: "tool-2", input: { objective: "改为从节点提取", sourceNodeIds: ["script-1"] } }))
+      .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-already-failed" } });
+    expect(specialist.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs a unique one-character source node ID typo before running a Specialist", async () => {
+    const policies = new CanvasAgentTurnPolicyRegistry();
+    policies.begin("pipeline-session", "turn-source-repair", {
+      type: "resolved", objective: "拆分镜头", requestedStage: "storyboard", effectiveStage: "storyboard",
+      allowedStages: ["discuss", "script", "storyboard"], generationPermission: "not-requested", confidence: "high",
+      scope: { projectWide: true, nodeIds: [] },
+    });
+    const specialist = { run: vi.fn().mockResolvedValue({
+      kind: "storyboard", profileVersion: "1.0.0", planId: "plan-1", status: "draft", summary: "完成",
+      operationCount: 1, affectedNodeIds: [], warnings: [],
+    }) } as unknown as PipelineSpecialistService;
+    const repository = {
+      listCanvasNodes: vi.fn().mockResolvedValue([{ id: "bc87f02f-b461-4ebd-887d-e9595e114d57" }]),
+      getCanvasRevision: vi.fn().mockResolvedValue(2),
+    } as unknown as PipelineRepository;
+    const provider = new PipelineAgentToolProvider(
+      {} as ScriptAnalysisService, {} as StoryboardService, {} as AssetGenerationService, {} as VideoGenerationService,
+      repository, policies, {} as CanvasAgentPlanService, {} as CanvasAssetAnalysisService,
+      {} as CanvasContinuityService, {} as CanvasStudioService, specialist,
+    );
+    const tool = provider.getTools({ sessionId: "pipeline-session", cwd: "D:\\project", pipelineProjectId: "project-1" })
+      .find((candidate) => candidate.name === "pipeline_run_storyboard_specialist")!;
+
+    await tool.execute({ toolCallId: "tool-source-repair", input: {
+      objective: "拆分镜头", sourceNodeIds: ["bc87f02f-f461-4ebd-887d-e9595e114d57"],
+    } });
+
+    expect(specialist.run).toHaveBeenCalledWith("storyboard", expect.objectContaining({
+      sourceNodeIds: ["bc87f02f-b461-4ebd-887d-e9595e114d57"],
+    }), undefined);
   });
 
   it("declares operation-specific required fields in the plan tool schema", () => {
@@ -367,6 +495,7 @@ function createGenerationProvider(allowAgentGeneration: boolean) {
   const studio = {
     prepareWorkflowGeneration: vi.fn().mockResolvedValue({
       nodeIds: ["video-1"], edges: [], nodes: [{ nodeId: "video-1", name: "Video", type: "video" }],
+      decisions: [{ nodeId: "video-1", name: "Video", status: "ready", reason: "explicitly-requested" }],
     }),
     startWorkflowGeneration: vi.fn().mockResolvedValue({
       created: true,

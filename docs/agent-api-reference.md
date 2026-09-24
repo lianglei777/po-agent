@@ -2900,9 +2900,18 @@ interface PipelineAgentTurnRequest {
 }
 ```
 
-当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。application 会把模型给出的 ID 与当前项目真实节点求交，并始终保留用户本轮明确选中或 `@` 引用的节点。越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`，新建节点及新建节点之间的引用仍可在本轮计划内使用。
+当前解析器使用 `discuss | script | storyboard | canvas | review` 五个阶段。合同中的 `generate` 仅为旧记录兼容，旧模型若返回该值也会被归一化为 `canvas`。范围不明确时 `intent.type` 为 `clarification`，实际权限只包含 `discuss`，Agent 应询问响应中的单个 `question`。所有 Pipeline Agent 工具在 application 层读取当前回合策略；超出 `allowedStages` 返回 `403 PIPELINE_AGENT_ACTION_NOT_ALLOWED`。`scope.nodeIds` 限定本轮可读取、修改或连接的已有节点；只有用户明确要求处理整个项目时 `projectWide` 才为 `true`。application 会把模型给出的 ID 与当前项目真实节点求交，并始终保留用户本轮明确选中或 `@` 引用的节点。普通 Plan 越界操作返回 `403 PIPELINE_AGENT_TARGET_OUT_OF_SCOPE`；Specialist 输入包含 scope 外节点时返回 `403 PIPELINE_SPECIALIST_SCOPE_EXCEEDED`。新建节点及新建节点之间的引用仍可在本轮计划内使用。
 
-画布写入通过四个项目作用域工具完成：
+内部专业处理通过四个项目作用域工具完成。它们由同一个 Pipeline Agent 自动选择，用户不需要选择或切换 Agent：
+
+- `pipeline_run_script_specialist`：把创作目标转换为短视频段落或短剧分集剧本规格。
+- `pipeline_run_asset_specialist`：从剧本或选中内容提取角色、场景和道具，按稳定 `identityKey` 去重、复用或更新。
+- `pipeline_run_storyboard_specialist`：把剧本规格转换为含时长、主体、对白、景别、运镜、走位、灯光和声音的镜头规格。
+- `pipeline_run_prompt_specialist`：读取当前已启用 Route Schema，把资产或镜头规格转换成媒体节点的 prompt、参数与素材绑定。
+
+每个工具最多引用 40 个源节点和目标节点。模型结果会先通过专用结构校验，再由确定性编译器生成 Canvas Agent Plan；工具本身不直接写画布。无效输出只修复一次。存在身份歧义或其他阻塞警告时返回 `planId: null`，不会留下部分节点。
+
+画布写入通过以下项目作用域工具完成：
 
 - `canvas_get_generation_routes`：读取当前已启用 Route 和 Provider 的安全 Catalog 描述，可按输出媒体类型过滤。未传 `routeIds` 时返回紧凑候选摘要和素材输入概况；Agent 选出少量候选后，传入最多 8 个 `routeIds` 获取完整参数与素材 Schema。响应不返回供应商 operation、凭据引用、adapter 配置或内部参数，避免把全部 Route 的大型枚举一次性塞入模型上下文。
 - `canvas_create_plan`：保存语义计划草稿，操作包括创建节点、更新节点以及建立引用；媒体节点操作可同时写入 `prompt`、已启用的 `routeId` 和完整 `settings`。服务端会同步生成富文本提示词文档，并在保存和应用计划时校验 Route 输出类型、Prompt、Schema 参数，以及引用能否映射到 Route 声明的素材槽位、语义角色和数量约束。
@@ -2996,6 +3005,19 @@ interface CanvasTextDocument {
 - 文本标记支持 `bold`、`italic` 和 `underline`。
 - 单个文档最多包含 5,000 个结构节点，最大嵌套深度为 20，纯文本最大 200,000 字符。
 - 读取没有 `textDocument` 的旧文本节点时，前端会从 `data.content` 生成一级兼容文档；后续编辑保存时会同时更新两种表示。
+
+#### Specialist 创作规格与连线语义
+
+文本节点可选保存 `data.creativeSpec`。V1 支持 `script`、`asset` 和 `shot` 三类规格；它们分别记录剧本段落或分集、资产稳定身份，以及可制作镜头的结构化信息。节点可选保存 `data.group`，用于按分集或其他制作单元在画布中归组。Inspector 会同时提交结构化规格和由它渲染的正文；服务端接受同类规格的显式更新。用户直接修改自由文本但没有改变规格时，服务端会移除旧 `creativeSpec`，避免后续步骤读取过期结构。Agent Plan 也可以在一次原子变更中替换正文和规格。
+
+`CanvasEdge.edgeType` 的含义如下：
+
+- `references`：媒体生成需要的真实素材绑定，可带 `reference`、`first-frame` 或 `last-frame` 角色；参与 Route 校验和工作流依赖。
+- `derives_from`：创作结果来源，例如剧本到镜头规格；只表达语义血缘。
+- `source_of`：声明源内容归属关系；只表达语义血缘。
+- `generates`：规格与生成目标之间的语义关系；只表达语义血缘。
+
+为了读取旧项目，服务端仍兼容已持久化的单数 `reference`，新的写入统一使用 `references`。
 - 下游工作流需要纯文本时应优先使用 `textDocument.plainText`，并回退到 `data.content`。
 
 ### `POST /api/pipeline/canvas-nodes/{nodeId}/generate-text`

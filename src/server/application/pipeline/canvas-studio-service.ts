@@ -23,6 +23,7 @@ import type { GenerationArtifact } from "@/server/domain/generation";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import type { PipelineSsePort } from "@/server/ports/pipeline-sse-port";
 import type { PipelineValidationLogger } from "@/server/ports/pipeline-validation-logger";
+import type { PipelineSpecialistMetrics } from "@/server/ports/pipeline-specialist-metrics";
 import type { LlmMessage, LlmPort } from "@/server/ports/llm-port";
 import { generationAssetSlotForReference } from "@/lib/generation-asset-slot";
 import { GenerationAssetService } from "@/server/application/content-generation/generation-asset-service";
@@ -34,6 +35,18 @@ import { LipSyncPreparationService } from "./lip-sync-preparation-service";
 const MAX_GENERATED_TEXT_LENGTH = 200_000;
 const MAX_TEXT_REFERENCE_LENGTH = 120_000;
 const MAX_WORKFLOW_GENERATION_CONCURRENCY = 3;
+
+export interface CanvasWorkflowPreparation {
+  nodeIds: string[];
+  edges: CanvasWorkflowRun["edges"];
+  nodes: Array<{ nodeId: string; name: string; type: CanvasMediaType; routeId?: string }>;
+  decisions: Array<{
+    nodeId: string;
+    name: string;
+    status: "ready" | "included-missing" | "included-stale" | "reused-current" | "skipped-source";
+    reason: string;
+  }>;
+}
 
 export class CanvasStudioService {
   private readonly advancingGroupRuns = new Set<string>();
@@ -49,6 +62,7 @@ export class CanvasStudioService {
     private readonly sse: PipelineSsePort,
     private readonly lipSyncPreparations?: LipSyncPreparationService,
     private readonly validationLogger?: PipelineValidationLogger,
+    private readonly specialistMetrics?: PipelineSpecialistMetrics,
   ) {}
 
   async createLipSyncPreparation(nodeId: string) {
@@ -1000,11 +1014,30 @@ export class CanvasStudioService {
     });
   }
 
-  async prepareWorkflowGeneration(input: { projectId: string; nodeIds: string[] }): Promise<{
-    nodeIds: string[];
-    edges: CanvasWorkflowRun["edges"];
-    nodes: Array<{ nodeId: string; name: string; type: CanvasMediaType; routeId?: string }>;
-  }> {
+  async prepareWorkflowGeneration(input: { projectId: string; nodeIds: string[] }): Promise<CanvasWorkflowPreparation> {
+    const startedAt = Date.now();
+    try {
+      const prepared = await this.prepareWorkflowGenerationInternal(input);
+      await this.specialistMetrics?.record({
+        event: "generation-preflight", projectId: input.projectId, outcome: "success",
+        durationMs: Date.now() - startedAt, requestedNodeCount: input.nodeIds.length,
+        preparedNodeCount: prepared.nodeIds.length,
+        reusedNodeCount: prepared.decisions.filter((decision) => decision.status === "reused-current").length,
+        staleNodeCount: prepared.decisions.filter((decision) => decision.status === "included-stale").length,
+        missingNodeCount: prepared.decisions.filter((decision) => decision.status === "included-missing").length,
+      }).catch(() => undefined);
+      return prepared;
+    } catch (cause) {
+      await this.specialistMetrics?.record({
+        event: "generation-preflight", projectId: input.projectId, outcome: "failure",
+        durationMs: Date.now() - startedAt, requestedNodeCount: input.nodeIds.length,
+        errorCode: cause instanceof AppError ? cause.code : "INTERNAL_ERROR",
+      }).catch(() => undefined);
+      throw cause;
+    }
+  }
+
+  private async prepareWorkflowGenerationInternal(input: { projectId: string; nodeIds: string[] }): Promise<CanvasWorkflowPreparation> {
     const requestedIds = [...new Set(input.nodeIds.map((id) => id.trim()).filter(Boolean))];
     if (!requestedIds.length || requestedIds.length > 30) {
       throw new AppError("VALIDATION_ERROR", "Select between 1 and 30 canvas nodes to generate", 400);
@@ -1025,12 +1058,24 @@ export class CanvasStudioService {
     }
 
     const selectedIds = new Set(requestedIds);
+    const decisions = new Map<string, { status: "ready" | "included-missing" | "included-stale" | "reused-current" | "skipped-source"; reason: string }>();
+    for (const nodeId of requestedIds) decisions.set(nodeId, { status: "ready", reason: "explicitly-requested" });
     const visitDependencies = (targetId: string) => {
-      for (const edge of allEdges.filter((candidate) => candidate.targetNodeId === targetId)) {
+      for (const edge of allEdges.filter((candidate) => isReferenceEdgeType(candidate.edgeType) && candidate.targetNodeId === targetId)) {
         const source = nodesById.get(edge.sourceNodeId);
         if (!source?.data || selectedIds.has(source.id)) continue;
         const stale = source.data.generationProvenance?.stale === true;
-        if (!workflowNodeIsGenerative(source.data) || (canvasNodeHasContent(source) && !stale)) continue;
+        if (!workflowNodeIsGenerative(source.data)) {
+          decisions.set(source.id, { status: "skipped-source", reason: "non-generative-source" });
+          continue;
+        }
+        if (canvasNodeHasContent(source) && !stale) {
+          decisions.set(source.id, { status: "reused-current", reason: "reliable-current-output" });
+          continue;
+        }
+        decisions.set(source.id, stale
+          ? { status: "included-stale", reason: "input-fingerprint-changed" }
+          : { status: "included-missing", reason: "output-missing" });
         selectedIds.add(source.id);
         visitDependencies(source.id);
       }
@@ -1039,11 +1084,12 @@ export class CanvasStudioService {
     if (selectedIds.size > 30) {
       throw new AppError("VALIDATION_ERROR", "The generation workflow exceeds the 30-node limit", 400);
     }
-    if (hasInternalCycle(selectedIds, allEdges)) {
+    const referenceEdges = allEdges.filter((edge) => isReferenceEdgeType(edge.edgeType));
+    if (hasInternalCycle(selectedIds, referenceEdges)) {
       throw new AppError("VALIDATION_ERROR", "The selected generation workflow contains a cycle", 400);
     }
 
-    const internalEdges = allEdges
+    const internalEdges = referenceEdges
       .filter((edge) => selectedIds.has(edge.sourceNodeId) && selectedIds.has(edge.targetNodeId))
       .map((edge) => ({ sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId }));
     const orderedIds = topologicalNodeOrder(selectedIds, internalEdges);
@@ -1055,7 +1101,16 @@ export class CanvasStudioService {
       const node = await this.requireNode(nodeId);
       preparedNodes.push({ nodeId, name: node.data!.name, type: node.data!.type, ...(routeId ? { routeId } : {}) });
     }
-    return { nodeIds: orderedIds, edges: internalEdges, nodes: preparedNodes };
+    return {
+      nodeIds: orderedIds,
+      edges: internalEdges,
+      nodes: preparedNodes,
+      decisions: [...decisions].map(([nodeId, decision]) => ({
+        nodeId,
+        name: nodesById.get(nodeId)?.data?.name ?? nodeId,
+        ...decision,
+      })),
+    };
   }
 
   async startWorkflowGeneration(input: {
@@ -1445,7 +1500,7 @@ export class CanvasStudioService {
     if (!target?.data || !isMediaType(target.data.type)) return target;
     const edges = await this.repository.listCanvasEdges(target.projectId);
     const incoming = edges
-      .filter((edge) => edge.targetNodeId === targetNodeId)
+      .filter((edge) => isReferenceEdgeType(edge.edgeType) && edge.targetNodeId === targetNodeId)
       .sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
     const sources = await Promise.all(incoming.map((edge) => this.repository.getCanvasNode(edge.sourceNodeId)));
     const params = target.data.params ?? { prompt: "" };
@@ -1574,6 +1629,7 @@ export class CanvasStudioService {
     projectId: string,
     batch: CanvasMutationBatch,
   ): Promise<CanvasMutationBatch> {
+    const allowStructuredCreativeSpecUpdate = batch.requestId.startsWith("canvas-agent");
     const currentNodes = new Map(
       (await this.repository.listCanvasNodes(projectId)).map((node) => [node.id, node]),
     );
@@ -1598,7 +1654,11 @@ export class CanvasStudioService {
           ...mutation,
           patch: {
             ...mutation.patch,
-            data: preserveServerOwnedFields(current?.data, mutation.patch.data),
+            data: preserveServerOwnedFields(
+              current?.data,
+              mutation.patch.data,
+              allowStructuredCreativeSpecUpdate,
+            ),
           },
         };
       }),
@@ -1700,7 +1760,7 @@ export class CanvasStudioService {
   ): Promise<void> {
     const edges = await this.repository.listCanvasEdges(projectId);
     const targetIds = [...new Set(edges
-      .filter((edge) => edge.sourceNodeId === sourceNodeId)
+      .filter((edge) => isReferenceEdgeType(edge.edgeType) && edge.sourceNodeId === sourceNodeId)
       .map((edge) => edge.targetNodeId))];
     for (const targetId of targetIds) {
       await this.syncTargetReferences(targetId);
@@ -1730,12 +1790,12 @@ export class CanvasStudioService {
         if (current) {
           nodes.set(current.id, { ...current, ...mutation.patch, updatedAt: current.updatedAt });
           for (const edge of edges) {
-            if (edge.sourceNodeId === current.id) affectedTargets.add(edge.targetNodeId);
+            if (isReferenceEdgeType(edge.edgeType) && edge.sourceNodeId === current.id) affectedTargets.add(edge.targetNodeId);
           }
         }
       } else if (mutation.type === "node.delete") {
         for (const edge of edges) {
-          if (edge.sourceNodeId === mutation.nodeId && edge.targetNodeId !== mutation.nodeId) {
+          if (isReferenceEdgeType(edge.edgeType) && edge.sourceNodeId === mutation.nodeId && edge.targetNodeId !== mutation.nodeId) {
             affectedTargets.add(edge.targetNodeId);
           }
         }
@@ -1743,27 +1803,29 @@ export class CanvasStudioService {
         edges = edges.filter((edge) => edge.sourceNodeId !== mutation.nodeId && edge.targetNodeId !== mutation.nodeId);
       } else if (mutation.type === "edge.delete") {
         const deleted = edges.find((edge) => edge.id === mutation.edgeId);
-        if (deleted) affectedTargets.add(deleted.targetNodeId);
+        if (deleted && isReferenceEdgeType(deleted.edgeType)) affectedTargets.add(deleted.targetNodeId);
         edges = edges.filter((edge) => edge.id !== mutation.edgeId);
       } else if (mutation.type === "edge.update") {
         const current = edges.find((edge) => edge.id === mutation.edgeId);
         if (!current) throw new AppError("VALIDATION_ERROR", "Canvas connection was not found", 404);
         Object.assign(current, mutation.patch);
-        affectedTargets.add(current.targetNodeId);
+        if (isReferenceEdgeType(current.edgeType)) affectedTargets.add(current.targetNodeId);
       } else if (mutation.type === "edge.create") {
         const source = nodes.get(mutation.edge.sourceNodeId);
         const target = nodes.get(mutation.edge.targetNodeId);
         if (!source || !target) throw new AppError("VALIDATION_ERROR", "Canvas connection references a missing node", 400);
-        assertCanvasConnectionAllowed(
-          projectId,
-          source,
-          target,
-          edges,
-          mutation.intent !== "restore",
-          mutation.edge.id,
-        );
+        if (isReferenceEdgeType(mutation.edge.edgeType)) {
+          assertCanvasConnectionAllowed(
+            projectId,
+            source,
+            target,
+            edges,
+            mutation.intent !== "restore",
+            mutation.edge.id,
+          );
+        }
         edges.push(mutation.edge);
-        affectedTargets.add(mutation.edge.targetNodeId);
+        if (isReferenceEdgeType(mutation.edge.edgeType)) affectedTargets.add(mutation.edge.targetNodeId);
       }
     }
     validateCanvasEdgeBindings(nodes, edges, { entrypoint: "mutation-batch", projectId }, this.validationLogger);
@@ -1913,7 +1975,6 @@ function sanitizeCreatedNodeData(data: CanvasNodeData): CanvasNodeData {
   delete editable.taskInfo;
   delete editable.videoSelection;
   delete editable.generationProvenance;
-  delete editable.group;
   delete editable.groupRun;
   delete editable.legacyEntity;
   return {
@@ -1923,8 +1984,21 @@ function sanitizeCreatedNodeData(data: CanvasNodeData): CanvasNodeData {
   };
 }
 
-function preserveServerOwnedFields(current: CanvasNodeData | null | undefined, requested: CanvasNodeData): CanvasNodeData {
+function preserveServerOwnedFields(
+  current: CanvasNodeData | null | undefined,
+  requested: CanvasNodeData,
+  allowStructuredCreativeSpecUpdate = false,
+): CanvasNodeData {
   if (!current) return sanitizeCreatedNodeData(requested);
+  const explicitStructuredEdit = requested.creativeSpec !== undefined
+    && current.creativeSpec !== undefined
+    && requested.creativeSpec.kind === current.creativeSpec.kind
+    && JSON.stringify(requested.creativeSpec) !== JSON.stringify(current.creativeSpec);
+  const creativeSpec = allowStructuredCreativeSpecUpdate || explicitStructuredEdit
+    ? requested.creativeSpec
+    : textNodeContentChanged(current, requested)
+      ? undefined
+      : current.creativeSpec;
   return {
     ...requested,
     url: current.url,
@@ -1934,7 +2008,9 @@ function preserveServerOwnedFields(current: CanvasNodeData | null | undefined, r
     taskInfo: current.taskInfo,
     videoSelection: current.videoSelection,
     generationProvenance: current.generationProvenance,
-    group: current.group,
+    // 自由文本改写会使旧规格失效；Inspector 和 Agent 同步提交新正文与新规格时可原子更新。
+    creativeSpec,
+    group: requested.group,
     groupRun: current.groupRun,
     legacyEntity: current.legacyEntity,
     params: requested.params ? {
@@ -1957,6 +2033,11 @@ function sanitizeClientGenerationParams(params: CanvasNodeData["params"]): Canva
   delete editable.audioList;
   delete editable.mixedListOrder;
   return editable;
+}
+
+function isReferenceEdgeType(edgeType: string): boolean {
+  // 兼容升级前已经持久化的单数形式，新的写入统一使用 references。
+  return edgeType === "references" || edgeType === "reference";
 }
 
 function normalizeData(data: CanvasNodeData, current: CanvasNode): CanvasNodeData {
@@ -1990,7 +2071,7 @@ function mediaReference(node: CanvasNode): CanvasMediaReference | null {
 function mediaReferenceIsUsable(reference: CanvasMediaReference): boolean {
   return reference.mediaType === "text"
     ? Boolean(reference.content?.some((content) => content.trim()))
-    : Boolean(reference.artifactId || reference.workspaceFile);
+    : Boolean(reference.artifactId || reference.workspaceFile || reference.url);
 }
 
 function canvasNodeHasContent(node: CanvasNode): boolean {
@@ -2159,6 +2240,7 @@ function validateCanvasEdgeBindings(
 ): void {
   const incomingByTarget = new Map<string, CanvasEdge[]>();
   for (const edge of edges) {
+    if (!isReferenceEdgeType(edge.edgeType)) continue;
     const role = edge.role ?? "reference";
     if (role !== "reference") {
       const source = nodes.get(edge.sourceNodeId);

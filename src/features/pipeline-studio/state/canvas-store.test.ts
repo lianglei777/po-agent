@@ -62,6 +62,28 @@ describe("pipeline studio canvas store", () => {
     });
   });
 
+  it("updates multiple node data records as one undoable document change", () => {
+    const store = createCanvasStore("project-1");
+    const nodes = ["shot-1", "shot-2"].map((id) => ({
+      id, projectId: "project-1", type: "text" as const, entityId: `${id}-entity`, positionX: 0, positionY: 0,
+      width: 320, height: 220,
+      data: { type: "text" as const, name: id, action: "text_generate", content: ["Old"] },
+      createdAt: "2026-08-19T00:00:00.000Z", updatedAt: "2026-08-19T00:00:00.000Z",
+    }));
+    store.getState().hydrate({ revision: 1, nodes, edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+
+    store.getState().updateNodeDataBatch(nodes.map((node) => ({
+      nodeId: node.id,
+      data: { ...node.data, content: ["New"] },
+    })));
+
+    expect(store.getState().nodes.map((node) => node.data?.content)).toEqual([["New"], ["New"]]);
+    expect(store.getState().pendingMutations).toHaveLength(2);
+    expect(store.getState().past).toHaveLength(1);
+    store.getState().undo();
+    expect(store.getState().nodes.map((node) => node.data?.content)).toEqual([["Old"], ["Old"]]);
+  });
+
   it("deletes a connection and restores it through undo", () => {
     const store = createCanvasStore("project-1");
     const edge = {

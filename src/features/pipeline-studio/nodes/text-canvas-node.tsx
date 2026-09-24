@@ -127,6 +127,18 @@ export function TextCanvasNode({
           if (!editing) beginEditing();
         }}
       >
+        {canvas.creativeSpec ? (
+          <div
+            className="pointer-events-none absolute right-3 top-3 z-10 rounded-md border border-[var(--pl-border)] bg-[var(--pl-surface)]/95 px-2 py-1 text-caption font-medium text-[var(--pl-text-secondary)] shadow-sm"
+            title={t.pipeline.creativeSpecGeneratedHint}
+          >
+            {canvas.creativeSpec.kind === "script"
+              ? `${t.pipeline.creativeSpecScript} · ${canvas.creativeSpec.estimatedDurationSeconds}s`
+              : canvas.creativeSpec.kind === "asset"
+                ? `${t.pipeline.creativeSpecAsset} · ${canvas.creativeSpec.canonicalName}`
+                : `${t.pipeline.creativeSpecShot} · ${canvas.creativeSpec.durationSeconds}s`}
+          </div>
+        ) : null}
         {editing && textDocument && !fullscreenOpen ? (
           <TextNodeEditor
             document={textDocument}

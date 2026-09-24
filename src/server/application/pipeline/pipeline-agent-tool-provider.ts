@@ -12,6 +12,8 @@ import type { CanvasAgentPlanService } from "./canvas-agent-plan-service";
 import type { CanvasAssetAnalysisService } from "./canvas-asset-analysis-service";
 import type { CanvasContinuityOperation, CanvasContinuityService } from "./canvas-continuity-service";
 import type { CanvasStudioService } from "./canvas-studio-service";
+import type { PipelineSpecialistKind, PipelineSpecialistRequest } from "@/server/domain/pipeline-specialist";
+import type { PipelineSpecialistService } from "./specialists/pipeline-specialist-service";
 
 // PipelineAgentToolProvider — 将 pipeline 操作暴露为 Agent 工具。
 // 实现 AgentToolProvider 接口，可注入到 AgentService 让 LLM 通过 tool call 驱动 pipeline。
@@ -27,6 +29,7 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     private readonly assetAnalysisService: CanvasAssetAnalysisService,
     private readonly continuityService: CanvasContinuityService,
     private readonly canvasStudioService: CanvasStudioService,
+    private readonly specialistService?: PipelineSpecialistService,
   ) {}
 
   getTools(input: AgentToolContext): AgentToolDefinition[] {
@@ -35,6 +38,12 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
     // 第一批只开放只读状态；画布写入与生成工具会随意图和计划边界一起启用。
     return [
       this.getPipelineStateTool(input.sessionId, projectId),
+      ...(this.specialistService ? [
+        this.specialistTool("script", input.sessionId, projectId),
+        this.specialistTool("asset", input.sessionId, projectId),
+        this.specialistTool("storyboard", input.sessionId, projectId),
+        this.specialistTool("prompt", input.sessionId, projectId),
+      ] : []),
       this.getGenerationRoutesTool(input.sessionId),
       this.createPlanTool(input.sessionId, projectId),
       this.updatePlanTool(input.sessionId, projectId),
@@ -46,6 +55,84 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
       this.saveWorkflowTool(input.sessionId, projectId),
       this.prepareGenerationTool(input.sessionId, projectId),
     ];
+  }
+
+  private specialistTool(kind: PipelineSpecialistKind, sessionId: string, projectId: string): AgentToolDefinition {
+    const definition = SPECIALIST_TOOL_DEFINITIONS[kind];
+    return {
+      name: definition.name,
+      label: definition.label,
+      description: definition.description,
+      promptGuidelines: [
+        ...definition.guidelines,
+        "工具内部已经包含一次格式修复。画布没有变化时，同一用户目标和范围只调用一次；只有先应用了上游修订，才能基于新画布版本重新调用。运行失败后说明具体错误，不要自行重试，也不要改用 canvas_create_plan 仿造 Specialist 输出。",
+        "返回 planId 后只调用一次 canvas_apply_plan。应用失败时报告计划与错误，不要创建替代计划或重复应用。",
+      ],
+      parameters: {
+        type: "object",
+        properties: {
+          objective: { type: "string", minLength: 1, maxLength: 4_000 },
+          sourceNodeIds: { type: "array", maxItems: 40, items: { type: "string" } },
+          targetNodeIds: { type: "array", maxItems: 40, items: { type: "string" } },
+          episodeKey: { type: "string", maxLength: 240 },
+          constraints: {
+            type: "object",
+            properties: {
+              language: { type: "string" },
+              targetDurationSeconds: { type: "number", minimum: 1, maximum: 100_000 },
+              aspectRatio: { type: "string" },
+              audience: { type: "string" },
+              platform: { type: "string" },
+              tone: { type: "string" },
+              episodeKey: { type: "string", maxLength: 240, description: "兼容字段；优先使用顶层 episodeKey" },
+              preserveUserText: { type: "boolean" },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ["objective"],
+      additionalProperties: false,
+      },
+      execute: async ({ input, signal }) => {
+        this.turnPolicies.requireStage(sessionId, definition.stage);
+        const request = specialistRequest(projectId, sessionId, input);
+        if (request.sourceNodeIds.length) {
+          const existingNodeIds = (await this.repo.listCanvasNodes(projectId)).map((node) => node.id);
+          // 长 UUID 在多阶段工具链中偶尔会被模型抄错一个字符；只修复唯一近邻的只读 source，写入 target 仍要求精确 ID。
+          request.sourceNodeIds = request.sourceNodeIds.map((nodeId) => repairSourceNodeId(nodeId, existingNodeIds));
+        }
+        const effectiveScope = this.turnPolicies.effectiveScope(sessionId);
+        if (effectiveScope && !effectiveScope.projectWide) {
+          const allowedNodeIds = new Set(effectiveScope.nodeIds);
+          const outOfScopeNodeIds = [...request.sourceNodeIds, ...request.targetNodeIds]
+            .filter((nodeId) => !allowedNodeIds.has(nodeId));
+          if (outOfScopeNodeIds.length) {
+            throw new AppError("PIPELINE_SPECIALIST_SCOPE_EXCEEDED", "The Specialist request includes nodes outside the current turn scope", 403, {
+              nodeIds: [...new Set(outOfScopeNodeIds)],
+            });
+          }
+        }
+        const canvasRevision = await this.repo.getCanvasRevision(projectId);
+        // 上游计划应用后允许 Specialist 基于新事实再运行；同一画布版本仍阻止模型空转和重复计费。
+        this.turnPolicies.claimSpecialistCall(sessionId, kind, specialistCallKey(kind, request, canvasRevision));
+        let result;
+        try {
+          result = await this.specialistService!.run(kind, request, signal);
+        } catch (cause) {
+          if (!(cause instanceof AppError) || cause.code !== "PIPELINE_SPECIALIST_BATCH_REQUIRED") {
+            this.turnPolicies.markSpecialistFailure(sessionId, kind);
+          }
+          throw cause;
+        }
+        const warningText = result.warnings.length
+          ? ` 警告：${result.warnings.map((warning) => warning.message).join("；")}`
+          : "";
+        const text = result.planId
+          ? `${definition.completed} 已创建画布计划 ${result.planId}，共 ${result.operationCount} 项操作。下一步调用 canvas_apply_plan。${warningText}`
+          : `${definition.completed} 未创建画布计划。${warningText || "当前画布无需修改。"}`;
+        return { content: [{ type: "text", text }], details: result };
+      },
+    };
   }
 
   private getGenerationRoutesTool(sessionId: string): AgentToolDefinition {
@@ -299,10 +386,14 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
           projectId,
           nodeIds: input.nodeIds as string[],
         });
+        const reused = prepared.decisions.filter((decision) => decision.status === "reused-current").length;
+        const missing = prepared.decisions.filter((decision) => decision.status === "included-missing").length;
+        const stale = prepared.decisions.filter((decision) => decision.status === "included-stale").length;
+        const skipped = prepared.decisions.filter((decision) => decision.status === "skipped-source").length;
         return {
           content: [{
             type: "text",
-            text: `配置检查通过，共 ${prepared.nodeIds.length} 个节点。请用户在节点或工作流上手动触发生成。`,
+            text: `配置检查通过：待执行 ${prepared.nodeIds.length} 个节点，复用 ${reused} 个可靠结果，补齐 ${missing} 个缺失结果，重做 ${stale} 个过期结果，跳过 ${skipped} 个非生成来源。请用户在节点或工作流上手动触发生成。`,
           }],
           details: { ...prepared, generationTrigger: "manual" },
         };
@@ -735,6 +826,109 @@ const generationNodeParameters = {
   additionalProperties: false,
 };
 
+const SPECIALIST_TOOL_DEFINITIONS = {
+  script: {
+    name: "pipeline_run_script_specialist",
+    label: "整理剧本",
+    description: "调用内部剧本 Specialist 编写或修改故事、脚本、旁白和对白，并返回可应用的 text 节点计划。不会创建媒体节点或生成任务。",
+    stage: "script" as const,
+    completed: "剧本 Specialist 已完成",
+    guidelines: [
+      "用户只要求讨论时不要调用。需要创作或修改剧本时使用，并把明确选中的文本节点作为 sourceNodeIds/targetNodeIds。",
+      "收到 planId 后必须调用 canvas_apply_plan；没有 planId 时先处理阻塞警告。",
+    ],
+  },
+  asset: {
+    name: "pipeline_run_asset_specialist",
+    label: "整理资产设定",
+    description: "调用内部资产 Specialist 提取、去重并复用角色、场景和关键道具身份，返回可编辑 text 规格节点计划。不会生成参考图。",
+    stage: "canvas" as const,
+    completed: "资产 Specialist 已完成",
+    guidelines: [
+      "从剧本整理资产或修改资产身份时使用。优先传入相关脚本节点，不能为每个镜头复制同一角色。",
+      "先应用 Script Specialist 返回的计划，再传入新建或更新后的真实脚本节点 ID。缺少外观细节时让 Specialist 补全制作设定；只有现有身份互相冲突且无法判定时才向用户确认。",
+    ],
+  },
+  storyboard: {
+    name: "pipeline_run_storyboard_specialist",
+    label: "拆分镜头",
+    description: "调用内部分镜 Specialist，把指定脚本范围转换为带时长、表演、运镜、灯光和声音的 text 镜头规格节点。不会选择 Route。",
+    stage: "storyboard" as const,
+    completed: "分镜 Specialist 已完成",
+    guidelines: [
+      "必须传入明确的脚本 sourceNodeIds。短剧按集或场次调用；单次最多处理 20 个镜头。",
+      "收到 planId 后先应用，再把创建的真实镜头节点 ID 交给 Prompt Specialist。",
+    ],
+  },
+  prompt: {
+    name: "pipeline_run_prompt_specialist",
+    label: "配置生成节点",
+    description: "调用内部 Prompt Specialist，根据资产或镜头规格和当前 Route Catalog 创建或更新可运行媒体节点。只准备画布并预检，不触发生成。",
+    stage: "canvas" as const,
+    completed: "Prompt Specialist 已完成",
+    guidelines: [
+      "只对需要执行的 asset/shot 规格调用。使用当前 Route Schema，不根据模型名称猜能力。",
+      "完整视频必须等待 Storyboard Specialist 的镜头计划应用完成，再传入真实镜头节点 ID；不得用占位目标或空 sourceNodeIds 提前调用。",
+      "应用计划后调用 canvas_prepare_generation；最终告诉用户从哪些节点或工作流手动启动。",
+    ],
+  },
+} satisfies Record<PipelineSpecialistKind, {
+  name: string;
+  label: string;
+  description: string;
+  stage: "script" | "storyboard" | "canvas";
+  completed: string;
+  guidelines: string[];
+}>;
+
+function specialistRequest(
+  projectId: string,
+  sessionId: string,
+  input: Record<string, unknown>,
+): PipelineSpecialistRequest {
+  const strings = (value: unknown) => Array.isArray(value)
+    ? [...new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean))]
+    : [];
+  const rawConstraints = input.constraints && typeof input.constraints === "object" && !Array.isArray(input.constraints)
+    ? input.constraints as Record<string, unknown>
+    : {};
+  const optionalString = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : undefined;
+  return {
+    projectId,
+    sessionId,
+    objective: String(input.objective ?? "").trim(),
+    sourceNodeIds: strings(input.sourceNodeIds),
+    targetNodeIds: strings(input.targetNodeIds),
+    episodeKey: optionalString(input.episodeKey) ?? optionalString(rawConstraints.episodeKey),
+    constraints: {
+      language: optionalString(rawConstraints.language),
+      targetDurationSeconds: typeof rawConstraints.targetDurationSeconds === "number" ? rawConstraints.targetDurationSeconds : undefined,
+      aspectRatio: optionalString(rawConstraints.aspectRatio),
+      audience: optionalString(rawConstraints.audience),
+      platform: optionalString(rawConstraints.platform),
+      tone: optionalString(rawConstraints.tone),
+      preserveUserText: rawConstraints.preserveUserText !== false,
+    },
+  };
+}
+
+function specialistCallKey(kind: PipelineSpecialistKind, request: PipelineSpecialistRequest, canvasRevision: number): string {
+  return JSON.stringify({
+    kind,
+    canvasRevision,
+    episodeKey: request.episodeKey ?? null,
+    sourceNodeIds: [...request.sourceNodeIds].sort(),
+    targetNodeIds: [...request.targetNodeIds].sort(),
+  });
+}
+
+function repairSourceNodeId(nodeId: string, existingNodeIds: string[]): string {
+  if (existingNodeIds.includes(nodeId)) return nodeId;
+  const candidates = existingNodeIds.filter((candidate) => candidate.length === nodeId.length
+    && [...candidate].reduce((count, character, index) => count + Number(character !== nodeId[index]), 0) === 1);
+  return candidates.length === 1 ? candidates[0]! : nodeId;
+}
+
 function planParameters(includePlanId: boolean) {
   return {
     type: "object" as const,
@@ -768,10 +962,22 @@ function planParameters(includePlanId: boolean) {
                 ],
               },
             },
+            creativeSpec: {
+              type: "object",
+              description: "仅用于 text 规格节点的结构化创作数据，必须包含 schemaVersion:1 与 kind:script|asset|shot",
+              additionalProperties: true,
+            },
+            group: {
+              type: "object",
+              properties: { id: { type: "string" }, name: { type: "string" } },
+              required: ["id", "name"],
+              additionalProperties: false,
+            },
             column: { type: "integer", minimum: 0, maximum: 20 },
             row: { type: "integer", minimum: 0, maximum: 20 },
             source: { type: "string" },
             target: { type: "string" },
+            edgeType: { type: "string", enum: ["references", "source_of", "generates", "derives_from"] },
             role: { type: "string", enum: ["reference", "first-frame", "last-frame"] },
           },
           anyOf: [

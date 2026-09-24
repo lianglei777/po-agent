@@ -26,4 +26,25 @@ describe("CanvasAgentTurnPolicyRegistry", () => {
     registry.end("session-1", "turn-1");
     expect(registry.get("session-1")).toBeNull();
   });
+
+  it("adds nodes created by an applied plan to the active turn scope", () => {
+    const registry = new CanvasAgentTurnPolicyRegistry();
+    registry.begin("session-1", "turn-1", {
+      type: "resolved",
+      objective: "完成多阶段画布",
+      requestedStage: "canvas",
+      effectiveStage: "canvas",
+      allowedStages: ["discuss", "script", "storyboard", "canvas"],
+      generationPermission: "not-requested",
+      confidence: "high",
+      scope: { projectWide: false, nodeIds: ["script-1"] },
+    });
+
+    registry.authorizeCreatedNodes("session-1", ["asset-1", "shot-1"]);
+
+    expect(registry.effectiveScope("session-1")).toEqual({
+      projectWide: false,
+      nodeIds: ["script-1", "asset-1", "shot-1"],
+    });
+  });
 });

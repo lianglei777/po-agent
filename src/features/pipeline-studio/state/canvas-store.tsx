@@ -66,6 +66,7 @@ type CanvasStoreState = CanvasDocument & {
   insertServerGenerationResult: (node: CanvasNode, edges?: CanvasEdge[]) => void;
   applyServerNodeData: (nodeId: string, data: CanvasNodeData, updatedAt?: string) => void;
   updateNodeData: (nodeId: string, data: CanvasNodeData) => void;
+  updateNodeDataBatch: (updates: Array<{ nodeId: string; data: CanvasNodeData }>) => void;
   updateNodePositionLive: (nodeId: string, position: { x: number; y: number }) => void;
   commitNodePosition: (nodeId: string, previous: { x: number; y: number }) => void;
   commitNodePositions: (origins: Array<{ nodeId: string; x: number; y: number }>) => void;
@@ -316,6 +317,27 @@ export function createCanvasStore(projectId: string) {
       pendingMutations: appendMutation(state.pendingMutations, { type: "node.update", nodeId, patch: { data } }),
       saveState: "idle",
     })),
+
+    updateNodeDataBatch: (updates) => {
+      if (!updates.length) return;
+      const state = get();
+      const locked = new Set(state.workflowLockedNodeIds);
+      const existing = new Set(state.nodes.map((node) => node.id));
+      const allowed = updates.filter((update) => existing.has(update.nodeId) && !locked.has(update.nodeId));
+      if (!allowed.length) return;
+      const byId = new Map(allowed.map((update) => [update.nodeId, update.data]));
+      const now = new Date().toISOString();
+      const nextNodes = state.nodes.map((node) => {
+        const data = byId.get(node.id);
+        return data ? { ...node, data, updatedAt: now } : node;
+      });
+      // Shot List 的批量修改必须是一次可撤销操作，不能为每个镜头分别制造历史记录。
+      commitDocument(set, get, nextNodes, state.edges, allowed.map((update) => ({
+        type: "node.update" as const,
+        nodeId: update.nodeId,
+        patch: { data: update.data },
+      })));
+    },
 
     updateNodePositionLive: (nodeId, position) => set((state) => ({
       nodes: state.nodes.map((node) => node.id === nodeId ? { ...node, positionX: position.x, positionY: position.y } : node),

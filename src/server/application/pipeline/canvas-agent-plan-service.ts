@@ -3,6 +3,7 @@ import type {
   CanvasAgentAction,
   CanvasAgentPlan,
   CanvasAgentPlanOperation,
+  CanvasCreativeSpec,
   CanvasEdge,
   CanvasMediaType,
   CanvasMutation,
@@ -146,6 +147,10 @@ export class CanvasAgentPlanService {
       appliedRevision: snapshot.revision,
       actionId: action.id,
     });
+    // 后续专业阶段要引用本回合刚落盘的真实节点，否则一条消息无法走完整条创作链路。
+    this.policies.authorizeCreatedNodes(sessionId, compiled.forward.flatMap((mutation) =>
+      mutation.type === "node.create" ? [mutation.node.id] : [],
+    ));
     return action;
   }
 
@@ -184,15 +189,25 @@ export class CanvasAgentPlanService {
   private requireWritableTurn(sessionId: string, operations: CanvasAgentPlanOperation[], nodes: CanvasNode[]) {
     const active = this.policies.getActive(sessionId);
     if (!active) this.policies.requireStage(sessionId, "canvas");
-    validatePlanScope(active?.intent.scope, operations);
+    validatePlanScope(this.policies.effectiveScope(sessionId), operations);
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
-    const textOnly = operations.every((operation) =>
-      operation.type !== "edge.create" &&
-      (operation.type !== "node.create" || operation.mediaType === "text") &&
-      (operation.type !== "node.update" || nodeById.get(operation.nodeId)?.data?.type === "text") &&
-      operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined
-    );
-    this.policies.requireStage(sessionId, textOnly ? "script" : "canvas");
+    const temporaryTextIds = new Set(operations.flatMap((operation) => operation.type === "node.create" && operation.mediaType === "text"
+      ? [operation.tempId]
+      : []));
+    const endpointIsText = (nodeId: string) => temporaryTextIds.has(nodeId) || nodeById.get(nodeId)?.data?.type === "text";
+    const creativeOnly = operations.every((operation) => {
+      if (operation.type === "edge.create") {
+        return operation.edgeType !== undefined
+          && operation.edgeType !== "references"
+          && endpointIsText(operation.source)
+          && endpointIsText(operation.target);
+      }
+      return (operation.type !== "node.create" || operation.mediaType === "text")
+        && (operation.type !== "node.update" || nodeById.get(operation.nodeId)?.data?.type === "text")
+        && operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined;
+    });
+    const includesShotSpec = operations.some((operation) => operation.type !== "edge.create" && operation.creativeSpec?.kind === "shot");
+    this.policies.requireStage(sessionId, creativeOnly ? (includesShotSpec ? "storyboard" : "script") : "canvas");
     return active!;
   }
 
@@ -225,8 +240,11 @@ export class CanvasAgentPlanService {
     }
     const incomingByTarget = new Map<string, Array<{ mediaType: CanvasMediaType; role: CanvasEdge["role"] }>>();
     const bindings = [
-      ...currentEdges.map((edge) => ({ source: edge.sourceNodeId, target: edge.targetNodeId, role: edge.role ?? "reference" })),
+      ...currentEdges
+        .filter((edge) => isReferenceEdgeType(edge.edgeType))
+        .map((edge) => ({ source: edge.sourceNodeId, target: edge.targetNodeId, role: edge.role ?? "reference" })),
       ...operations.flatMap((operation) => operation.type === "edge.create"
+        && (operation.edgeType ?? "references") === "references"
         ? [{ source: operation.source, target: operation.target, role: operation.role ?? "reference" }]
         : []),
     ];
@@ -238,7 +256,7 @@ export class CanvasAgentPlanService {
       incomingByTarget.set(binding.target, incoming);
     }
     for (const operation of operations) {
-      if (operation.type !== "edge.create") continue;
+      if (operation.type !== "edge.create" || (operation.edgeType ?? "references") !== "references") continue;
       touchedNodeIds.add(operation.target);
     }
     for (const nodeId of touchedNodeIds) {
@@ -260,6 +278,9 @@ export class CanvasAgentPlanService {
 function validateOperationTargets(operations: CanvasAgentPlanOperation[], nodes: CanvasNode[]): void {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   for (const operation of operations) {
+    if (operation.type === "node.create" && operation.creativeSpec !== undefined && operation.mediaType !== "text") {
+      invalid("Creative specs can only be stored on text nodes");
+    }
     if (operation.type !== "node.update") continue;
     const node = byId.get(operation.nodeId);
     if (!node?.data) continue;
@@ -267,6 +288,7 @@ function validateOperationTargets(operations: CanvasAgentPlanOperation[], nodes:
     if (operation.prompt !== undefined && node.data.type === "text") invalid("Generation prompts belong to image, video, or audio nodes");
     if (operation.routeId !== undefined && node.data.type === "text") invalid("Generation routes belong to image, video, or audio nodes");
     if (operation.settings !== undefined && node.data.type === "text") invalid("Generation settings belong to image, video, or audio nodes");
+    if (operation.creativeSpec !== undefined && node.data.type !== "text") invalid("Creative specs can only be stored on text nodes");
   }
 }
 
@@ -309,13 +331,13 @@ function validatePlanEdgeBindings(
   for (const operation of operations) {
     if (operation.type === "node.create") mediaTypes.set(operation.tempId, operation.mediaType);
   }
-  const bindings = [...edges.map((edge) => ({
+  const bindings = [...edges.filter((edge) => isReferenceEdgeType(edge.edgeType)).map((edge) => ({
     source: edge.sourceNodeId,
     target: edge.targetNodeId,
     role: edge.role ?? "reference",
   }))];
   for (const operation of operations) {
-    if (operation.type !== "edge.create") continue;
+    if (operation.type !== "edge.create" || (operation.edgeType ?? "references") !== "references") continue;
     const role = operation.role ?? "reference";
     if (role !== "reference"
       && (mediaTypes.get(operation.source) !== "image" || mediaTypes.get(operation.target) !== "video")) {
@@ -402,7 +424,9 @@ function compilePlan(
     const targetNodeId = tempIds.get(operation.target) ?? operation.target;
     const edge: CanvasEdge = {
       id: randomUUID(), projectId: plan.projectId, sourceNodeId, targetNodeId,
-      edgeType: "references", role: operation.role ?? "reference", order: order++,
+      edgeType: operation.edgeType ?? "references",
+      role: (operation.edgeType ?? "references") === "references" ? operation.role ?? "reference" : undefined,
+      order: order++,
       createdAt: now, updatedAt: now,
     };
     forward.push({ type: "edge.create", edge, intent: "prompt-reference" });
@@ -487,18 +511,25 @@ function normalizeOperations(operations: CanvasAgentPlanOperation[]): CanvasAgen
         text: optionalBounded(operation.text, "text", 200_000), prompt: optionalBounded(operation.prompt, "prompt", 20_000),
         routeId: optionalBounded(operation.routeId, "routeId", 160),
         settings: normalizeSettings(operation.settings),
+        creativeSpec: normalizeCreativeSpec(operation.creativeSpec),
+        group: normalizeGroup(operation.group),
         column: boundedGrid(operation.column), row: boundedGrid(operation.row) };
     }
     if (operation.type === "node.update") {
-      if (operation.name === undefined && operation.text === undefined && operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined) invalid("A node update must change name, text, prompt, route, or settings");
+      if (operation.name === undefined && operation.text === undefined && operation.prompt === undefined && operation.routeId === undefined && operation.settings === undefined && operation.creativeSpec === undefined && operation.group === undefined) invalid("A node update must change name, text, prompt, route, settings, creative spec, or group");
       return { ...operation, nodeId: bounded(operation.nodeId, "nodeId", 128),
         name: optionalBounded(operation.name, "name", 120), text: optionalBounded(operation.text, "text", 200_000),
         prompt: optionalBounded(operation.prompt, "prompt", 20_000), routeId: optionalBounded(operation.routeId, "routeId", 160),
-        settings: normalizeSettings(operation.settings) };
+        settings: normalizeSettings(operation.settings), creativeSpec: normalizeCreativeSpec(operation.creativeSpec),
+        group: normalizeGroup(operation.group) };
     }
     if (operation.type !== "edge.create") invalid("Unsupported Canvas Agent plan operation");
+    const edgeType = operation.edgeType ?? "references";
+    if (!["references", "source_of", "generates", "derives_from"].includes(edgeType)) invalid("Unsupported canvas edge type");
     if (operation.role !== undefined && operation.role !== "reference" && operation.role !== "first-frame" && operation.role !== "last-frame") invalid("Unsupported canvas reference role");
-    return { ...operation, source: bounded(operation.source, "source", 128), target: bounded(operation.target, "target", 128), role: operation.role ?? "reference" };
+    if (edgeType !== "references" && operation.role !== undefined) invalid("Only reference edges can define a resource role");
+    return { ...operation, source: bounded(operation.source, "source", 128), target: bounded(operation.target, "target", 128), edgeType,
+      role: edgeType === "references" ? operation.role ?? "reference" : undefined };
   });
 }
 
@@ -554,7 +585,37 @@ function withOperationContent(data: CanvasNodeData, operation: Extract<CanvasAge
     if (next.type === "text") invalid("Generation settings belong to image, video, or audio nodes");
     next.params = { ...(next.params ?? { prompt: "" }), settings: operation.settings };
   }
+  if (operation.creativeSpec !== undefined) next.creativeSpec = structuredClone(operation.creativeSpec);
+  if (operation.group !== undefined) next.group = { ...operation.group };
   return next;
+}
+
+function normalizeGroup(group: { id: string; name: string } | undefined): { id: string; name: string } | undefined {
+  if (group === undefined) return undefined;
+  return { id: bounded(group.id, "group.id", 120), name: bounded(group.name, "group.name", 120) };
+}
+
+function normalizeCreativeSpec(spec: CanvasCreativeSpec | undefined): CanvasCreativeSpec | undefined {
+  if (spec === undefined) return undefined;
+  if (!isPlainRecord(spec) || spec.schemaVersion !== 1 || !["script", "asset", "shot"].includes(String(spec.kind))) {
+    invalid("Canvas creative spec is invalid");
+  }
+  const serialized = JSON.stringify(spec);
+  if (serialized.length > 100_000) invalid("Canvas creative spec is too large");
+  if (spec.kind === "script") {
+    if (!["concept", "episode", "scene", "segment"].includes(spec.level)
+      || !spec.key.trim() || !spec.title.trim() || !spec.objective.trim()
+      || !Array.isArray(spec.characters) || !Array.isArray(spec.sourceNodeIds)) invalid("Canvas script spec is invalid");
+  } else if (spec.kind === "asset") {
+    if (!["character", "scene", "prop"].includes(spec.assetType)
+      || !spec.identityKey.trim() || !spec.canonicalName.trim() || !spec.visualDescription.trim()
+      || !Array.isArray(spec.aliases) || !Array.isArray(spec.continuityFacts) || !Array.isArray(spec.sourceNodeIds)) invalid("Canvas asset spec is invalid");
+  } else if (!spec.shotKey.trim() || !Number.isInteger(spec.order) || !Number.isFinite(spec.durationSeconds)
+    || spec.durationSeconds <= 0 || !spec.purpose.trim() || !spec.visual.trim()
+    || !Array.isArray(spec.subjects) || !Array.isArray(spec.sourceNodeIds)) {
+    invalid("Canvas shot spec is invalid");
+  }
+  return structuredClone(spec);
 }
 
 function normalizeSettings(
@@ -632,4 +693,8 @@ function isMediaType(value: string): value is CanvasMediaType {
 
 function invalid(message: string): never {
   throw new AppError("VALIDATION_ERROR", message, 400);
+}
+
+function isReferenceEdgeType(edgeType: string): boolean {
+  return edgeType === "references" || edgeType === "reference";
 }

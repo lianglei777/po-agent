@@ -150,12 +150,15 @@ export function resolvePolicy(
   // 兼容旧调用签名；该开关不再扩大或收紧 Canvas Agent 的回合权限。
   void allowAgentGeneration;
   // 兼容旧模型偶尔返回 generate；Canvas Agent 当前只准备画布，永远不获得付费生成权限。
-  const requestedStage = decision.requestedStage === "generate" ? "canvas" : decision.requestedStage;
+  const classifiedStage = decision.requestedStage === "generate" ? "canvas" : decision.requestedStage;
+  // 模型偶尔会被“修复/核对”等措辞带到 review；显式要求调用 Prompt 或预检时，实际边界至少是 canvas。
+  const explicitStage = explicitExecutionStage(currentMessage);
+  const requestedStage = higherStage(classifiedStage, explicitStage);
   const generationPermission: CanvasAgentGenerationPermission = "not-requested";
   const effectiveStage = requestedStage;
   const objective = decision.objective.trim() || currentMessage.trim().slice(0, 240);
 
-  if (decision.needsClarification || decision.confidence === "low") {
+  if (!explicitStage && (decision.needsClarification || decision.confidence === "low")) {
     return {
       type: "clarification",
       objective,
@@ -176,7 +179,8 @@ export function resolvePolicy(
     allowedStages: allowedStages(effectiveStage),
     generationPermission,
     scope: decision.scope,
-    confidence: decision.confidence,
+    // 显式执行语义可以纠正分类器的低置信结果，但不能把低置信状态带入 resolved 合同。
+    confidence: decision.confidence === "low" ? "medium" : decision.confidence,
   };
 }
 
@@ -188,7 +192,7 @@ export function canvasAgentTurnPolicyContext(intent: CanvasAgentTurnIntent): str
     "<canvas-agent-turn-policy>",
     "This is the server-enforced scope for the current turn. Complete only the effective stage. A suggested next step is not permission to perform it. If clarification is required, ask only the supplied question and do not advance the work.",
     JSON.stringify(intent),
-    `Execution contract: ${clarificationInstruction} For script or storyboard deliverables, create or update text nodes through canvas_create_plan and then canvas_apply_plan. For canvas deliverables, query available Routes when needed, create the complete node/reference plan, apply it, and run canvas_prepare_generation as a configuration check. Do not create executable media nodes during a storyboard-only turn. Asset inspection is read-only and uses canvas_inspect_assets. Save continuity only when the current user explicitly confirms it; never promote an analysis suggestion by yourself. This Agent cannot trigger generation; after preparation, tell the user which node or workflow they can run manually.`,
+    `Execution contract: ${clarificationInstruction} Use pipeline_run_script_specialist for script writing or revision, pipeline_run_asset_specialist for stable character/scene/prop specifications, pipeline_run_storyboard_specialist for shot specifications, and pipeline_run_prompt_specialist for Route-ready media nodes. A complete workflow is strictly sequential: Script -> apply -> Asset -> apply -> Storyboard -> apply -> Prompt -> apply -> canvas_prepare_generation. Never call a downstream Specialist before its required upstream plan is applied, never use a placeholder objective, and pass the real node IDs returned by apply. Every sourceNodeId and targetNodeId passed to a Specialist must be listed in scope.nodeIds unless scope.projectWide is true; the wider node index is read-only context. Call only the Specialists needed for the current objective and reuse reliable existing nodes. For a multi-episode drama, apply the Script plan first, run Asset once across the applied episode nodes, then run Storyboard and Prompt separately for each episodeKey; apply each bounded plan before continuing so no episode is silently truncated. Each Specialist already performs one internal format repair: call it at most once for the same unchanged canvas version and bounded episode or scene range. If a non-error Specialist result reports a correctable upstream content gap, revise and apply the upstream plan first; the changed canvas version may then be evaluated again. Never replace a failed Specialist with direct canvas_create_plan output, never retry a failed plan application, and do not call canvas_undo_action in the same turn. A PIPELINE_SPECIALIST_BATCH_REQUIRED result means continue with a smaller unprocessed episode or scene range, not retry the same range. Report the exact blocking error and preserve completed canvas work. For a complete canvas deliverable, finish with canvas_prepare_generation as a configuration check. Do not call canvas_inspect_assets or canvas_review_results while only preparing Route-ready nodes; those tools inspect completed local media. Do not create executable media nodes during a storyboard-only turn. Use canvas_create_plan directly only for small manual canvas edits that do not create or imitate creativeSpec. Asset inspection is read-only and uses canvas_inspect_assets. Save continuity only when the current user explicitly confirms it; never promote an analysis suggestion by yourself. This Agent cannot trigger generation; after preparation, tell the user which node or workflow they can run manually.`,
     "</canvas-agent-turn-policy>",
   ].join("\n");
 }
@@ -202,6 +206,30 @@ function allowedStages(stage: CanvasAgentStage): CanvasAgentStage[] {
     case "generate": return ["discuss", "script", "storyboard", "canvas"];
     case "review": return ["discuss", "review"];
   }
+}
+
+function explicitExecutionStage(message: string): CanvasAgentStage | null {
+  if (/(?:调用|执行|运行|应用|创建|生成|重跑|完成).{0,80}(?:prompt\s*specialist|canvas_prepare_generation|预检)/i.test(message)) {
+    return "canvas";
+  }
+  if (/(?:调用|执行|运行|应用|创建|生成|重跑|完成).{0,80}(?:storyboard\s*specialist|分镜)/i.test(message)) {
+    return "storyboard";
+  }
+  if (/(?:asset\s*specialist|资产规格|角色资产|场景资产|道具资产|统一.{0,20}(?:角色|造型|资产)|更新.{0,20}(?:角色|造型|资产)|别名.{0,20}(?:合并|统一)|continuity\s*bible)/i.test(message)) {
+    return "canvas";
+  }
+  if (/(?:调用|执行|运行|应用|创建|生成|重跑|完成).{0,80}(?:script\s*specialist|剧本)/i.test(message)) {
+    return "script";
+  }
+  return null;
+}
+
+function higherStage(left: CanvasAgentStage, right: CanvasAgentStage | null): CanvasAgentStage {
+  if (!right) return left;
+  const rank: Record<CanvasAgentStage, number> = {
+    discuss: 0, script: 1, storyboard: 2, canvas: 3, generate: 3, review: 0,
+  };
+  return rank[right] > rank[left] ? right : left;
 }
 
 function parseDecision(text: string): ClassifierDecision | null {

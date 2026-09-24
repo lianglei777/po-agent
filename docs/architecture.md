@@ -238,6 +238,12 @@ Pipeline Studio 的多节点执行使用项目数据库中的 Workflow Run 和 S
 
 Pipeline Canvas Agent 每轮先解析结构化意图、阶段和已有节点修改范围，并在内存回合注册表中建立短期执行权限。画布选择先作为富文本光标位置上的临时 `resourceReference`；只有下一次指针或键盘焦点进入 Agent 编辑器时，候选才成为正式消息 atom，其他落点会删除候选。application 从结构化消息文档提取节点指针，重新读取权威名称和类型，规范化后写入持久化 user-role 消息，并把完整节点数据放入受信任上下文。上下文提供有界节点索引用于名称到稳定 ID 的语义解析；application 再将解析结果与当前项目节点求交，并合入用户确认的节点引用和 `@` 引用，模型不能通过虚构 ID 扩大范围。Agent 根据当前已启用的 Generation Route Catalog 选择适合节点目标的 Route，并把提示词、完整 Schema 参数、素材引用和布局一起写入语义 Plan；用户要求“生成”时也只把画布准备到可运行状态。application 编译器解析临时节点引用、校验已有节点是否位于本轮范围内，并按 Route 自身的 Schema 检查输出类型、提示词、参数、素材槽位、语义角色和数量约束；新增模型只需维护 Catalog，无需在 Agent 侧维护模型评分。通过校验后，编译器按真实节点矩形为同批节点分行避让，再生成现有 `CanvasMutationBatch`，模型不能直接提交底层 mutation。Plan 记录 base revision 与引用节点版本，无关画布变化可以安全 rebase，相关节点变化必须停止。全部校验在事务 mutation 之前完成，失败 Plan 不会留下部分节点。每次应用保存正向和反向 mutations 形成 Action；只有画布此后没有新 revision 时才允许整组撤销。节点和连线仍由 Canvas Studio 的事务、连接校验和服务端字段保护规则统一处理。
 
+Canvas Agent 是用户唯一面对的 Manager。剧本、资产、分镜和生成配置分别由四个内部 Specialist Tool 完成；每个 Specialist 从 `resources/pipeline-specialists/<kind>` 加载独立 System Prompt 与 Skill，通过 `PipelineSpecialistRuntime` port 执行一次隔离的结构化补全，并由 application 的确定性编译器转换为普通 Canvas Agent Plan。Specialist 不持有数据库写入能力，也不维护独立会话；模型输出无效时只自动修复一次，仍无效则以业务错误停止。资产身份歧义等阻塞问题不生成部分计划。剧本、资产和镜头的结构化规格保存在文本节点 `creativeSpec` 中；Inspector 在一次普通 Canvas mutation 中同步更新规格与可见正文，用户直接改写自由文本则使旧规格失效。`derives_from`、`source_of` 和 `generates` 仅表达语义血缘，只有 `references` 连线参与媒体素材绑定、Route Schema 校验和工作流依赖执行。
+
+四个 Specialist 默认启用；本地或灰度环境可设置 `PO_AGENT_PIPELINE_SPECIALISTS_ENABLED=0`，此时 Manager 工具集中不注册四个 Specialist Tool。Electron 包会把 `resources/pipeline-specialists` 作为独立资源目录传给服务端，避免生产包的工作目录差异影响 Profile 加载。
+
+固定评测保存在 `resources/pipeline-specialists/evaluation`。运行时只把 Specialist 类型、Profile 版本、耗时、修复使用情况、Plan 操作数和 preflight 分类计数写入 `<agent-dir>/logs/pipeline-specialist-metrics.jsonl`，不记录用户正文、Prompt、模型原始响应或凭据。`canvas_prepare_generation` 的结果会区分明确执行、缺失补齐、输入过期、可靠结果复用与非生成来源跳过，Workflow Run 仍只保存实际待执行节点。
+
 Canvas Agent 不持有创建 Generation Run 或 Workflow Run 的工具。节点与工作流生成必须由用户在画布 UI 显式触发，执行时继续复用既有全量预检、幂等键、Worker 和持久化状态机。项目设置中的旧 `allowAgentGeneration` 字段只为合同和数据兼容保留，不再影响 Canvas Agent 行为。
 
 结果评审继续复用 Canvas 素材分析和持久化 Generation Run，不建立第二套版本数据。评审工具组装最近 Run 摘要和由画布边计算的下游影响范围；对本地可读取的成功产物，在一次最多八个分析预算中优先当前选择并补充近期历史版本，缓存仍按原节点和媒体指纹复用。建议与最终选择保持分离。局部调整仍通过语义 Plan 修改提示词、Route、参数或引用，用户确认画布状态后手动触发局部重跑。成功子图保存为现有 `CanvasWorkflow`，不引入 Agent 专属模板格式。

@@ -317,6 +317,36 @@ describe("CanvasAgentPlanService", () => {
       role: "first-frame",
     }));
   });
+
+  it("preserves structured specs and semantic lineage without treating lineage as a media binding", async () => {
+    const source = node("script-1", "text", "v1");
+    const state = repositoryState([source]);
+    const canvas = {
+      applyMutationBatch: vi.fn(async () => ({ revision: ++state.revision })),
+      validateGenerationNodeConfiguration: vi.fn(async () => undefined),
+    } as unknown as CanvasStudioService;
+    const service = new CanvasAgentPlanService(state.repository, canvas, storyboardPolicy());
+    const creativeSpec = {
+      schemaVersion: 1 as const, kind: "shot" as const, shotKey: "shot-1", order: 0, durationSeconds: 4,
+      purpose: "建立空间", visual: "雨夜街口", subjects: [], shotSize: "全景", cameraMovement: "推进",
+      blocking: "人物居中", lighting: "冷色", audio: {}, sourceNodeIds: [source.id],
+    };
+    const plan = await service.create({
+      projectId: "project-1", sessionId: "session-1", summary: "创建镜头规格",
+      operations: [
+        { type: "node.create", tempId: "shot", mediaType: "text", name: "镜头 1", text: "雨夜街口", creativeSpec },
+        { type: "edge.create", source: source.id, target: "shot", edgeType: "derives_from" },
+      ],
+    });
+
+    await service.apply("project-1", "session-1", plan.id);
+    const mutations = vi.mocked(canvas.applyMutationBatch).mock.calls[0]![1].mutations;
+    expect(mutations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "node.create", node: expect.objectContaining({ data: expect.objectContaining({ creativeSpec }) }) }),
+      expect.objectContaining({ type: "edge.create", edge: expect.objectContaining({ edgeType: "derives_from", role: undefined }) }),
+    ]));
+    expect(canvas.validateGenerationNodeConfiguration).not.toHaveBeenCalled();
+  });
 });
 
 function repositoryState(initialNodes: CanvasNode[] = []) {
@@ -370,8 +400,12 @@ function scriptPolicy() {
   return policy("script", ["discuss", "script"]);
 }
 
+function storyboardPolicy() {
+  return policy("storyboard", ["discuss", "script", "storyboard"]);
+}
+
 function policy(
-  effectiveStage: "script" | "canvas",
+  effectiveStage: "script" | "storyboard" | "canvas",
   allowedStages: Array<"discuss" | "script" | "storyboard" | "canvas">,
   scope?: { projectWide: boolean; nodeIds: string[] },
 ) {

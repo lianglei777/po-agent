@@ -1,0 +1,27 @@
+[
+  {"id":"video-01","category":"complete-short-video","objective":"把外卖员雨夜救助流浪猫的创意做成60秒竖屏短视频画布","input":"一名疲惫的外卖员在最后一单途中救下一只猫，最终收到陌生人的善意。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["create-generation-run","duplicate-asset","omit-preflight"]},
+  {"id":"video-02","category":"complete-short-video","objective":"制作30秒护肤产品反转广告","input":"观众以为主角在准备约会，结尾揭示她只是享受独处。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["create-generation-run","invent-route","omit-product-continuity"]},
+  {"id":"video-03","category":"complete-short-video","objective":"制作45秒无对白悬疑短片","input":"空办公室里打印机自行打印出明天的新闻。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["create-generation-run","add-unrequested-dialogue","omit-audio-design"]},
+  {"id":"video-04","category":"complete-short-video","objective":"把科普主题做成90秒横屏视频","input":"用日常比喻解释为什么天空是蓝色。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["create-generation-run","change-aspect-ratio","fabricate-facts"]},
+  {"id":"video-05","category":"complete-short-video","objective":"制作20秒循环播放的咖啡品牌氛围视频","input":"清晨咖啡店从第一束光到杯中拉花，结尾无缝回到开头。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["create-generation-run","omit-loop-transition","duplicate-scene"]},
+
+  {"id":"drama-01","category":"multi-episode-drama","objective":"制作三集都市悬疑短剧，每集60秒","input":"新租客发现每晚门口都会出现一把不属于自己的钥匙。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["silent-truncation","cross-episode-overwrite","create-generation-run"]},
+  {"id":"drama-02","category":"multi-episode-drama","objective":"制作五集家庭轻喜剧，每集45秒","input":"退休父亲偷偷报名电竞比赛，全家轮流帮他隐瞒。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["silent-truncation","duplicate-main-character","create-generation-run"]},
+  {"id":"drama-03","category":"multi-episode-drama","objective":"制作两集古风情感短剧，每集90秒","input":"女医师与失忆将军通过一味旧药认出彼此。","expectedSpecialists":["script","asset","storyboard","prompt"],"forbiddenBehaviors":["silent-truncation","break-costume-continuity","create-generation-run"]},
+
+  {"id":"script-01","category":"script-only","objective":"把选中梗概改写成60秒脚本，保留结局","input":"已有梗概节点；用户明确要求不改结局。","expectedSpecialists":["script"],"forbiddenBehaviors":["call-unrelated-specialist","overwrite-ending","create-media-node"]},
+  {"id":"script-02","category":"script-only","objective":"只把第二集对白改得更克制","input":"已有三集剧本节点，目标节点为第二集。","expectedSpecialists":["script"],"forbiddenBehaviors":["modify-out-of-scope-node","call-unrelated-specialist","create-media-node"]},
+  {"id":"script-03","category":"script-only","objective":"将旁白稿压缩到30秒且保留三个事实点","input":"原稿约500字，给定三个必须保留的事实。","expectedSpecialists":["script"],"forbiddenBehaviors":["drop-required-fact","call-unrelated-specialist","create-media-node"]},
+
+  {"id":"asset-01","category":"asset-dedup-continuity","objective":"从剧本提取角色，复用已有的林野","input":"画布已有 identityKey=character:lin-ye 的角色规格。","expectedSpecialists":["asset"],"forbiddenBehaviors":["duplicate-asset","overwrite-locked-asset","create-generation-run"]},
+  {"id":"asset-02","category":"asset-dedup-continuity","objective":"统一阿宁、小宁和宁宁为同一角色","input":"三个称呼来自不同场次，已有别名证据。","expectedSpecialists":["asset"],"forbiddenBehaviors":["create-three-identities","merge-without-evidence","create-generation-run"]},
+  {"id":"asset-03","category":"asset-dedup-continuity","objective":"更新主角冬季造型但保留左眉伤疤","input":"Continuity Bible 已确认左眉伤疤，目标资产正在被下游引用。","expectedSpecialists":["asset"],"forbiddenBehaviors":["drop-confirmed-continuity","modify-out-of-scope-node","create-generation-run"]},
+
+  {"id":"shot-01","category":"local-storyboard-edit","objective":"只把第三镜头节奏加快到3秒","input":"已有8个镜头规格，目标为shot-03。","expectedSpecialists":["storyboard"],"forbiddenBehaviors":["modify-other-shots","renumber-unrelated-shots","choose-route"]},
+  {"id":"shot-02","category":"local-storyboard-edit","objective":"拆分对白过密的第五镜头","input":"第五镜头5秒包含45个汉字对白。","expectedSpecialists":["storyboard"],"forbiddenBehaviors":["leave-duration-mismatch","modify-other-scenes","choose-route"]},
+  {"id":"shot-03","category":"local-storyboard-edit","objective":"把第一场改成无对白视觉叙事","input":"目标范围是第一场的4个镜头。","expectedSpecialists":["storyboard"],"forbiddenBehaviors":["modify-out-of-scope-node","retain-dialogue","choose-route"]},
+
+  {"id":"route-01","category":"route-reference","objective":"为角色规格配置可运行的文生图节点","input":"环境存在启用的默认text-to-image Route。","expectedSpecialists":["prompt"],"forbiddenBehaviors":["invent-route","create-generation-run","bind-invalid-reference"]},
+  {"id":"route-02","category":"route-reference","objective":"为镜头配置首尾帧视频","input":"环境存在first-last-frame-to-video Route，画布有两张可用图片。","expectedSpecialists":["prompt"],"forbiddenBehaviors":["omit-first-frame","omit-last-frame","create-generation-run"]},
+  {"id":"route-03","category":"route-reference","objective":"为镜头配置参考图生视频，不创建一次性首帧","input":"环境存在reference-to-video Route和一张角色参考图。","expectedSpecialists":["prompt"],"forbiddenBehaviors":["invent-first-frame","invent-route","create-generation-run"]}
+]

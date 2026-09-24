@@ -109,6 +109,76 @@ describe("CanvasStudioService mutation batches", () => {
       }),
     })]);
   });
+
+  it("invalidates a structured creative spec on free text edits but accepts Inspector and Agent replacements", async () => {
+    const current = {
+      ...textNode("旧正文"),
+      data: {
+        ...textNode("旧正文").data!,
+        creativeSpec: {
+          schemaVersion: 1 as const, kind: "script" as const, level: "segment" as const, key: "main", title: "旧稿",
+          objective: "开场", estimatedDurationSeconds: 30, characters: [], sourceNodeIds: [],
+        },
+      },
+    };
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listCanvasNodes: vi.fn().mockResolvedValue([current]),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      applyCanvasMutationBatch: vi.fn().mockResolvedValue({ applied: false, revision: 1 }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+    const replacement = {
+      schemaVersion: 1 as const, kind: "script" as const, level: "segment" as const, key: "main", title: "新稿",
+      objective: "新开场", estimatedDurationSeconds: 45, characters: [], sourceNodeIds: [],
+    };
+    const editedData = { ...current.data!, content: ["新正文"], textDocument: { schemaVersion: 1 as const, format: "tiptap-json" as const,
+      content: { type: "doc" as const, content: [{ type: "paragraph" as const, content: [{ type: "text" as const, text: "新正文" }] }] }, plainText: "新正文" }, creativeSpec: replacement };
+
+    await expect(service.applyMutationBatch(project.id, { baseRevision: 0, requestId: "client-edit",
+      mutations: [{ type: "node.update", nodeId: current.id, patch: { data: { ...editedData, creativeSpec: current.data!.creativeSpec } } }] }))
+      .rejects.toMatchObject({ code: "PIPELINE_CANVAS_REVISION_CONFLICT" });
+    expect(repository.applyCanvasMutationBatch).toHaveBeenLastCalledWith(project.id, 0, [expect.objectContaining({
+      patch: expect.objectContaining({ data: expect.objectContaining({ creativeSpec: undefined }) }),
+    })]);
+
+    await expect(service.applyMutationBatch(project.id, { baseRevision: 0, requestId: "client-inspector",
+      mutations: [{ type: "node.update", nodeId: current.id, patch: { data: editedData } }] }))
+      .rejects.toMatchObject({ code: "PIPELINE_CANVAS_REVISION_CONFLICT" });
+    expect(repository.applyCanvasMutationBatch).toHaveBeenLastCalledWith(project.id, 0, [expect.objectContaining({
+      patch: expect.objectContaining({ data: expect.objectContaining({ creativeSpec: replacement }) }),
+    })]);
+
+    await expect(service.applyMutationBatch(project.id, { baseRevision: 0, requestId: "canvas-agent:plan-1",
+      mutations: [{ type: "node.update", nodeId: current.id, patch: { data: editedData } }] }))
+      .rejects.toMatchObject({ code: "PIPELINE_CANVAS_REVISION_CONFLICT" });
+    expect(repository.applyCanvasMutationBatch).toHaveBeenLastCalledWith(project.id, 0, [expect.objectContaining({
+      patch: expect.objectContaining({ data: expect.objectContaining({ creativeSpec: replacement }) }),
+    })]);
+  });
+
+  it("allows semantic lineage to connect populated text nodes without treating it as an input binding", async () => {
+    const source = textNode("来源剧本");
+    const target = { ...textNode("资产规格"), id: "node-2", entityId: "entity-2" };
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listCanvasNodes: vi.fn().mockResolvedValue([source, target]),
+      listCanvasEdges: vi.fn().mockResolvedValue([]),
+      applyCanvasMutationBatch: vi.fn().mockResolvedValue({ applied: false, revision: 1 }),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+
+    await expect(service.applyMutationBatch(project.id, {
+      baseRevision: 0,
+      requestId: "canvas-agent:semantic-edge",
+      mutations: [{ type: "edge.create", edge: {
+        id: "edge-lineage", projectId: project.id, sourceNodeId: source.id, targetNodeId: target.id,
+        edgeType: "derives_from", order: 0, createdAt: source.createdAt, updatedAt: source.updatedAt,
+      } }],
+    })).rejects.toMatchObject({ code: "PIPELINE_CANVAS_REVISION_CONFLICT" });
+
+    expect(repository.applyCanvasMutationBatch).toHaveBeenCalledOnce();
+  });
 });
 
 describe("CanvasStudioService text AI", () => {
@@ -1322,6 +1392,42 @@ describe("CanvasStudioService video AI", () => {
     expect(runs.createRun).not.toHaveBeenCalled();
   });
 
+  it("explains missing, stale, reused, and non-generative upstream decisions", async () => {
+    const target = { ...videoNode(), id: "target", data: { ...videoNode().data!, name: "Target", params: { prompt: "animate" } } };
+    const missing = { ...imageNode(), id: "missing", data: { ...imageNode().data!, name: "Missing" } };
+    const current = { ...imageNode(), id: "current", data: { ...imageNode().data!, name: "Current", url: ["artifact://current"],
+      generationProvenance: { runId: "run-current", inputFingerprint: "current", stale: false } } };
+    const stale = { ...imageNode(), id: "stale", data: { ...imageNode().data!, name: "Stale", url: ["artifact://stale"],
+      generationProvenance: { runId: "run-stale", inputFingerprint: "old", stale: true } } };
+    const source = { ...textNode("规格"), id: "source", data: { ...textNode("规格").data!, name: "Source" } };
+    const nodes = [target, missing, current, stale, source];
+    const edges = [missing, current, stale, source].map((node, index) => ({
+      id: `edge-${index}`, projectId: project.id, sourceNodeId: node.id, targetNodeId: target.id,
+      edgeType: "references" as const, role: "reference" as const, order: index,
+      createdAt: target.createdAt, updatedAt: target.updatedAt,
+    }));
+    const repository = {
+      getProject: vi.fn().mockResolvedValue(project),
+      listCanvasNodes: vi.fn().mockResolvedValue(nodes),
+      listCanvasEdges: vi.fn().mockResolvedValue(edges),
+      getCanvasNode: vi.fn(async (id: string) => nodes.find((node) => node.id === id) ?? null),
+    } as unknown as PipelineRepository;
+    const service = createService(repository);
+    vi.spyOn(service, "syncTargetReferences").mockImplementation(async (nodeId) => nodes.find((node) => node.id === nodeId) ?? null);
+    vi.spyOn(service, "preflightWorkflowNode").mockResolvedValue("route");
+
+    const prepared = await service.prepareWorkflowGeneration({ projectId: project.id, nodeIds: [target.id] });
+
+    expect(new Set(prepared.nodeIds)).toEqual(new Set(["missing", "stale", "target"]));
+    expect(prepared.decisions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "target", status: "ready" }),
+      expect.objectContaining({ nodeId: "missing", status: "included-missing" }),
+      expect.objectContaining({ nodeId: "stale", status: "included-stale" }),
+      expect.objectContaining({ nodeId: "current", status: "reused-current" }),
+      expect.objectContaining({ nodeId: "source", status: "skipped-source" }),
+    ]));
+  });
+
   it("rejects an audio file larger than 10 MiB before writing an asset", async () => {
     const assets = { upload: vi.fn() } as unknown as GenerationAssetService;
     const service = createService({} as PipelineRepository, {} as LlmPort, {} as GenerationRunService, assets);
@@ -1604,6 +1710,7 @@ describe("CanvasStudioService durable workflow generation", () => {
     const service = createService(repository);
     vi.spyOn(service, "prepareWorkflowGeneration").mockResolvedValue({
       nodeIds: ["image-1"], edges: [], nodes: [{ nodeId: "image-1", name: "Image", type: "image" }],
+      decisions: [{ nodeId: "image-1", name: "Image", status: "ready", reason: "explicitly-requested" }],
     });
     const generate = vi.spyOn(service, "generate").mockResolvedValue({ node: imageNode(), runId: "generation-1" });
 
@@ -1651,6 +1758,7 @@ describe("CanvasStudioService durable workflow generation", () => {
     const service = createService(repository);
     vi.spyOn(service, "prepareWorkflowGeneration").mockResolvedValue({
       nodeIds: ["image-1"], edges: [], nodes: [{ nodeId: "image-1", name: "Image", type: "image" }],
+      decisions: [{ nodeId: "image-1", name: "Image", status: "ready", reason: "explicitly-requested" }],
     });
     let generationStarted!: () => void;
     const started = new Promise<void>((resolve) => { generationStarted = resolve; });

@@ -74,12 +74,17 @@ import { CanvasAgentTurnPolicyRegistry } from "@/server/application/pipeline/can
 import { CanvasAgentPlanService } from "@/server/application/pipeline/canvas-agent-plan-service";
 import { CanvasAssetAnalysisService } from "@/server/application/pipeline/canvas-asset-analysis-service";
 import { CanvasContinuityService } from "@/server/application/pipeline/canvas-continuity-service";
+import { PipelineSpecialistContextAssembler } from "@/server/application/pipeline/specialists/pipeline-specialist-context-assembler";
+import { PipelineSpecialistService } from "@/server/application/pipeline/specialists/pipeline-specialist-service";
+import { BundledPipelineSpecialistProfileSource } from "@/server/infrastructure/filesystem/bundled-pipeline-specialist-profile-source";
 import { PiCanvasAssetAnalyzer } from "@/server/infrastructure/pi/pi-canvas-asset-analyzer";
+import { PiPipelineSpecialistRuntime } from "@/server/infrastructure/pi/pi-pipeline-specialist-runtime";
 import { FfmpegCanvasMediaPreprocessor } from "@/server/infrastructure/media/ffmpeg-canvas-media-preprocessor";
 import type { PipelineRepository } from "@/server/ports/pipeline-repository";
 import { NodeAccessControlPasswordHasher } from "@/server/infrastructure/security/node-access-control-password-hasher";
 import { FileHttpUnexpectedErrorLogger } from "@/server/infrastructure/observability/file-http-unexpected-error-logger";
 import { FilePipelineValidationLogger } from "@/server/infrastructure/observability/file-pipeline-validation-logger";
+import { FilePipelineSpecialistMetrics } from "@/server/infrastructure/observability/file-pipeline-specialist-metrics";
 
 function createContainer() {
   const agentDir = getAgentDir();
@@ -93,6 +98,9 @@ function createContainer() {
   );
   const pipelineValidationLogger = new FilePipelineValidationLogger(
     path.join(agentDir, "logs", "pipeline-validation.jsonl"),
+  );
+  const pipelineSpecialistMetrics = new FilePipelineSpecialistMetrics(
+    path.join(agentDir, "logs", "pipeline-specialist-metrics.jsonl"),
   );
   // 模型、凭证与所有 Agent Session 必须共享同一 Runtime，避免配置和认证快照分叉。
   const modelRuntime = ModelRuntime.create({
@@ -294,6 +302,7 @@ function createContainer() {
       pipelineSse,
       lipSyncPreparations,
       pipelineValidationLogger,
+      pipelineSpecialistMetrics,
     );
     pipelineAgentPlanService = new CanvasAgentPlanService(
       pipelineRepository,
@@ -311,6 +320,20 @@ function createContainer() {
       pipelineRepository,
       canvasAgentTurnPolicies,
     );
+    const pipelineSpecialistService = process.env.PO_AGENT_PIPELINE_SPECIALISTS_ENABLED === "0"
+      ? undefined
+      : new PipelineSpecialistService(
+        pipelineRepository,
+        new BundledPipelineSpecialistProfileSource(
+          process.env.PO_AGENT_PIPELINE_SPECIALISTS_DIR
+            ?? path.join(process.cwd(), "resources", "pipeline-specialists"),
+        ),
+        new PiPipelineSpecialistRuntime(modelRuntime),
+        new PipelineSpecialistContextAssembler(pipelineRepository),
+        pipelineAgentPlanService,
+        canvasStudioService,
+        pipelineSpecialistMetrics,
+      );
     pipelineAgentTools = new PipelineAgentToolProvider(
       scriptAnalysisService,
       storyboardService,
@@ -322,6 +345,7 @@ function createContainer() {
       canvasAssetAnalysisService,
       canvasContinuityService,
       canvasStudioService,
+      pipelineSpecialistService,
     );
     return pipelineRepository;
   }

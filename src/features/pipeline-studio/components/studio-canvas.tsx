@@ -29,6 +29,7 @@ import {
   Paperclip,
   Plus,
   Project,
+  List,
   LineSquiggle,
   Play,
 } from "@/components/icons";
@@ -46,6 +47,8 @@ import {
   type StudioCanvasEdge,
 } from "./studio-canvas-edge";
 import { StudioCanvasConnectionLine } from "./studio-canvas-connection-line";
+import { CreativeSpecInspector } from "./creative-spec-inspector";
+import { ShotListPanel } from "./shot-list-panel";
 
 const CLIPBOARD_KEY = "po:pipeline-studio-clipboard-v2";
 const studioEdgeTypes = { studio: StudioCanvasEdgeComponent } satisfies EdgeTypes;
@@ -107,6 +110,9 @@ export function StudioCanvas({
   const toggleMinimap = useCanvasStore((state) => state.toggleMinimap);
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const updateNodeDataBatch = useCanvasStore((state) => state.updateNodeDataBatch);
+  const workflowLockedNodeIds = useCanvasStore((state) => state.workflowLockedNodeIds);
 
   const instanceRef = useRef<ReactFlowInstance<StudioFlowNode, StudioCanvasEdge> | null>(null);
   const dragOriginsRef = useRef(new Map<string, { x: number; y: number }>());
@@ -114,6 +120,7 @@ export function StudioCanvas({
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [createMenu, setCreateMenu] = useState<CreateMenuState>(null);
   const [assetsOpen, setAssetsOpen] = useState(false);
+  const [shotsOpen, setShotsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(projectTitle);
   const [reactFlowNodes, setReactFlowNodes] = useState<StudioFlowNode[]>([]);
@@ -132,6 +139,9 @@ export function StudioCanvas({
     editingNodeId,
     interactionMode,
   }), [editingNodeId, interactionMode, nodes, reactFlowNodes, selectedNodeIds]);
+  const selectedCreativeSpecNode = selectedNodeIds.length === 1
+    ? nodes.find((node) => node.id === selectedNodeIds[0] && node.data?.creativeSpec) ?? null
+    : null;
 
   const removeEdge = useCallback((edgeId: string) => {
     deleteEdges([edgeId]);
@@ -510,7 +520,7 @@ export function StudioCanvas({
               position="bottom-left"
               pannable
               zoomable
-              className={`!bottom-16 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)] ${assetsOpen ? "!left-[324px]" : "!left-4"}`}
+              className={`!bottom-16 !rounded-xl !border !border-[var(--pl-border)] !bg-[var(--pl-surface-elevated)] ${shotsOpen ? "!left-[796px]" : assetsOpen ? "!left-[324px]" : "!left-4"}`}
               maskColor="var(--pl-minimap-mask)"
               nodeColor="var(--pl-accent)"
             />
@@ -523,9 +533,17 @@ export function StudioCanvas({
       <BottomLeftControls
         zoom={displayZoom}
         assetsOpen={assetsOpen}
+        shotsOpen={shotsOpen}
         minimapVisible={minimapVisible}
         connectionsVisible={connectionsVisible}
-        onOpenAssets={() => setAssetsOpen(true)}
+        onOpenAssets={() => {
+          setShotsOpen(false);
+          setAssetsOpen(true);
+        }}
+        onOpenShots={() => {
+          setAssetsOpen(false);
+          setShotsOpen(true);
+        }}
         onToggleMinimap={toggleMinimap}
         onToggleConnections={toggleConnections}
         onFit={() => instanceRef.current?.fitView({ padding: 0.2, duration: 220 })}
@@ -544,6 +562,17 @@ export function StudioCanvas({
               : { x: 200, y: 160 };
             setCreateMenu({ screenX: window.innerWidth / 2 - 90, screenY: window.innerHeight - 150, flowX: center.x, flowY: center.y });
           }}
+        />
+      ) : null}
+
+      {selectedCreativeSpecNode ? (
+        <CreativeSpecInspector
+          key={`${selectedCreativeSpecNode.id}:${selectedCreativeSpecNode.updatedAt}`}
+          node={selectedCreativeSpecNode}
+          nodes={nodes}
+          edges={edges}
+          onSave={(data) => updateNodeData(selectedCreativeSpecNode.id, data)}
+          onClose={() => setSelection([])}
         />
       ) : null}
 
@@ -607,6 +636,51 @@ export function StudioCanvas({
         }}
       >
         <CanvasAssetBrowser projectId={projectId} nodes={nodes} onLocateNode={locateNode} />
+      </Drawer>
+
+      <Drawer
+        open={shotsOpen}
+        onClose={() => setShotsOpen(false)}
+        classNames={{ section: "pipeline-asset-drawer" }}
+        title={<span className="text-sm font-medium text-[var(--pl-text-secondary)]">{t.pipeline.shotListTitle}</span>}
+        closable={false}
+        size={760}
+        placement="left"
+        mask={false}
+        footer={(
+          <div className="flex h-full items-center justify-between">
+            <Tooltip title={t.pipeline.shotListClose}>
+              <button
+                type="button"
+                onClick={() => setShotsOpen(false)}
+                aria-label={t.pipeline.shotListClose}
+                className="flex size-9 items-center justify-center rounded-md text-[var(--pl-text-secondary)] transition-colors hover:bg-[var(--pl-surface-hover)] hover:text-[var(--pl-text)] active:translate-y-px focus-visible:outline-2 focus-visible:outline-[var(--pl-accent)]"
+              >
+                <ArrowLeft className="size-5" />
+              </button>
+            </Tooltip>
+            <span className="text-caption tabular-nums text-[var(--pl-text-muted)]">
+              {t.pipeline.shotListCount.replace("{count}", String(nodes.filter((node) => node.data?.creativeSpec?.kind === "shot").length))}
+            </span>
+          </div>
+        )}
+        styles={{
+          section: { background: "var(--pl-surface)", borderRight: "1px solid var(--pl-border)", boxShadow: "none" },
+          header: { minHeight: 48, padding: "8px 16px", background: "var(--pl-surface)", borderBottom: "1px solid var(--pl-border)" },
+          body: { padding: 0, background: "var(--pl-surface)" },
+          footer: { height: 52, padding: "0 12px", background: "var(--pl-surface)", borderTop: "1px solid var(--pl-border)" },
+        }}
+      >
+        <ShotListPanel
+          nodes={nodes}
+          edges={edges}
+          lockedNodeIds={workflowLockedNodeIds}
+          onUpdateNodeData={updateNodeDataBatch}
+          onLocateNode={(nodeId) => {
+            setShotsOpen(false);
+            locateNode(nodeId);
+          }}
+        />
       </Drawer>
 
       <Modal
@@ -686,12 +760,14 @@ function EmptyCanvasActions({ onCreate }: { onCreate: (type: CanvasMediaType, po
     </div>
   );
 }
-function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisible, onOpenAssets, onToggleMinimap, onToggleConnections, onFit, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
+function BottomLeftControls({ zoom, assetsOpen, shotsOpen, minimapVisible, connectionsVisible, onOpenAssets, onOpenShots, onToggleMinimap, onToggleConnections, onFit, onZoomOut, onZoomIn, onZoomChange, onZoomChangeComplete }: {
   zoom: number;
   assetsOpen: boolean;
+  shotsOpen: boolean;
   minimapVisible: boolean;
   connectionsVisible: boolean;
   onOpenAssets: () => void;
+  onOpenShots: () => void;
   onToggleMinimap: () => void;
   onToggleConnections: () => void;
   onFit: () => void;
@@ -703,8 +779,9 @@ function BottomLeftControls({ zoom, assetsOpen, minimapVisible, connectionsVisib
   const { t } = useI18n();
   const zoomPercentage = Math.round(zoom * 100);
   return (
-    <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${assetsOpen ? "translate-x-[284px]" : "translate-x-0"}`}>
-      {!assetsOpen ? <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} /> : null}
+    <div className={`absolute bottom-4 left-4 z-30 flex h-10 items-center gap-0.5 rounded-xl border border-[var(--pl-border)] bg-[var(--pl-surface-elevated)]/96 p-1 shadow-[var(--pl-shadow-card)] backdrop-blur transition-transform duration-200 ease-out motion-reduce:transition-none ${shotsOpen ? "translate-x-[756px]" : assetsOpen ? "translate-x-[284px]" : "translate-x-0"}`}>
+      {!assetsOpen && !shotsOpen ? <ToolButton title={t.pipeline.canvasAssetManagement} icon={<PanelLeft className="size-4" />} label={t.pipeline.canvasAssetManagement} onClick={onOpenAssets} /> : null}
+      {!assetsOpen && !shotsOpen ? <ToolButton title={t.pipeline.shotListTitle} icon={<List className="size-4" />} label={t.pipeline.shotListTitle} onClick={onOpenShots} /> : null}
       <ToolButton title={minimapVisible ? t.pipeline.canvasHideMinimap : t.pipeline.canvasShowMinimap} icon={<MapPinned className="size-4" />} active={minimapVisible} onClick={onToggleMinimap} />
       <ToolButton title={connectionsVisible ? t.pipeline.canvasHideConnections : t.pipeline.canvasShowConnections} icon={<LineSquiggle className="size-4" />} active={connectionsVisible} onClick={onToggleConnections} />
       <ToolButton title={t.pipeline.canvasFit} icon={<Minimize2 className="size-4" />} onClick={onFit} />

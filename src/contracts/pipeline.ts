@@ -72,6 +72,53 @@ export const MAX_CANVAS_AUDIO_UPLOAD_BYTES = 10 * 1024 * 1024;
 export type CanvasResourceSourceType = "canvas-node" | "asset";
 export type CanvasResourceRole = "reference" | "first-frame" | "last-frame";
 
+export type CanvasCreativeSpec = CanvasScriptSpec | CanvasAssetSpec | CanvasShotSpec;
+
+export interface CanvasScriptSpec {
+  schemaVersion: 1;
+  kind: "script";
+  level: "concept" | "episode" | "scene" | "segment";
+  key: string;
+  title: string;
+  objective: string;
+  estimatedDurationSeconds?: number;
+  characters: string[];
+  sourceNodeIds: string[];
+}
+
+export interface CanvasAssetSpec {
+  schemaVersion: 1;
+  kind: "asset";
+  assetType: "character" | "scene" | "prop";
+  identityKey: string;
+  canonicalName: string;
+  aliases: string[];
+  visualDescription: string;
+  continuityFacts: string[];
+  sourceNodeIds: string[];
+}
+
+export interface CanvasShotSpec {
+  schemaVersion: 1;
+  kind: "shot";
+  shotKey: string;
+  episodeKey?: string;
+  sceneKey?: string;
+  order: number;
+  durationSeconds: number;
+  purpose: string;
+  visual: string;
+  subjects: Array<{ identityKey: string; action: string; expression?: string }>;
+  dialogue?: { speaker: string; line: string; emotion?: string; delivery?: string };
+  shotSize: string;
+  cameraMovement: string;
+  blocking: string;
+  lighting: string;
+  audio: { ambience?: string; sfx?: string; music?: string };
+  transition?: string;
+  sourceNodeIds: string[];
+}
+
 export interface CanvasWorkspaceFileRef {
   relativePath: string;
   contentType: string;
@@ -210,6 +257,7 @@ export interface CanvasNodeData {
   videoMetadata?: CanvasVideoMetadata;
   videoSelection?: CanvasVideoSelection;
   generationProvenance?: CanvasGenerationProvenance;
+  creativeSpec?: CanvasCreativeSpec;
   group?: {
     id: string;
     name: string;

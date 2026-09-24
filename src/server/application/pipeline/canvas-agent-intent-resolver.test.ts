@@ -37,6 +37,28 @@ describe("resolvePolicy", () => {
     });
   });
 
+  it("keeps an explicit Prompt and preflight execution request at canvas scope", () => {
+    expect(resolvePolicy(
+      decision("review"),
+      "修复当前项目，然后调用 Prompt Specialist 创建视频节点并执行 canvas_prepare_generation 预检",
+      true,
+    )).toMatchObject({
+      requestedStage: "canvas",
+      effectiveStage: "canvas",
+      allowedStages: ["discuss", "script", "storyboard", "canvas", "review"],
+    });
+  });
+
+  it.each([
+    "统一阿宁、小宁和宁宁为同一角色",
+    "更新主角冬季造型但保留 Continuity Bible 中的伤疤",
+  ])("keeps asset work in canvas scope: %s", (message) => {
+    expect(resolvePolicy(decision("discuss"), message, true)).toMatchObject({
+      requestedStage: "canvas",
+      effectiveStage: "canvas",
+    });
+  });
+
   it("stops at a prepared canvas regardless of the legacy automatic generation setting", () => {
     expect(resolvePolicy(decision("generate"), "做成完整视频", false)).toMatchObject({
       requestedStage: "canvas",
@@ -219,6 +241,16 @@ describe("CanvasAgentIntentResolver", () => {
     });
     expect(context).toContain("Do not call any Canvas tool");
     expect(context).toContain("Reply with the supplied question verbatim");
+  });
+
+  it("instructs the Manager to batch multi-episode work without retrying the same range", () => {
+    const context = canvasAgentTurnPolicyContext({
+      type: "resolved", objective: "制作三集短剧", requestedStage: "canvas", effectiveStage: "canvas",
+      allowedStages: ["discuss", "script", "storyboard", "canvas", "review"], generationPermission: "not-requested", confidence: "high",
+    });
+    expect(context).toContain("run Storyboard and Prompt separately for each episodeKey");
+    expect(context).toContain("not retry the same range");
+    expect(context).toContain("canvas_prepare_generation");
   });
 });
 

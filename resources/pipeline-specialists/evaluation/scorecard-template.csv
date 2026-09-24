@@ -1,0 +1,1 @@
+run_id,fixture_id,profile_versions,model,route_correct,structure_valid,repair_used,plan_valid,duplicate_assets,preflight_passed,out_of_scope_mutations,generation_runs_created,script_score,asset_score,storyboard_score,prompt_score,canvas_score,scope_score,reviewer,notes

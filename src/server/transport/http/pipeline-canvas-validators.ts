@@ -291,6 +291,17 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
     }
   }
   const params = value.params === undefined ? undefined : parseClientGenerationParams(value.params, index);
+  const creativeSpec = value.creativeSpec === undefined
+    ? undefined
+    : parseCreativeSpec(value.creativeSpec, `mutations[${index}].node.data.creativeSpec`);
+  let group: CanvasNodeData["group"];
+  if (value.group !== undefined) {
+    if (!isRecord(value.group) || !validId(value.group.id)
+      || typeof value.group.name !== "string" || !value.group.name.trim() || value.group.name.length > 120) {
+      throw validationError(`mutations[${index}].node.data.group is invalid`);
+    }
+    group = { id: value.group.id as string, name: value.group.name };
+  }
   // 任务状态、文件和产物引用由服务端生命周期维护；传输层只输出客户端可编辑字段。
   return {
     type: value.type as CanvasNodeData["type"],
@@ -300,8 +311,98 @@ function parseNodeData(value: unknown, index: number): CanvasNodeData {
     content: value.content as string[] | undefined,
     textDocument: value.textDocument as CanvasNodeData["textDocument"],
     params,
+    creativeSpec,
+    group,
     audioMetadata: value.audioMetadata as CanvasNodeData["audioMetadata"],
     videoMetadata: value.videoMetadata as CanvasNodeData["videoMetadata"],
+  };
+}
+
+function parseCreativeSpec(value: unknown, path: string): NonNullable<CanvasNodeData["creativeSpec"]> {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !["script", "asset", "shot"].includes(String(value.kind))) {
+    throw validationError(`${path} is invalid`);
+  }
+  const strings = (candidate: unknown, field: string, limit = 40) => {
+    if (!Array.isArray(candidate) || candidate.length > limit
+      || candidate.some((item) => typeof item !== "string" || item.length > 2_000)) {
+      throw validationError(`${path}.${field} is invalid`);
+    }
+    return candidate as string[];
+  };
+  const required = (candidate: unknown, field: string, max = 20_000) => {
+    if (typeof candidate !== "string" || !candidate.trim() || candidate.length > max) {
+      throw validationError(`${path}.${field} is invalid`);
+    }
+    return candidate;
+  };
+  const optional = (candidate: unknown, field: string, max = 2_000) => {
+    if (candidate === undefined) return undefined;
+    if (typeof candidate !== "string" || candidate.length > max) throw validationError(`${path}.${field} is invalid`);
+    return candidate;
+  };
+  if (value.kind === "script") {
+    if (!["concept", "episode", "scene", "segment"].includes(String(value.level))) {
+      throw validationError(`${path}.level is invalid`);
+    }
+    if (value.estimatedDurationSeconds !== undefined
+      && (!Number.isFinite(value.estimatedDurationSeconds) || Number(value.estimatedDurationSeconds) <= 0)) {
+      throw validationError(`${path}.estimatedDurationSeconds is invalid`);
+    }
+    return {
+      schemaVersion: 1, kind: "script", level: value.level as "concept" | "episode" | "scene" | "segment",
+      key: required(value.key, "key", 240), title: required(value.title, "title", 500),
+      objective: required(value.objective, "objective"),
+      estimatedDurationSeconds: value.estimatedDurationSeconds as number | undefined,
+      characters: strings(value.characters, "characters"), sourceNodeIds: strings(value.sourceNodeIds, "sourceNodeIds"),
+    };
+  }
+  if (value.kind === "asset") {
+    if (!["character", "scene", "prop"].includes(String(value.assetType))) {
+      throw validationError(`${path}.assetType is invalid`);
+    }
+    return {
+      schemaVersion: 1, kind: "asset", assetType: value.assetType as "character" | "scene" | "prop",
+      identityKey: required(value.identityKey, "identityKey", 240),
+      canonicalName: required(value.canonicalName, "canonicalName", 500),
+      aliases: strings(value.aliases, "aliases"), visualDescription: required(value.visualDescription, "visualDescription"),
+      continuityFacts: strings(value.continuityFacts, "continuityFacts"), sourceNodeIds: strings(value.sourceNodeIds, "sourceNodeIds"),
+    };
+  }
+  if (!Number.isInteger(value.order) || Number(value.order) < 0
+    || !Number.isFinite(value.durationSeconds) || Number(value.durationSeconds) <= 0 || Number(value.durationSeconds) > 3_600
+    || !Array.isArray(value.subjects) || value.subjects.length > 20 || !isRecord(value.audio)) {
+    throw validationError(`${path} is invalid`);
+  }
+  const subjects = value.subjects.map((subject, subjectIndex) => {
+    if (!isRecord(subject)) throw validationError(`${path}.subjects[${subjectIndex}] is invalid`);
+    return {
+      identityKey: required(subject.identityKey, `subjects[${subjectIndex}].identityKey`, 240),
+      action: required(subject.action, `subjects[${subjectIndex}].action`, 2_000),
+      expression: optional(subject.expression, `subjects[${subjectIndex}].expression`),
+    };
+  });
+  let dialogue: Extract<NonNullable<CanvasNodeData["creativeSpec"]>, { kind: "shot" }>["dialogue"];
+  if (value.dialogue !== undefined) {
+    if (!isRecord(value.dialogue)) throw validationError(`${path}.dialogue is invalid`);
+    dialogue = {
+      speaker: required(value.dialogue.speaker, "dialogue.speaker", 500),
+      line: required(value.dialogue.line, "dialogue.line", 10_000),
+      emotion: optional(value.dialogue.emotion, "dialogue.emotion"),
+      delivery: optional(value.dialogue.delivery, "dialogue.delivery"),
+    };
+  }
+  return {
+    schemaVersion: 1, kind: "shot", shotKey: required(value.shotKey, "shotKey", 240),
+    episodeKey: optional(value.episodeKey, "episodeKey", 240), sceneKey: optional(value.sceneKey, "sceneKey", 240),
+    order: Number(value.order), durationSeconds: Number(value.durationSeconds), purpose: required(value.purpose, "purpose"),
+    visual: required(value.visual, "visual"), subjects, dialogue,
+    shotSize: required(value.shotSize, "shotSize", 500), cameraMovement: required(value.cameraMovement, "cameraMovement"),
+    blocking: required(value.blocking, "blocking"), lighting: required(value.lighting, "lighting"),
+    audio: {
+      ambience: optional(value.audio.ambience, "audio.ambience"),
+      sfx: optional(value.audio.sfx, "audio.sfx"), music: optional(value.audio.music, "audio.music"),
+    },
+    transition: optional(value.transition, "transition"), sourceNodeIds: strings(value.sourceNodeIds, "sourceNodeIds"),
   };
 }
 

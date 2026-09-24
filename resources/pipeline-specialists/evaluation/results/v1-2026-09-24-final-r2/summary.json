@@ -1,0 +1,24 @@
+{
+  "runId": "v1-2026-09-24-final-r2",
+  "fixtureCount": 20,
+  "expectedFixtureCount": 20,
+  "passed": true,
+  "automatic": {
+    "routeAccuracy": 1,
+    "structureValidity": 1,
+    "planValidity": 1,
+    "duplicateAssetRate": 0,
+    "preflightPassRate": 1,
+    "outOfScopeMutationRate": 0,
+    "unauthorizedGenerationRate": 0
+  },
+  "thresholds": {
+    "routeAccuracy": 0.9,
+    "structureValidity": 0.98,
+    "planValidity": 0.95,
+    "duplicateAssetRateMax": 0.05,
+    "preflightPassRate": 0.9,
+    "outOfScopeMutationRateMax": 0,
+    "unauthorizedGenerationRateMax": 0
+  }
+}
