@@ -108,7 +108,7 @@ describe("PipelineAgentToolProvider", () => {
       details: { kind: "storyboard", status: "running" },
     }));
     await expect(tool.execute({ toolCallId: "tool-2", input: { ...first, objective: "重试第一集" } }))
-      .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-range-already-attempted" } });
+      .resolves.toMatchObject({ details: { planId: "plan-1", status: "draft" } });
     await expect(tool.execute({ toolCallId: "tool-3", input: { ...first, episodeKey: "ep-2" } })).resolves.toBeDefined();
     repository.getCanvasRevision = vi.fn().mockResolvedValue(5);
     await expect(tool.execute({ toolCallId: "tool-4", input: { ...first, objective: "应用上游修订后重跑第一集" } })).resolves.toBeDefined();

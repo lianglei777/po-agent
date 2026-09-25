@@ -2913,6 +2913,8 @@ Specialist 模型请求按 Profile 设置独立超时。用户停止、请求超
 - `pipeline_run_storyboard_specialist`：把剧本规格转换为含时长、主体、对白、景别、运镜、走位、灯光和声音的镜头规格。
 - `pipeline_run_prompt_specialist`：读取当前已启用 Route Schema，把资产或镜头规格转换成媒体节点的 prompt、参数与素材绑定。
 
+同一 Agent 回合中，同画布 revision、同集及相同源/目标节点范围的成功 Specialist 调用再次出现时，返回原结果及原 Plan ID；失败调用仍拒绝同范围重试。局部修改若未覆盖所有指定目标，服务端只进行一次定向修复，修复后仍缺失目标则返回 `PIPELINE_SPECIALIST_OUTPUT_INVALID`。
+
 每个工具最多引用 40 个源节点和目标节点。模型结果会先通过专用结构校验，再由确定性编译器生成 Canvas Agent Plan；工具本身不直接写画布。无效输出只修复一次。存在身份歧义或其他阻塞警告时返回 `planId: null`，不会留下部分节点。
 
 画布写入通过以下项目作用域工具完成：

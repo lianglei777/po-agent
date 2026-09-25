@@ -1,11 +1,13 @@
 import type { CanvasAgentStage, CanvasAgentTurnIntent } from "@/contracts/pipeline-agent";
 import { AppError } from "@/server/domain/app-error";
+import type { PipelineSpecialistPlanResult } from "@/server/domain/pipeline-specialist";
 
 interface ActiveCanvasAgentTurnPolicy {
   turnId: string;
   intent: CanvasAgentTurnIntent;
   userMessage: string;
   specialistCallKeys: Set<string>;
+  successfulSpecialistCalls: Map<string, PipelineSpecialistPlanResult>;
   authorizedNodeIds: Set<string>;
 }
 
@@ -25,6 +27,7 @@ export class CanvasAgentTurnPolicyRegistry {
       intent,
       userMessage,
       specialistCallKeys: new Set(),
+      successfulSpecialistCalls: new Map(),
       authorizedNodeIds: new Set(intent.scope?.nodeIds ?? []),
     });
   }
@@ -67,12 +70,14 @@ export class CanvasAgentTurnPolicyRegistry {
     return intent;
   }
 
-  claimSpecialistCall(sessionId: string, callKey: string): void {
+  claimSpecialistCall(sessionId: string, callKey: string): PipelineSpecialistPlanResult | null {
     const active = this.active.get(sessionId);
     if (!active) {
       throw new AppError("PIPELINE_AGENT_ACTION_NOT_ALLOWED", "No active Pipeline Agent turn can call a Specialist", 403);
     }
     if (active.specialistCallKeys.has(callKey)) {
+      const previous = active.successfulSpecialistCalls.get(callKey);
+      if (previous) return previous;
       throw new AppError(
         "PIPELINE_AGENT_ACTION_NOT_ALLOWED",
         "The same Specialist range was already attempted in this turn; report the original result instead of retrying",
@@ -81,6 +86,10 @@ export class CanvasAgentTurnPolicyRegistry {
       );
     }
     active.specialistCallKeys.add(callKey);
+    return null;
   }
 
+  recordSpecialistSuccess(sessionId: string, callKey: string, result: PipelineSpecialistPlanResult): void {
+    this.active.get(sessionId)?.successfulSpecialistCalls.set(callKey, result);
+  }
 }

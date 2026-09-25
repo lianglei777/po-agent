@@ -118,13 +118,17 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
         }
         const canvasRevision = await this.repo.getCanvasRevision(projectId);
         // 上游计划应用后允许 Specialist 基于新事实再运行；同一画布版本仍阻止模型空转和重复计费。
-        this.turnPolicies.claimSpecialistCall(sessionId, specialistCallKey(kind, request, canvasRevision));
-        // 同一范围由 claimSpecialistCall 防重复；其他集或场景即使前一批失败也可继续交付。
-        const result = await this.specialistService!.run(kind, request, signal);
+        const callKey = specialistCallKey(kind, request, canvasRevision);
+        const previous = this.turnPolicies.claimSpecialistCall(sessionId, callKey);
+        // 同一画布版本的成功结果复用原 Plan，避免 Agent 重复请求模型；失败范围仍被拦截。
+        const result = previous ?? await this.specialistService!.run(kind, request, signal);
+        if (!previous) this.turnPolicies.recordSpecialistSuccess(sessionId, callKey, result);
         const warningText = result.warnings.length
           ? ` 警告：${result.warnings.map((warning) => warning.message).join("；")}`
           : "";
-        const text = result.planId
+        const text = previous
+          ? `${definition.completed} 当前范围在同一画布版本已处理；复用原结果${result.planId ? `及计划 ${result.planId}` : ""}。请继续应用尚未应用的计划或进入下一阶段。`
+          : result.planId
           ? `${definition.completed} 已创建画布计划 ${result.planId}，共 ${result.operationCount} 项操作。下一步调用 canvas_apply_plan。${warningText}`
           : `${definition.completed} 未创建画布计划。${warningText || "当前画布无需修改。"}`;
         return { content: [{ type: "text", text }], details: result };

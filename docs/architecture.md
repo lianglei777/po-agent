@@ -246,6 +246,8 @@ Canvas Agent 是用户唯一面对的 Manager。剧本、资产、分镜和生�
 
 Specialist Tool 在模型执行开始时发送结构化进度更新。完整画布流程以 `canvas_prepare_generation` 为确定性终点；该工具的结构化结果和文字摘要已经构成交付答复，因此返回终止提示，Agent Runtime 不再为同一回合追加一次模型收尾请求。这样可以避免大画布上下文在已完成后继续消耗时间和 token。
 
+同一 Agent 回合内，Specialist 请求以类型、画布 revision、集标识和源/目标节点集合识别范围。成功请求的同范围重复调用复用原结构化结果和 Plan，不重复消耗模型；失败请求仍阻止原范围重试，其它范围可继续执行。局部修改的目标覆盖也在 application 层校验；模型返回可解析结构但遗漏目标时，最多定向修复一次，未补齐仍拒绝创建 Plan。
+
 Canvas Agent 不持有创建 Generation Run 或 Workflow Run 的工具。节点与工作流生成必须由用户在画布 UI 显式触发，执行时继续复用既有全量预检、幂等键、Worker 和持久化状态机。项目设置中的旧 `allowAgentGeneration` 字段只为合同和数据兼容保留，不再影响 Canvas Agent 行为。
 
 结果评审继续复用 Canvas 素材分析和持久化 Generation Run，不建立第二套版本数据。评审工具组装最近 Run 摘要和由画布边计算的下游影响范围；对本地可读取的成功产物，在一次最多八个分析预算中优先当前选择并补充近期历史版本，缓存仍按原节点和媒体指纹复用。建议与最终选择保持分离。局部调整仍通过语义 Plan 修改提示词、Route、参数或引用，用户确认画布状态后手动触发局部重跑。成功子图保存为现有 `CanvasWorkflow`，不引入 Agent 专属模板格式。
