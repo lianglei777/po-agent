@@ -86,11 +86,24 @@ export class PipelineSpecialistService {
         else draft = storyboardFallbackDraft(input);
       }
     }
+    let scopedDraft: PipelineSpecialistDraft;
+    try {
+      scopedDraft = constrainDraftToRequestedTargets(draft, input.targetNodeIds);
+    } catch (cause) {
+      if (!(cause instanceof AppError) || cause.code !== "PIPELINE_SPECIALIST_OUTPUT_INVALID" || repairUsed) throw cause;
+      // 完整 JSON 也可能漏掉局部修改目标；只允许一次定向修复，仍由同一覆盖校验把关。
+      repairUsed = true;
+      const coverageHint = `Requested target node IDs (cover each exactly once): ${input.targetNodeIds.join(", ")}. ${cause.message}`;
+      const repaired = await this.runtime.run({
+        profile, context: `${context}\n${coverageHint}`, outputContract: SPECIALIST_OUTPUT_CONTRACTS[kind], model,
+        repairResponse: raw, signal,
+      });
+      scopedDraft = constrainDraftToRequestedTargets(parseSpecialistDraft(kind, repaired), input.targetNodeIds);
+    }
     const [nodes, edges] = await Promise.all([
       this.repository.listCanvasNodes(input.projectId),
       this.repository.listCanvasEdges(input.projectId),
     ]);
-    const scopedDraft = constrainDraftToRequestedTargets(draft, input.targetNodeIds);
     const routeNormalizedDraft = scopedDraft.kind === "prompt"
       ? normalizePromptRoutes(ensurePromptConfigurations(scopedDraft, input, routes, nodes), routes, nodes)
       : scopedDraft.kind === "asset" && !scopedDraft.assets.length

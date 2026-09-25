@@ -91,6 +91,47 @@ describe("PipelineSpecialistService", () => {
       code: "PIPELINE_SPECIALIST_OUTPUT_INVALID",
       details: { invalidTargetNodeIds: [second.id] },
     });
+    expect(runtime.run).toHaveBeenCalledTimes(2);
+    expect(runtime.run).toHaveBeenLastCalledWith(expect.objectContaining({
+      context: expect.stringContaining(second.id),
+      repairResponse: expect.any(String),
+    }));
+  });
+
+  it("repairs target coverage once before compiling a local storyboard revision", async () => {
+    const first = scriptNode("shot-2", "镜头 2");
+    const second = scriptNode("shot-3", "镜头 3");
+    const shot = (targetNodeId: string, order: number) => ({
+      targetNodeId, shotKey: `ep01-s0${order + 1}`, order, durationSeconds: 3,
+      purpose: "完成动作", visual: "主体完成动作", subjects: [], shotSize: "中景",
+      cameraMovement: "固定", blocking: "主体居中", lighting: "自然光", audio: {},
+    });
+    const response = (shots: ReturnType<typeof shot>[]) => JSON.stringify({
+      kind: "storyboard", episodeKey: "ep01", sourceNodeIds: [first.id, second.id],
+      totalDurationSeconds: shots.length * 3, summary: "局部调整", warnings: [], shots,
+    });
+    const runtime = { run: vi.fn()
+      .mockResolvedValueOnce(response([shot(first.id, 1)]))
+      .mockResolvedValueOnce(response([shot(first.id, 1), shot(second.id, 2)])) } as unknown as PipelineSpecialistRuntime;
+    const plans = { create: vi.fn(async (input) => ({
+      id: "plan-repaired", status: "draft", summary: input.summary, operations: input.operations,
+    })) } as unknown as CanvasAgentPlanService;
+    const service = new PipelineSpecialistService(
+      repositoryStub([first, second]), profileSource(), runtime,
+      { assemble: vi.fn().mockResolvedValue("trusted-context") } as unknown as PipelineSpecialistContextAssembler,
+      plans, {} as CanvasStudioService,
+    );
+
+    const result = await service.run("storyboard", {
+      ...request(), sourceNodeIds: [first.id, second.id], targetNodeIds: [first.id, second.id],
+    });
+
+    expect(result).toMatchObject({ executionMode: "repaired", status: "draft", planId: "plan-repaired" });
+    const operations = vi.mocked(plans.create).mock.calls[0]?.[0].operations ?? [];
+    expect(operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "node.update", nodeId: first.id }),
+      expect.objectContaining({ type: "node.update", nodeId: second.id }),
+    ]));
   });
 
   it("keeps ambiguous mentions non-blocking while creating a shared asset baseline", async () => {
