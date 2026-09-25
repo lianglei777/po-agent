@@ -6,10 +6,10 @@ import type { PipelineSpecialistProfileSource } from "@/server/ports/pipeline-sp
 
 const SETTINGS: Record<PipelineSpecialistKind, Pick<PipelineSpecialistProfile,
   "version" | "maxInputCharacters" | "maxOutputTokens" | "temperature" | "requestTimeoutMs">> = {
-  script: { version: "1.0.0", maxInputCharacters: 48_000, maxOutputTokens: 4_000, temperature: 0.6, requestTimeoutMs: 120_000 },
+  script: { version: "1.1.0", maxInputCharacters: 48_000, maxOutputTokens: 8_000, temperature: 0.6, requestTimeoutMs: 300_000 },
   asset: { version: "1.1.0", maxInputCharacters: 48_000, maxOutputTokens: 4_000, temperature: 0.2, requestTimeoutMs: 120_000 },
-  storyboard: { version: "1.1.0", maxInputCharacters: 56_000, maxOutputTokens: 6_000, temperature: 0.3, requestTimeoutMs: 180_000 },
-  prompt: { version: "1.5.0", maxInputCharacters: 56_000, maxOutputTokens: 6_000, temperature: 0.1, requestTimeoutMs: 180_000 },
+  storyboard: { version: "1.2.0", maxInputCharacters: 56_000, maxOutputTokens: 12_000, temperature: 0.3, requestTimeoutMs: 300_000 },
+  prompt: { version: "1.6.0", maxInputCharacters: 56_000, maxOutputTokens: 12_000, temperature: 0.1, requestTimeoutMs: 300_000 },
 };
 
 export class BundledPipelineSpecialistProfileSource implements PipelineSpecialistProfileSource {

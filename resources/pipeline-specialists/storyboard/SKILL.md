@@ -9,3 +9,4 @@
 7. Avoid splitting continuous action into shots that do not add narrative or visual value.
 8. Return shots in ascending order. Use unique shotKey and order values; preserve intentional gaps only for a bounded partial edit.
 9. Before returning, verify plausible total duration, valid identity references, readable dialogue timing, adjacent-shot continuity, and no route or provider syntax.
+10. Keep each field concise enough to finish the complete JSON object. Cover every requested target exactly once and close every array and object before returning.

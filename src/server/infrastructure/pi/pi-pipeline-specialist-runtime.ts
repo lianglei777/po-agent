@@ -6,7 +6,7 @@ import type { PipelineSpecialistRuntime } from "@/server/ports/pipeline-speciali
 export class PiPipelineSpecialistRuntime implements PipelineSpecialistRuntime {
   constructor(
     private readonly modelRuntime: Promise<ModelRuntime>,
-    private readonly requestTimeoutMs = 180_000,
+    private readonly requestTimeoutMs = 300_000,
   ) {}
 
   async run(input: Parameters<PipelineSpecialistRuntime["run"]>[0]): Promise<string> {

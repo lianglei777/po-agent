@@ -8,3 +8,4 @@
 6. Reuse supplied character names consistently. Do not invent duplicate aliases unless the story requires them.
 7. Estimate duration from spoken content and visible action. Split content into scenes with one clear dramatic purpose each.
 8. Before returning, verify that every scene advances the objective, names are consistent, duration is plausible, and no media generation instruction appears.
+9. Keep scene content concise enough to finish the complete JSON object. Include every required field and close every array and object before returning.

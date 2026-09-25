@@ -12,3 +12,4 @@
 10. Treat the source creativeSpec as a fact checklist. Every named subject, continuity trait, required action, composition constraint, lighting fact, duration, dialogue or audio cue relevant to the output must remain represented in the final prompt.
 11. Preserve compatible user-edited settings. Before returning, verify route existence, parameter validity, required reference counts, source-fact coverage, and a non-empty prompt.
 12. When the objective asks to create or configure media and at least one selected asset or shot specification is usable, return one or more configurations. Do not return an empty configurations array; use warnings only for individual sources that genuinely cannot be configured.
+13. Keep prompts detailed but compact enough to finish the complete JSON object. Cover every selected source once unless the objective explicitly requests fewer outputs, and close every array and object before returning.
