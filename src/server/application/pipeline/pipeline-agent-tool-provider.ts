@@ -118,16 +118,9 @@ export class PipelineAgentToolProvider implements AgentToolProvider {
         }
         const canvasRevision = await this.repo.getCanvasRevision(projectId);
         // 上游计划应用后允许 Specialist 基于新事实再运行；同一画布版本仍阻止模型空转和重复计费。
-        this.turnPolicies.claimSpecialistCall(sessionId, kind, specialistCallKey(kind, request, canvasRevision));
-        let result;
-        try {
-          result = await this.specialistService!.run(kind, request, signal);
-        } catch (cause) {
-          if (!(cause instanceof AppError) || cause.code !== "PIPELINE_SPECIALIST_BATCH_REQUIRED") {
-            this.turnPolicies.markSpecialistFailure(sessionId, kind);
-          }
-          throw cause;
-        }
+        this.turnPolicies.claimSpecialistCall(sessionId, specialistCallKey(kind, request, canvasRevision));
+        // 同一范围由 claimSpecialistCall 防重复；其他集或场景即使前一批失败也可继续交付。
+        const result = await this.specialistService!.run(kind, request, signal);
         const warningText = result.warnings.length
           ? ` 警告：${result.warnings.map((warning) => warning.message).join("；")}`
           : "";

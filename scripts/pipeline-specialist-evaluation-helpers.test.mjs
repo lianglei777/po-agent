@@ -50,6 +50,9 @@ test("expected bounded batching signals are not treated as delivery failures", (
   assert.equal(isExpectedBatchSplitError(
     "The Specialist result exceeds the safe plan size; split it by episode or scene",
   ), true);
+  assert.equal(isExpectedBatchSplitError(
+    "The generation workflow exceeds the 30-node limit",
+  ), true);
   assert.equal(isExpectedBatchSplitError("The Specialist runtime failed"), false);
 });
 

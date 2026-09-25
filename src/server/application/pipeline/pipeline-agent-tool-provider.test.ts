@@ -115,7 +115,7 @@ describe("PipelineAgentToolProvider", () => {
     expect(specialist.run).toHaveBeenCalledTimes(3);
   });
 
-  it("blocks a Specialist after its first non-batch failure in the same turn", async () => {
+  it("blocks the failed range but permits another Specialist range in the same turn", async () => {
     const policies = new CanvasAgentTurnPolicyRegistry();
     policies.begin("pipeline-session", "turn-1", {
       type: "resolved", objective: "提取资产", requestedStage: "canvas", effectiveStage: "canvas",
@@ -133,9 +133,11 @@ describe("PipelineAgentToolProvider", () => {
       .find((candidate) => candidate.name === "pipeline_run_asset_specialist")!;
 
     await expect(tool.execute({ toolCallId: "tool-1", input: { objective: "提取资产" } })).rejects.toThrow("malformed output");
-    await expect(tool.execute({ toolCallId: "tool-2", input: { objective: "改为从节点提取", sourceNodeIds: ["script-1"] } }))
-      .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-already-failed" } });
-    expect(specialist.run).toHaveBeenCalledTimes(1);
+    await expect(tool.execute({ toolCallId: "tool-2", input: { objective: "重试相同范围" } }))
+      .rejects.toMatchObject({ code: "PIPELINE_AGENT_ACTION_NOT_ALLOWED", details: { reason: "specialist-range-already-attempted" } });
+    await expect(tool.execute({ toolCallId: "tool-3", input: { objective: "改为从节点提取", sourceNodeIds: ["script-1"] } }))
+      .rejects.toThrow("malformed output");
+    expect(specialist.run).toHaveBeenCalledTimes(2);
   });
 
   it("repairs a unique one-character source node ID typo before running a Specialist", async () => {

@@ -6,7 +6,6 @@ interface ActiveCanvasAgentTurnPolicy {
   intent: CanvasAgentTurnIntent;
   userMessage: string;
   specialistCallKeys: Set<string>;
-  failedSpecialists: Set<string>;
   authorizedNodeIds: Set<string>;
 }
 
@@ -26,7 +25,6 @@ export class CanvasAgentTurnPolicyRegistry {
       intent,
       userMessage,
       specialistCallKeys: new Set(),
-      failedSpecialists: new Set(),
       authorizedNodeIds: new Set(intent.scope?.nodeIds ?? []),
     });
   }
@@ -69,18 +67,10 @@ export class CanvasAgentTurnPolicyRegistry {
     return intent;
   }
 
-  claimSpecialistCall(sessionId: string, specialist: string, callKey: string): void {
+  claimSpecialistCall(sessionId: string, callKey: string): void {
     const active = this.active.get(sessionId);
     if (!active) {
       throw new AppError("PIPELINE_AGENT_ACTION_NOT_ALLOWED", "No active Pipeline Agent turn can call a Specialist", 403);
-    }
-    if (active.failedSpecialists.has(specialist)) {
-      throw new AppError(
-        "PIPELINE_AGENT_ACTION_NOT_ALLOWED",
-        "This Specialist already failed in the current turn; preserve completed work and report the original error",
-        409,
-        { reason: "specialist-already-failed", specialist },
-      );
     }
     if (active.specialistCallKeys.has(callKey)) {
       throw new AppError(
@@ -93,7 +83,4 @@ export class CanvasAgentTurnPolicyRegistry {
     active.specialistCallKeys.add(callKey);
   }
 
-  markSpecialistFailure(sessionId: string, specialist: string): void {
-    this.active.get(sessionId)?.failedSpecialists.add(specialist);
-  }
 }

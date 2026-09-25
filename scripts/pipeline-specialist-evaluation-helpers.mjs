@@ -18,7 +18,7 @@ export function evaluationWaitExpiry({ startedAt, lastProgressAt, now, idleTimeo
 }
 
 export function isExpectedBatchSplitError(text) {
-  return /(input is too large|result exceeds the safe plan size); split (?:it|the request) by episode or scene/i.test(text);
+  return /(input is too large|result exceeds the safe plan size); split (?:it|the request) by episode or scene|the generation workflow exceeds the 30-node limit/i.test(text);
 }
 
 export function evaluationSessionIsStreaming(session) {
