@@ -27,13 +27,16 @@
 ```powershell
 $env:PIPELINE_EVAL_RUN_ID='v1-YYYY-MM-DD-model'
 $env:PIPELINE_EVAL_CONCURRENCY='3'
-$env:PIPELINE_EVAL_TIMEOUT_MS='1200000'
+$env:PIPELINE_EVAL_IDLE_TIMEOUT_MS='360000'
+$env:PIPELINE_EVAL_HARD_TIMEOUT_MS='3600000'
 npm run eval:pipeline-specialists
 ```
 
+评估器每 5 秒读取一次落盘会话。`PIPELINE_EVAL_IDLE_TIMEOUT_MS` 限制连续无落盘进展的时长，默认 6 分钟；每新增或更新一条消息都会重新计时。`PIPELINE_EVAL_HARD_TIMEOUT_MS` 是单样例绝对上限，默认 60 分钟。旧的 `PIPELINE_EVAL_TIMEOUT_MS` 仍可作为绝对上限使用，但建议新运行使用含义更明确的新变量。可通过 `PIPELINE_EVAL_POLL_INTERVAL_MS` 调整轮询间隔。
+
 开发过程可用 `PIPELINE_EVAL_FIXTURES='video-03,route-01'` 只运行指定样例。局部运行写入 `partial-summary.json` 和 `partial-scorecard.csv`，不会覆盖同一 Run 下的正式验收产物。正式验收不得设置该变量，必须得到 20 个样例的 `summary.json`、逐例 JSON 与 `scorecard.csv`。运行期文件位于被 Git 忽略的 `.pipeline-eval/runs/<run-id>/`；正式发布时仅把去除项目数据库和会话内容后的汇总、评分表与验收说明复制到 `evaluation/results/<run-id>/`。
 
-续跑时设置 `PIPELINE_EVAL_RESUME=1`，评估器只复用状态为 `passed` 的结果。若 Agent 在评估等待上限后完成，可在只选中该单个 fixture 时设置 `PIPELINE_EVAL_RECOVER_SESSION_ID=<session-id>`，从已结束的落盘会话和对应画布只读恢复证据；仍在 streaming 的会话会被拒绝。
+续跑时设置 `PIPELINE_EVAL_RESUME=1`，评估器只复用状态为 `passed` 的结果。失败结果会保留 `projectId` 和 `sessionId`。若 Agent 在评估等待上限后完成，可在只选中该单个 fixture 时设置 `PIPELINE_EVAL_RECOVER_SESSION_ID=<session-id>`，从已结束的落盘会话和对应画布只读恢复证据；仍在 streaming 的会话会被拒绝。
 
 逐例证据会记录 Specialist 的 Profile 版本、执行模式（模型首次成功、格式修复或保守回退）、计划与应用关系、初始节点的范围外变化以及实际 Generation Run ID。恢复旧会话时没有初始画布快照，范围外变化记为不可判定，仍需人工核对。
 

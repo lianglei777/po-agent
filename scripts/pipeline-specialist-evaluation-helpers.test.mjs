@@ -2,8 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   changedProtectedNodeIds,
+  evaluationWaitExpiry,
   evaluationArtifactNames,
+  evaluationSessionIsStreaming,
+  isExpectedBatchSplitError,
   scoreSpecialistEvidence,
+  sessionProgressMarker,
 } from "./pipeline-specialist-evaluation-helpers.mjs";
 
 test("focused evaluations use separate artifacts", () => {
@@ -15,6 +19,47 @@ test("focused evaluations use separate artifacts", () => {
     summary: "summary.json",
     scorecard: "scorecard.csv",
   });
+});
+
+test("session progress marker changes when persisted output advances", () => {
+  const session = {
+    info: { modified: "2026-09-25T00:00:00.000Z" },
+    context: { messages: [{ role: "assistant", timestamp: 1, content: [{ type: "text", text: "a" }] }] },
+  };
+  const initial = sessionProgressMarker(session);
+  session.context.messages[0].content[0].text = "advanced output";
+  assert.notEqual(sessionProgressMarker(session), initial);
+});
+
+test("evaluation wait distinguishes inactivity from the hard deadline", () => {
+  assert.equal(evaluationWaitExpiry({
+    startedAt: 0, lastProgressAt: 8_000, now: 12_000, idleTimeoutMs: 5_000, hardTimeoutMs: 20_000,
+  }), null);
+  assert.equal(evaluationWaitExpiry({
+    startedAt: 0, lastProgressAt: 1_000, now: 7_000, idleTimeoutMs: 5_000, hardTimeoutMs: 20_000,
+  }), "idle");
+  assert.equal(evaluationWaitExpiry({
+    startedAt: 0, lastProgressAt: 18_000, now: 20_000, idleTimeoutMs: 5_000, hardTimeoutMs: 20_000,
+  }), "hard");
+});
+
+test("expected bounded batching signals are not treated as delivery failures", () => {
+  assert.equal(isExpectedBatchSplitError(
+    "The Specialist input is too large; split the request by episode or scene",
+  ), true);
+  assert.equal(isExpectedBatchSplitError(
+    "The Specialist result exceeds the safe plan size; split it by episode or scene",
+  ), true);
+  assert.equal(isExpectedBatchSplitError("The Specialist runtime failed"), false);
+});
+
+test("a loaded runtime is settled when its turn is no longer streaming", () => {
+  assert.equal(evaluationSessionIsStreaming({
+    agentState: { running: true, state: { isStreaming: false } },
+  }), false);
+  assert.equal(evaluationSessionIsStreaming({
+    agentState: { running: true, state: { isStreaming: true } },
+  }), true);
 });
 
 test("protected baseline nodes are compared by persisted data", () => {

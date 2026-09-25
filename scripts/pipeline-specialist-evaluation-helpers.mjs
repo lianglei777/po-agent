@@ -4,6 +4,28 @@ export function evaluationArtifactNames(partial) {
     : { summary: "summary.json", scorecard: "scorecard.csv" };
 }
 
+export function sessionProgressMarker(session) {
+  const messages = session?.context?.messages ?? [];
+  const lastMessage = messages.at(-1);
+  const contentLength = JSON.stringify(lastMessage?.content ?? "").length;
+  return [messages.length, lastMessage?.timestamp ?? "", contentLength, session?.info?.modified ?? ""].join(":");
+}
+
+export function evaluationWaitExpiry({ startedAt, lastProgressAt, now, idleTimeoutMs, hardTimeoutMs }) {
+  if (now - startedAt >= hardTimeoutMs) return "hard";
+  if (now - lastProgressAt >= idleTimeoutMs) return "idle";
+  return null;
+}
+
+export function isExpectedBatchSplitError(text) {
+  return /(input is too large|result exceeds the safe plan size); split (?:it|the request) by episode or scene/i.test(text);
+}
+
+export function evaluationSessionIsStreaming(session) {
+  // agentState.running 只表示 Runtime 已加载；当前回合是否仍在执行以内部状态为准。
+  return session?.agentState?.state?.isStreaming === true;
+}
+
 export function changedProtectedNodeIds(baselineNodes, finalNodes, mutableNodeIds) {
   if (!Array.isArray(baselineNodes)) return null;
   const mutable = new Set(mutableNodeIds ?? []);

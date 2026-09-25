@@ -3,8 +3,12 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   changedProtectedNodeIds,
+  evaluationWaitExpiry,
   evaluationArtifactNames,
+  evaluationSessionIsStreaming,
+  isExpectedBatchSplitError,
   scoreSpecialistEvidence,
+  sessionProgressMarker,
 } from "./pipeline-specialist-evaluation-helpers.mjs";
 
 const baseUrl = process.env.PIPELINE_EVAL_BASE_URL ?? "http://localhost:3100";
@@ -49,7 +53,9 @@ await Promise.all(Array.from({ length: Math.min(concurrency, prepared.length) },
   while (cursor < prepared.length) {
     const current = prepared[cursor++];
     const result = await (current.recovered ? evaluateRecoveredFixture(current) : evaluateFixture(current)).catch((error) => ({
-      runId, fixtureId: current.fixture.id, category: current.fixture.category, model: "unknown", status: "failed",
+      runId, fixtureId: current.fixture.id, category: current.fixture.category,
+      projectId: current.project.id, sessionId: current.conversation.sessionId,
+      model: [current.conversation.provider, current.conversation.modelId].filter(Boolean).join(":") || "unknown", status: "failed",
       error: error instanceof Error ? error.message : String(error),
       metrics: failedMetrics(),
     }));
@@ -139,7 +145,7 @@ async function evaluateFixture({ fixture, project, conversation, seed, revision 
       referencedNodeIds: seed.focusNodeIds,
     },
   });
-  const session = await waitForSession(conversation.sessionId);
+  const session = await waitForSession(conversation.sessionId, fixture.id);
   const [snapshot, workflowRuns] = await Promise.all([
     request(`/api/pipeline/projects/${project.id}/canvas`),
     request(`/api/pipeline/projects/${project.id}/canvas/workflow-runs`),
@@ -164,14 +170,46 @@ async function evaluateFixture({ fixture, project, conversation, seed, revision 
   };
 }
 
-async function waitForSession(sessionId) {
-  const deadline = Date.now() + Number(process.env.PIPELINE_EVAL_TIMEOUT_MS ?? 900_000);
-  while (Date.now() < deadline) {
+async function waitForSession(sessionId, fixtureId) {
+  const idleTimeoutMs = positiveNumber(process.env.PIPELINE_EVAL_IDLE_TIMEOUT_MS, 360_000);
+  const hardTimeoutMs = positiveNumber(
+    process.env.PIPELINE_EVAL_HARD_TIMEOUT_MS ?? process.env.PIPELINE_EVAL_TIMEOUT_MS,
+    3_600_000,
+  );
+  const pollIntervalMs = positiveNumber(process.env.PIPELINE_EVAL_POLL_INTERVAL_MS, 5_000);
+  const startedAt = Date.now();
+  let lastProgressAt = startedAt;
+  let progressMarker = null;
+  let messageCount = -1;
+  while (true) {
     const session = await request(`/api/sessions/${sessionId}?includeState=true`);
-    if (!session.agentState?.state?.isStreaming) return session;
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const nextMarker = sessionProgressMarker(session);
+    const nextMessageCount = session.context?.messages?.length ?? 0;
+    if (nextMarker !== progressMarker) {
+      lastProgressAt = Date.now();
+      progressMarker = nextMarker;
+      if (nextMessageCount !== messageCount) {
+        messageCount = nextMessageCount;
+        process.stdout.write(`${fixtureId}: ${messageCount} persisted messages\n`);
+      }
+    }
+    if (!evaluationSessionIsStreaming(session)) return session;
+    const expiry = evaluationWaitExpiry({
+      startedAt, lastProgressAt, now: Date.now(), idleTimeoutMs, hardTimeoutMs,
+    });
+    if (expiry) {
+      const reason = expiry === "idle"
+        ? `${idleTimeoutMs} ms without persisted progress`
+        : `${hardTimeoutMs} ms hard limit`;
+      throw new Error(`Agent session ${sessionId} did not settle (${reason})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
-  throw new Error(`Agent session ${sessionId} did not settle before the evaluation timeout`);
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function extractEvidence(session, snapshot, workflowRuns, fixture, seed) {
@@ -192,8 +230,7 @@ function extractEvidence(session, snapshot, workflowRuns, fixture, seed) {
   const specs = snapshot.nodes.flatMap((node) => node.data?.creativeSpec ? [node.data.creativeSpec] : []);
   const identityKeys = specs.filter((spec) => spec.kind === "asset").map((spec) => spec.identityKey);
   // 会话协议已经提供结构化 isError；不能从创作内容中的“失败”等自然语言推断工具状态。
-  const errors = results.filter((result) => result.isError
-    && !/input is too large; split the request by episode or scene/i.test(result.text));
+  const errors = results.filter((result) => result.isError && !isExpectedBatchSplitError(result.text));
   const specialistResults = results.flatMap((result) => {
     const details = result.details;
     return details && typeof details === "object" && specialistKind(result.name) === details.kind
