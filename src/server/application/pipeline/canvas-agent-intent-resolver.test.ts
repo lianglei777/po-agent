@@ -49,6 +49,17 @@ describe("resolvePolicy", () => {
     });
   });
 
+  it("resolves an explicit shot rewrite even when the model asks for clarification", () => {
+    expect(resolvePolicy({
+      ...decision("discuss"), confidence: "low", needsClarification: true,
+    }, "把第一场改成无对白视觉叙事。目标范围是第一场的4个镜头。", false)).toMatchObject({
+      type: "resolved",
+      requestedStage: "storyboard",
+      effectiveStage: "storyboard",
+      allowedStages: ["discuss", "script", "storyboard"],
+    });
+  });
+
   it.each([
     "统一阿宁、小宁和宁宁为同一角色",
     "更新主角冬季造型但保留 Continuity Bible 中的伤疤",

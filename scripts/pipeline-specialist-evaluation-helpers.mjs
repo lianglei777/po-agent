@@ -34,9 +34,21 @@ export function changedProtectedNodeIds(baselineNodes, finalNodes, mutableNodeId
     .filter((node) => !mutable.has(node.id))
     .filter((node) => {
       const finalNode = finalById.get(node.id);
-      return !finalNode || stableJson(finalNode.data) !== stableJson(node.data);
+      return !finalNode || stableJson(comparableNodeData(finalNode.data)) !== stableJson(comparableNodeData(node.data));
     })
     .map((node) => node.id);
+}
+
+function comparableNodeData(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  const params = data.params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) return data;
+  const comparableParams = { ...params };
+  // Canvas 持久化会物化这些空列表；缺省与空数组语义相同，不能记作 scope 外编辑。
+  for (const key of ["textList", "imageList", "videoList", "audioList", "mixedListOrder"]) {
+    if (comparableParams[key] === undefined) comparableParams[key] = [];
+  }
+  return { ...data, params: comparableParams };
 }
 
 export function scoreSpecialistEvidence(evidence, fixture) {

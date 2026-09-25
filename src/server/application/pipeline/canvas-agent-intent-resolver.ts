@@ -215,6 +215,9 @@ function explicitExecutionStage(message: string): CanvasAgentStage | null {
   if (/(?:调用|执行|运行|应用|创建|生成|重跑|完成).{0,80}(?:storyboard\s*specialist|分镜)/i.test(message)) {
     return "storyboard";
   }
+  if (/(?:修改|调整|改写|重写|改成|改为|删除|移除)[\s\S]{0,100}(?:镜头|分镜)|(?:镜头|分镜)[\s\S]{0,100}(?:修改|调整|改写|重写|改成|改为|删除|移除)/i.test(message)) {
+    return "storyboard";
+  }
   if (/(?:asset\s*specialist|资产规格|角色资产|场景资产|道具资产|统一.{0,20}(?:角色|造型|资产)|更新.{0,20}(?:角色|造型|资产)|别名.{0,20}(?:合并|统一)|continuity\s*bible)/i.test(message)) {
     return "canvas";
   }

@@ -74,6 +74,20 @@ test("protected baseline nodes are compared by persisted data", () => {
   assert.deepEqual(changedProtectedNodeIds(baseline, final, ["target"]), ["source"]);
 });
 
+test("materialized empty media lists are not counted as protected node edits", () => {
+  const baseline = [{ id: "reference", data: { name: "Reference", params: { prompt: "same" } } }];
+  const final = [{
+    id: "reference",
+    data: {
+      name: "Reference",
+      params: {
+        prompt: "same", textList: [], imageList: [], videoList: [], audioList: [], mixedListOrder: [],
+      },
+    },
+  }];
+  assert.deepEqual(changedProtectedNodeIds(baseline, final, []), []);
+});
+
 test("a specialist draft only passes when its exact plan is applied", () => {
   const fixture = {
     category: "script-only",
