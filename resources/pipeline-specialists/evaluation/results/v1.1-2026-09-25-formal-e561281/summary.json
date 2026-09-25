@@ -1,0 +1,28 @@
+{
+  "runId": "v1.1-2026-09-25-formal-e561281",
+  "scope": "formal",
+  "fixtureCount": 20,
+  "expectedFixtureCount": 20,
+  "passed": false,
+  "automatic": {
+    "routeAccuracy": 0.95,
+    "structureValidity": 0.8,
+    "planValidity": 0.8,
+    "duplicateAssetRate": 0,
+    "preflightPassRate": 0.875,
+    "outOfScopeMutationRate": 0,
+    "unauthorizedGenerationRate": 0,
+    "repairRate": 0.2,
+    "fallbackRate": 0.2
+  },
+  "thresholds": {
+    "routeAccuracy": 0.9,
+    "structureValidity": 0.98,
+    "planValidity": 0.95,
+    "duplicateAssetRateMax": 0.05,
+    "preflightPassRate": 0.9,
+    "outOfScopeMutationRateMax": 0,
+    "unauthorizedGenerationRateMax": 0,
+    "fallbackRateMax": 0.05
+  }
+}
