@@ -3172,6 +3172,8 @@ POST /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/select
 GET  /api/pipeline/canvas-nodes/{nodeId}/generation-runs/upload-source/media
 ```
 
+已选视频 Take 的画布预览优先读取 `GET /api/pipeline/canvas-nodes/{nodeId}/media` 的本地 Artifact；历史 Take 优先读取上面的 Artifact media 接口。两者支持 `Range: bytes=...`，完整响应为 `200`，单段响应为 `206`（包含 `Accept-Ranges`、`Content-Length` 和 `Content-Range`），不可满足的区间为 `416`。本地文件不可用时，客户端可使用保留的供应商远程 URL 降级预览；远程 URL 不作为已保存视频的默认预览源。
+
 - 列表接口只返回 `sourceRef === pipeline:canvas:{nodeId}` 的 Run，并按创建时间倒序返回标准 `GenerationRunViewDto[]`。
 - `select` 请求体为 `{ artifactId: string }`。该能力只用于视频和音频节点；图片结果需要作为新图片节点加入画布。Run 必须属于该节点，Artifact 必须属于该 Run 且媒体类型与节点一致；选择会以该 Artifact 创建一个新的资源节点，源节点、历史和已有连线均不会被修改。
 - `retry` 请求体为 `{ idempotencyKey: string }`。服务端读取最后一个 Provider Job 的结构化失败诊断：供应商已返回输出但本地下载或保存失败时，仅重新下载并返回 `action: "redownload"`；供应商未返回输出时，在同一 Run 下创建新 attempt、重新准备引用素材并返回 `action: "resubmit"`。只有重新提交可能再次产生生成费用。

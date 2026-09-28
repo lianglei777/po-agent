@@ -1,7 +1,9 @@
-import { promises as fs } from "node:fs";
+import { createReadStream, promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { AppError } from "@/server/domain/app-error";
+import type { ByteRange } from "@/server/domain/workspace";
 import type { GenerationFileStore } from "@/server/ports/generation-file-store";
 
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
@@ -67,6 +69,29 @@ export class NodeGenerationFileStore implements GenerationFileStore {
     };
   }
 
+  async openPreview(input: { cwd: string; relativePath: string }) {
+    const root = await fs.realpath(path.resolve(input.cwd));
+    const candidate = resolveInsideWorkspace(root, input.relativePath);
+    let filePath: string;
+    let stat;
+    try {
+      filePath = await fs.realpath(candidate);
+      // 流式读取必须校验符号链接的最终目标，不能只校验传入的相对路径。
+      if (!isInside(root, filePath)) throw new AppError("PROJECT_NOT_REGISTERED", "Generation preview is outside the workspace", 403);
+      stat = await fs.stat(filePath);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("FILE_NOT_FOUND", "Generation preview was not found", 404);
+    }
+    if (!stat.isFile()) throw new AppError("NOT_A_FILE", "Generation preview is not a file", 400);
+    return {
+      path: filePath,
+      size: stat.size,
+      contentType: mimeForPath(filePath),
+      createStream: (range?: ByteRange) => Readable.toWeb(createReadStream(filePath, range)) as ReadableStream<Uint8Array>,
+    };
+  }
+
   async saveOutput(input: {
     cwd: string;
     runId: string;
@@ -126,6 +151,11 @@ function resolveInsideWorkspace(cwd: string, relativePath: string): string {
     );
   }
   return target;
+}
+
+function isInside(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function safeExtension(value?: string): string {

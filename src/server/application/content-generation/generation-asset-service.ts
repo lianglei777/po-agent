@@ -49,6 +49,11 @@ export class GenerationAssetService {
     });
   }
 
+  async openPreview(input: { sessionId: string; relativePath: string }) {
+    const session = await this.runs.requireSession(input.sessionId);
+    return this.files.openPreview({ cwd: session.cwd, relativePath: input.relativePath });
+  }
+
   async readArtifact(artifactId: string) {
     const artifact = await this.runs.getArtifact(artifactId);
     if (!artifact?.localPath) {

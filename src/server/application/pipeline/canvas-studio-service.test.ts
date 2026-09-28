@@ -307,6 +307,22 @@ describe("CanvasStudioService local media upload", () => {
 });
 
 describe("CanvasStudioService asset media", () => {
+  it("does not preview an old upload when the selected video Take has no local file", async () => {
+    const current = videoNode();
+    current.data = {
+      ...current.data!,
+      workspaceFile: { relativePath: "assets/imports/old.mp4", contentType: "video/mp4", name: "old.mp4" },
+      videoSelection: { runId: "run-1", artifactId: "artifact-1", completedAt: "2026-08-25T00:00:00.000Z" },
+    };
+    const repository = { getCanvasNode: vi.fn().mockResolvedValue(current) } as unknown as PipelineRepository;
+    const runs = { getArtifact: vi.fn().mockResolvedValue({ id: "artifact-1" }) } as unknown as GenerationRunService;
+    const assets = { openPreview: vi.fn() } as unknown as GenerationAssetService;
+
+    await expect(createService(repository, {} as LlmPort, runs, assets).openNodeMedia(current.id))
+      .rejects.toMatchObject({ code: "FILE_NOT_FOUND", status: 404 });
+    expect(assets.openPreview).not.toHaveBeenCalled();
+  });
+
   it("reads the selected artifact through the registered project workspace", async () => {
     const repository = {
       getAsset: vi.fn().mockResolvedValue({

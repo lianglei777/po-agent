@@ -64,14 +64,17 @@ export function VideoCanvasNode({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [failedMediaKey, setFailedMediaKey] = useState<string | null>(null);
   const mediaSource = resolveCanvasMediaSource(id, canvas);
-  const mediaUrl = mediaSource?.url ?? null;
+  const localFailedKey = `${mediaSource?.assetKey}:local`;
+  const fallbackFailedKey = `${mediaSource?.assetKey}:fallback`;
+  const fallbackActive = Boolean(mediaSource?.fallbackUrl && (failedMediaKey === localFailedKey || failedMediaKey === fallbackFailedKey));
+  const mediaUrl = fallbackActive ? mediaSource?.fallbackUrl ?? null : mediaSource?.url ?? null;
   const deferMediaLoad = shouldDeferCanvasMediaLoad(mediaSource, awaitingNodeCreation);
   const hasVideo = Boolean(mediaUrl);
   const hasGenerationHistory = Boolean(canvas?.workspaceFile || canvas?.artifactIds?.length || canvas?.taskInfo?.runId);
   const canUploadIntoNode = !hasVideo && !hasGenerationHistory && !hasIncomingConnection;
   const isGenerating = canvas?.taskInfo?.status === "queued" || canvas?.taskInfo?.status === "processing";
   const outputStale = Boolean(canvas?.generationProvenance?.stale);
-  const mediaFailed = Boolean(mediaSource?.assetKey && failedMediaKey === mediaSource.assetKey);
+  const mediaFailed = failedMediaKey === fallbackFailedKey || (failedMediaKey === localFailedKey && !mediaSource?.fallbackUrl);
   const toolbarPresentation = videoNodeToolbarPresentation({
     selected: singleSelected,
     composerActive,
@@ -118,7 +121,7 @@ export function VideoCanvasNode({
 
     video.addEventListener("dblclick", preventNativeFullscreen, true);
     return () => video.removeEventListener("dblclick", preventNativeFullscreen, true);
-  }, [focusPreviewNode, hasVideo]);
+  }, [focusPreviewNode, hasVideo, mediaUrl]);
 
   const playVideoOnHover = useCallback(() => {
     if (mediaFailed) return;
@@ -299,6 +302,7 @@ export function VideoCanvasNode({
           ) : (
             <>
               <video
+                key={mediaUrl}
                 ref={videoRef}
                 src={mediaUrl}
                 aria-label={canvas.name}
@@ -315,7 +319,7 @@ export function VideoCanvasNode({
                   if (event.clientY >= bounds.bottom - 48) event.stopPropagation();
                 }}
                 onLoadedMetadata={(event) => {
-                  setFailedMediaKey(null);
+                  if (!fallbackActive) setFailedMediaKey(null);
                   const element = event.currentTarget;
                   const metadata = {
                     durationSeconds: Math.max(0, Math.round(element.duration * 10) / 10),
@@ -328,7 +332,7 @@ export function VideoCanvasNode({
                     || canvas.videoMetadata.height !== metadata.height
                   )) updateNodeData(id, { ...canvas, videoMetadata: metadata });
                 }}
-                onError={() => setFailedMediaKey(mediaSource?.assetKey ?? "unknown")}
+                onError={() => setFailedMediaKey(fallbackActive ? fallbackFailedKey : localFailedKey)}
               />
               {mediaFailed ? (
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/80 px-5 text-center text-xs text-white/80">

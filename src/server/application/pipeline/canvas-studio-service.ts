@@ -361,28 +361,40 @@ export class CanvasStudioService {
   }
 
   async readNodeMedia(nodeId: string) {
+    const location = await this.nodeMediaLocation(nodeId);
+    return this.assets.read(location);
+  }
+
+  async openNodeMedia(nodeId: string) {
+    const location = await this.nodeMediaLocation(nodeId);
+    return this.assets.openPreview(location);
+  }
+
+  private async nodeMediaLocation(nodeId: string) {
     const node = await this.requireNode(nodeId);
     const selectedVideoArtifactId = node.data?.videoSelection?.artifactId;
     if (selectedVideoArtifactId) {
       const artifact = await this.runs.getArtifact(selectedVideoArtifactId);
       if (artifact?.localPath) {
         await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-        return this.assets.read({ sessionId: `pipeline:${node.projectId}`, relativePath: artifact.localPath });
+        return { sessionId: `pipeline:${node.projectId}`, relativePath: artifact.localPath };
       }
+      // 已选 Take 不存在本地文件时返回 404，让预览尝试远程降级，不能误播旧上传源。
+      throw new AppError("FILE_NOT_FOUND", "Selected canvas video is not available locally", 404);
     }
     if (node.data?.workspaceFile) {
       await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-      return this.assets.read({
+      return {
         sessionId: `pipeline:${node.projectId}`,
         relativePath: node.data.workspaceFile.relativePath,
-      });
+      };
     }
     const artifactId = node.data?.artifactIds?.[0];
     if (artifactId) {
       const artifact = await this.runs.getArtifact(artifactId);
       if (artifact?.localPath) {
         await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-        return this.assets.read({ sessionId: `pipeline:${node.projectId}`, relativePath: artifact.localPath });
+        return { sessionId: `pipeline:${node.projectId}`, relativePath: artifact.localPath };
       }
     }
     const runId = node.data?.taskInfo?.runId;
@@ -391,10 +403,10 @@ export class CanvasStudioService {
       const artifact = view?.artifacts[0];
       if (artifact?.localPath) {
         await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-        return this.assets.read({
+        return {
           sessionId: `pipeline:${node.projectId}`,
           relativePath: artifact.localPath,
-        });
+        };
       }
     }
     throw new AppError("FILE_NOT_FOUND", "Canvas media is not available locally", 404);
@@ -766,6 +778,16 @@ export class CanvasStudioService {
   }
 
   async readNodeGenerationArtifact(nodeId: string, runId: string, artifactId: string) {
+    const location = await this.nodeGenerationArtifactLocation(nodeId, runId, artifactId);
+    return this.assets.read(location);
+  }
+
+  async openNodeGenerationArtifact(nodeId: string, runId: string, artifactId: string) {
+    const location = await this.nodeGenerationArtifactLocation(nodeId, runId, artifactId);
+    return this.assets.openPreview(location);
+  }
+
+  private async nodeGenerationArtifactLocation(nodeId: string, runId: string, artifactId: string) {
     const node = await this.requireNode(nodeId);
     const view = await this.runs.getRun(runId);
     if (!view || view.run.sourceRef !== canvasSourceRef(node.id)) {
@@ -776,10 +798,10 @@ export class CanvasStudioService {
       throw new AppError("FILE_NOT_FOUND", "Generation artifact is not available locally", 404);
     }
     await ensurePipelineRunSession(this.runs, node.projectId, await this.requireProjectRoot(node.projectId));
-    return this.assets.read({
+    return {
       sessionId: `pipeline:${node.projectId}`,
       relativePath: artifact.localPath,
-    });
+    };
   }
 
   async selectNodeUploadSource(nodeId: string): Promise<CanvasNode> {

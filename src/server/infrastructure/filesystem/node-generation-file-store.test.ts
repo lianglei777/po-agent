@@ -52,6 +52,20 @@ describe("NodeGenerationFileStore", () => {
     })).rejects.toMatchObject({ code: "PROJECT_NOT_REGISTERED" });
   });
 
+  it("streams only the requested bytes of a local preview", async () => {
+    await fs.writeFile(path.join(cwd, "result.mp4"), new Uint8Array([0, 1, 2, 3, 4]));
+    const preview = await store.openPreview({ cwd, relativePath: "result.mp4" });
+
+    expect(preview).toMatchObject({ size: 5, contentType: "video/mp4" });
+    expect(new Uint8Array(await new Response(preview.createStream({ start: 1, end: 3 })).arrayBuffer()))
+      .toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("rejects a preview path escaping the workspace", async () => {
+    await expect(store.openPreview({ cwd, relativePath: "../secret.mp4" }))
+      .rejects.toMatchObject({ code: "PROJECT_NOT_REGISTERED" });
+  });
+
   it("stores outputs under the run artifact directory", async () => {
     const relativePath = await store.saveOutput({
       cwd,

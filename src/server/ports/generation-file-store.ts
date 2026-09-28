@@ -1,4 +1,5 @@
 import type { ProviderInputAsset } from "./generation-provider";
+import type { BinaryFile } from "@/server/domain/workspace";
 
 export interface GenerationFileStore {
   saveInput(input: {
@@ -12,6 +13,7 @@ export interface GenerationFileStore {
     relativePath: string;
     slot: string;
   }): Promise<ProviderInputAsset>;
+  openPreview(input: { cwd: string; relativePath: string }): Promise<BinaryFile>;
   saveOutput(input: {
     cwd: string;
     runId: string;

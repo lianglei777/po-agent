@@ -24,6 +24,7 @@ export function ResourcePreviewThumbnail({
   mediaType,
   label,
   url,
+  fallbackUrl,
   poster,
   size,
   badge,
@@ -34,6 +35,7 @@ export function ResourcePreviewThumbnail({
   mediaType: CanvasMediaType;
   label: string;
   url: string | null;
+  fallbackUrl?: string;
   poster?: string;
   size: ThumbnailSize;
   badge?: number;
@@ -42,7 +44,9 @@ export function ResourcePreviewThumbnail({
   fit?: "cover" | "contain";
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const failed = !url || failedSource === url;
+  const useFallback = mediaType === "video" && failedSource === url && Boolean(fallbackUrl);
+  const previewUrl = useFallback ? fallbackUrl : url;
+  const failed = !url || failedSource === fallbackUrl || (failedSource === url && !fallbackUrl);
   const Icon = mediaType === "text" ? FileText : mediaType === "image" ? FileImage : mediaType === "video" ? FileVideo : FileMusic;
   // next/image fill 不参与父元素尺寸计算；缩略图框必须始终生成可计算的布局盒子。
   // 资产浏览器采用无描边缩略图，其余场景仍保留内容边界，并降低兜底图标的存在感。
@@ -70,7 +74,7 @@ export function ResourcePreviewThumbnail({
     content = (
       <>
         <video
-          src={url}
+          src={previewUrl ?? undefined}
           poster={poster}
           muted
           playsInline
@@ -78,7 +82,7 @@ export function ResourcePreviewThumbnail({
           aria-label={accessible ? label : undefined}
           aria-hidden={accessible ? undefined : true}
           className={fit === "contain" ? "size-full object-contain" : "size-full object-cover"}
-          onError={() => setFailedSource(url)}
+          onError={() => setFailedSource(previewUrl ?? null)}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
           <FileVideo className={size === "inline" ? "size-2.5 text-white/90" : "size-3.5 text-white/90"} />
@@ -105,6 +109,7 @@ export function ResourcePreviewPopover({
   mediaType,
   label,
   url,
+  fallbackUrl,
   poster,
   detail,
   ariaLabel,
@@ -113,6 +118,7 @@ export function ResourcePreviewPopover({
   mediaType: "image" | "video";
   label: string;
   url: string | null;
+  fallbackUrl?: string;
   poster?: string;
   detail: string;
   ariaLabel: string;
@@ -125,15 +131,7 @@ export function ResourcePreviewPopover({
         {mediaType === "image" ? (
           <Image src={url} alt={label} fill unoptimized sizes="224px" className="object-contain" />
         ) : (
-          <video
-            src={url}
-            poster={poster}
-            muted
-            playsInline
-            preload="metadata"
-            aria-label={label}
-            className="size-full object-contain"
-          />
+          <PopoverVideoPreview url={url} fallbackUrl={fallbackUrl} poster={poster} label={label} />
         )}
       </div>
       <figcaption className="flex items-center gap-2 px-1 pb-0.5 pt-2">
@@ -160,6 +158,27 @@ export function ResourcePreviewPopover({
         {children}
       </button>
     </Popover>
+  );
+}
+
+function PopoverVideoPreview({ url, fallbackUrl, poster, label }: { url: string; fallbackUrl?: string; poster?: string; label: string }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const useFallback = failedUrl === url && Boolean(fallbackUrl);
+  if (failedUrl === fallbackUrl || (failedUrl === url && !fallbackUrl)) {
+    return <FileVideo className="size-8 text-[var(--pl-text-secondary)]" />;
+  }
+  return (
+    <video
+      key={useFallback ? fallbackUrl : url}
+      src={useFallback ? fallbackUrl : url}
+      poster={poster}
+      muted
+      playsInline
+      preload="metadata"
+      aria-label={label}
+      className="size-full object-contain"
+      onError={() => setFailedUrl(useFallback ? fallbackUrl ?? null : url)}
+    />
   );
 }
 

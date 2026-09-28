@@ -151,9 +151,9 @@ export function VideoGenerationHistory({
             const action = failure?.recoveryAction === "none"
               ? null
               : videoGenerationHistoryAction(view.run.status, Boolean(artifact));
-            const mediaUrl = artifact?.remoteUrl ?? (artifact
+            const mediaUrl = artifact?.localPath
               ? canvasNodeGenerationArtifactUrl(node.id, view.run.id, artifact.id)
-              : null);
+              : artifact?.remoteUrl ?? null;
             return (
               <article
                 key={view.run.id}
@@ -161,7 +161,7 @@ export function VideoGenerationHistory({
               >
                 <div className="relative aspect-video bg-black">
                   {mediaUrl ? (
-                    <video src={mediaUrl} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+                    <HistoryVideoPreview key={artifact?.id} url={mediaUrl} fallbackUrl={artifact?.localPath ? artifact.remoteUrl : undefined} />
                   ) : (
                     <div className="grid h-full place-items-center text-[var(--pl-text-muted)]"><FileVideo className="size-8" /></div>
                   )}
@@ -230,4 +230,23 @@ function statusLabel(status: GenerationRunViewDto["run"]["status"], labels: {
   if (status === "failed") return labels.videoHistoryFailed;
   if (status === "cancelled") return labels.videoHistoryCancelled;
   return labels.videoHistoryRunning;
+}
+
+function HistoryVideoPreview({ url, fallbackUrl }: { url: string; fallbackUrl?: string }) {
+  const [failedStage, setFailedStage] = useState<"local" | "fallback" | null>(null);
+  if (failedStage === "fallback" || (failedStage === "local" && !fallbackUrl)) {
+    return <div className="grid h-full place-items-center text-[var(--pl-text-muted)]"><FileVideo className="size-8" /></div>;
+  }
+  const usingFallback = failedStage === "local";
+  return (
+    <video
+      key={usingFallback ? fallbackUrl : url}
+      src={usingFallback ? fallbackUrl : url}
+      muted
+      playsInline
+      preload="metadata"
+      className="h-full w-full object-cover"
+      onError={() => setFailedStage(usingFallback ? "fallback" : "local")}
+    />
+  );
 }

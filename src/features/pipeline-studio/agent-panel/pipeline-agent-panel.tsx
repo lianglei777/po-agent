@@ -593,6 +593,7 @@ function PipelineAgentInlineReference({
       mediaType={mediaType}
       label={reference.name}
       url={source?.url ?? null}
+      fallbackUrl={source?.fallbackUrl}
       poster={node?.data?.poster}
       size="inline"
     />
@@ -602,6 +603,7 @@ function PipelineAgentInlineReference({
       mediaType={mediaType}
       label={reference.name}
       url={source.url}
+      fallbackUrl={source.fallbackUrl}
       poster={node?.data?.poster}
       detail={reference.type}
       ariaLabel={previewLabel.replace("{name}", reference.name)}

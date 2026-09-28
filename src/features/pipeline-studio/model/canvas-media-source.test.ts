@@ -57,6 +57,26 @@ describe("resolveCanvasMediaSource", () => {
     })?.assetKey).toBe("artifact:take-2");
   });
 
+  it("prefers the local selected Take while retaining a remote fallback", () => {
+    expect(resolveCanvasMediaSource("video-1", {
+      type: "video",
+      name: "Video",
+      action: "video_generate",
+      url: ["https://provider.example/expiring.mp4"],
+      artifactIds: ["take-2"],
+      videoSelection: {
+        runId: "run-2",
+        artifactId: "take-2",
+        completedAt: "2026-08-25T00:00:00.000Z",
+      },
+    })).toEqual({
+      assetKey: "artifact:take-2",
+      kind: "local",
+      url: "/api/pipeline/canvas-nodes/video-1/media?v=artifact%3Atake-2",
+      fallbackUrl: "https://provider.example/expiring.mp4",
+    });
+  });
+
   it("does not request an unfinished generation run as readable media", () => {
     expect(resolveCanvasMediaSource("node-1", {
       type: "image",

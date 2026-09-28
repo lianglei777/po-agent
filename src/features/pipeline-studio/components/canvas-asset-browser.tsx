@@ -158,6 +158,7 @@ function ResourceThumbnail({ node, mediaType, label, fallback }: {
       mediaType={mediaType}
       label={label}
       url={source?.url ?? null}
+      fallbackUrl={source?.fallbackUrl}
       poster={node?.data?.poster}
       size="browser"
       fallback={fallback}

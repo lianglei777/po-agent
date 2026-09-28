@@ -65,6 +65,7 @@ describe("GenerationWorker", () => {
     files = {
       saveInput: vi.fn(async () => ".po-agent/generation-inputs/input.png"),
       readInput: vi.fn(),
+      openPreview: vi.fn(),
       saveOutput: vi.fn(async () =>
         ".po-agent/generated/id-1/rainy-bamboo-forest-1.mp4"
       ),

@@ -4,6 +4,7 @@ export interface CanvasMediaSource {
   assetKey: string;
   kind: "local" | "external";
   url: string;
+  fallbackUrl?: string;
 }
 
 export function resolveCanvasMediaSource(
@@ -15,10 +16,11 @@ export function resolveCanvasMediaSource(
   const selectedVideoArtifactId = data.videoSelection?.artifactId;
   if (selectedVideoArtifactId) {
     const selectedUrl = data.url?.[0];
-    if (selectedUrl && !selectedUrl.startsWith("/api/pipeline/canvas-nodes/")) {
-      return { assetKey: `url:${selectedUrl}`, kind: "external", url: selectedUrl };
-    }
-    return localMediaSource(nodeId, `artifact:${selectedVideoArtifactId}`);
+    const source = localMediaSource(nodeId, `artifact:${selectedVideoArtifactId}`);
+    // 已选 Take 优先读取持久化的本地文件；远程地址只供旧数据或文件丢失时降级。
+    return selectedUrl && !selectedUrl.startsWith("/api/pipeline/canvas-nodes/")
+      ? { ...source, fallbackUrl: selectedUrl }
+      : source;
   }
 
   const workspacePath = data.workspaceFile?.relativePath;
